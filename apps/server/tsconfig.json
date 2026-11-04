@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  // The OPAC pages are hono/jsx (spec §4.9): esbuild and Vitest read these two options from here.
+  "compilerOptions": { "outDir": "dist", "jsx": "react-jsx", "jsxImportSource": "hono/jsx" },
+  "include": ["src", "test", "../../globals.d.ts"],
+  "references": [
+    { "path": "../../packages/shared" },
+    { "path": "../../packages/opac-theme" },
+    { "path": "../../packages/platform" },
+    { "path": "../../packages/crypto" },
+    { "path": "../../packages/db" },
+    { "path": "../../packages/core" },
+    { "path": "../../tools/test" }
+  ]
+}

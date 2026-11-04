@@ -1,0 +1,18 @@
+{
+  "name": "@altis/server",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "dependencies": {
+    "@altis/core": "workspace:*",
+    "@altis/crypto": "workspace:*",
+    "@altis/db": "workspace:*",
+    "@altis/opac-theme": "workspace:*",
+    "@altis/platform": "workspace:*",
+    "@altis/shared": "workspace:*",
+    "@hono/node-server": "2.1.5",
+    "hono": "4.13.14",
+    "zod": "4.6.7"
+  }
+}

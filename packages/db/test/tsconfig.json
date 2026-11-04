@@ -1,0 +1,12 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "../dist/test" },
+  "include": [".", "../../../globals.d.ts"],
+  "references": [
+    { "path": ".." },
+    { "path": "../../shared" },
+    { "path": "../../platform" },
+    { "path": "../../crypto" },
+    { "path": "../../../tools/test" }
+  ]
+}

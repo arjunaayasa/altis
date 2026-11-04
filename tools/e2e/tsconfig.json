@@ -1,0 +1,16 @@
+{
+  // The Playwright suite (Task 32): a project of its own (S22), so that `tsc -b` checks it against the declarations of
+  // the projects it imports: @altis/core and @altis/shared (workspace dependencies), the admin SPA's catalogues
+  // (lib/text.ts), the fake SMTP server and mailpit helper of packages/core/test, and the release zip reader.
+  // `page.evaluate` callbacks run in the browser, hence the DOM library.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist/tsc", "lib": ["ES2023", "DOM", "DOM.Iterable"] },
+  "include": ["*.ts", "lib", "specs", "test", "../../globals.d.ts"],
+  "exclude": ["node_modules", "dist"],
+  "references": [
+    { "path": "../../packages/shared" },
+    { "path": "../../packages/core" },
+    { "path": "../../apps/admin" },
+    { "path": "../release" }
+  ]
+}

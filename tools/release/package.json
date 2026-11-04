@@ -1,0 +1,29 @@
+{
+  "name": "@altis/release",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "feed:build": "tsx feed/build.ts",
+    "feed:dev": "tsx feed/serve.ts",
+    "passenger-sim": "tsx passenger-sim/sim.ts",
+    "release": "tsx src/build.ts"
+  },
+  "dependencies": {
+    "@altis/bootloader": "workspace:*",
+    "@altis/crypto": "workspace:*",
+    "@altis/db": "workspace:*",
+    "@altis/platform": "workspace:*",
+    "@altis/shared": "workspace:*",
+    "@altis/sign-cli": "workspace:*",
+    "esbuild": "0.28.2"
+  },
+  "devDependencies": {
+    "@altis/test-tools": "workspace:*",
+    "@types/pg": "8.23.1",
+    "acorn": "8.19.0",
+    "mysql2": "3.24.6",
+    "pg": "8.23.1"
+  }
+}

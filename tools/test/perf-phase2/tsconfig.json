@@ -1,0 +1,17 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist" },
+  // The Phase 2 performance seed and runner (plan Task 39, K9/K16) and their tests: a project of its own. It imports
+  // packages/core (the catalog's key helpers, the MARCXML writer, the storage driver, the search) and the release
+  // tooling (tools/release/smoke: install, processes, sessions) by relative path; tools/test itself is referenced by
+  // packages/core, so tools/test cannot reference core (a cycle).
+  "include": ["*.ts", "test", "../../../globals.d.ts"],
+  "references": [
+    { "path": "../../../packages/shared" },
+    { "path": "../../../packages/platform" },
+    { "path": "../../../packages/db" },
+    { "path": "../../../packages/core" },
+    { "path": "../../release" },
+    { "path": ".." }
+  ]
+}

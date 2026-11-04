@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist" },
+  // The tests are a project of their own (test/tsconfig.json): they import tools/test/test-db.ts, which itself
+  // imports this package, and project references cannot form a cycle.
+  "include": ["src", "../../globals.d.ts"],
+  "references": [{ "path": "../shared" }, { "path": "../platform" }, { "path": "../crypto" }]
+}

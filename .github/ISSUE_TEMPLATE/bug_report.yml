@@ -1,0 +1,88 @@
+name: Laporan bug (Bug report)
+description: Sesuatu tidak bekerja sebagaimana mestinya. / Something does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Terima kasih sudah melapor. **Celah keamanan jangan dilaporkan di sini**: pakai tab Security → Report a
+        vulnerability (lihat SECURITY.md).
+
+        Thank you for reporting. **Do not report security vulnerabilities here**: use the Security tab → Report a
+        vulnerability (see SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: Versi ALTIS (ALTIS version)
+      description: Dari menu Tentang atau Diagnostik, misalnya 0.1.0. / From the Tentang or Diagnostik screen.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: hosting
+    attributes:
+      label: Jenis hosting (Hosting type)
+      options:
+        - cPanel (Application Manager / Passenger)
+        - cPanel CloudLinux (Setup Node.js App)
+        - LiteSpeed
+        - aaPanel (PM2)
+        - PM2 (VPS)
+        - Docker
+        - PC / node app.js
+        - Lainnya (Other)
+    validations:
+      required: true
+  - type: dropdown
+    id: database
+    attributes:
+      label: Mesin database (Database engine)
+      options:
+        - SQLite
+        - MySQL 8.0
+        - MySQL 8.4
+        - MariaDB 10.6
+        - MariaDB 11.x
+        - PostgreSQL 15
+        - PostgreSQL 16+
+        - Lainnya (Other)
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Versi Node.js (Node.js version)
+      placeholder: "v22.16.0"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Langkah untuk mereproduksi (Steps to reproduce)
+      placeholder: |
+        1. Buka ...
+        2. Klik ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Yang diharapkan dan yang terjadi (Expected and actual behaviour)
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostik (Diagnostics)
+      description: |
+        Isi halaman Diagnostik di admin, atau keluaran `node app.js doctor`. **Hapus dulu sandi, token, kode
+        pemasangan, alamat e-mail, dan data pribadi apa pun.** Jangan menempelkan `config.json` atau `.env`.
+
+        The text of the admin Diagnostik screen, or the output of `node app.js doctor`. **Redact passwords,
+        tokens, install codes, e-mail addresses and any personal data first.** Never paste `config.json` or `.env`.
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log atau pesan galat (Logs or error messages)
+      description: Bagian log yang relevan, tanpa rahasia. / The relevant log lines, without secrets.
+      render: text

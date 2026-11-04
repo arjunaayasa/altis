@@ -1,0 +1,1093 @@
+import { newId } from '@altis/shared';
+import type { Selectable } from 'kysely';
+import { expect } from 'vitest';
+import type { DB } from '../../src/schema.js';
+
+// Phase 2 (catalog), Task 1: what tables.test.ts expects of the tables of migrations 0020–0029 (Phase 2 spec §2.2,
+// §2.3, §2.4), written out by hand, independently of TABLE_CLASSES/TABLE_COLUMNS/TABLE_KEYS, in the notations of
+// tables.test.ts. Kept in its own module so that tables.test.ts only spreads it in (one block per list).
+
+/** The Phase 2 tables. */
+export type CatalogTable =
+  | 'languages'
+  | 'material_types'
+  | 'publishers'
+  | 'agents'
+  | 'subjects'
+  | 'subject_relations'
+  | 'records'
+  | 'record_identifiers'
+  | 'record_marc_extra'
+  | 'record_agents'
+  | 'record_subjects'
+  | 'record_relations'
+  | 'attachments'
+  | 'locations'
+  | 'collection_types'
+  | 'suppliers'
+  | 'items'
+  | 'item_events'
+  | 'pages'
+  | 'page_translations'
+  | 'search_doc'
+  | 'search_facet'
+  | 'search_term'
+  | 'search_state'
+  | 'catalog_runs'
+  | 'migration_map'
+  | 'migration_archive';
+
+/** §2.3: the search index is volatile, every other Phase 2 table data. */
+export const CATALOG_CLASSES: Record<CatalogTable, 'data' | 'volatile'> = {
+  languages: 'data',
+  material_types: 'data',
+  publishers: 'data',
+  agents: 'data',
+  subjects: 'data',
+  subject_relations: 'data',
+  records: 'data',
+  record_identifiers: 'data',
+  record_marc_extra: 'data',
+  record_agents: 'data',
+  record_subjects: 'data',
+  record_relations: 'data',
+  attachments: 'data',
+  locations: 'data',
+  collection_types: 'data',
+  suppliers: 'data',
+  items: 'data',
+  item_events: 'data',
+  pages: 'data',
+  page_translations: 'data',
+  search_doc: 'volatile',
+  search_facet: 'volatile',
+  search_term: 'volatile',
+  search_state: 'volatile',
+  catalog_runs: 'data',
+  migration_map: 'data',
+  migration_archive: 'data',
+};
+
+/** §2.4: which migration creates which tables, in creation order. */
+export const CATALOG_TABLES_BY_MIGRATION: Record<string, CatalogTable[]> = {
+  '0020_catalog_authorities': ['languages', 'material_types', 'publishers', 'agents', 'subjects', 'subject_relations'],
+  '0021_catalog_records': [
+    'records',
+    'record_identifiers',
+    'record_marc_extra',
+    'record_agents',
+    'record_subjects',
+    'record_relations',
+    'attachments',
+  ],
+  '0022_catalog_items': ['locations', 'collection_types', 'suppliers', 'items', 'item_events'],
+  '0023_opac_pages': ['pages', 'page_translations'],
+  '0024_search_index': ['search_doc', 'search_facet', 'search_term', 'search_state'],
+  '0025_catalog_runs_migration': ['catalog_runs', 'migration_map', 'migration_archive'],
+  // Three columns on custom_field_defs: no table, so no class literal (R44).
+  '0026_custom_fields_i18n': [],
+  // Seed rows only.
+  '0027_catalog_seed': [],
+  // Plan Task 39 (K9): four indexes on records and items, no table.
+  '0028_catalog_perf_indexes': [],
+  '0029_search_token_version': [],
+};
+
+export const CATALOG_PRIMARY_KEYS: Record<CatalogTable, string[]> = {
+  languages: ['id'],
+  material_types: ['id'],
+  publishers: ['id'],
+  agents: ['id'],
+  subjects: ['id'],
+  subject_relations: ['subject_id', 'related_id', 'rel'],
+  records: ['id'],
+  record_identifiers: ['id'],
+  record_marc_extra: ['id'],
+  record_agents: ['record_id', 'agent_id', 'role'],
+  record_subjects: ['record_id', 'subject_id'],
+  record_relations: ['record_id', 'related_id', 'type'],
+  attachments: ['id'],
+  locations: ['id'],
+  collection_types: ['id'],
+  suppliers: ['id'],
+  items: ['id'],
+  item_events: ['id'],
+  pages: ['id'],
+  page_translations: ['page_id', 'locale'],
+  search_doc: ['doc_no'],
+  search_facet: ['record_id', 'facet', 'value_key'],
+  search_term: ['term'],
+  search_state: ['id'],
+  catalog_runs: ['id'],
+  migration_map: ['source', 'entity', 'legacy_key'],
+  migration_archive: ['id'],
+};
+
+export interface CatalogIndexFacts {
+  table: string;
+  name: string;
+  unique: boolean;
+  columns: string[];
+}
+
+/**
+ * Every ix_/uq_ index of the Phase 2 tables but the full-text ones (their own test: fulltext.test.ts), S14's two
+ * newest-first indexes of search_doc included.
+ */
+export const CATALOG_INDEXES: CatalogIndexFacts[] = [
+  { table: 'agents', name: 'uq_agents_type_name_key', unique: true, columns: ['type', 'name_key'] },
+  { table: 'attachments', name: 'ix_attachments_record_id', unique: false, columns: ['record_id'] },
+  { table: 'catalog_runs', name: 'ix_catalog_runs_kind_created_at', unique: false, columns: ['kind', 'created_at'] },
+  { table: 'collection_types', name: 'uq_collection_types_code_key', unique: true, columns: ['code_key'] },
+  { table: 'item_events', name: 'ix_item_events_item_id_at', unique: false, columns: ['item_id', 'at'] },
+  { table: 'items', name: 'ix_items_branch_id_location_id', unique: false, columns: ['branch_id', 'location_id'] },
+  { table: 'items', name: 'ix_items_collection_type_id_archived_at', unique: false, columns: ['collection_type_id', 'archived_at'] }, // 0028
+  { table: 'items', name: 'ix_items_inventory_no', unique: false, columns: ['inventory_no'] },
+  { table: 'items', name: 'ix_items_record_id', unique: false, columns: ['record_id'] },
+  { table: 'items', name: 'ix_items_supplier_id_archived_at', unique: false, columns: ['supplier_id', 'archived_at'] }, // 0028
+  { table: 'items', name: 'uq_items_barcode_key', unique: true, columns: ['barcode_key'] },
+  { table: 'languages', name: 'uq_languages_code_key', unique: true, columns: ['code_key'] },
+  { table: 'locations', name: 'ix_locations_branch_id_parent_id', unique: false, columns: ['branch_id', 'parent_id'] },
+  { table: 'locations', name: 'uq_locations_branch_id_code_key', unique: true, columns: ['branch_id', 'code_key'] },
+  { table: 'material_types', name: 'uq_material_types_code_key', unique: true, columns: ['code_key'] },
+  {
+    table: 'migration_archive',
+    name: 'uq_migration_archive_source_table_name_legacy_key',
+    unique: true,
+    columns: ['source', 'table_name', 'legacy_key'],
+  },
+  { table: 'pages', name: 'ix_pages_kind_status_published_at', unique: false, columns: ['kind', 'status', 'published_at'] },
+  { table: 'pages', name: 'uq_pages_kind_slug_key', unique: true, columns: ['kind', 'slug_key'] },
+  { table: 'publishers', name: 'uq_publishers_name_key', unique: true, columns: ['name_key'] },
+  { table: 'record_agents', name: 'ix_record_agents_agent_id', unique: false, columns: ['agent_id'] },
+  { table: 'record_identifiers', name: 'ix_record_identifiers_type_value_key', unique: false, columns: ['type', 'value_key'] },
+  {
+    table: 'record_identifiers',
+    name: 'uq_record_identifiers_record_id_type_value_key',
+    unique: true,
+    columns: ['record_id', 'type', 'value_key'],
+  },
+  {
+    table: 'record_marc_extra',
+    name: 'ix_record_marc_extra_record_id_sort_order',
+    unique: false,
+    columns: ['record_id', 'sort_order'],
+  },
+  { table: 'record_relations', name: 'ix_record_relations_related_id', unique: false, columns: ['related_id'] },
+  { table: 'record_subjects', name: 'ix_record_subjects_subject_id', unique: false, columns: ['subject_id'] },
+  { table: 'records', name: 'ix_records_changed_at_id', unique: false, columns: ['changed_at', 'id'] },
+  { table: 'records', name: 'ix_records_language_id_archived_at', unique: false, columns: ['language_id', 'archived_at'] }, // 0028
+  { table: 'records', name: 'ix_records_material_type_id', unique: false, columns: ['material_type_id'] },
+  { table: 'records', name: 'ix_records_promoted_changed_at_id', unique: false, columns: ['promoted', 'changed_at', 'id'] }, // 0028
+  { table: 'records', name: 'ix_records_publisher_id', unique: false, columns: ['publisher_id'] },
+  { table: 'records', name: 'ix_records_title_key', unique: false, columns: ['title_key'] },
+  { table: 'search_doc', name: 'ix_search_doc_created', unique: false, columns: ['created_at'] }, // S14 (admin)
+  { table: 'search_doc', name: 'ix_search_doc_is_public_changed_at', unique: false, columns: ['is_public', 'changed_at'] },
+  { table: 'search_doc', name: 'ix_search_doc_is_public_title_key', unique: false, columns: ['is_public', 'title_key'] },
+  { table: 'search_doc', name: 'ix_search_doc_is_public_year', unique: false, columns: ['is_public', 'year'] },
+  { table: 'search_doc', name: 'ix_search_doc_public_created', unique: false, columns: ['is_public', 'created_at'] }, // S14 (OPAC)
+  { table: 'search_doc', name: 'uq_search_doc_record_id', unique: true, columns: ['record_id'] },
+  {
+    table: 'search_facet',
+    name: 'ix_search_facet_facet_value_key_record_id',
+    unique: false,
+    columns: ['facet', 'value_key', 'record_id'],
+  },
+  { table: 'search_term', name: 'ix_search_term_first_char_len_df', unique: false, columns: ['first_char', 'len', 'df'] },
+  { table: 'subject_relations', name: 'ix_subject_relations_related_id', unique: false, columns: ['related_id'] },
+  { table: 'subjects', name: 'uq_subjects_type_term_key', unique: true, columns: ['type', 'term_key'] },
+  { table: 'suppliers', name: 'uq_suppliers_code_key', unique: true, columns: ['code_key'] },
+];
+
+/** The unique indexes above as `table(columns)`. */
+export const CATALOG_UNIQUE = CATALOG_INDEXES.filter((i) => i.unique).map((i) => `${i.table}(${i.columns.join(', ')})`);
+
+export interface CatalogForeignKeyFacts {
+  table: string;
+  column: string;
+  refTable: string;
+  refColumn: string;
+  onDelete: string;
+}
+
+/** §2.2's foreign keys, and no other: cascade for owned rows, restrict on items.record_id and locations.branch_id. */
+export const CATALOG_FOREIGN_KEYS: CatalogForeignKeyFacts[] = [
+  { table: 'attachments', column: 'record_id', refTable: 'records', refColumn: 'id', onDelete: 'cascade' },
+  { table: 'item_events', column: 'item_id', refTable: 'items', refColumn: 'id', onDelete: 'cascade' },
+  { table: 'items', column: 'record_id', refTable: 'records', refColumn: 'id', onDelete: 'restrict' },
+  { table: 'locations', column: 'branch_id', refTable: 'branches', refColumn: 'id', onDelete: 'restrict' },
+  { table: 'page_translations', column: 'page_id', refTable: 'pages', refColumn: 'id', onDelete: 'cascade' },
+  { table: 'record_agents', column: 'record_id', refTable: 'records', refColumn: 'id', onDelete: 'cascade' },
+  { table: 'record_identifiers', column: 'record_id', refTable: 'records', refColumn: 'id', onDelete: 'cascade' },
+  { table: 'record_marc_extra', column: 'record_id', refTable: 'records', refColumn: 'id', onDelete: 'cascade' },
+  { table: 'record_relations', column: 'record_id', refTable: 'records', refColumn: 'id', onDelete: 'cascade' },
+  { table: 'record_subjects', column: 'record_id', refTable: 'records', refColumn: 'id', onDelete: 'cascade' },
+  { table: 'subject_relations', column: 'subject_id', refTable: 'subjects', refColumn: 'id', onDelete: 'cascade' },
+];
+
+const ARCHIVED_TRAIL = {
+  archived_at: 'bigint null',
+  version: 'integer default',
+  created_at: 'bigint',
+  created_by: 'char(26) null',
+  updated_at: 'bigint',
+  updated_by: 'char(26) null',
+};
+
+/** Every column in tables.test.ts's notation (`<type>[ null][ default][ auto]`). */
+export const CATALOG_COLUMNS: Record<CatalogTable, Record<string, string>> = {
+  languages: {
+    id: 'char(26)',
+    code_display: 'varchar(191)',
+    code_key: 'varchar(191)',
+    name_id: 'varchar(191)',
+    name_en: 'varchar(191)',
+    ...ARCHIVED_TRAIL,
+  },
+  material_types: {
+    id: 'char(26)',
+    code_display: 'varchar(191)',
+    code_key: 'varchar(191)',
+    name_id: 'varchar(191)',
+    name_en: 'varchar(191)',
+    marc_type: 'char(1)',
+    marc_level: 'char(1) default',
+    content_type: 'varchar(8) default',
+    media_type: 'varchar(8) default',
+    carrier_type: 'varchar(8) default',
+    schema_type: 'varchar(32) default',
+    dcmi_type: 'varchar(32) default',
+    template: 'text',
+    sort_order: 'integer default',
+    ...ARCHIVED_TRAIL,
+  },
+  publishers: {
+    id: 'char(26)',
+    name_display: 'varchar(191)',
+    name_key: 'varchar(191)',
+    place: 'varchar(191) null',
+    merged_into: 'char(26) null',
+    ...ARCHIVED_TRAIL,
+  },
+  agents: {
+    id: 'char(26)',
+    type: 'varchar(191)', // R39b: a column of a unique key
+    name_display: 'varchar(191)',
+    name_key: 'varchar(191)',
+    dates: 'varchar(64) null',
+    authority_source: 'varchar(64) null',
+    authority_ref: 'varchar(191) null',
+    note: 'text null',
+    merged_into: 'char(26) null',
+    ...ARCHIVED_TRAIL,
+  },
+  subjects: {
+    id: 'char(26)',
+    type: 'varchar(191)',
+    term_display: 'varchar(191)',
+    term_key: 'varchar(191)',
+    classification: 'varchar(64) null',
+    scope_note: 'text null',
+    authority_source: 'varchar(64) null',
+    merged_into: 'char(26) null',
+    ...ARCHIVED_TRAIL,
+  },
+  subject_relations: { subject_id: 'char(26)', related_id: 'char(26)', rel: 'varchar(191)' },
+  records: {
+    id: 'char(26)',
+    material_type_id: 'char(26)',
+    title: 'text',
+    subtitle: 'text null',
+    responsibility: 'text null',
+    title_key: 'varchar(191)',
+    edition: 'varchar(191) null',
+    material_detail: 'varchar(191) null',
+    publisher_id: 'char(26) null',
+    publication_place: 'varchar(191) null',
+    publication_year: 'char(4) null',
+    publication_date_text: 'varchar(64) null',
+    physical_desc: 'varchar(191) null',
+    series: 'varchar(191) null',
+    classification: 'varchar(64) null',
+    call_number: 'varchar(64) null',
+    language_id: 'char(26) null',
+    content_type: 'varchar(8) null',
+    media_type: 'varchar(8) null',
+    carrier_type: 'varchar(8) null',
+    summary: 'text null',
+    notes: 'text null',
+    cover_file_id: 'char(26) null',
+    opac_visible: 'smallint default',
+    promoted: 'smallint default',
+    source: 'varchar(191) null',
+    merged_into: 'char(26) null',
+    changed_at: 'bigint',
+    ...ARCHIVED_TRAIL,
+  },
+  record_identifiers: {
+    id: 'char(26)',
+    record_id: 'char(26)',
+    type: 'varchar(191)',
+    value_display: 'varchar(64)',
+    value_key: 'varchar(191)',
+    qualifier: 'varchar(64) null',
+    is_valid: 'smallint default',
+    sort_order: 'integer default',
+  },
+  record_marc_extra: {
+    id: 'char(26)',
+    record_id: 'char(26)',
+    tag: 'char(3)',
+    ind1: 'varchar(1)', // a blank indicator must read back as a blank
+    ind2: 'varchar(1)',
+    data: 'text',
+    sort_order: 'integer default',
+  },
+  record_agents: {
+    record_id: 'char(26)',
+    agent_id: 'char(26)',
+    role: 'varchar(191)',
+    is_main: 'smallint default',
+    sort_order: 'integer default',
+  },
+  record_subjects: { record_id: 'char(26)', subject_id: 'char(26)', is_primary: 'smallint default', sort_order: 'integer default' },
+  record_relations: { record_id: 'char(26)', related_id: 'char(26)', type: 'varchar(191)' },
+  attachments: {
+    id: 'char(26)',
+    record_id: 'char(26)',
+    kind: 'varchar(8)',
+    file_id: 'char(26) null',
+    url: 'text null',
+    title: 'varchar(191)',
+    description: 'text null',
+    access: 'varchar(16)',
+    legacy_access_limit: 'text null',
+    read_count: 'bigint default',
+    sort_order: 'integer default',
+    ...ARCHIVED_TRAIL,
+  },
+  locations: {
+    id: 'char(26)',
+    branch_id: 'char(26)',
+    parent_id: 'char(26) null',
+    kind: 'varchar(8)',
+    code_display: 'varchar(191)',
+    code_key: 'varchar(191)',
+    name: 'varchar(191)',
+    shelf_hint: 'varchar(40) null',
+    class_from: 'varchar(32) null',
+    class_to: 'varchar(32) null',
+    map_file_id: 'char(26) null',
+    map_x: 'smallint null',
+    map_y: 'smallint null',
+    map_w: 'smallint null',
+    map_h: 'smallint null',
+    is_public: 'smallint default',
+    sort_order: 'integer default',
+    ...ARCHIVED_TRAIL,
+  },
+  collection_types: {
+    id: 'char(26)',
+    code_display: 'varchar(191)',
+    code_key: 'varchar(191)',
+    name_id: 'varchar(191)',
+    name_en: 'varchar(191)',
+    loanable: 'smallint default',
+    self_service: 'smallint default',
+    sort_order: 'integer default',
+    ...ARCHIVED_TRAIL,
+  },
+  suppliers: {
+    id: 'char(26)',
+    code_display: 'varchar(191)',
+    code_key: 'varchar(191)',
+    name: 'varchar(191)',
+    contact_name: 'varchar(191) null',
+    phone: 'varchar(64) null',
+    email: 'varchar(191) null',
+    address: 'text null',
+    note: 'text null',
+    ...ARCHIVED_TRAIL,
+  },
+  items: {
+    id: 'char(26)',
+    record_id: 'char(26)',
+    branch_id: 'char(26)',
+    barcode_display: 'varchar(64)',
+    barcode_key: 'varchar(191)',
+    inventory_no: 'varchar(64) null',
+    call_number: 'varchar(64) null',
+    location_id: 'char(26) null',
+    collection_type_id: 'char(26)',
+    status: 'varchar(16)',
+    status_note: 'varchar(191) null',
+    parts_total: 'smallint default',
+    acq_source: 'varchar(16) null',
+    order_no: 'varchar(64) null',
+    order_date: 'char(10) null',
+    received_date: 'char(10) null',
+    invoice_date: 'char(10) null',
+    supplier_id: 'char(26) null',
+    invoice_no: 'varchar(64) null',
+    price: 'bigint null',
+    currency: 'char(3) null',
+    note: 'text null',
+    ...ARCHIVED_TRAIL,
+  },
+  item_events: {
+    id: 'char(26)',
+    item_id: 'char(26)',
+    at: 'bigint',
+    type: 'varchar(16)',
+    from_status: 'varchar(16) null',
+    to_status: 'varchar(16) null',
+    from_location_id: 'char(26) null',
+    to_location_id: 'char(26) null',
+    actor_type: 'varchar(32)',
+    actor_id: 'char(26) null',
+    meta: 'text',
+  },
+  pages: {
+    id: 'char(26)',
+    kind: 'varchar(191)',
+    slug_key: 'varchar(191)',
+    status: 'varchar(16)',
+    published_at: 'bigint null',
+    show_in_nav: 'smallint default',
+    cover_file_id: 'char(26) null',
+    sort_order: 'integer default',
+    ...ARCHIVED_TRAIL,
+  },
+  page_translations: {
+    page_id: 'char(26)',
+    locale: 'varchar(191)',
+    title: 'varchar(191)',
+    summary: 'text null',
+    body_format: 'varchar(16)',
+    body: 'text',
+    updated_at: 'bigint',
+  },
+  search_doc: {
+    doc_no: 'bigint auto',
+    record_id: 'char(26)',
+    is_public: 'smallint',
+    is_archived: 'smallint',
+    t_title: 'text',
+    t_agents: 'text',
+    t_subjects: 'text',
+    t_rest: 'text',
+    title_key: 'varchar(191)',
+    year: 'smallint null',
+    created_at: 'bigint',
+    changed_at: 'bigint',
+  },
+  search_facet: { record_id: 'char(26)', facet: 'varchar(191)', value_key: 'varchar(191)' },
+  search_term: { term: 'varchar(191)', first_char: 'varchar(4)', len: 'smallint', df: 'integer' },
+  search_state: { id: 'smallint', status: 'varchar(16)', docs: 'integer', job_id: 'char(26) null', built_at: 'bigint null', token_version: 'smallint null' },
+  catalog_runs: {
+    id: 'char(26)',
+    kind: 'varchar(16)',
+    status: 'varchar(16)',
+    dry_run: 'smallint default',
+    format: 'varchar(32) null',
+    options: 'text',
+    summary: 'text',
+    report_file_id: 'char(26) null',
+    output_name: 'varchar(191) null',
+    output_size: 'bigint null',
+    expires_at: 'bigint null',
+    job_id: 'char(26) null',
+    created_at: 'bigint',
+    created_by: 'char(26) null',
+    finished_at: 'bigint null',
+  },
+  migration_map: {
+    source: 'varchar(191)',
+    entity: 'varchar(191)',
+    legacy_key: 'varchar(191)',
+    target_id: 'char(26)',
+    run_id: 'char(26)',
+  },
+  migration_archive: {
+    id: 'char(26)',
+    run_id: 'char(26)',
+    source: 'varchar(191)',
+    table_name: 'varchar(191)',
+    legacy_key: 'varchar(191)',
+    row_json: 'text',
+    created_at: 'bigint',
+  },
+};
+
+/** key191() columns of the Phase 2 tables outside any primary or unique key (binary on MySQL/MariaDB as well). */
+export const CATALOG_NON_UNIQUE_BINARY_COLUMNS = ['records.title_key', 'search_doc.title_key'];
+
+/** The database default of every column the `DB` type marks `Generated`, per Phase 2 table (parents first). */
+export const CATALOG_DEFAULTS = {
+  languages: { version: 0 },
+  material_types: {
+    marc_level: 'm',
+    content_type: 'txt',
+    media_type: 'n',
+    carrier_type: 'nc',
+    schema_type: 'Book',
+    dcmi_type: 'Text',
+    sort_order: 0,
+    version: 0,
+  },
+  publishers: { version: 0 },
+  agents: { version: 0 },
+  subjects: { version: 0 },
+  subject_relations: {},
+  records: { opac_visible: 1, promoted: 0, version: 0 },
+  record_identifiers: { is_valid: 1, sort_order: 0 },
+  record_marc_extra: { sort_order: 0 },
+  record_agents: { is_main: 0, sort_order: 0 },
+  record_subjects: { is_primary: 0, sort_order: 0 },
+  record_relations: {},
+  attachments: { read_count: 0, sort_order: 0, version: 0 },
+  locations: { is_public: 1, sort_order: 0, version: 0 },
+  collection_types: { loanable: 1, self_service: 1, sort_order: 0, version: 0 },
+  suppliers: { version: 0 },
+  items: { parts_total: 1, version: 0 },
+  item_events: {},
+  pages: { show_in_nav: 0, sort_order: 0, version: 0 },
+  page_translations: {},
+  search_doc: { doc_no: expect.any(Number) as number },
+  search_facet: {},
+  search_term: {},
+  search_state: {},
+  catalog_runs: { dry_run: 0 },
+  migration_map: {},
+  migration_archive: {},
+} as const;
+
+const EPOCH_MS = 1767225600000; // 2026-01-01T00:00:00Z
+const LATER_MS = EPOCH_MS + 86_400_000;
+
+/**
+ * Full rows of every Phase 2 table, typed by `DB` (tsc checks that every column is written), for the round trip of
+ * tables.test.ts. Row B of a table sets every nullable column to null. `branchId` and `staffId` are rows of the
+ * Phase 1 sample (locations reference a branch). The ids are new ULIDs unless `newId` gives them (the same rows in two
+ * databases, as the backup checksum test needs); the times are fixed.
+ */
+export function catalogSampleRows(o: { branchId: string; staffId: string; newId?: () => string }): { [T in CatalogTable]: Selectable<DB[T]>[] } {
+  const nextId = o.newId ?? newId;
+  const trail = { archived_at: LATER_MS, version: 2, created_at: EPOCH_MS, created_by: o.staffId, updated_at: LATER_MS, updated_by: o.staffId };
+  const bare = { archived_at: null, version: 0, created_at: EPOCH_MS, created_by: null, updated_at: EPOCH_MS, updated_by: null };
+  const materialTypeId = nextId();
+  const languageId = nextId();
+  const publisherId = nextId();
+  const agentId = nextId();
+  const subjectId = nextId();
+  const subjectId2 = nextId();
+  const recordId = nextId();
+  const recordId2 = nextId();
+  const roomId = nextId();
+  const shelfId = nextId();
+  const collectionTypeId = nextId();
+  const supplierId = nextId();
+  const itemId = nextId();
+  const pageId = nextId();
+  const runId = nextId();
+  const fileId = nextId();
+  return {
+    languages: [
+      { id: languageId, code_display: 'ind', code_key: 'IND', name_id: 'Indonesia', name_en: 'Indonesian', ...trail },
+      { id: nextId(), code_display: 'jav', code_key: 'JAV', name_id: 'Jawa', name_en: 'Javanese', ...bare },
+    ],
+    material_types: [
+      {
+        id: materialTypeId,
+        code_display: 'Peta',
+        code_key: 'PETA',
+        name_id: 'Peta',
+        name_en: 'Map',
+        marc_type: 'e',
+        marc_level: 'm',
+        content_type: 'cri',
+        media_type: 'n',
+        carrier_type: 'nb',
+        schema_type: 'Map',
+        dcmi_type: 'Image',
+        template: '{"fields":{"edition":"hidden"},"defaults":{},"customFields":[]}',
+        sort_order: 50,
+        ...trail,
+      },
+    ],
+    publishers: [
+      { id: publisherId, name_display: 'Gramedia', name_key: 'GRAMEDIA', place: 'Jakarta', merged_into: nextId(), ...trail },
+      { id: nextId(), name_display: 'Balai Pustaka', name_key: 'BALAI PUSTAKA', place: null, merged_into: null, ...bare },
+    ],
+    agents: [
+      {
+        id: agentId,
+        type: 'person',
+        name_display: 'Toer, Pramoedya Ananta',
+        name_key: 'TOER, PRAMOEDYA ANANTA 1925-2006',
+        dates: '1925-2006',
+        authority_source: 'lcnaf',
+        authority_ref: 'n80094352',
+        note: 'Sastrawan',
+        merged_into: nextId(),
+        ...trail,
+      },
+      {
+        // The same name key under another type: another key.
+        id: nextId(),
+        type: 'organization',
+        name_display: 'Toer',
+        name_key: 'TOER, PRAMOEDYA ANANTA 1925-2006',
+        dates: null,
+        authority_source: null,
+        authority_ref: null,
+        note: null,
+        merged_into: null,
+        ...bare,
+      },
+    ],
+    subjects: [
+      {
+        id: subjectId,
+        type: 'topic',
+        term_display: 'Sastra Indonesia',
+        term_key: 'SASTRA INDONESIA',
+        classification: '899.221',
+        scope_note: 'Karya sastra berbahasa Indonesia',
+        authority_source: 'lcsh',
+        merged_into: null,
+        ...trail,
+      },
+      {
+        id: subjectId2,
+        type: 'geographic',
+        term_display: 'Bandung',
+        term_key: 'BANDUNG',
+        classification: null,
+        scope_note: null,
+        authority_source: null,
+        merged_into: null,
+        ...bare,
+      },
+    ],
+    subject_relations: [
+      { subject_id: subjectId, related_id: subjectId2, rel: 'rt' },
+      { subject_id: subjectId2, related_id: subjectId, rel: 'rt' },
+    ],
+    records: [
+      {
+        id: recordId,
+        material_type_id: materialTypeId,
+        title: 'Bumi Manusia',
+        subtitle: 'sebuah roman',
+        responsibility: 'Pramoedya Ananta Toer',
+        title_key: 'bumi manusia sebuah roman',
+        edition: 'Cet. 3',
+        material_detail: 'skala 1:50.000',
+        publisher_id: publisherId,
+        publication_place: 'Jakarta',
+        publication_year: '1980',
+        publication_date_text: 'c1980',
+        physical_desc: '535 hlm. ; 21 cm',
+        series: 'Tetralogi Buru',
+        classification: '899.221 3',
+        call_number: '899.221 3 TOE b',
+        language_id: languageId,
+        content_type: 'txt',
+        media_type: 'n',
+        carrier_type: 'nc',
+        summary: 'Roman sejarah',
+        notes: 'Bibliografi',
+        cover_file_id: fileId,
+        opac_visible: 0,
+        promoted: 1,
+        source: 'slims:42',
+        merged_into: recordId2,
+        changed_at: LATER_MS,
+        ...trail,
+      },
+      {
+        id: recordId2,
+        material_type_id: materialTypeId,
+        title: 'Anak Semua Bangsa',
+        subtitle: null,
+        responsibility: null,
+        title_key: 'anak semua bangsa',
+        edition: null,
+        material_detail: null,
+        publisher_id: null,
+        publication_place: null,
+        publication_year: null,
+        publication_date_text: null,
+        physical_desc: null,
+        series: null,
+        classification: null,
+        call_number: null,
+        language_id: null,
+        content_type: null,
+        media_type: null,
+        carrier_type: null,
+        summary: null,
+        notes: null,
+        cover_file_id: null,
+        opac_visible: 1,
+        promoted: 0,
+        source: null,
+        merged_into: null,
+        changed_at: EPOCH_MS,
+        ...bare,
+      },
+    ],
+    record_identifiers: [
+      {
+        id: nextId(),
+        record_id: recordId,
+        type: 'isbn',
+        value_display: '979-407-182-X',
+        value_key: '9789794071823',
+        qualifier: 'jil. 1',
+        is_valid: 0,
+        sort_order: 1,
+      },
+      {
+        // The same value under another type: another key.
+        id: nextId(),
+        record_id: recordId,
+        type: 'other',
+        value_display: '9789794071823',
+        value_key: '9789794071823',
+        qualifier: null,
+        is_valid: 1,
+        sort_order: 2,
+      },
+    ],
+    record_marc_extra: [
+      // A blank indicator reads back as a blank (VARCHAR(1)).
+      { id: nextId(), record_id: recordId, tag: '590', ind1: ' ', ind2: '0', data: '[["a","Koleksi hibah"]]', sort_order: 3 },
+      { id: nextId(), record_id: recordId, tag: 'LDR', ind1: ' ', ind2: ' ', data: '00000nam a2200000 a 4500', sort_order: 0 },
+    ],
+    record_agents: [
+      { record_id: recordId, agent_id: agentId, role: 'aut', is_main: 1, sort_order: 0 },
+      { record_id: recordId, agent_id: agentId, role: 'trl', is_main: 0, sort_order: 1 },
+    ],
+    record_subjects: [{ record_id: recordId, subject_id: subjectId, is_primary: 1, sort_order: 4 }],
+    record_relations: [{ record_id: recordId, related_id: recordId2, type: 'other_edition' }],
+    attachments: [
+      {
+        id: nextId(),
+        record_id: recordId,
+        kind: 'file',
+        file_id: fileId,
+        url: null,
+        title: 'Bab 1',
+        description: 'Cuplikan',
+        access: 'public',
+        legacy_access_limit: '[1,2]',
+        read_count: 2 ** 40,
+        sort_order: 1,
+        ...trail,
+      },
+      {
+        id: nextId(),
+        record_id: recordId,
+        kind: 'url',
+        file_id: null,
+        url: 'https://example.org/bumi',
+        title: 'Situs',
+        description: null,
+        access: 'staff',
+        legacy_access_limit: null,
+        read_count: 0,
+        sort_order: 2,
+        ...bare,
+      },
+    ],
+    locations: [
+      {
+        id: roomId,
+        branch_id: o.branchId,
+        parent_id: null,
+        kind: 'room',
+        code_display: 'R1',
+        code_key: 'R1',
+        name: 'Ruang Baca',
+        shelf_hint: null,
+        class_from: null,
+        class_to: null,
+        map_file_id: null,
+        map_x: null,
+        map_y: null,
+        map_w: null,
+        map_h: null,
+        is_public: 1,
+        sort_order: 0,
+        ...bare,
+      },
+      {
+        id: shelfId,
+        branch_id: o.branchId,
+        parent_id: roomId,
+        kind: 'shelf',
+        code_display: 'R1-800',
+        code_key: 'R1-800',
+        name: 'Rak 800–899',
+        shelf_hint: 'Rak 800',
+        class_from: '800',
+        class_to: '899.999',
+        map_file_id: fileId,
+        map_x: 0,
+        map_y: 250,
+        map_w: 1000,
+        map_h: 125,
+        is_public: 0,
+        sort_order: 7,
+        ...trail,
+      },
+    ],
+    collection_types: [
+      {
+        id: collectionTypeId,
+        code_display: 'Tandon',
+        code_key: 'TANDON',
+        name_id: 'Tandon',
+        name_en: 'Reserve',
+        loanable: 0,
+        self_service: 0,
+        sort_order: 40,
+        ...trail,
+      },
+    ],
+    suppliers: [
+      {
+        id: supplierId,
+        code_display: 'TB-1',
+        code_key: 'TB-1',
+        name: 'Toko Buku Satu',
+        contact_name: 'Budi',
+        phone: '+62 21 555 0101',
+        email: 'budi@example.test',
+        address: 'Jl. Contoh 2',
+        note: 'Langganan',
+        ...trail,
+      },
+      {
+        id: nextId(),
+        code_display: 'TB-2',
+        code_key: 'TB-2',
+        name: 'Toko Buku Dua',
+        contact_name: null,
+        phone: null,
+        email: null,
+        address: null,
+        note: null,
+        ...bare,
+      },
+    ],
+    items: [
+      {
+        id: itemId,
+        record_id: recordId,
+        branch_id: o.branchId,
+        barcode_display: 'b001',
+        barcode_key: 'B001',
+        inventory_no: 'INV/2026/1',
+        call_number: '899.221 3 TOE b c.1',
+        location_id: shelfId,
+        collection_type_id: collectionTypeId,
+        status: 'available',
+        status_note: 'Sampul sobek',
+        parts_total: 2,
+        acq_source: 'purchase',
+        order_no: 'PO-1',
+        order_date: '2026-01-02',
+        received_date: '2026-01-10',
+        invoice_date: '2026-01-11',
+        supplier_id: supplierId,
+        invoice_no: 'F-77',
+        price: 12_500_000,
+        currency: 'IDR',
+        note: 'Hadiah',
+        ...trail,
+      },
+      {
+        // Same key in another case: another barcode (binary on MySQL/MariaDB too).
+        id: nextId(),
+        record_id: recordId2,
+        branch_id: o.branchId,
+        barcode_display: 'b001',
+        barcode_key: 'b001',
+        inventory_no: null,
+        call_number: null,
+        location_id: null,
+        collection_type_id: collectionTypeId,
+        status: 'processing',
+        status_note: null,
+        parts_total: 1,
+        acq_source: null,
+        order_no: null,
+        order_date: null,
+        received_date: null,
+        invoice_date: null,
+        supplier_id: null,
+        invoice_no: null,
+        price: null,
+        currency: null,
+        note: null,
+        ...bare,
+      },
+    ],
+    item_events: [
+      {
+        id: nextId(),
+        item_id: itemId,
+        at: LATER_MS,
+        type: 'moved',
+        from_status: 'processing',
+        to_status: 'available',
+        from_location_id: roomId,
+        to_location_id: shelfId,
+        actor_type: 'staff',
+        actor_id: o.staffId,
+        meta: '{"fields":["location_id"]}',
+      },
+      {
+        id: nextId(),
+        item_id: itemId,
+        at: EPOCH_MS,
+        type: 'created',
+        from_status: null,
+        to_status: null,
+        from_location_id: null,
+        to_location_id: null,
+        actor_type: 'system',
+        actor_id: null,
+        meta: '{}',
+      },
+    ],
+    pages: [
+      {
+        id: pageId,
+        kind: 'news',
+        slug_key: 'jam-buka-lebaran',
+        status: 'published',
+        published_at: LATER_MS,
+        show_in_nav: 1,
+        cover_file_id: fileId,
+        sort_order: 3,
+        ...trail,
+      },
+      {
+        // The same slug as a page: another key.
+        id: nextId(),
+        kind: 'page',
+        slug_key: 'jam-buka-lebaran',
+        status: 'draft',
+        published_at: null,
+        show_in_nav: 0,
+        cover_file_id: null,
+        sort_order: 0,
+        ...bare,
+      },
+    ],
+    page_translations: [
+      {
+        page_id: pageId,
+        locale: 'id',
+        title: 'Jam buka Lebaran',
+        summary: 'Perpustakaan tutup',
+        body_format: 'markdown',
+        body: '# Libur',
+        updated_at: LATER_MS,
+      },
+      { page_id: pageId, locale: 'en', title: 'Eid hours', summary: null, body_format: 'html', body: '<p>Closed</p>', updated_at: EPOCH_MS },
+    ],
+    search_doc: [
+      {
+        doc_no: 1,
+        record_id: recordId,
+        is_public: 1,
+        is_archived: 0,
+        t_title: 'bumi manusia',
+        t_agents: 'toer pramoedya ananta',
+        t_subjects: 'sastra indonesia',
+        t_rest: '9789794071823 zqab',
+        title_key: 'bumi manusia',
+        year: 1980,
+        created_at: EPOCH_MS,
+        changed_at: LATER_MS,
+      },
+      {
+        doc_no: 2 ** 40, // BIGINT
+        record_id: recordId2,
+        is_public: 0,
+        is_archived: 1,
+        t_title: '',
+        t_agents: '',
+        t_subjects: '',
+        t_rest: '',
+        title_key: '',
+        year: null,
+        created_at: EPOCH_MS,
+        changed_at: EPOCH_MS,
+      },
+    ],
+    search_facet: [
+      { record_id: recordId, facet: 'mt', value_key: materialTypeId },
+      { record_id: recordId, facet: 'cl', value_key: '8' },
+    ],
+    search_term: [{ term: 'manusia', first_char: 'm', len: 7, df: 2 ** 30 }],
+    search_state: [{ id: 1, status: 'building', docs: 2, job_id: nextId(), built_at: LATER_MS, token_version: 1 }],
+    catalog_runs: [
+      {
+        id: runId,
+        kind: 'import',
+        status: 'succeeded',
+        dry_run: 1,
+        format: 'marc21',
+        options: '{"matchOn":"isbn"}',
+        summary: '{"read":2}',
+        report_file_id: fileId,
+        output_name: `${runId}.mrc`,
+        output_size: 5_000_000_000,
+        expires_at: LATER_MS,
+        job_id: nextId(),
+        created_at: EPOCH_MS,
+        created_by: o.staffId,
+        finished_at: LATER_MS,
+      },
+      {
+        id: nextId(),
+        kind: 'dedupe_scan',
+        status: 'queued',
+        dry_run: 0,
+        format: null,
+        options: '{}',
+        summary: '{}',
+        report_file_id: null,
+        output_name: null,
+        output_size: null,
+        expires_at: null,
+        job_id: null,
+        created_at: EPOCH_MS,
+        created_by: null,
+        finished_at: null,
+      },
+    ],
+    migration_map: [
+      { source: 'slims', entity: 'biblio', legacy_key: '42', target_id: recordId, run_id: runId },
+      // The same legacy key under another source: another key.
+      { source: `import:${runId}`, entity: 'biblio', legacy_key: '42', target_id: recordId2, run_id: runId },
+    ],
+    migration_archive: [
+      {
+        id: nextId(),
+        run_id: runId,
+        source: 'slims',
+        table_name: 'biblio_log',
+        legacy_key: '7',
+        row_json: '{"biblio_id":42,"action":"update"}',
+        created_at: EPOCH_MS,
+      },
+    ],
+  };
+}

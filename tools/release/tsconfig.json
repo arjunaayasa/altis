@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist" },
+  // The release tooling (build, feed, passenger-sim, smoke) is a project of its own: the build imports the workspace packages
+  // it bundles and signs with; the smoke run and the N−1 runner (1d Task 34) take the test engines of tools/test.
+  // packages/core only for a test (1d Task 32: test/altis-init.test.ts checks docker/altis-init's code with the server's
+  // install-code parser, by relative path; @altis/core is not a dependency of this package).
+  "include": ["src", "feed", "test", "passenger-sim", "smoke", "n-minus-1", "perf", "../../globals.d.ts"],
+  "references": [
+    { "path": "../../packages/shared" },
+    { "path": "../../packages/platform" },
+    { "path": "../../packages/crypto" },
+    { "path": "../../packages/db" },
+    { "path": "../../packages/bootloader" },
+    { "path": "../../packages/core" },
+    { "path": "../sign-cli" },
+    { "path": "../test" }
+  ]
+}

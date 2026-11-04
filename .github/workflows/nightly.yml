@@ -1,0 +1,921 @@
+# Nightly tier (spec §12.3, §13.2 exit check of 1a): the unit tests and test:db on Node 22.16/24/26 (test:db × the
+# seven engines); the test-profile release zip built once, then smoke-tested on every target × engine: passenger-sim
+# (max-pool 6), pm2 and standalone on each Node (passenger-sim never on SQLite, P20), Docker on its image's Node
+# (node:24), and standalone + SQLite on Windows. Budgets (cold start < 1.5 s, idle RSS < 150 MB) are asserted by the
+# smoke run on the Linux x64 runners.
+#
+# The zip's app.js is also started on the Nodes that hosting panels still offer (10 to 20.11): it must answer with the
+# NODE_TOO_OLD rescue page there (ruling R56, Review Focus 4). app.js cannot be fixed once an install has it, so this
+# is the only place that proves it on a real old Node.
+#
+# The Playwright E2E suite (tools/e2e, Task 32; §13.2 exit check of 1b: A3 in the browser, A11 no CSP violation) runs
+# here only; the PR tier has none (§12.3). 1c Task 34 adds its specs (the install wizard with its resume on an
+# uninstalled app, backup and restore through the UI, realtime progress by SSE and by polling) and the passenger-sim
+# scenarios of the smoke run (job `smoke-scenarios`).
+#
+# 1c Task 29 (§12.3 "semua 12 pasangan restore", A6): the restore matrix on every ordered pair of two different engines
+# of {SQLite, MySQL 8.0, MariaDB 10.6, PostgreSQL 15} (the PR tier runs SQLite → MariaDB 10.6 only).
+#
+# 1d Task 35 (§13.2 CI "nightly green on all seven engines with every scenario, E2E, perf, N−1, the image check and
+# the Windows standalone smoke"): the release job builds the fixtures 0.1.0-test, 0.2.0-test and 0.3.0-test; every
+# update scenario of the smoke run on the four A1 targets (`smoke-update`: passenger-sim + MariaDB 10.6, pm2 + MySQL
+# 8.0, Docker + MariaDB 10.6 and PostgreSQL 15, standalone + SQLite; update-kill on passenger-sim with max-pool 6,
+# docker-pull on Docker and standalone, zip-reupload standalone); the install wizard per A1 target (`e2e-wizard`; standalone + SQLite
+# is the e2e job's, which also runs the update, revert and offline update specs); the §12.7 budgets
+# on MariaDB 10.6 and SQLite (`perf`, asserted on these Linux x64 runners, the update duration from the passenger-sim
+# update scenario); and the Windows standalone smoke updates 0.1 → 0.2 through feed-dev and forces the update faults,
+# `boot-crash:0.2.0-test` among them (preflight 1D-26: the first public app.js ships Windows paths).
+#
+# Phase 2 Task 39 (Phase 2 spec §15, §14.4 step 3, P10):
+# - the test:db matrix runs with ALTIS_TEST_NIGHTLY=1 (the nightly-only cases, e.g. the 1c L41 burst test);
+# - the restore matrix also runs the Phase 2 restore check on all 12 pairs (K1);
+# - `slims-direct`: the SLiMS migration with the direct-connection source on MariaDB 10.6 (K15);
+# - `perf-phase2`: tools/test/perf-phase2 on SQLite and MariaDB 10.6 (K9, K16);
+# - `e2e-catalog`: the catalog and OPAC specs in Playwright's full Chromium, M10 among them (K10).
+#
+# Actions are pinned to commit SHAs (the tag in the comment); the token can only read the repository.
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 19 * * *' # 02:00 WIB
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  # The release is built, and the Docker smoke driven, on the minimum Node.
+  NODE_VERSION: '22.16.0'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  unit:
+    # `pnpm test` (the unit project) on every Node the product supports (spec §4.2: tested on 22, 24 and 26).
+    name: unit (Node ${{ matrix.node }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.16.0', '24', '26']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start mailpit
+        run: docker compose -f tools/test/compose.yml up -d --wait mailpit
+      - run: pnpm test
+        env:
+          ALTIS_TEST_MAILPIT_REQUIRED: '1'
+      - name: Stop mailpit
+        if: always()
+        run: docker compose -f tools/test/compose.yml down
+
+  test-db:
+    name: test:db ${{ matrix.engine }} (Node ${{ matrix.node }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.16.0', '24', '26']
+        engine: [sqlite, mysql80, mysql84, mariadb106, mariadb114, pg15, pg17]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start ${{ matrix.engine }}
+        if: matrix.engine != 'sqlite'
+        run: docker compose -f tools/test/compose.yml up -d --wait "$ENGINE"
+        env:
+          ENGINE: ${{ matrix.engine }}
+      - name: Start mailpit
+        run: docker compose -f tools/test/compose.yml up -d --wait mailpit
+      # ALTIS_TEST_NIGHTLY=1 turns on the cases that run in this tier only, such as the 1c L41 burst test
+      # (packages/core/test/db/burst.test.ts: a snapshot backup and 32 audit writers on MySQL, MariaDB and PostgreSQL).
+      - run: pnpm test:db
+        env:
+          ALTIS_TEST_DB: ${{ matrix.engine }}
+          ALTIS_TEST_DB_REQUIRED: '1'
+          ALTIS_TEST_MAILPIT_REQUIRED: '1'
+          ALTIS_TEST_NIGHTLY: '1'
+      - name: Stop the services
+        if: always()
+        run: docker compose -f tools/test/compose.yml down
+
+  restore-matrix:
+    # 1c Task 29: backups made on `source` (ALTIS_TEST_DB_SOURCE) restored into `target` (ALTIS_TEST_DB), the 12
+    # ordered pairs of two different engines (apps/server/test/db/restore-matrix.test.ts). Phase 2 Task 39 (K1 "semua
+    # pasangan (nightly)"): the same pairs for apps/server/test/db/phase2-integration.test.ts, whose restore check
+    # compares the catalog tables, `migration_*` and the attachment and cover blobs, then requires the search index to
+    # be rebuilt by the boot alone with the 1 000-record fixture fully searchable.
+    name: restore ${{ matrix.source }} → ${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [sqlite, mysql80, mariadb106, pg15]
+        target: [sqlite, mysql80, mariadb106, pg15]
+        exclude:
+          - source: sqlite
+            target: sqlite
+          - source: mysql80
+            target: mysql80
+          - source: mariadb106
+            target: mariadb106
+          - source: pg15
+            target: pg15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start the engines and mailpit
+        run: |
+          services=(mailpit)
+          for engine in "$SOURCE" "$TARGET"; do
+            if [ "$engine" != sqlite ]; then services+=("$engine"); fi
+          done
+          docker compose -f tools/test/compose.yml up -d --wait "${services[@]}"
+        env:
+          SOURCE: ${{ matrix.source }}
+          TARGET: ${{ matrix.target }}
+      - name: restore matrix (1c)
+        run: pnpm test:db apps/server/test/db/restore-matrix.test.ts
+        env:
+          ALTIS_TEST_DB_SOURCE: ${{ matrix.source }}
+          ALTIS_TEST_DB: ${{ matrix.target }}
+          ALTIS_TEST_DB_REQUIRED: '1'
+          ALTIS_TEST_MAILPIT_REQUIRED: '1'
+      # Run even when the 1c file failed, so both acceptance checks report. A file filter that matches nothing would
+      # quietly run nothing, hence the check that the file is there.
+      - name: restore with the catalog (Phase 2, K1)
+        if: ${{ !cancelled() }}
+        run: |
+          test -f "$K1_FILE" || { echo "::error::$K1_FILE is missing"; exit 1; }
+          pnpm test:db "$K1_FILE"
+        env:
+          K1_FILE: apps/server/test/db/phase2-restore-reindex.test.ts
+          ALTIS_TEST_DB_SOURCE: ${{ matrix.source }}
+          ALTIS_TEST_DB: ${{ matrix.target }}
+          ALTIS_TEST_DB_REQUIRED: '1'
+          ALTIS_TEST_MAILPIT_REQUIRED: '1'
+      - name: Stop the services
+        if: always()
+        run: docker compose -f tools/test/compose.yml down
+
+  e2e:
+    # `pnpm e2e` (tools/e2e/global-setup.ts): the test-profile release built, installed standalone on SQLite and started
+    # on 127.0.0.1, its mail to mailpit, driven by the Chromium of the pinned @playwright/test (installed through the
+    # workspace's own binary, never an unpinned `npx playwright`). On failure the traces, screenshots and the app's
+    # build, install and server logs are uploaded. The whole suite includes Phase 2's specs (catalog.spec.ts,
+    # opac.spec.ts and opac-pdf.spec.ts, which asks for the full Chromium itself; `playwright install chromium` installs
+    # both the full build and the headless shell); `e2e-catalog` runs those again with the full Chromium only.
+    name: e2e (Playwright, Chromium)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium for Playwright
+        run: pnpm --filter @altis/e2e exec playwright install --with-deps chromium
+      - name: Start mailpit
+        run: docker compose -f tools/test/compose.yml up -d --wait mailpit
+      - run: pnpm e2e
+        env:
+          ALTIS_TEST_MAILPIT_REQUIRED: '1'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: e2e-traces
+          path: |
+            tools/e2e/dist/test-results/
+            tools/e2e/dist/report/
+            tools/e2e/dist/run/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop mailpit
+        if: always()
+        run: docker compose -f tools/test/compose.yml down
+
+  release:
+    name: release zip (test profile)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The release fixtures (§12.5, decision D1d-26), one build after the other (the builds share apps/admin/dist).
+      - name: Build 0.1.0-test, 0.2.0-test and 0.3.0-test
+        run: |
+          pnpm release --profile test --version 0.1.0-test
+          pnpm release --profile test --version 0.2.0-test
+          pnpm release --profile test --version 0.3.0-test
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-zip
+          path: |
+            dist/altis-0.1.0-test.zip
+            dist/altis-0.2.0-test.zip
+            dist/altis-0.3.0-test.zip
+            dist/build-report.json
+          if-no-files-found: error
+          retention-days: 7
+
+  old-node:
+    # app.js on the Nodes a hosting panel still offers: it must start, listen and answer the NODE_TOO_OLD rescue page
+    # (503 HTML naming "Node 22.16", /_health 503 {"status":"rescue","reason":"NODE_TOO_OLD"}, `doctor` exit 1). The
+    # checker is plain CommonJS for Node 10 (tools/release/smoke/old-node-check.cjs): nothing of the toolchain (the
+    # package manager, tsx, node_modules) runs on the old Node, only the unzipped release and the checker.
+    name: NODE_TOO_OLD rescue on Node ${{ matrix.node }}
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['10', '12', '14', '16', '18', '20.11']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-zip
+          path: dist
+      - name: Unzip the release
+        run: |
+          mkdir -p "$RUNNER_TEMP/app"
+          unzip -q dist/altis-0.1.0-test.zip -d "$RUNNER_TEMP/app"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Node version
+        run: node --version
+      - name: NODE_TOO_OLD rescue
+        run: node tools/release/smoke/old-node-check.cjs --app "$RUNNER_TEMP/app"
+
+  smoke:
+    name: smoke ${{ matrix.target }} + ${{ matrix.engine }} (Node ${{ matrix.node }})
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.16.0', '24', '26']
+        target: [passenger-sim, pm2, standalone]
+        engine: [sqlite, mysql80, mysql84, mariadb106, mariadb114, pg15, pg17]
+        exclude:
+          - target: passenger-sim
+            engine: sqlite
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-zip
+          path: dist
+      - name: Start ${{ matrix.engine }}
+        if: matrix.engine != 'sqlite'
+        run: docker compose -f tools/test/compose.yml up -d --wait "$ENGINE"
+        env:
+          ENGINE: ${{ matrix.engine }}
+      - name: smoke
+        run: |
+          mkdir -p smoke-reports
+          extra=()
+          if [ "$TARGET" = passenger-sim ]; then extra=(--max-pool 6); fi
+          pnpm --silent smoke --zip dist/altis-0.1.0-test.zip --target "$TARGET" --db "$ENGINE" "${extra[@]}" \
+            > "smoke-reports/$TARGET-$ENGINE-node$MATRIX_NODE.json"
+        env:
+          TARGET: ${{ matrix.target }}
+          ENGINE: ${{ matrix.engine }}
+          # Not NODE: pnpm sets NODE itself for the scripts it runs, which would hide the matrix value from them.
+          MATRIX_NODE: ${{ matrix.node }}
+      - name: Report
+        if: always()
+        run: cat smoke-reports/*.json || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: smoke-${{ matrix.target }}-${{ matrix.engine }}-node${{ matrix.node }}
+          path: smoke-reports/
+          if-no-files-found: ignore
+      - name: Stop the engine
+        if: always() && matrix.engine != 'sqlite'
+        run: docker compose -f tools/test/compose.yml down
+
+  smoke-scenarios:
+    # 1c Task 34 (A5, A6, A9 on a cPanel-like host): every passenger-sim scenario of the smoke run, on MariaDB 10.6 with
+    # max-pool 6: a frozen backup driven by /_cron alone, piggyback, `jobs:run`, the backup progress hints by polling
+    # and by SSE, and the X-Forwarded-For test (tools/release/smoke/run.ts).
+    name: smoke passenger-sim + mariadb106, scenario ${{ matrix.scenario }}
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [cron-backup, piggyback, cron-cli, polling-progress, sse-progress, xff]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-zip
+          path: dist
+      - name: Start mariadb106
+        run: docker compose -f tools/test/compose.yml up -d --wait mariadb106
+      - name: smoke
+        run: |
+          mkdir -p smoke-reports
+          pnpm --silent smoke --zip dist/altis-0.1.0-test.zip --target passenger-sim --db mariadb106 --max-pool 6 --scenario "$SCENARIO" \
+            > "smoke-reports/passenger-sim-mariadb106-$SCENARIO.json"
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+      - name: Report
+        if: always()
+        run: cat smoke-reports/*.json || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: smoke-scenario-${{ matrix.scenario }}
+          path: smoke-reports/
+          if-no-files-found: ignore
+      - name: Stop the engine
+        if: always()
+        run: docker compose -f tools/test/compose.yml down
+
+  smoke-docker:
+    # The app runs on the image's Node (node:24-bookworm-slim) whatever the runner's Node; the DB is the compose
+    # file's own service (MariaDB 10.6, or the engine's image through the smoke run's override).
+    name: smoke docker + ${{ matrix.engine }}
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [sqlite, mysql80, mysql84, mariadb106, mariadb114, pg15, pg17]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-zip
+          path: dist
+      - name: smoke
+        run: |
+          mkdir -p smoke-reports
+          pnpm --silent smoke --zip dist/altis-0.1.0-test.zip --target docker --db "$ENGINE" > "smoke-reports/docker-$ENGINE.json"
+        env:
+          ENGINE: ${{ matrix.engine }}
+      - name: Report
+        if: always()
+        run: cat smoke-reports/*.json || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: smoke-docker-${{ matrix.engine }}
+          path: smoke-reports/
+          if-no-files-found: ignore
+
+  smoke-update:
+    # 1d Task 35 (A7, §12.7; Review Focus 1, 3, 4): the update scenarios of the smoke run
+    # (tools/release/smoke/update-scenarios.ts) on the four A1 targets, release N−1 updated to N through a feed signed
+    # with the dev keys and served by feed-dev. rollback-restore goes 0.2 → 0.3 (a contract migration) with
+    # health:0.3.0-test; docker-pull takes image 0.2 then image 0.3 (data mode, then image mode; on standalone the zips
+    # unpacked over the app folder). Host targets get their engine from
+    # tools/test/compose.yml; Docker brings its own database.
+    name: update ${{ matrix.scenario }} on ${{ matrix.site.target }} + ${{ matrix.site.engine }}
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [update, update-faults, rollback-restore, rollback-manual, update-offline, rejections]
+        site:
+          - { target: passenger-sim, engine: mariadb106 }
+          - { target: pm2, engine: mysql80 }
+          - { target: docker, engine: mariadb106 }
+          - { target: docker, engine: pg15 }
+          - { target: standalone, engine: sqlite }
+        include:
+          - scenario: update-kill
+            site: { target: passenger-sim, engine: mariadb106 }
+          - scenario: docker-pull
+            site: { target: docker, engine: mariadb106 }
+          - scenario: docker-pull
+            site: { target: docker, engine: pg15 }
+          - scenario: docker-pull
+            site: { target: standalone, engine: sqlite }
+          - scenario: zip-reupload
+            site: { target: standalone, engine: sqlite }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-zip
+          path: dist
+      - name: Start ${{ matrix.site.engine }}
+        if: matrix.site.target != 'docker' && matrix.site.engine != 'sqlite'
+        run: docker compose -f tools/test/compose.yml up -d --wait "$ENGINE"
+        env:
+          ENGINE: ${{ matrix.site.engine }}
+      - name: smoke
+        run: |
+          mkdir -p smoke-reports
+          from=0.1.0-test
+          to=(--to-zip dist/altis-0.2.0-test.zip)
+          case "$SCENARIO" in
+            rollback-restore) from=0.2.0-test; to=(--to-zip dist/altis-0.3.0-test.zip) ;;
+            docker-pull) to=(--to-zip dist/altis-0.2.0-test.zip --to-zip dist/altis-0.3.0-test.zip) ;;
+          esac
+          extra=()
+          if [ "$TARGET" = passenger-sim ]; then extra=(--max-pool 6); fi
+          pnpm --silent smoke --zip "dist/altis-$from.zip" "${to[@]}" --target "$TARGET" --db "$ENGINE" "${extra[@]}" --scenario "$SCENARIO" \
+            > "smoke-reports/$SCENARIO-$TARGET-$ENGINE.json"
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+          TARGET: ${{ matrix.site.target }}
+          ENGINE: ${{ matrix.site.engine }}
+      - name: Report
+        if: always()
+        run: cat smoke-reports/*.json || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: smoke-update-${{ matrix.scenario }}-${{ matrix.site.target }}-${{ matrix.site.engine }}
+          path: smoke-reports/
+          if-no-files-found: ignore
+      - name: Stop the engine
+        if: always() && matrix.site.target != 'docker' && matrix.site.engine != 'sqlite'
+        run: docker compose -f tools/test/compose.yml down
+
+  e2e-wizard:
+    # 1d Task 35 (A1, the automated part): the install wizard in the browser (tools/e2e/specs/wizard.spec.ts) on each
+    # A1 target other than standalone + SQLite (the e2e job's): ALTIS_E2E_TARGET and ALTIS_E2E_DB (tools/e2e/lib/targets.ts).
+    name: e2e wizard on ${{ matrix.site.target }} + ${{ matrix.site.engine }}
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        site:
+          - { target: passenger-sim, engine: mariadb106 }
+          - { target: pm2, engine: mysql80 }
+          - { target: docker, engine: mariadb106 }
+          - { target: docker, engine: pg15 }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-zip
+          path: dist
+      - name: Install Chromium for Playwright
+        run: pnpm --filter @altis/e2e exec playwright install --with-deps chromium
+      - name: Start ${{ matrix.site.engine }} and mailpit
+        run: |
+          services=(mailpit)
+          if [ "$TARGET" != docker ]; then services+=("$ENGINE"); fi
+          docker compose -f tools/test/compose.yml up -d --wait "${services[@]}"
+        env:
+          TARGET: ${{ matrix.site.target }}
+          ENGINE: ${{ matrix.site.engine }}
+      - run: pnpm e2e --project uninstalled
+        env:
+          ALTIS_TEST_MAILPIT_REQUIRED: '1'
+          ALTIS_E2E_ZIP: dist/altis-0.1.0-test.zip
+          ALTIS_E2E_TARGET: ${{ matrix.site.target }}
+          ALTIS_E2E_DB: ${{ matrix.site.engine }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: e2e-wizard-traces-${{ matrix.site.target }}-${{ matrix.site.engine }}
+          path: |
+            tools/e2e/dist/test-results/
+            tools/e2e/dist/report/
+            tools/e2e/dist/run/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop the services
+        if: always()
+        run: docker compose -f tools/test/compose.yml down
+
+  perf:
+    # 1d Task 35 (A11, §12.7): `pnpm perf` (tools/release/perf/measure.ts) on the seed perf-phase1 (50 staff, 200 000
+    # audit_log, 10 000 jobs): p95 of GET users, audit, jobs and dashboard < 200 ms, RSS under that load < 300 MB, cold
+    # start < 1.5 s, idle RSS < 150 MB, zip < 15 MB, and on MariaDB 10.6 the update 0.1 → 0.2 on passenger-sim without
+    # cron < 120 s (the smoke run's update scenario, read from its report). Asserted here: Linux x64, Node 22.16.
+    name: perf on ${{ matrix.engine }}
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [mariadb106, sqlite]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-zip
+          path: dist
+      - name: Start ${{ matrix.engine }}
+        if: matrix.engine != 'sqlite'
+        run: docker compose -f tools/test/compose.yml up -d --wait "$ENGINE"
+        env:
+          ENGINE: ${{ matrix.engine }}
+      - name: perf
+        run: |
+          mkdir -p perf-reports
+          report=()
+          if [ "$ENGINE" != sqlite ]; then
+            pnpm --silent smoke --zip dist/altis-0.1.0-test.zip --to-zip dist/altis-0.2.0-test.zip --target passenger-sim --db "$ENGINE" --scenario update \
+              > "perf-reports/update-$ENGINE.json"
+            report=(--update-report "perf-reports/update-$ENGINE.json")
+          fi
+          pnpm --silent perf --zip dist/altis-0.1.0-test.zip --db "$ENGINE" "${report[@]}" > "perf-reports/perf-$ENGINE.json"
+        env:
+          ENGINE: ${{ matrix.engine }}
+      - name: Report
+        if: always()
+        run: cat perf-reports/*.json || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: perf-${{ matrix.engine }}
+          path: perf-reports/
+          if-no-files-found: ignore
+      - name: Stop the engine
+        if: always() && matrix.engine != 'sqlite'
+        run: docker compose -f tools/test/compose.yml down
+
+  image-check:
+    # 1d Task 32 (spec §9.11 "CI memastikan image tidak memuat .env, .git, maupun source map"; L58/L59): the image
+    # built from the release zip, as docker/compose.yml builds it, holds no .env, .git or source map anywhere, runs as a
+    # non-root user, and that user can change nothing under /app (tools/release/smoke/docker-image-check.ts).
+    name: Docker image check
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-zip
+          path: dist
+      - name: Build the image from the release zip
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          unzip -q dist/altis-0.1.0-test.zip -d "$RUNNER_TEMP/release"
+          docker build --build-context release="$RUNNER_TEMP/release" --tag altis:image-check docker
+      - name: Check the image
+        run: pnpm exec tsx tools/release/smoke/docker-image-check.ts --image altis:image-check
+      - name: Remove the image
+        if: always()
+        run: docker image rm --force altis:image-check || true
+
+  smoke-windows:
+    name: smoke standalone + sqlite (Windows, Node 24)
+    needs: release
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-zip
+          path: dist
+      - name: smoke
+        run: |
+          mkdir -p smoke-reports
+          pnpm --silent smoke --zip dist/altis-0.1.0-test.zip --target standalone --db sqlite > smoke-reports/windows-standalone-sqlite.json
+      # 1d Task 35 (preflight 1D-26): install --config with SQLite, 0.1 → 0.2 through feed-dev, then the forced update
+      # faults (boot-crash:0.2.0-test among them) each reverted: rename retries, boot.lock PID liveness, reg/vol factors.
+      - name: smoke update (Windows)
+        run: pnpm --silent smoke --zip dist/altis-0.1.0-test.zip --to-zip dist/altis-0.2.0-test.zip --target standalone --db sqlite --scenario update > smoke-reports/windows-update.json
+      - name: smoke update-faults (Windows)
+        run: pnpm --silent smoke --zip dist/altis-0.1.0-test.zip --to-zip dist/altis-0.2.0-test.zip --target standalone --db sqlite --scenario update-faults > smoke-reports/windows-update-faults.json
+      - name: Report
+        if: always()
+        run: cat smoke-reports/*.json || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: smoke-windows-standalone-sqlite
+          path: smoke-reports/
+          if-no-files-found: ignore
+
+  # 1d Task 34 (spec §12.4, tools/release/n-minus-1/run.ts): the N−1 test between the release fixtures, the expand pair
+  # 0.1.0-test → 0.2.0-test and the contract pair 0.2.0-test → 0.3.0-test, on MySQL 8.0 (a `migrate-ddl` fault after
+  # every DDL statement, then the migration again) and MariaDB 10.6. N−1 is installed and seeded through its API, N
+  # migrates it to every prefix of its new migrations, then N−1's `doctor --smoke` must pass (expand) or report the
+  # database as needing a newer ALTIS (contract), its data never changed. One JSON line per prefix.
+  n-minus-1:
+    name: N−1 ${{ matrix.pair.from }} → ${{ matrix.pair.to }} on ${{ matrix.engine }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [mysql80, mariadb106]
+        pair:
+          - { from: 0.1.0-test, to: 0.2.0-test }
+          - { from: 0.2.0-test, to: 0.3.0-test }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: 'Build N−1 and N (one after the other: the builds share apps/admin/dist)'
+        run: |
+          pnpm release --profile test --version "$FROM"
+          pnpm release --profile test --version "$TO"
+        env:
+          FROM: ${{ matrix.pair.from }}
+          TO: ${{ matrix.pair.to }}
+      - name: Start ${{ matrix.engine }}
+        run: docker compose -f tools/test/compose.yml up -d --wait "$ENGINE"
+        env:
+          ENGINE: ${{ matrix.engine }}
+      - name: N−1
+        run: |
+          mkdir -p n1-reports
+          pnpm --silent n-1 --from "dist/altis-$FROM.zip" --to "dist/altis-$TO.zip" --db "$ENGINE" \
+            > "n1-reports/$FROM-$TO-$ENGINE.jsonl"
+        env:
+          FROM: ${{ matrix.pair.from }}
+          TO: ${{ matrix.pair.to }}
+          ENGINE: ${{ matrix.engine }}
+      - name: Report
+        if: always()
+        run: cat n1-reports/*.jsonl || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: n-minus-1-${{ matrix.pair.from }}-${{ matrix.pair.to }}-${{ matrix.engine }}
+          path: n1-reports/
+          if-no-files-found: ignore
+      - name: Stop the engine
+        if: always()
+        run: docker compose -f tools/test/compose.yml down
+
+  # Phase 2 Task 39 (Phase 2 spec §15 K15 "koneksi langsung MariaDB di nightly", §11.1): the SLiMS migration end to end
+  # (packages/core/test/db/slims-end-to-end.test.ts) on MariaDB 10.6 with ALTIS_TEST_NIGHTLY=1. The file's dump variant
+  # runs in every test:db job: every table reconciles, the 20 samples match, `/index.php?p=show_detail&id=N` finds the
+  # record, a run SIGKILLed during `records` and again during `items` resumes to the same `migration_map` and
+  # checksums, and the dry run writes no catalog row. Its direct-connection variant (the synthetic fixture loaded into a
+  # database of the same MySQL-family server and read through openDbSource: a pool of one, SELECT only, keyset pages
+  # of at most 500 rows) is the one this switch is for; the nightly test:db jobs of the other MySQL-family engines run
+  # it too, and this job is K15's named check.
+  slims-direct:
+    name: SLiMS migration, direct connection (mariadb106)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start mariadb106
+        run: docker compose -f tools/test/compose.yml up -d --wait mariadb106
+      # A file filter that matches nothing would quietly run nothing, hence the check that the file is there.
+      - name: SLiMS end to end (K15)
+        run: |
+          test -f "$K15_FILE" || { echo "::error::$K15_FILE is missing"; exit 1; }
+          pnpm test:db "$K15_FILE"
+        env:
+          K15_FILE: packages/core/test/db/slims-end-to-end.test.ts
+          ALTIS_TEST_DB: mariadb106
+          ALTIS_TEST_DB_REQUIRED: '1'
+          ALTIS_TEST_NIGHTLY: '1'
+      - name: Stop the engine
+        if: always()
+        run: docker compose -f tools/test/compose.yml down
+
+  # Phase 2 Task 39 (Phase 2 spec §15 K9, K16; §12.7 runner): tools/test/perf-phase2 on the release zip. seed.ts writes
+  # 100 000 records, 150 000 items, 50 000 agents, 20 000 subjects and 2 000 attachments; run.ts sends the §15 request
+  # mix and reports the p95 per route. Budgets: the OPAC (home, 1–3 word searches, a search with 2 facets, a record,
+  # a sitemap page, a ListRecords page) p95 < 300 ms and the admin catalog API p95 < 200 ms on SQLite and MariaDB 10.6
+  # (K9); RSS < 300 MB during a 100 000-record import and the migration (K16). Asserted on these Linux x64 runners, as
+  # the `perf` job does for Phase 1. One JSON report on stdout, progress on stderr.
+  perf-phase2:
+    name: perf Phase 2 (catalog, OPAC) on ${{ matrix.engine }}
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [mariadb106, sqlite]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-zip
+          path: dist
+      - name: Start ${{ matrix.engine }}
+        if: matrix.engine != 'sqlite'
+        run: docker compose -f tools/test/compose.yml up -d --wait "$ENGINE"
+        env:
+          ENGINE: ${{ matrix.engine }}
+      - name: perf-phase2
+        run: |
+          mkdir -p perf-reports
+          pnpm exec tsx tools/test/perf-phase2/run.ts --zip dist/altis-0.1.0-test.zip --db "$ENGINE" > "perf-reports/perf-phase2-$ENGINE.json"
+        env:
+          ENGINE: ${{ matrix.engine }}
+      - name: Report
+        if: always()
+        run: cat perf-reports/*.json || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: perf-phase2-${{ matrix.engine }}
+          path: perf-reports/
+          if-no-files-found: ignore
+      - name: Stop the engine
+        if: always() && matrix.engine != 'sqlite'
+        run: docker compose -f tools/test/compose.yml down
+
+  # Phase 2 Task 39 (Phase 2 spec §15 K10, preflight M10): the catalog and OPAC specs in Playwright's full Chromium,
+  # on the release zip installed standalone on SQLite (tools/e2e/global-setup.ts with ALTIS_E2E_ZIP):
+  # - specs/opac.spec.ts: home, results, a record, a page, the news, and the PDF, audio and video viewers, with 0
+  #   violations under the 1b CSP guard;
+  # - specs/catalog.spec.ts: create a record, add an item, print labels;
+  # - specs/opac-pdf.spec.ts (M10): Chromium's own viewer renders a PDF that `/files/:id` serves with
+  #   `Content-Security-Policy: default-src 'none'; sandbox`. If it fails, Task 34's fallback applies (serve PDFs without
+  #   `sandbox`, keeping `default-src 'none'` and nosniff, or offer "Unduh" only).
+  # ALTIS_E2E_CHANNEL=chromium drives the full build for every spec, and only that build is installed (--no-shell), so
+  # no spec can fall back to the headless shell, which has no PDF viewer. Lighthouse (K10's SEO and accessibility
+  # scores) stays a manual check of the owner (P3).
+  e2e-catalog:
+    name: e2e catalog + OPAC (Playwright, full Chromium)
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-zip
+          path: dist
+      - name: Install the full Chromium for Playwright (no headless shell)
+        run: pnpm --filter @altis/e2e exec playwright install --with-deps --no-shell chromium
+      - name: Start mailpit
+        run: docker compose -f tools/test/compose.yml up -d --wait mailpit
+      # A file filter that matches nothing would quietly run nothing, hence the check that every spec is there.
+      - name: e2e catalog + OPAC
+        run: |
+          read -ra specs <<< "$SPECS"
+          for f in "${specs[@]}"; do test -f "tools/e2e/$f" || { echo "::error::tools/e2e/$f is missing"; exit 1; }; done
+          pnpm e2e --project chromium "${specs[@]}"
+        env:
+          SPECS: specs/opac.spec.ts specs/catalog.spec.ts specs/opac-pdf.spec.ts
+          ALTIS_E2E_CHANNEL: chromium
+          ALTIS_E2E_ZIP: dist/altis-0.1.0-test.zip
+          ALTIS_TEST_MAILPIT_REQUIRED: '1'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: e2e-catalog-traces
+          path: |
+            tools/e2e/dist/test-results/
+            tools/e2e/dist/report/
+            tools/e2e/dist/run/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop mailpit
+        if: always()
+        run: docker compose -f tools/test/compose.yml down

@@ -1,0 +1,7 @@
+packages:
+  - packages/*
+  - apps/*
+  - tools/*
+# esbuild's postinstall only verifies/optimizes the platform binary; it is not required.
+ignoredBuiltDependencies:
+  - esbuild

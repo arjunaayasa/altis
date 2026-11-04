@@ -1,0 +1,99 @@
+# Test engines for `pnpm test:db` (spec §12.3). Every data directory is a tmpfs, so each `up` starts empty.
+#
+#   export PATH="$HOME/.docker/bin:$PATH"     # dev Mac: Docker Desktop is not on the default PATH
+#   docker compose -f tools/test/compose.yml up -d --wait mariadb106 pg15
+#   ALTIS_TEST_DB=mariadb106 pnpm test:db
+#   docker compose -f tools/test/compose.yml down
+#
+# Test-only credentials: application user `altis` / `altis_test_pw`; root (MySQL/MariaDB) and the `postgres`
+# superuser use `altis_root_pw`. tools/test/global-setup.ts connects as root/superuser to create one database
+# per Vitest worker (and, on PostgreSQL, the `altis` role). Ports are bound to 127.0.0.1 only.
+#
+# Server settings are left at the image defaults on purpose (character set, sql_mode, max_connections): the code
+# under test must set what it needs itself, as it has to on a shared host.
+name: altis-test
+
+x-mysql-env: &mysql-env
+  MYSQL_ROOT_PASSWORD: altis_root_pw
+  MYSQL_USER: altis
+  MYSQL_PASSWORD: altis_test_pw
+
+x-mariadb-env: &mariadb-env
+  MARIADB_ROOT_PASSWORD: altis_root_pw
+  MARIADB_USER: altis
+  MARIADB_PASSWORD: altis_test_pw
+
+x-postgres-env: &postgres-env
+  POSTGRES_PASSWORD: altis_root_pw
+
+x-health: &health
+  interval: 2s
+  timeout: 5s
+  retries: 90
+  start_period: 5s
+
+services:
+  mysql80:
+    image: mysql:8.0
+    environment: *mysql-env
+    ports: ['127.0.0.1:33080:3306']
+    tmpfs: [/var/lib/mysql]
+    healthcheck:
+      <<: *health
+      # TCP, not the socket: the image's init server runs with networking off, so this only passes once the
+      # real server is up.
+      test: [CMD, mysqladmin, ping, -h, 127.0.0.1, -uroot, -paltis_root_pw]
+
+  mysql84:
+    image: mysql:8.4
+    environment: *mysql-env
+    ports: ['127.0.0.1:33084:3306']
+    tmpfs: [/var/lib/mysql]
+    healthcheck:
+      <<: *health
+      test: [CMD, mysqladmin, ping, -h, 127.0.0.1, -uroot, -paltis_root_pw]
+
+  mariadb106:
+    image: mariadb:10.6
+    environment: *mariadb-env
+    ports: ['127.0.0.1:33106:3306']
+    tmpfs: [/var/lib/mysql]
+    healthcheck:
+      <<: *health
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+
+  mariadb114:
+    image: mariadb:11.4
+    environment: *mariadb-env
+    ports: ['127.0.0.1:33114:3306']
+    tmpfs: [/var/lib/mysql]
+    healthcheck:
+      <<: *health
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+
+  pg15:
+    image: postgres:15
+    environment: *postgres-env
+    ports: ['127.0.0.1:54315:5432']
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      <<: *health
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, postgres]
+
+  pg17:
+    image: postgres:17
+    environment: *postgres-env
+    ports: ['127.0.0.1:54317:5432']
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      <<: *health
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, postgres]
+
+  # SMTP catcher for the mail tests of later sub-milestones (SMTP 31025, web UI/API 38025).
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports: ['127.0.0.1:31025:1025', '127.0.0.1:38025:8025']
+    tmpfs: [/data]
+    healthcheck:
+      <<: *health
+      test: [CMD, /mailpit, readyz]

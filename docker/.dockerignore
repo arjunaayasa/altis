@@ -1,0 +1,6 @@
+# Allowlist (spec §9.11): of this folder only the entrypoint enters the build. The application comes from the named
+# context `release` (the unzipped release zip), and a .env next to compose.yml never reaches an image: neither do
+# altis-init, the .env.bak it keeps on --force, compose.yml or anything else placed here. The nightly image check
+# (tools/release/smoke/docker-image-check.ts) proves the built image holds no .env, .git or source map.
+*
+!entrypoint.sh

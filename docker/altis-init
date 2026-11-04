@@ -1,0 +1,199 @@
+#!/bin/sh
+# altis-init [--force]: the first step of ALTIS on Docker (spec §9.11, §7.7; 1d Task 32). POSIX sh.
+#
+# Writes `.env` in the current folder (the folder of compose.yml; Docker Compose reads it from there) with mode 600:
+#
+#   ALTIS_DB_PASSWORD       32 random characters of [A-Za-z0-9] (the `altis` database user)
+#   ALTIS_DB_ROOT_PASSWORD  32 random characters of [A-Za-z0-9] (the database's root; ALTIS never uses it)
+#   ALTIS_INSTALL_CODE      26 random characters of the install-code alphabet, shown in groups 5-5-5-5-6
+#
+# then prints the install code (never a password): it opens the install wizard (§7.7 "altis-init mengisi
+# ALTIS_INSTALL_CODE acak ke .env lalu menampilkannya").
+#
+# - The randomness comes from /dev/urandom through `head` and `tr` only (no openssl, python or node on the host):
+#   `tr -dc <set>` keeps the bytes that are characters of <set>, each with the same chance, so every character is
+#   uniform over its set. The install code uses the alphabet the server parses (Crockford's base32: 0-9 and A-Z
+#   without I, L, O and U; packages/core/src/install/code.ts), 5 bits a character, 130 bits in all.
+# - An existing `.env` (or a link named .env) is never overwritten: exit 1. `--force` writes a new one (new
+#   passwords AND a new code) and keeps the old file as `.env.bak`. Only for a NEW installation: a database volume
+#   already created keeps the password it was created with, so the app could no longer connect to it. For that reason
+#   `.env.bak` is never overwritten either: while one exists (or a link of that name), `--force` over a `.env` is
+#   refused (exit 1) until the operator moves it away; it may hold the only copy of those passwords.
+# - The file is created by this shell under `umask 077` (mode 600) and never through a world-readable step: without
+#   --force with noclobber (an exclusive create); with --force as a temporary file renamed over .env. Besides the
+#   shell, head and tr, only `mv` (the --force renames) and `rm` (removing a file this run created, on failure) run.
+#
+# Exit 0: written; 1: refused or failed (nothing changed); 2: usage error.
+set -eu
+
+PASSWORD_SET='A-Za-z0-9'
+CODE_SET='0-9A-HJKMNP-TV-Z'
+ENV_FILE=.env
+
+say() {
+  printf 'altis-init: %s\n' "$*" >&2
+}
+
+usage() {
+  printf '%s\n' \
+    'usage: altis-init [--force]' \
+    '  Menulis .env (mode 600) berisi sandi database acak dan ALTIS_INSTALL_CODE, lalu menampilkan kode instalasi.' \
+    '  Writes .env (mode 600) with random database passwords and ALTIS_INSTALL_CODE, then shows the install code.' \
+    '  --force  ganti .env yang ada (disimpan sebagai .env.bak, yang tidak pernah ditimpa); hanya untuk instalasi baru /' \
+    '           replace an existing .env (kept as .env.bak, never overwritten); for a new installation only'
+}
+
+force=0
+case $# in
+  0) ;;
+  1)
+    case $1 in
+      --force) force=1 ;;
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      *)
+        usage >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
+
+if [ -d "$ENV_FILE" ]; then
+  say ".env adalah folder; tidak diubah / .env is a folder; left alone"
+  exit 1
+fi
+if [ "$force" -eq 0 ] && { [ -e "$ENV_FILE" ] || [ -L "$ENV_FILE" ]; }; then
+  say ".env sudah ada dan tidak ditimpa. Untuk instalasi baru saja: altis-init --force (sandi database ikut berganti) /"
+  say ".env already exists and is not overwritten. For a new installation only: altis-init --force (the database passwords change too)"
+  exit 1
+fi
+if [ "$force" -eq 1 ] && [ -d "$ENV_FILE.bak" ]; then
+  say ".env.bak adalah folder; tidak diubah / .env.bak is a folder; left alone"
+  exit 1
+fi
+# bak_refused: .env.bak exists, and --force would have to replace it to keep the current .env.
+bak_refused() {
+  say ".env.bak sudah ada dan tidak ditimpa: mungkin berisi sandi volume database yang ada. Pindahkan atau hapus dulu"
+  say "  bila memang tidak dibutuhkan; tidak ada yang diubah /"
+  say ".env.bak already exists and is not overwritten: it may hold the passwords of an existing database volume. Move"
+  say "  it away (or delete it, if it is not needed) first; nothing changed"
+  exit 1
+}
+if [ "$force" -eq 1 ] && { [ -e "$ENV_FILE" ] || [ -L "$ENV_FILE" ]; } && { [ -e "$ENV_FILE.bak" ] || [ -L "$ENV_FILE.bak" ]; }; then
+  bak_refused
+fi
+if [ ! -r /dev/urandom ]; then
+  say "/dev/urandom tidak dapat dibaca / /dev/urandom cannot be read"
+  exit 1
+fi
+
+# random_text SET LENGTH: LENGTH characters of the tr set SET, each uniform, from /dev/urandom.
+random_text() {
+  text=''
+  tries=0
+  while [ "${#text}" -lt "$2" ]; do
+    tries=$((tries + 1))
+    if [ "$tries" -gt 20 ]; then
+      say "/dev/urandom tidak memberi cukup data / /dev/urandom gave too little data"
+      return 1
+    fi
+    text=$text$(head -c 512 /dev/urandom | LC_ALL=C tr -dc "$1")
+  done
+  printf '%s' "$text" | head -c "$2"
+}
+
+db_password=$(random_text "$PASSWORD_SET" 32) || exit 1
+root_password=$(random_text "$PASSWORD_SET" 32) || exit 1
+g1=$(random_text "$CODE_SET" 5) || exit 1
+g2=$(random_text "$CODE_SET" 5) || exit 1
+g3=$(random_text "$CODE_SET" 5) || exit 1
+g4=$(random_text "$CODE_SET" 5) || exit 1
+g5=$(random_text "$CODE_SET" 6) || exit 1
+code=$g1-$g2-$g3-$g4-$g5
+if [ "${#db_password}" -ne 32 ] || [ "${#root_password}" -ne 32 ] || [ "${#code}" -ne 30 ]; then
+  say "nilai acak tidak lengkap; tidak ada yang ditulis / incomplete random values; nothing written"
+  exit 1
+fi
+
+content() {
+  printf '%s\n' \
+    '# ALTIS Docker: dibuat oleh altis-init. Berisi rahasia: jangan dibagikan, jangan di-commit, jangan masuk image.' \
+    '# ALTIS Docker: written by altis-init. Holds secrets: never share or commit it, never copy it into an image.' \
+    "ALTIS_DB_PASSWORD=$db_password" \
+    "ALTIS_DB_ROOT_PASSWORD=$root_password" \
+    "ALTIS_INSTALL_CODE=$code"
+}
+
+umask 077
+if [ "$force" -eq 0 ]; then
+  # noclobber: an exclusive create, so a .env that appeared meanwhile is refused, never overwritten. The file is ours
+  # from then on: a write that fails (or an interrupt) removes it again rather than leave half a .env behind.
+  if ! (set -C && : > "$ENV_FILE") 2>/dev/null; then
+    say ".env tidak dapat dibuat (sudah ada, atau folder ini tidak bisa ditulis); tidak ada yang diubah /"
+    say ".env could not be created (it exists, or this folder is not writable); nothing changed"
+    exit 1
+  fi
+  trap 'rm -f "$ENV_FILE"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  if ! content >> "$ENV_FILE"; then
+    say ".env tidak dapat ditulis; tidak ada yang diubah / .env could not be written; nothing changed"
+    exit 1
+  fi
+  trap - EXIT INT TERM
+else
+  tmp=$ENV_FILE.altis-init.$$
+  if ! (set -C && : > "$tmp") 2>/dev/null; then
+    say "berkas sementara $tmp tidak dapat dibuat; tidak ada yang diubah / the temporary file $tmp could not be created; nothing changed"
+    exit 1
+  fi
+  trap 'rm -f "$tmp"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  if ! content >> "$tmp"; then
+    say ".env baru tidak dapat ditulis; tidak ada yang diubah / the new .env could not be written; nothing changed"
+    exit 1
+  fi
+  if [ -e "$ENV_FILE" ] || [ -L "$ENV_FILE" ]; then
+    # .env.bak is claimed with noclobber (an exclusive create) before the rename, so a .env.bak that appeared since the
+    # check above is refused, never replaced; the empty claim is removed again if the rename does not happen.
+    if ! (set -C && : > "$ENV_FILE.bak") 2>/dev/null; then
+      bak_refused
+    fi
+    trap 'rm -f "$tmp"; [ -s "$ENV_FILE.bak" ] || rm -f "$ENV_FILE.bak"' EXIT
+    if ! mv -f "$ENV_FILE" "$ENV_FILE.bak"; then
+      say ".env lama tidak dapat disimpan sebagai .env.bak; tidak ada yang diubah / the old .env could not be kept as .env.bak; nothing changed"
+      exit 1
+    fi
+    trap 'rm -f "$tmp"' EXIT
+    say "PERINGATAN: .env lama disimpan sebagai .env.bak. Volume database yang sudah ada tetap memakai sandi lamanya;"
+    say "  .env baru hanya untuk instalasi baru (volume database kosong)."
+    say "WARNING: the old .env is kept as .env.bak. A database volume that already exists keeps its old password;"
+    say "  the new .env is for a new installation only (an empty database volume)."
+  fi
+  if ! mv -f "$tmp" "$ENV_FILE"; then
+    say ".env baru tidak dapat dipasang; .env lama ada di .env.bak / the new .env could not be put in place; the old one is in .env.bak"
+    exit 1
+  fi
+  trap - EXIT INT TERM
+fi
+
+printf '%s\n' \
+  "altis-init: $PWD/.env ditulis (mode 600) / written (mode 600)" \
+  '' \
+  'Kode instalasi / Install code:' \
+  '' \
+  "    $code" \
+  '' \
+  'Langkah berikutnya / Next steps:' \
+  '  1. docker compose up -d   (dari folder ini, tempat compose.yml / from this folder, next to compose.yml)' \
+  '  2. Buka ALTIS di browser dan masukkan kode di atas pada wizard instalasi.' \
+  '     Open ALTIS in a browser and enter the code above in the install wizard.' \
+  'Kode ini juga tersimpan di .env sebagai ALTIS_INSTALL_CODE. / The code is also kept in .env as ALTIS_INSTALL_CODE.'

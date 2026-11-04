@@ -1,0 +1,42 @@
+{
+  "name": "altis",
+  "version": "0.0.0",
+  "private": true,
+  "description": "ALTIS (Arsya Library Tracking Information System), Edisi Komunitas: sistem otomasi perpustakaan self-hosted",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arjunaayasa/altis.git"
+  },
+  "homepage": "https://github.com/arjunaayasa/altis#readme",
+  "bugs": {
+    "url": "https://github.com/arjunaayasa/altis/issues"
+  },
+  "type": "module",
+  "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=22.16"
+  },
+  "scripts": {
+    "check": "tsc -b && eslint .",
+    "test": "vitest run --project unit --project admin",
+    "test:db": "vitest run --project db",
+    "build": "pnpm -r --if-present run build",
+    "release": "pnpm --filter @altis/release run release",
+    "smoke": "tsx tools/release/smoke/run.ts",
+    "n-1": "tsx tools/release/n-minus-1/run.ts",
+    "perf": "tsx tools/release/perf/measure.ts",
+    "feed-dev": "tsx tools/release/feed/serve.ts",
+    "e2e": "pnpm --filter @altis/e2e exec playwright test"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.5",
+    "eslint": "10.13.0",
+    "globals": "17.13.0",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "5.0.5"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist" },
+  // The DB tests (test/db) import tools/test/test-db.ts, which imports @altis/db only, so no reference cycle.
+  "include": ["src", "test", "scripts", "../../globals.d.ts"],
+  "references": [
+    { "path": "../shared" },
+    { "path": "../platform" },
+    { "path": "../crypto" },
+    { "path": "../db" },
+    // Phase 2 (catalog): the backup checksum test writes the catalog sample rows of packages/db's table test.
+    { "path": "../db/test" },
+    { "path": "../../tools/test" }
+  ]
+}

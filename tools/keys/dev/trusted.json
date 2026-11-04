@@ -1,0 +1,32 @@
+[
+  {
+    "kid": "dev-rel-1",
+    "use": "release",
+    "pub": "6of-j_VNGx2rmJUz7xIn2WZVH-rxJ7qbjD_S9oyjEnE"
+  },
+  {
+    "kid": "dev-rel-2",
+    "use": "release",
+    "pub": "HtxklPgboOArLHmV0YRslsXT3rH-nut1ECQtBVXidzU"
+  },
+  {
+    "kid": "dev-lic-1",
+    "use": "license",
+    "pub": "1jtqGbt3KAqdOMKir1_8sIJQ9xOALu0c58BxYcuXS9w"
+  },
+  {
+    "kid": "dev-ts-1",
+    "use": "timestamp",
+    "pub": "_W-wcWWyxaLeuEVeNn7S2npMtYWYvhVqj5onkgt61ds"
+  },
+  {
+    "kid": "dev-dca-1",
+    "use": "device",
+    "pub": "kbbR4JBs5E4JPuQzfgZNaCoqGhVS2dVHl9RfslUXxok"
+  },
+  {
+    "kid": "dev-root-1",
+    "use": "root",
+    "pub": "PcjSuLS-JF_TaF0dTbXOmqZUB5UfNWdyRK3wwBV4OZc"
+  }
+]

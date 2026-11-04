@@ -1,0 +1,6 @@
+{
+  // vite.config.ts runs in Node at build time; the SPA's own project (tsconfig.json) has no Node types.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "outDir": ".build/tsc-node" },
+  "include": ["vite.config.ts"]
+}

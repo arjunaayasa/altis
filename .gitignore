@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.env
+.env.*
+coverage/
+smoke-reports/
+n1-reports/
+perf-reports/
+
+# Agent and editor state: never part of the repository.
+.claude/
+[.]superpowers/
+CLAUDE.local.md
+
+# Private signing keys: only the public development fixtures of tools/keys/dev are committed.
+tools/keys/prod/
+*.key.json
+!tools/keys/dev/*.key.json
