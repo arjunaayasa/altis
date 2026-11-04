@@ -1,0 +1,21 @@
+{
+  "name": "@altis/db",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@altis/crypto": "workspace:*",
+    "@altis/platform": "workspace:*",
+    "@altis/shared": "workspace:*",
+    "kysely": "0.29.7",
+    "mysql2": "3.24.6",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
+  }
+}

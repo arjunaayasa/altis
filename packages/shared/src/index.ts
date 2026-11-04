@@ -1,0 +1,113 @@
+export { newId, isUlid, ulidTime } from './ids.js';
+export { DomainError, ERROR_CODES, isDomainError } from './errors.js';
+export type { ErrorCode, DomainErrorOptions } from './errors.js';
+export { compareSemver, isSemver } from './semver.js';
+export { normalizeKey, IP_TRUST_VALUES } from './keys.js';
+export type { IpTrust } from './keys.js';
+export {
+  PERMISSIONS,
+  ADMIN_EXCLUDED,
+  SUPER_ADMIN_ONLY_GRANTS,
+  SYSTEM_ROLE_KEYS,
+  permissionCatalog,
+  isPermission,
+  isSystemRoleKey,
+  systemRolePermissions,
+} from './permissions.js';
+export type { Permission, PermissionScope, PermissionDef, SystemRoleKey } from './permissions.js';
+export { AUDIT_ACTIONS, isAuditAction } from './audit-actions.js';
+export type { AuditAction } from './audit-actions.js';
+export {
+  NEEDS_ATTENTION,
+  OP_KINDS,
+  OP_KIND_PERMISSION,
+  OP_SCHEMA,
+  OP_STATES,
+  OP_TERMINAL_STATES,
+  isOpState,
+  isTerminal,
+} from './ops.js';
+export type { OpKind, OpState } from './ops.js';
+export { parseChannel } from './channels.js';
+export type { ChannelRule } from './channels.js';
+export { DEFAULT_LOCALE, LOCALES, MESSAGES, isLocale, resolveLocale, t } from './i18n/index.js';
+export type { Locale, MessageKey } from './i18n/index.js';
+export { EDITION_COMMUNITY, COMMUNITY_SOURCE_URL, COMMUNITY_LICENSE_SPDX } from './edition.js';
+export type { EditionView } from './edition.js';
+// ---- Phase 2 (catalog): Task 4 ----
+// The catalog vocabularies (no Zod: the API contracts are imported as `@altis/shared/api/catalog/<area>`).
+export {
+  ACQ_SOURCES,
+  AGENT_TYPES,
+  ATTACHMENT_ACCESS,
+  ATTACHMENT_KINDS,
+  ATTACHMENT_MEDIA,
+  BODY_FORMATS,
+  CUSTOM_FIELD_ENTITIES,
+  CUSTOM_FIELD_TYPES,
+  EXPORT_FORMATS,
+  FACETS,
+  FIELD_STATES,
+  IDENTIFIER_TYPES,
+  IMPORT_FORMATS,
+  ITEM_EVENT_TYPES,
+  ITEM_STATUSES,
+  ITEM_TRANSITIONS,
+  LOCATION_KINDS,
+  PAGE_KINDS,
+  PAGE_LOCALES,
+  PAGE_STATUSES,
+  RDA_CARRIER_CODES,
+  RDA_CARRIER_TYPES,
+  RDA_CONTENT_CODES,
+  RDA_CONTENT_TYPES,
+  RDA_MEDIA_CODES,
+  RDA_MEDIA_TYPES,
+  RECORD_FIELD_NAMES,
+  RELATION_TYPES,
+  RELATOR_ROLES,
+  RUN_KINDS,
+  RUN_STATUSES,
+  SUBJECT_EXPORT_TAG,
+  SUBJECT_TYPES,
+  THESAURUS_RECIPROCAL,
+  THESAURUS_RELS,
+  VOCAB_LISTS,
+  canTransition,
+  vocabKey,
+} from './catalog-vocab.js';
+export type {
+  AcqSource,
+  AgentType,
+  AttachmentAccess,
+  AttachmentKind,
+  AttachmentMedia,
+  BodyFormat,
+  CustomFieldEntity,
+  CustomFieldType,
+  ExportFormat,
+  FacetName,
+  FieldState,
+  IdentifierType,
+  ImportFormat,
+  ItemEventType,
+  ItemStatus,
+  LocationKind,
+  PageKind,
+  PageLocale,
+  PageStatus,
+  RdaCarrierCode,
+  RdaContentCode,
+  RdaMediaCode,
+  RdaTerm,
+  RecordFieldName,
+  RelationType,
+  RelatorRole,
+  RunKind,
+  RunStatus,
+  SubjectType,
+  ThesaurusRel,
+  VocabList,
+  VocabMessageKey,
+  VocabValue,
+} from './catalog-vocab.js';

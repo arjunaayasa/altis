@@ -1,0 +1,249 @@
+# PR tier (spec §12.3): typecheck + lint, unit, test:db on SQLite + MariaDB 10.6 + PostgreSQL 15, the restore pair
+# SQLite → MariaDB 10.6 (1c Task 29), the test-profile release zip, and its smoke runs (passenger-sim + MariaDB 10.6,
+# standalone + SQLite, and the passenger-sim scenarios cron-backup and piggyback of 1c Task 34). Node 22.16: the
+# minimum. 1d Task 35 (§13.2 CI "PR … plus the update scenario"): the 0.1.0-test and 0.2.0-test builds, and the
+# `update` scenario 0.1 → 0.2 through a signed feed on passenger-sim + MariaDB 10.6 without cron (A7, §12.7 < 2 min).
+#
+# Phase 2 Task 39 (Phase 2 spec §15 K1, K8; §14.4 step 3): the restore pairs SQLite → MariaDB 10.6 and SQLite →
+# PostgreSQL 15, each with the 1c restore matrix and the Phase 2 restore check (K1: the catalog tables, `migration_*` and
+# the attachment and cover blobs come back with equal `data` checksums, and the search index is rebuilt without any
+# action), and the K8 search corpus as a gate of its own on SQLite, MariaDB 10.6 and PostgreSQL 15.
+#
+# Actions are pinned to commit SHAs (the tag in the comment); the token can only read the repository.
+name: PR
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22.16.0'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    name: check + unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - name: Start mailpit
+        run: docker compose -f tools/test/compose.yml up -d --wait mailpit
+      - run: pnpm test
+        env:
+          ALTIS_TEST_MAILPIT_REQUIRED: '1'
+      - name: Stop mailpit
+        if: always()
+        run: docker compose -f tools/test/compose.yml down
+
+  test-db:
+    name: test:db (${{ matrix.engine }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [sqlite, mariadb106, pg15]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start ${{ matrix.engine }}
+        if: matrix.engine != 'sqlite'
+        run: docker compose -f tools/test/compose.yml up -d --wait "$ENGINE"
+        env:
+          ENGINE: ${{ matrix.engine }}
+      - name: Start mailpit
+        run: docker compose -f tools/test/compose.yml up -d --wait mailpit
+      - run: pnpm test:db
+        env:
+          ALTIS_TEST_DB: ${{ matrix.engine }}
+          ALTIS_TEST_DB_REQUIRED: '1'
+          ALTIS_TEST_MAILPIT_REQUIRED: '1'
+      - name: Stop the services
+        if: always()
+        run: docker compose -f tools/test/compose.yml down
+
+  restore-from-sqlite:
+    # The cross-dialect restore for the PR tier's pairs: backups made on SQLite (the source, ALTIS_TEST_DB_SOURCE)
+    # restored into MariaDB 10.6 (1c Task 29, §12.3 PR tier, A6) and into PostgreSQL 15 (Phase 2 Task 39, K1:
+    # "SQLite→MariaDB dan SQLite→PG (PR)"). Two files on each pair:
+    # - apps/server/test/db/restore-matrix.test.ts (1c): every data checksum equal to the backup's, sign-in with
+    #   password and TOTP, the restored SMTP password, every file back with its SHA-256;
+    # - apps/server/test/db/phase2-restore-reindex.test.ts (Phase 2, K1): the catalog tables, `migration_*` and the
+    #   attachment and cover blobs equal, the search tables empty after the load, the reindex queued by the boot, and
+    #   the 1 000-record fixture fully searchable afterwards.
+    # The nightly tier runs both files on all 12 ordered pairs.
+    name: restore sqlite → ${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [mariadb106, pg15]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start ${{ matrix.target }} and mailpit
+        run: docker compose -f tools/test/compose.yml up -d --wait "$TARGET" mailpit
+        env:
+          TARGET: ${{ matrix.target }}
+      - name: restore matrix (1c)
+        run: pnpm test:db apps/server/test/db/restore-matrix.test.ts
+        env:
+          ALTIS_TEST_DB_SOURCE: sqlite
+          ALTIS_TEST_DB: ${{ matrix.target }}
+          ALTIS_TEST_DB_REQUIRED: '1'
+          ALTIS_TEST_MAILPIT_REQUIRED: '1'
+      # Run even when the 1c file failed, so both acceptance checks report. A file filter that matches nothing would
+      # quietly run nothing, hence the check that the file is there.
+      - name: restore with the catalog (Phase 2, K1)
+        if: ${{ !cancelled() }}
+        run: |
+          test -f "$K1_FILE" || { echo "::error::$K1_FILE is missing"; exit 1; }
+          pnpm test:db "$K1_FILE"
+        env:
+          K1_FILE: apps/server/test/db/phase2-restore-reindex.test.ts
+          ALTIS_TEST_DB_SOURCE: sqlite
+          ALTIS_TEST_DB: ${{ matrix.target }}
+          ALTIS_TEST_DB_REQUIRED: '1'
+          ALTIS_TEST_MAILPIT_REQUIRED: '1'
+      - name: Stop the services
+        if: always()
+        run: docker compose -f tools/test/compose.yml down
+
+  search-corpus:
+    # Phase 2 Task 39 (Phase 2 spec §15 K8, §4.3): the search acceptance as a gate of its own on each PR engine.
+    # - packages/core/test/db/search-query.test.ts: the corpus of packages/core/test/support/search-corpus.ts (typos,
+    #   diacritics, hyphenated ISBNs, phrases, exclusions, `pengarang:`, short tokens such as "AI" and "C", the stopword
+    #   "the"). Each query must return exactly its hand-written record set on every engine, so SQLite, MariaDB 10.6 and
+    #   PostgreSQL 15 return identical sets (§4.3 compares sets, not relevance orders).
+    # - packages/core/test/db/search-facets.test.ts: exact facet counts for up to 5 000 hits.
+    # - packages/core/test/db/search-every-path.test.ts: a record saved through any write path (form create, update,
+    #   item change, attachment change, merge, import, SRU save, migration) is found by a unique title word right after
+    #   its transaction.
+    # - apps/server/test/db/opac-search.test.ts: the OPAC's /cari over the same corpus.
+    # test:db above runs these files too. This job names K8, so a dialect difference shows up as its own failed check.
+    name: search corpus K8 (${{ matrix.engine }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [sqlite, mariadb106, pg15]
+    env:
+      K8_FILES: >-
+        packages/core/test/db/search-query.test.ts
+        packages/core/test/db/search-facets.test.ts
+        packages/core/test/db/search-every-path.test.ts
+        apps/server/test/db/opac-search.test.ts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start ${{ matrix.engine }}
+        if: matrix.engine != 'sqlite'
+        run: docker compose -f tools/test/compose.yml up -d --wait "$ENGINE"
+        env:
+          ENGINE: ${{ matrix.engine }}
+      # A file filter that matches nothing would quietly run nothing, hence the check that every file is there.
+      - name: K8 corpus, facets, every write path and the OPAC search
+        run: |
+          read -ra files <<< "$K8_FILES"
+          for f in "${files[@]}"; do test -f "$f" || { echo "::error::$f is missing"; exit 1; }; done
+          pnpm test:db "${files[@]}"
+        env:
+          ALTIS_TEST_DB: ${{ matrix.engine }}
+          ALTIS_TEST_DB_REQUIRED: '1'
+      - name: Stop the engine
+        if: always() && matrix.engine != 'sqlite'
+        run: docker compose -f tools/test/compose.yml down
+
+  smoke:
+    name: release zip + smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm release --profile test --version 0.1.0-test
+      # 1d Task 35: release N of the update scenario (one build after the other: the builds share apps/admin/dist).
+      - run: pnpm release --profile test --version 0.2.0-test
+      - run: docker compose -f tools/test/compose.yml up -d --wait mariadb106
+      - run: mkdir -p smoke-reports
+      # The JSON report is stdout (pnpm --silent keeps pnpm's own lines out of it); progress goes to stderr.
+      - name: smoke passenger-sim + mariadb106
+        run: pnpm --silent smoke --zip dist/altis-0.1.0-test.zip --target passenger-sim --db mariadb106 > smoke-reports/passenger-sim-mariadb106.json
+      - name: smoke standalone + sqlite
+        run: pnpm --silent smoke --zip dist/altis-0.1.0-test.zip --target standalone --db sqlite > smoke-reports/standalone-sqlite.json
+      # 1c Task 34 (A6, A5): a frozen backup driven by the cron URL alone (no page, no Origin), and a job moved by plain
+      # page views alone (piggyback). The other scenarios run nightly.
+      - name: smoke passenger-sim + mariadb106, scenario cron-backup
+        run: pnpm --silent smoke --zip dist/altis-0.1.0-test.zip --target passenger-sim --db mariadb106 --scenario cron-backup > smoke-reports/passenger-sim-mariadb106-cron-backup.json
+      - name: smoke passenger-sim + mariadb106, scenario piggyback
+        run: pnpm --silent smoke --zip dist/altis-0.1.0-test.zip --target passenger-sim --db mariadb106 --scenario piggyback > smoke-reports/passenger-sim-mariadb106-piggyback.json
+      # 1d Task 35 (A7, §12.7, Review Focus 4): 0.1 → 0.2 through the signed feed, driven by /admin/_update's poll and
+      # drive alone (no cron, 5 s idle time, a page reload mid-update), apply → done < 120 s.
+      - name: smoke passenger-sim + mariadb106, scenario update
+        run: pnpm --silent smoke --zip dist/altis-0.1.0-test.zip --to-zip dist/altis-0.2.0-test.zip --target passenger-sim --db mariadb106 --scenario update > smoke-reports/passenger-sim-mariadb106-update.json
+      - name: Reports
+        if: always()
+        run: cat smoke-reports/*.json || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: smoke-reports
+          path: |
+            smoke-reports/
+            dist/build-report.json
+          if-no-files-found: ignore
+      - name: Stop the engine
+        if: always()
+        run: docker compose -f tools/test/compose.yml down

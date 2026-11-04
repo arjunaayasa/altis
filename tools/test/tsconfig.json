@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist" },
+  "include": ["*.ts", "../../globals.d.ts"],
+  "references": [{ "path": "../../packages/shared" }, { "path": "../../packages/platform" }, { "path": "../../packages/db" }]
+}

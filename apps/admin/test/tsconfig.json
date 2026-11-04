@@ -1,0 +1,7 @@
+{
+  // The admin tests: jsdom (DOM types) plus Node for the few that ask Vitest or the file system (projects.test.ts).
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "outDir": "../.build/tsc-test", "types": ["vite/client", "node"] },
+  "include": [".", "../../../globals.d.ts"],
+  "references": [{ "path": ".." }, { "path": "../../../packages/shared" }]
+}

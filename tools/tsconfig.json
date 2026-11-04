@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist" },
+  "include": ["**/*.ts", "../globals.d.ts"],
+  // The fixtures hold deliberate violations and are only linted as text; the test itself is type-checked.
+  // sign-cli, release, test (the DB test infrastructure) and e2e (Playwright, S22) are projects of their own.
+  "exclude": ["node_modules", "dist", "lint-fixtures/*.ts", "sign-cli", "release", "test", "e2e"],
+  "files": ["lint-fixtures/lint-rules.test.ts"]
+}

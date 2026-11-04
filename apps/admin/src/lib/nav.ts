@@ -1,0 +1,91 @@
+import type { Permission } from '@altis/shared';
+import type { MeResponse } from '@altis/shared/api/auth';
+import { editionNav } from '@/edition';
+import type { AdminKey } from '@/i18n';
+
+/**
+ * The shell's sections (spec §13.3 "Kerangka admin": navigation by permission). An item shows when the signed-in
+ * user holds its permission (a super admin holds every one) and, for `superAdminOnly`, is a super admin. Hiding is a
+ * convenience only: the server refuses whatever the menus hide (§4.8).
+ *
+ * Phase 2 (its spec §13; plan Task 2) groups them: Katalog, OPAC, then Sistem (the Phase 1 screens); Beranda stays
+ * above the groups. The shell and the command palette show each group under its heading (`nav.group.<group>`).
+ */
+export type NavGroup = 'catalog' | 'opac' | 'system';
+
+/** The groups in the order the shell and the palette show them. */
+export const NAV_GROUPS: readonly NavGroup[] = Object.freeze(['catalog', 'opac', 'system'] as const);
+
+export interface NavItem {
+  to: string;
+  labelKey: AdminKey;
+  permission?: Permission;
+  superAdminOnly?: boolean;
+  /** The group the item is listed under; none for Beranda. */
+  group?: NavGroup;
+}
+
+export const NAV: readonly NavItem[] = Object.freeze([
+  { to: '/admin', labelKey: 'nav.home' },
+  // ---- Phase 2 (catalog): Task 2 ----
+  // Katalog (§13), in the spec's order. Migrasi SLiMS follows its own permission, not superAdminOnly (M1): a super
+  // admin may grant it to a custom role, as with system.backup.restore, and the API admits any holder.
+  { to: '/admin/catalog/records', labelKey: 'nav.catalog.records', permission: 'catalog.records.read', group: 'catalog' },
+  { to: '/admin/catalog/items', labelKey: 'nav.catalog.items', permission: 'catalog.records.read', group: 'catalog' },
+  { to: '/admin/catalog/authorities', labelKey: 'nav.catalog.authorities', permission: 'catalog.records.read', group: 'catalog' },
+  { to: '/admin/catalog/locations', labelKey: 'nav.catalog.locations', permission: 'catalog.records.read', group: 'catalog' },
+  { to: '/admin/catalog/masters', labelKey: 'nav.catalog.masters', permission: 'catalog.records.read', group: 'catalog' },
+  { to: '/admin/catalog/exchange', labelKey: 'nav.catalog.exchange', permission: 'catalog.records.read', group: 'catalog' },
+  { to: '/admin/catalog/labels', labelKey: 'nav.catalog.labels', permission: 'catalog.records.read', group: 'catalog' },
+  { to: '/admin/catalog/duplicates', labelKey: 'nav.catalog.duplicates', permission: 'catalog.records.manage', group: 'catalog' },
+  { to: '/admin/catalog/migration', labelKey: 'nav.catalog.migration', permission: 'catalog.migration.run', group: 'catalog' },
+  // OPAC
+  { to: '/admin/opac/pages', labelKey: 'nav.opac.pages', permission: 'opac.pages.manage', group: 'opac' },
+  // Sistem: the Phase 1 screens.
+  { to: '/admin/users', labelKey: 'nav.users', permission: 'system.users.read', group: 'system' },
+  { to: '/admin/roles', labelKey: 'nav.roles', permission: 'system.users.read', group: 'system' },
+  { to: '/admin/branches', labelKey: 'nav.branches', permission: 'system.branches.manage', group: 'system' },
+  { to: '/admin/settings', labelKey: 'nav.settings', permission: 'system.settings.read', group: 'system' },
+  { to: '/admin/system', labelKey: 'nav.system', permission: 'system.config.manage', group: 'system' },
+  // 1d Task 30: Pembaruan (§13.3), for whoever may read the update state; updating needs `system.update.run`.
+  { to: '/admin/updates', labelKey: 'nav.updates', permission: 'system.update.read', group: 'system' },
+  { to: '/admin/audit', labelKey: 'nav.audit', permission: 'system.audit.read', group: 'system' },
+  { to: '/admin/jobs', labelKey: 'nav.jobs', permission: 'system.jobs.read', group: 'system' },
+  { to: '/admin/backups', labelKey: 'nav.backups', permission: 'system.backup.read', group: 'system' },
+  { to: '/admin/diagnostics', labelKey: 'nav.diagnostics', permission: 'system.diagnostics.read', group: 'system' },
+  { to: '/admin/about', labelKey: 'nav.about', group: 'system' },
+  // The edition's own items (ruling R2, edition/index.ts), after the community ones: none in the community edition.
+  ...editionNav,
+] satisfies NavItem[]);
+
+/** The items `me` may see: none until the session is fully signed in (a pre-2FA session learns nothing, M10). */
+export function visibleNav(me: MeResponse | undefined): NavItem[] {
+  if (me === undefined || !me.authenticated || me.stage !== 'full') return [];
+  const held = new Set<string>(me.permissions);
+  return NAV.filter((item) => {
+    if (item.superAdminOnly === true && !me.superAdmin) return false;
+    return item.permission === undefined || me.superAdmin || held.has(item.permission);
+  });
+}
+
+/** One heading of the navigation: its group (null for the items above the groups) and its visible items. */
+export interface NavSection {
+  group: NavGroup | null;
+  items: NavItem[];
+}
+
+/**
+ * {@link visibleNav} by group: the ungrouped items first, then each group of {@link NAV_GROUPS} that has a visible
+ * item, in that order; a group with none is left out.
+ */
+export function visibleNavSections(me: MeResponse | undefined): NavSection[] {
+  const items = visibleNav(me);
+  const sections: NavSection[] = [];
+  const top = items.filter((item) => item.group === undefined);
+  if (top.length > 0) sections.push({ group: null, items: top });
+  for (const group of NAV_GROUPS) {
+    const inGroup = items.filter((item) => item.group === group);
+    if (inGroup.length > 0) sections.push({ group, items: inGroup });
+  }
+  return sections;
+}

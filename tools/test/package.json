@@ -1,0 +1,19 @@
+{
+  "name": "@altis/test-tools",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./test-db.ts"
+  },
+  "dependencies": {
+    "@altis/db": "workspace:*",
+    "kysely": "0.29.7",
+    "mysql2": "3.24.6",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
+  }
+}

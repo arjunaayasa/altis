@@ -1,0 +1,18 @@
+# Every text file is LF in the working tree, on every platform. A Windows checkout with core.autocrlf=true would
+# otherwise give docker/entrypoint.sh CRLF line endings, and an image built from it fails at start in dash
+# (`set: Illegal option -`). The release zip and its signed manifest hash the bytes as checked out, too.
+* text=auto eol=lf
+
+# Spelled out for what must never be CRLF (a shebang script, the Dockerfile, compose and workflow files).
+*.sh text eol=lf
+docker/Dockerfile text eol=lf
+docker/*.yml text eol=lf
+.github/workflows/*.yml text eol=lf
+
+# Never touched by line-ending conversion.
+*.zip binary
+*.png binary
+*.ico binary
+*.woff2 binary
+*.gz binary
+*.altisbak binary

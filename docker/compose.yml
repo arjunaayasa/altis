@@ -1,0 +1,105 @@
+# ALTIS on Docker (spec §9.1, §9.11; 1a Task 19, 1d Task 32): the app and a MariaDB 10.6 database.
+# The installation guide, in Indonesian, is docs/install/docker.md.
+#
+#   1. Secrets: `./altis-init` in this folder writes .env (mode 600, git-ignored, never in an image) with random
+#      ALTIS_DB_PASSWORD and ALTIS_DB_ROOT_PASSWORD and an ALTIS_INSTALL_CODE, and prints the install code. Until it
+#      has run, every compose command stops with "jalankan ./altis-init dulu". (The smoke run,
+#      tools/release/smoke/run.ts, writes its own .env and passes --env-file.)
+#   2. Image: a published one named by ALTIS_IMAGE in .env, or one built here from the unzipped release zip (see
+#      Dockerfile):
+#        ALTIS_RELEASE_DIR=/path/to/unzipped-release docker compose -f docker/compose.yml build
+#   3. docker compose -f docker/compose.yml up -d     → http://127.0.0.1:8080 (ALTIS_HTTP_BIND / ALTIS_HTTP_PORT),
+#      published on loopback only: put it behind a TLS proxy on this host, with trustProxy hops = 1 (P15). The install
+#      wizard opens with the code altis-init printed; its database step: MariaDB, host `db`, port 3306, user `altis`,
+#      database `altis`, password left empty (the app takes ALTIS_DB_PASSWORD from the environment, so it is never
+#      written to config.json). The app's environment below names that same database (ALTIS_DB_*), and it wins over
+#      what the wizard is given; with it, a lost `data` volume answers 503 "volume data hilang" (spec §7.7), never
+#      a new install over the existing database: restore the volume (or a backup) instead.
+#      Or, instead of the wizard, a headless install (spec §13.6), with /data/install.json = {"baseUrl": ...,
+#      "db": {"dialect": "mariadb", "host": "db", "port": 3306, "user": "altis", "database": "altis"},
+#      "admin": {"username": ..., "name": ..., "password": ...}} (no database password, as above). `admin` is the
+#      first super admin and is required; its password needs at least 10 characters and must not be a common
+#      password:
+#        docker compose -f docker/compose.yml run --rm app node /app/app.js install --config /data/install.json
+#      Then delete the input at once: it holds the first super admin's password in plain text, on the data volume.
+#      Hapus berkas masukan segera: isinya memuat sandi super admin pertama.
+#        docker compose -f docker/compose.yml run --rm app rm /data/install.json
+#   4. Updates (§9.8): a new image goes through the update flow by itself, with a pre_update backup:
+#        docker compose pull && docker compose up -d        (a published image)
+#        docker compose build && docker compose up -d       (a newer release unzipped at ALTIS_RELEASE_DIR)
+#
+# Hardening (§9.11): the app runs as `node`, read-only root file system (writable: the /data volume and the /tmp
+# tmpfs; nothing is written under /app), no capabilities, no privilege escalation; the database publishes no port and
+# its `altis` user (not root) has rights on the `altis` schema only (the MariaDB image grants MARIADB_USER all
+# privileges on MARIADB_DATABASE and nothing else). ALTIS never uses the root password. The nightly image check
+# (tools/release/smoke/docker-image-check.ts) proves the image holds no .env, .git or source map.
+#
+# The project name is fixed, so the volumes (altis_data, altis_db) keep their names whatever the folder is called. A
+# second ALTIS on the same host, in a folder of its own, sets COMPOSE_PROJECT_NAME (which wins over `name:`) and
+# ALTIS_HTTP_PORT in that folder's .env; otherwise it takes over this one's containers and volumes. Never change the
+# project name of an installed ALTIS: it names its volumes (docs/install/docker.md).
+name: altis
+
+services:
+  app:
+    image: ${ALTIS_IMAGE:-altis:local}
+    build:
+      context: .
+      additional_contexts:
+        release: ${ALTIS_RELEASE_DIR:-./release}
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - data:/data
+    restart: unless-stopped
+    environment:
+      # The database of the db service below (spec §7.7): named here, in the environment, and not only in config.json
+      # (which is on the data volume), so that a lost data volume over a database that already holds this install
+      # answers 503 "volume data hilang" instead of opening the install wizard. These override what the wizard or
+      # install.json names. `${VAR-default}`: a variable .env sets, even blank, wins (blank counts as unset in ALTIS),
+      # for another database (ALTIS_DB_DIALECT=postgres and ALTIS_DB_PORT=5432 with a PostgreSQL db service).
+      ALTIS_DB_DIALECT: ${ALTIS_DB_DIALECT-mariadb}
+      ALTIS_DB_HOST: ${ALTIS_DB_HOST-db}
+      ALTIS_DB_PORT: ${ALTIS_DB_PORT-3306}
+      ALTIS_DB_USER: ${ALTIS_DB_USER-altis}
+      ALTIS_DB_NAME: ${ALTIS_DB_NAME-altis}
+      ALTIS_DB_PASSWORD: ${ALTIS_DB_PASSWORD:?jalankan ./altis-init dulu}
+      # The install code altis-init wrote (spec §7.7); blank or absent: the app makes DATA_DIR/install-code.txt.
+      ALTIS_INSTALL_CODE: ${ALTIS_INSTALL_CODE:-}
+    ports:
+      - '${ALTIS_HTTP_BIND:-127.0.0.1}:${ALTIS_HTTP_PORT:-8080}:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  db:
+    image: mariadb:10.6
+    restart: unless-stopped
+    command: [--character-set-server=utf8mb4, --collation-server=utf8mb4_unicode_ci]
+    environment:
+      MARIADB_DATABASE: altis
+      MARIADB_USER: altis
+      MARIADB_PASSWORD: ${ALTIS_DB_PASSWORD:?jalankan ./altis-init dulu}
+      MARIADB_ROOT_PASSWORD: ${ALTIS_DB_ROOT_PASSWORD:?jalankan ./altis-init dulu}
+      MARIADB_AUTO_UPGRADE: '1'
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 2s
+      timeout: 5s
+      retries: 90
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+    # No `ports:`: the database is reachable from the app container only.
+
+volumes:
+  data:
+  db:

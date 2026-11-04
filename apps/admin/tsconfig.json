@@ -1,0 +1,17 @@
+{
+  // The admin SPA (browser code and its jsdom tests). Vite bundles it; tsc only checks it. The declarations go to
+  // .build/ (git-ignored): dist/ is Vite's output, which the release copies as it is.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": ".build/tsc",
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["vite/client"],
+    "jsx": "react-jsx",
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src", "../../globals.d.ts"],
+  "references": [{ "path": "../../packages/shared" }]
+}

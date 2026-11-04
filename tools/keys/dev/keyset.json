@@ -1,0 +1,11 @@
+[
+  {
+    "raw": "{\"keys\":[{\"kid\":\"dev-rel-1\",\"pub\":\"6of-j_VNGx2rmJUz7xIn2WZVH-rxJ7qbjD_S9oyjEnE\",\"use\":\"release\"},{\"kid\":\"dev-rel-2\",\"pub\":\"HtxklPgboOArLHmV0YRslsXT3rH-nut1ECQtBVXidzU\",\"use\":\"release\"},{\"kid\":\"dev-lic-1\",\"pub\":\"1jtqGbt3KAqdOMKir1_8sIJQ9xOALu0c58BxYcuXS9w\",\"use\":\"license\"},{\"kid\":\"dev-ts-1\",\"pub\":\"_W-wcWWyxaLeuEVeNn7S2npMtYWYvhVqj5onkgt61ds\",\"use\":\"timestamp\"},{\"kid\":\"dev-dca-1\",\"pub\":\"kbbR4JBs5E4JPuQzfgZNaCoqGhVS2dVHl9RfslUXxok\",\"use\":\"device\"}],\"revokedKids\":[],\"seq\":1}",
+    "env": {
+      "typ": "altis-keyset/1",
+      "kid": "dev-root-1",
+      "alg": "Ed25519",
+      "sig": "s1MGXzaB97h1lgp9ufA1TQHz-MbdUrXgQfDRtVTq-3pLzcN6XlgKMY9CAOefdTKigzm6ebWo0Nae_At5-mAXDQ"
+    }
+  }
+]

@@ -1,0 +1,16 @@
+ALTIS — Arsya Library Tracking Information System, Edisi Komunitas (Community Edition)
+Copyright (C) 2026 Arjuna / Arsya
+
+This program is free software: you can redistribute it and/or modify it under the terms of the
+GNU Affero General Public License, version 3 only (SPDX: AGPL-3.0-only), as published by the
+Free Software Foundation. It is distributed WITHOUT ANY WARRANTY; see the LICENSE file.
+
+Source code: https://github.com/arjunaayasa/altis
+If you run a modified version for users over a network, AGPL-3.0 section 13 requires you to offer
+them the corresponding source of your version.
+
+Third-party components keep their own licences: see THIRD_PARTY_NOTICES.txt in each release,
+tools/release/licenses/, apps/admin/src/components/ui/LICENSE-shadcn-ui.txt and packages/core/data/.
+
+"ALTIS" and "Arsya" are names of the copyright holder; the AGPL does not grant rights to use them
+as trademarks.
