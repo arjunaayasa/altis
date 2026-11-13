@@ -169,3 +169,8 @@ export type {
 export { addDays, addMonths, diffDays, endOfMonth, isCalendarDate, isoWeekday, localDate, monthOf, monthsBetween } from './dates.js';
 export { DDC_MAINS, compareDdcRowKeys, ddcClassOf, ddcDivisionKey, ddcRowKind, foldByDdc } from './ddc.js';
 export type { DdcClass, DdcMain, DdcRowKey } from './ddc.js';
+// ---- Komunitas K1 (contracts) ----
+// The types of the report and accreditation contracts the domain code shares (types only: the Zod schemas are imported
+// as `@altis/shared/api/reports` and `@altis/shared/api/accreditation`, so the root pulls no Zod in).
+export type { AnswerLetter, NoteRef, PrerequisitesView, SnpOutcome } from './api/accreditation.js';
+export type { ReportCell, ReportColumnType, ReportColumnView, ReportParamKind, ReportParamSpec } from './api/reports.js';

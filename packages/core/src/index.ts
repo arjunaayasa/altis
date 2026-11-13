@@ -637,3 +637,9 @@ export * from './html/index.js';
 export * from './net/index.js';
 export * from './migration/index.js';
 export * from './opac-pages/index.js';
+// ---- Komunitas K1 (reports and accreditation) ----
+// The report framework (definitions, registry, runs, export, housekeeping) and the accreditation workspace (instruments,
+// metrics, periods, registers, evidence, usage, evaluation, documents): each area's names come through its own barrel,
+// filled by the change that owns it, so no later change edits this file.
+export * from './reports/index.js';
+export * from './accreditation/index.js';

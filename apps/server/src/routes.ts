@@ -4,6 +4,7 @@ import { AUTH_ROUTES } from './api/auth.js';
 import { AUTH_MFA_ROUTES } from './api/auth-mfa.js';
 import { AUTH_PASSWORD_ROUTES } from './api/auth-password.js';
 import { BACKUP_ROUTES } from './api/backups.js';
+import { ACCREDITATION_ROUTES } from './api/accreditation/index.js';
 import { CATALOG_ROUTES } from './api/catalog/index.js';
 import { CRON_ROUTES } from './api/cron.js';
 import { DASHBOARD_ROUTES } from './api/dashboard.js';
@@ -16,6 +17,7 @@ import { USERS_ROUTES } from './api/users.js';
 import { ROLE_ROUTES } from './api/roles.js';
 import { BRANCH_ROUTES } from './api/branches.js';
 import { NOTIFICATIONS_ROUTES } from './api/notifications.js';
+import { REPORTS_ROUTES } from './api/reports/index.js';
 import { OPS_ROUTES } from './api/ops.js';
 import { SETTINGS_ROUTES } from './api/settings.js';
 import { UPDATES_ROUTES } from './api/updates.js';
@@ -45,6 +47,10 @@ const health = route({
   handler: (rc) => rc.services.health(rc.c),
 });
 
+// ---- Komunitas K1 (reports and accreditation) ----
+/** The community routes: the reports, then the accreditation workspace (each area's list filled by its own change). */
+export const KOMUNITAS_ROUTES: RouteDecl[] = [...REPORTS_ROUTES, ...ACCREDITATION_ROUTES];
+
 export const ALL_ROUTES: RouteDecl[] = defineRoutes([
   health,
   ...AUTH_ROUTES,
@@ -70,6 +76,9 @@ export const ALL_ROUTES: RouteDecl[] = defineRoutes([
   // ---- Phase 2 (catalog): Task 3 ----
   // The catalog API (api/catalog/index.ts, one list per area), after the 1c groups and before INSTALL_ROUTES.
   ...CATALOG_ROUTES,
+  // ---- Komunitas K1 (reports and accreditation) ----
+  // The reports and the accreditation workspace, after the catalog API and before INSTALL_ROUTES.
+  ...KOMUNITAS_ROUTES,
   ...INSTALL_ROUTES,
   ...ADMIN_ROUTES,
   // ---- Phase 2 (catalog): Task 3 ----

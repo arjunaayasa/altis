@@ -26,7 +26,7 @@ import { z } from 'zod';
 import { problemResponse } from '../http/problem.js';
 import { route, type RouteContext, type RouteDecl } from '../http/route.js';
 import { validationFailed } from '../http/validate.js';
-import { byteRange } from './backups.js';
+import { byteRange } from '../http/range.js';
 
 // The upload and file routes of Task 9 (route catalog "Berkas"; spec §7.5, P10; decision C7). Uploads are
 // `mode: system` (a backup upload must work in read-only, §8.6, C7) and belong to the signed-in staff user who

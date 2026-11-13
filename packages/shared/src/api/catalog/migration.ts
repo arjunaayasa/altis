@@ -100,6 +100,11 @@ export const SlimsStartBody = z
     allowNonEmpty: z.boolean(),
     confirmLibraryName: shortText(191).optional(),
     dryRun: z.boolean(),
+    // ---- Komunitas K1 (catalogue re-sync) ----
+    /** `append` (when absent): new rows only; `sync`: also rewrite the mapped rows no one edited in ALTIS. */
+    catalogMode: z.enum(['append', 'sync']).optional(),
+    /** Skip the catalogue stages; accepted only after a sync dry run (`fromRunId`) found nothing to change. */
+    skipCatalog: z.boolean().optional(),
   })
   .check((ctx) => {
     const { source, filesUploadId, fromRunId } = ctx.value;
@@ -141,6 +146,9 @@ export interface MigrationReconcileRow extends Omit<MigrationTableCounts, 'skipp
   skipped: number;
   unread: boolean;
   diff: number;
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  /** Why an unread table is not read: a later module's table, or a derived one (absent in older summaries). */
+  unreadKind?: 'phase3' | 'derived';
 }
 
 /** A sample of a value a cleaning step changed (mojibake, backslashes, a bad date), cut per M6. */
@@ -187,4 +195,7 @@ export interface MigrationSummary {
   missingFiles: number;
   nonstandardBarcodes: number;
   warnings: string[];
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  /** A sync dry run: the source records and copies that are new, changed or gone (absent in other runs). */
+  catalogChanges?: number;
 }

@@ -60,6 +60,7 @@ import type { Logger } from '../logger.js';
 import { embeddedRootKeys, installedKeysets, refusesDevKids } from '../release-keys.js'; // 1d Task 27
 import { loggableError } from '../safe-error.js';
 import { catalogJobDeps, catalogJobHandlers } from './catalog.js';
+import { komunitasJobDeps, komunitasJobHandlers } from './komunitas.js';
 
 // The job runtime of a server process (spec §10.2, P14; plan Task 13, M13): the job handlers and op kinds of this
 // release, and what runs them in each runner mode.
@@ -330,6 +331,8 @@ export function jobHandlers(deps: JobHandlerDeps = {}): JobHandler<any>[] {
     // The catalog's handlers (jobs/catalog.ts: housekeeping, reindex, runs, import/export, SLiMS migration), each area's
     // list from its own module; bound to the process like the backup jobs.
     ...needsRuntimeAll((rt) => catalogJobHandlers(() => catalogJobDeps(rt()))),
+    // ---- Komunitas K1 (reports and accreditation) ----
+    ...needsRuntimeAll((rt) => komunitasJobHandlers(() => komunitasJobDeps(rt()))),
   ];
 }
 

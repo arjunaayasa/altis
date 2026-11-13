@@ -20,7 +20,7 @@ import { DedupeScanBody, RunListQuery, type RunListResponse, type RunStarted, ty
 import { z } from 'zod';
 import { route, type RouteContext, type RouteDecl } from '../../http/route.js';
 import { jobHandlers } from '../../jobs/runtime.js';
-import { byteRange } from '../backups.js';
+import { byteRange, rangeStream } from '../../http/range.js';
 
 // The catalog API routes of catalog runs and the duplicate scan (Phase 2 spec §3.3, §5.4, §12.2, §12.3; plan Task 19,
 // route catalog; decisions P2-12, P2-23, P2-27):
@@ -46,8 +46,6 @@ import { byteRange } from '../backups.js';
 
 const RUNS = '/api/v1/catalog/runs';
 const RunParams = z.strictObject({ id: ulidField });
-/** A file is read in pieces of this size, each only once the client took the previous one. */
-const DOWNLOAD_CHUNK_BYTES = 256 * 1024;
 
 /** The Content-Type of each export file extension. */
 const EXPORT_MIME: Readonly<Record<ExportFileExt, string>> = Object.freeze({
@@ -75,44 +73,6 @@ function registryOf(rc: RouteContext<unknown, unknown, unknown>): JobRegistry {
   if (reg?.get(DEDUPE_SCAN_JOB) !== undefined) return reg;
   fallbackRegistry ??= createJobRegistry(jobHandlers());
   return fallbackRegistry;
-}
-
-/**
- * Bytes `first` to `last` of `handle`, read only as the client takes them (highWaterMark 0); the handle is closed at
- * the end, on an error, or when the client goes.
- */
-function rangeStream(handle: FileHandle, first: number, last: number): ReadableStream<Uint8Array> {
-  let position = first;
-  let open = true;
-  const close = async (): Promise<void> => {
-    if (!open) return;
-    open = false;
-    await handle.close().catch(() => undefined);
-  };
-  return new ReadableStream<Uint8Array>(
-    {
-      async pull(controller) {
-        try {
-          const left = last + 1 - position;
-          if (left <= 0) {
-            await close();
-            controller.close();
-            return;
-          }
-          const buffer = new Uint8Array(Math.min(DOWNLOAD_CHUNK_BYTES, left));
-          const { bytesRead } = await handle.read(buffer, 0, buffer.byteLength, position);
-          if (bytesRead === 0) throw new Error('the export file is shorter than its size');
-          position += bytesRead;
-          controller.enqueue(buffer.subarray(0, bytesRead));
-        } catch (error) {
-          await close();
-          controller.error(error);
-        }
-      },
-      cancel: close,
-    },
-    { highWaterMark: 0 },
-  );
 }
 
 /** `source` as a web stream; cancelling the stream (a client gone) ends the iteration, which closes the file. */
