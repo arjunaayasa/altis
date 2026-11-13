@@ -71,7 +71,7 @@ const PHASE_1C = [
   'audit.purge',
 ];
 
-/** Phase 1d (Task 1), appended after 1c's in the plan's order: updates and releases (no licence action, ruling R12). */
+/** Phase 1d (Task 1), appended after 1c's in the plan's order: updates and releases (the community edition has no licence action). */
 const PHASE_1D = [
   // updates and releases
   'update.apply',
@@ -115,12 +115,35 @@ const PHASE_2 = [
   'opac.page.archive',
 ];
 
+/** Reports and accreditation, appended after Phase 2's in this order: 18 actions. */
+const KOMUNITAS_K1 = [
+  'reports.run.start',
+  'reports.run.download',
+  'accreditation.period.create',
+  'accreditation.period.update',
+  'accreditation.period.archive',
+  'accreditation.period.freeze',
+  'accreditation.period.unfreeze',
+  'accreditation.answer.update',
+  'accreditation.usage.update',
+  'accreditation.usage_groups.update',
+  'accreditation.register.create',
+  'accreditation.register.update',
+  'accreditation.register.archive',
+  'accreditation.evidence.create',
+  'accreditation.evidence.archive',
+  'accreditation.slims_usage.start',
+  'accreditation.slims_usage.finish',
+  'catalog.record.bulk_update',
+];
+
 describe('AUDIT_ACTIONS', () => {
-  it('is exactly the Phase 1b list followed by the 18 actions of Phase 1c, the 5 of Phase 1d, then the 30 of Phase 2, in order', () => {
+  it('is exactly the Phase 1b list followed by the 18 actions of Phase 1c, the 5 of Phase 1d, the 30 of Phase 2, then the 18 of reports and accreditation, in order', () => {
     expect(PHASE_1C).toHaveLength(18);
     expect(PHASE_1D).toHaveLength(5);
     expect(PHASE_2).toHaveLength(30);
-    expect([...AUDIT_ACTIONS]).toEqual([...PHASE_1B, ...PHASE_1C, ...PHASE_1D, ...PHASE_2]);
+    expect(KOMUNITAS_K1).toHaveLength(18);
+    expect([...AUDIT_ACTIONS]).toEqual([...PHASE_1B, ...PHASE_1C, ...PHASE_1D, ...PHASE_2, ...KOMUNITAS_K1]);
   });
 
   it('every action is dotted lower-case and fits audit_log.action (64)', () => {

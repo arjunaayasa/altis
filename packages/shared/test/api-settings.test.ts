@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { issueCode } from '../src/api/common.js';
 import {
+  AccreditationSettingsBody,
   BarcodePattern,
   BarcodePatternList,
   CatalogSettingsBody,
@@ -236,7 +237,70 @@ describe('CatalogSettingsBody and the new OpacSettingsBody keys', () => {
     expect(codes(OpacSettingsBody.safeParse({ oai: { adminEmail: 'x@' } }))).toEqual(['invalid_format']);
   });
 
-  it('SETTINGS_GROUPS ends with catalog', () => {
-    expect([...SETTINGS_GROUPS]).toEqual(['library', 'email', 'security', 'opac', 'catalog']);
+  it('SETTINGS_GROUPS lists catalog after the Phase 1 groups', () => {
+    expect([...SETTINGS_GROUPS].slice(0, 5)).toEqual(['library', 'email', 'security', 'opac', 'catalog']);
+  });
+});
+
+// ---- Komunitas K1 (settings) ----
+// The accreditation group: a strict body of the sixteen settings under their names without `accreditation.`, with the
+// limits of the settings registry (which reuses these schemas). `visits.dedupeMinutes` is not part of it: its group has
+// no screen yet.
+
+describe('AccreditationSettingsBody', () => {
+  const ULID = '01JZ0000000000000000000ABC';
+  const full = {
+    schoolYearStartMonth: 7,
+    fiction: { collectionTypeCodes: ['fiksi', 'NOVEL'], callNumberPrefixes: ['F', 'FIK'], ddcPrefixes: ['8', '899.2'] },
+    referenceCollectionTypeCodes: ['REF'],
+    electronicMaterialTypeCodes: ['EBOOK'],
+    usedUnit: 'items',
+    websiteFeatures: { profilePageId: ULID, faqPageId: ULID, socialUrls: ['https://instagram.com/perpus', 'http://perpus.sch.id/fb'] },
+    liveFrom: '2025-07-01',
+    evidence: { maxMb: 5, componentLimitMb: 9 },
+    textbookCollectionTypeCodes: [],
+    k7: { processedThresholdPct: 95 },
+    undatedShareMaxPct: 10,
+    visits: { dedupeLegacy: false },
+    unknownMemberGroup: { default: 'auto' },
+  };
+
+  it('SETTINGS_GROUPS ends with accreditation; the visits group has no screen yet', () => {
+    expect([...SETTINGS_GROUPS]).toEqual(['library', 'email', 'security', 'opac', 'catalog', 'accreditation']);
+    expect(SETTINGS_GROUPS as readonly string[]).not.toContain('visits');
+  });
+
+  it('takes every key, nested as the setting names are, and upper-cases the codes', () => {
+    const parsed = AccreditationSettingsBody.parse(full);
+    expect(parsed.fiction?.collectionTypeCodes).toEqual(['FIKSI', 'NOVEL']);
+    expect(AccreditationSettingsBody.safeParse({}).success).toBe(true);
+    expect(AccreditationSettingsBody.safeParse({ unknownMemberGroup: { default: null } }).success).toBe(true);
+    expect(AccreditationSettingsBody.safeParse({ unknownMemberGroup: { default: 'teacher' } }).success).toBe(true);
+    expect(AccreditationSettingsBody.safeParse({ liveFrom: null }).success).toBe(true);
+  });
+
+  it('is strict at every level', () => {
+    expect(codes(AccreditationSettingsBody.safeParse({ dedupeMinutes: 60 }))).toEqual(['unrecognized_keys']);
+    expect(codes(AccreditationSettingsBody.safeParse({ fiction: { prefixes: [] } }))).toEqual(['unrecognized_keys']);
+    expect(codes(AccreditationSettingsBody.safeParse({ websiteFeatures: { homePageId: ULID } }))).toEqual(['unrecognized_keys']);
+  });
+
+  it('holds the limits of each setting', () => {
+    const refused = (body: unknown): string[] => codes(AccreditationSettingsBody.safeParse(body));
+    expect(refused({ schoolYearStartMonth: 13 })).toEqual(['too_big']);
+    expect(refused({ schoolYearStartMonth: 0 })).toEqual(['too_small']);
+    expect(refused({ k7: { processedThresholdPct: 40 } })).toEqual(['too_small']);
+    expect(refused({ evidence: { maxMb: 101 } })).toEqual(['too_big']);
+    expect(refused({ undatedShareMaxPct: 101 })).toEqual(['too_big']);
+    expect(refused({ fiction: { collectionTypeCodes: Array.from({ length: 21 }, (_, i) => `K${i}`) } })).toEqual(['too_big']);
+    expect(refused({ fiction: { ddcPrefixes: Array.from({ length: 51 }, (_, i) => `${i}`) } })).toEqual(['too_big']);
+    expect(refused({ fiction: { callNumberPrefixes: ['x'.repeat(17)] } })).toEqual(['too_big']);
+    expect(refused({ referenceCollectionTypeCodes: [''] })).toEqual(['too_small']);
+    expect(refused({ usedUnit: 'pages' })).toEqual(['invalid_value']);
+    expect(refused({ liveFrom: '2025-02-30' })).toEqual(['invalid_format']);
+    expect(refused({ unknownMemberGroup: { default: 'guest' } })).toEqual(['invalid_value']);
+    expect(refused({ websiteFeatures: { socialUrls: ['ftp://x.example'] } })).toEqual(['invalid_format']);
+    expect(refused({ websiteFeatures: { socialUrls: Array.from({ length: 6 }, () => 'https://x.example') } })).toEqual(['too_big']);
+    expect(refused({ websiteFeatures: { profilePageId: 'halaman-profil' } })).toEqual(['custom']);
   });
 });

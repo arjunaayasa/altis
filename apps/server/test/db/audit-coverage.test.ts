@@ -967,8 +967,11 @@ describe.skipIf(!ctx.available)(`audit coverage of the 1d actions [${engineLabel
 // runtime answers 500 AUDIT_MISSING); afterwards the chain verifies, seq 1..N. A script still null lists its actions as
 // pending (it.todo) while PHASE2_PENDING_ALLOWED; Task 39 sets it to false, and they must all be covered then.
 
-/** The Phase 2 actions: AUDIT_ACTIONS from the first catalog action on (the list appends them last). */
-const PHASE2_ACTIONS: readonly AuditAction[] = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('catalog.record.create'));
+/**
+ * The Phase 2 actions: AUDIT_ACTIONS from the first catalog action up to the first action of reports and accreditation,
+ * which the community milestones append after them.
+ */
+const PHASE2_ACTIONS: readonly AuditAction[] = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('catalog.record.create'), AUDIT_ACTIONS.indexOf('reports.run.start'));
 
 describe('audit coverage: the Phase 2 scripts own every Phase 2 action, once', () => {
   it('the ten areas list the 30 actions of §12.4 between them, each in exactly one', () => {

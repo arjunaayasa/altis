@@ -7,7 +7,7 @@ import { ADMIN_MESSAGES, I18nProvider, useT, type AdminKey } from '@/i18n';
 // The SPA's own strings (decision D29): Indonesian first, English complete. Shared families (error.*, perm.*,
 // audit.*, banner.*) come from @altis/shared through the same useT().
 
-const SHARED_PREFIXES = ['error.', 'perm.', 'audit.', 'role.', 'mail.', 'opac.', 'banner.'];
+const SHARED_PREFIXES = ['error.', 'perm.', 'audit.', 'role.', 'mail.', 'opac.', 'banner.', 'vocab.', 'report.', 'accred.'];
 
 const placeholders = (text: string): string[] => [...text.matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((m) => m[1]!).sort();
 

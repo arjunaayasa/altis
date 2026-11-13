@@ -643,6 +643,8 @@ export const MATRIX_FIXTURES: Record<string, MatrixFixture> = {
   // ---- Phase 2 (catalog): Task 2 ----
   'settings.catalog.put': async () => ({ body: {} }),
   'catalog.config': none,
+  // ---- Komunitas K1 (settings) ----
+  'settings.accreditation.put': async () => ({ body: {} }),
   'system.config.get': none,
   'system.config.put': async () => ({ body: {} }),
   'system.config.email_test': async () => ({ body: { to: 'uji@example.test' } }),

@@ -21,6 +21,7 @@ import { ME_KEY, gateTarget, localeOf, meQuery, useMe } from '@/lib/me';
 import { page } from '@/lib/page';
 import { endHold, signInGate, validateNextSearch, validateSignInSearch } from '@/lib/sign-in';
 import { catalogRoutes } from '@/routes/catalog';
+import { komunitasRoutes } from '@/routes/komunitas';
 
 /**
  * The admin routes (spec §4.8, §13.3). Every path is a full `/admin/…` path (the server serves index.html for
@@ -357,6 +358,9 @@ export const routeTree = rootRoute.addChildren([
     // ---- Phase 2 (catalog): Task 3 ----
     // The catalogue's screens (routes/catalog/*.tsx, one file per area, each owned by its task).
     ...catalogRoutes(shellRoute),
+    // ---- Komunitas K1 (routes) ----
+    // Laporan, Akreditasi and Pengaturan Akreditasi (routes/komunitas/*.tsx, one file per area).
+    ...komunitasRoutes(shellRoute),
     // The edition's own screens (ruling R2): none in the community edition.
     ...editionRoutes,
     sectionNotFoundRoute,

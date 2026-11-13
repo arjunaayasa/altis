@@ -116,6 +116,33 @@ export const AUDIT_ACTIONS = Object.freeze([
   'opac.page.create',
   'opac.page.update',
   'opac.page.archive',
+
+  // ---- Komunitas K1 (reports and accreditation) ----
+  // `meta` holds field names, counts and reason names only, never a personal value.
+  // report runs
+  'reports.run.start',
+  'reports.run.download',
+  // accreditation periods and answers
+  'accreditation.period.create',
+  'accreditation.period.update',
+  'accreditation.period.archive',
+  'accreditation.period.freeze',
+  'accreditation.period.unfreeze',
+  'accreditation.answer.update',
+  // monthly usage and the member type groups
+  'accreditation.usage.update',
+  'accreditation.usage_groups.update',
+  // registers and evidence
+  'accreditation.register.create',
+  'accreditation.register.update',
+  'accreditation.register.archive',
+  'accreditation.evidence.create',
+  'accreditation.evidence.archive',
+  // the SLiMS usage statistics import (`finish` is written by the job, as the system actor)
+  'accreditation.slims_usage.start',
+  'accreditation.slims_usage.finish',
+  // the bulk edit of records
+  'catalog.record.bulk_update',
 ] as const);
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

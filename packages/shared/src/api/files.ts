@@ -25,6 +25,11 @@ export const UPLOAD_CONTEXT_NAMES = [
   'catalog.import',
   'slims.dump',
   'slims.files',
+  // ---- Komunitas K1 (uploads) ----
+  // Accreditation evidence (PDF or JPEG, also the register attachments) is stored as a file; the SLiMS dump of the
+  // usage statistics import stays staged for its job.
+  'accreditation.evidence',
+  'accreditation.slims_dump',
 ] as const;
 
 export type UploadContextName = (typeof UPLOAD_CONTEXT_NAMES)[number];
