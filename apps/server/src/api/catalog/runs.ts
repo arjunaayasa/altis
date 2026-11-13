@@ -55,10 +55,13 @@ const EXPORT_MIME: Readonly<Record<ExportFileExt, string>> = Object.freeze({
   csv: 'text/csv; charset=utf-8',
 });
 
-/** What the request's user may see of runs (P2-27): a route with a permission runs with a session. */
+/**
+ * What the request's user may see of runs: migration runs only with `catalog.migration.run`, the SLiMS usage import
+ * runs only with `accreditation.workspace.manage`. A route with a permission runs with a session.
+ */
 function viewerOf(rc: RouteContext<unknown, unknown, unknown>): RunViewer {
   if (rc.auth === null) throw new DomainError('AUTH_REQUIRED');
-  return { migration: can(rc.auth.grants, 'catalog.migration.run') };
+  return { migration: can(rc.auth.grants, 'catalog.migration.run'), slimsUsage: can(rc.auth.grants, 'accreditation.workspace.manage') };
 }
 
 function exportGone(): DomainError {

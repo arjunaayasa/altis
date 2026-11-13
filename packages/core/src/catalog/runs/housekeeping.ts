@@ -1,6 +1,7 @@
 import { withTx, type DbHandle } from '@altis/db';
 import { dataPath, exportFilePath, listNames, removeFile, removeStaleTemps, removeTree, runWorkDir, statOrNull, type ExportFileExt } from '@altis/platform';
 import { isUlid, ulidTime } from '@altis/shared';
+import { closeAbandonedUsageRun } from '../../accreditation/slims-usage/start.js';
 import { errorFields } from '../../context.js';
 import { closeAbandonedSlimsRun } from '../../migration/slims/ending.js';
 import { RUN_WORK_KEEP_MS, finishRun, type RunEnd } from '../data/runs.js';
@@ -20,7 +21,9 @@ import { exportFileExtOf } from './queries.js';
 //            retries meanwhile still finds its run live. A run whose job is gone (retention) or never attached is
 //            ended `failed` once it is 7 days old. A migration run ended here gets what its pipeline's end would have
 //            written (migration/slims/ending.ts: the search index `ready`, `catalog.migration.finish`), and its work
-//            folder goes at once (no real run adopts a run that did not succeed).
+//            folder goes at once (no real run adopts a run that did not succeed). A SLiMS usage import (`slims_usage`)
+//            is ended at once the same way (`accreditation.slims_usage.finish`), and its work folder, which holds
+//            member hashes, goes at once too.
 //   expired  An export whose file expired (`expires_at` ≤ now) loses the file `exports/<runId>.<ext>`, and its
 //            `output_name` and `output_size` are cleared: the download answers 410 CATALOG_RUN_EXPIRED from
 //            `expires_at` on anyway.
@@ -104,12 +107,13 @@ async function endAbandonedRuns(c: HousekeepingStepContext, after: string, stop:
         if (Number(r.created_at) <= c.now - RUN_WORK_KEEP_MS) end = { status: 'failed', at: c.now };
       } else if (JOB_TERMINAL.has(r.job_status)) {
         const endedAt = Number(r.job_finished_at ?? r.job_updated_at ?? c.now);
-        const grace = r.kind === 'dedupe_scan' || r.kind === 'migration' ? 0 : RUN_WORK_KEEP_MS;
+        const grace = r.kind === 'dedupe_scan' || r.kind === 'migration' || r.kind === 'slims_usage' ? 0 : RUN_WORK_KEEP_MS;
         if (endedAt <= c.now - grace) end = { status: r.job_status === 'cancelled' ? 'cancelled' : 'failed', at: endedAt };
       }
       if (end === null) continue;
       const ending = end;
       const migration = r.kind === 'migration';
+      const usage = r.kind === 'slims_usage';
       const ended = await withTx(h, async (trx) => {
         const done = await finishRun(
           trx,
@@ -127,9 +131,10 @@ async function endAbandonedRuns(c: HousekeepingStepContext, after: string, stop:
         if (done && migration) {
           await closeAbandonedSlimsRun(trx, { runId: r.id, jobId: r.job_id, status: ending.status, dryRun: Number(r.dry_run) === 1, now: c.now });
         }
+        if (done && usage) await closeAbandonedUsageRun(trx, { runId: r.id, status: ending.status, now: c.now });
         return done;
       });
-      if (ended && migration) {
+      if (ended && (migration || usage)) {
         await removeTree(runWorkDir(c.deps.dataDir, r.id)).catch((error: unknown) => {
           c.deps.log.warn('catalog housekeeping: the work folder of an ended migration run could not be removed', { runId: r.id, ...errorFields(error) });
         });
