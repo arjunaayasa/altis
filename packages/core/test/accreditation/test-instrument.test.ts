@@ -14,8 +14,8 @@ import { ACCRED_NOTE_KEYS } from '../../src/accreditation/notes.js';
 import type { AccredInstrument } from '../../src/accreditation/types.js';
 import { REPORTS } from '../../src/reports/registry.js';
 
-// The instruments of this build: the four headers (the three school instruments of 2025 and the statistics mode), still
-// without indicators, and under the test profile `test-sch`, a scored school instrument with four real indicators of
+// The instruments of this build: the four headers (the three school instruments of 2025 and the statistics mode, which
+// has no indicators), and under the test profile `test-sch`, a scored school instrument with four real indicators of
 // the school instruments (K1, K2, K3 and SP1), on which periods, answers and evidence are tested.
 
 const MESSAGE_KEYS = new Set(Object.keys(MESSAGES.id));
@@ -26,7 +26,8 @@ describe('ACCRED_INSTRUMENTS', () => {
     expect(ACCRED_INSTRUMENTS.map((i) => i.id)).toEqual(['sch-sd-2025', 'sch-smp-2025', 'sch-sma-2025', 'general-stats', 'test-sch']);
     for (const i of ACCRED_INSTRUMENTS) expect(instrumentById(i.id)).toBe(i);
     expect(instrumentById('sch-sma-2022')).toBeNull();
-    for (const i of ACCRED_INSTRUMENTS.slice(0, 4)) expect([i.components, i.snp], i.id).toEqual([[], []]);
+    const general = instrumentById('general-stats') as AccredInstrument;
+    expect([general.components, general.snp]).toEqual([[], []]);
   });
 
   it('the school headers: the decree, the day they apply from, one level each, two period kinds, every form, scored', () => {
