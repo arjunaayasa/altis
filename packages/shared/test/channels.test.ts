@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseChannel } from '../src/channels.js';
+import { FIXED_CHANNEL_NAMES, ID_CHANNEL_PREFIXES, parseChannel } from '../src/channels.js';
 import { newId } from '../src/ids.js';
 
 // Spec §10.7: the channel registry.
@@ -31,6 +31,22 @@ describe('parseChannel', () => {
     for (const name of ['Catalog', 'CATALOG', ' catalog', 'catalog ', 'catalog.', `catalog.${id}`, 'catalog.records', 'catalogs']) {
       expect(parseChannel(name), JSON.stringify(name)).toBeNull();
     }
+  });
+
+  it('accreditation needs accreditation.workspace.read (the results hints carry a period id only)', () => {
+    expect(parseChannel('accreditation')).toEqual({ kind: 'permission', permission: 'accreditation.workspace.read' });
+    for (const name of ['Accreditation', 'accreditation.', `accreditation.${id}`, 'accreditation.results', ' accreditation']) {
+      expect(parseChannel(name), JSON.stringify(name)).toBeNull();
+    }
+  });
+
+  it('FIXED_CHANNEL_NAMES lists every channel without an id, each of which parses; user and jobs take an id', () => {
+    expect([...FIXED_CHANNEL_NAMES]).toEqual(['system.update', 'system.backup', 'system.status', 'catalog', 'accreditation']);
+    for (const name of FIXED_CHANNEL_NAMES) expect(parseChannel(name), name).not.toBeNull();
+    expect([...ID_CHANNEL_PREFIXES]).toEqual(['user', 'jobs']);
+    for (const prefix of ID_CHANNEL_PREFIXES) expect(parseChannel(`${prefix}.${id}`), prefix).not.toBeNull();
+    expect(parseChannel('constructor')).toBeNull();
+    expect(parseChannel('__proto__')).toBeNull();
   });
 
   it('refuses unknown channels (the whole request then answers 403)', () => {

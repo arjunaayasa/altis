@@ -28,7 +28,7 @@ export const ERROR_CODES = Object.freeze({
   SCHEMA_CONFLICT: Object.freeze({ status: 500 }),
   /**
    * A transaction lost to a deadlock or a serialization failure (MySQL/MariaDB 1213, PostgreSQL 40P01/40001) and
-   * kept losing when withTx ran it again (ruling R37); `meta.attempts`, `meta.code`. Retrying later may succeed.
+   * kept losing when withTx ran it again; `meta.attempts`, `meta.code`. Retrying later may succeed.
    */
   TX_CONFLICT: Object.freeze({ status: 409 }),
   /** No route answers the request's path (the HTTP app's problem+json for an unknown path). */
@@ -267,8 +267,8 @@ export const ERROR_CODES = Object.freeze({
 
   // ---- Phase 2 (catalog): Task 2 ----
   // Phase 2 spec §12.5, in its order. Field errors stay VALIDATION_FAILED with errors[{path, code}] (`taken`,
-  // `isbn_not_barcode`, `invalid_transition`, ...). No 5xx reason reaches a client (decision P2-17), so none is added to
-  // PROBLEM_REASONS.
+  // `isbn_not_barcode`, `invalid_transition`, ...). No 5xx reason reaches a client (a connection test answers 200 with
+  // its own code instead), so none is added to PROBLEM_REASONS.
 
   /** A record that still has live items cannot be archived. */
   CATALOG_RECORD_HAS_ITEMS: Object.freeze({ status: 409 }),
@@ -296,6 +296,27 @@ export const ERROR_CODES = Object.freeze({
   MIGRATION_SOURCE_UNSUPPORTED: Object.freeze({ status: 422 }),
   /** The target catalog already holds data and the migration was not allowed to add to it. */
   MIGRATION_TARGET_NOT_EMPTY: Object.freeze({ status: 409 }),
+
+  // ---- Komunitas K1 (reports and accreditation) ----
+  // Field errors stay VALIDATION_FAILED with errors[{path, code}] (`branch_scope_not_available`, `export_only`, ...).
+
+  /**
+   * A report export is over its format's row limit; `meta {rows, max, format}`. For a ZIP the limit is named:
+   * `limit: 'entries'` (`rows` = entries, `max` 5 000) or `limit: 'bytes'` (`rows` = bytes, `max` 2 147 483 648).
+   */
+  REPORT_TOO_LARGE: Object.freeze({ status: 422 }),
+  /** The report run's file has expired and was removed. */
+  REPORT_RUN_EXPIRED: Object.freeze({ status: 410 }),
+  /** The accreditation period is frozen: its data no longer changes until it is unfrozen. */
+  ACCRED_PERIOD_FROZEN: Object.freeze({ status: 409 }),
+  /** The instrument does not fit the library's type or school level; `meta {libraryType, schoolLevel}`. */
+  ACCRED_INSTRUMENT_MISMATCH: Object.freeze({ status: 422 }),
+  /** A scored instrument needs one school year or twelve months; `meta {kind, months}`. */
+  ACCRED_PERIOD_SPAN: Object.freeze({ status: 422 }),
+  /** The period's data changed after its results were computed; `meta {computedAt, changedAt}`. */
+  ACCRED_RESULTS_STALE: Object.freeze({ status: 409 }),
+  /** A migration precheck refused the run; `meta {reason, count}` (`catalog_changed`: the catalogue differs). */
+  MIGRATION_PRECHECK_FAILED: Object.freeze({ status: 422 }),
 });
 
 export type ErrorCode = keyof typeof ERROR_CODES;

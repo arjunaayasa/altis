@@ -130,7 +130,7 @@ describe('ERROR_CODES', () => {
 
   // Phase 1d (Task 1), in the order the plan lists them: updates, feeds and releases. The draft's KEYSET_FILE_FULL is
   // not among them (preflight M6): a full keyset file is a setting and a dashboard alert. The community edition has no
-  // licence codes (ruling R12).
+  // licence codes.
   const phase1d: Record<string, number> = {
     // updates (§9.6-9.8)
     UPDATE_NONE: 404,
@@ -166,33 +166,48 @@ describe('ERROR_CODES', () => {
     MIGRATION_TARGET_NOT_EMPTY: 409,
   };
 
+  // ---- Komunitas K1 (reports and accreditation) ----
+  // Reports and accreditation, in this order. Field errors stay VALIDATION_FAILED.
+  const komunitasK1: Record<string, number> = {
+    REPORT_TOO_LARGE: 422,
+    REPORT_RUN_EXPIRED: 410,
+    ACCRED_PERIOD_FROZEN: 409,
+    ACCRED_INSTRUMENT_MISMATCH: 422,
+    ACCRED_PERIOD_SPAN: 422,
+    ACCRED_RESULTS_STALE: 409,
+    MIGRATION_PRECHECK_FAILED: 422,
+  };
+
   const expected: Record<ErrorCode, number> = {
     ...phase1a,
     ...phase1b,
     ...phase1c,
     ...phase1d,
     ...phase2,
+    ...komunitasK1,
   } as Record<ErrorCode, number>;
 
-  it('registers exactly the Phase 1a, 1b, 1c, 1d and 2 codes with their HTTP status', () => {
+  it('registers exactly the Phase 1a, 1b, 1c, 1d, 2 and the reports and accreditation codes with their HTTP status', () => {
     expect(Object.keys(ERROR_CODES).sort()).toEqual(Object.keys(expected).sort());
     for (const [code, status] of Object.entries(expected)) {
       expect(ERROR_CODES[code as ErrorCode].status, code).toBe(status);
     }
   });
 
-  it('keeps the 19 Phase 1a codes unchanged, and appends the 1b, the 1c, the 1d and then the Phase 2 codes after them in order', () => {
+  it('keeps the 19 Phase 1a codes unchanged, and appends the 1b, the 1c, the 1d, the Phase 2 and then the reports and accreditation codes after them in order', () => {
     expect(Object.keys(phase1a)).toHaveLength(19);
     expect(Object.keys(phase1b)).toHaveLength(38);
     expect(Object.keys(phase1c)).toHaveLength(40);
     expect(Object.keys(phase1d)).toHaveLength(13);
     expect(Object.keys(phase2)).toHaveLength(13);
+    expect(Object.keys(komunitasK1)).toHaveLength(7);
     expect(Object.keys(ERROR_CODES)).toEqual([
       ...Object.keys(phase1a),
       ...Object.keys(phase1b),
       ...Object.keys(phase1c),
       ...Object.keys(phase1d),
       ...Object.keys(phase2),
+      ...Object.keys(komunitasK1),
     ]);
     for (const [code, status] of Object.entries(phase1a)) {
       expect(ERROR_CODES[code as ErrorCode].status, code).toBe(status);
@@ -215,6 +230,15 @@ describe('ERROR_CODES', () => {
     expect(new DomainError('UPDATE_BOOT_FAILED').status).toBe(500);
     expect(new DomainError('UPDATE_CHECK_THROTTLED', { meta: { retryAfterS: 60 } }).status).toBe(429);
     expect(new DomainError('RELEASE_PENDING').status).toBe(409);
+  });
+
+  it('a DomainError of a reports or accreditation code takes its status from the registry and keeps its meta', () => {
+    const zip = new DomainError('REPORT_TOO_LARGE', { meta: { rows: 5001, max: 5000, format: 'zip', limit: 'entries' } });
+    expect([zip.status, zip.meta]).toEqual([422, { rows: 5001, max: 5000, format: 'zip', limit: 'entries' }]);
+    expect(new DomainError('REPORT_RUN_EXPIRED').status).toBe(410);
+    expect(new DomainError('ACCRED_PERIOD_FROZEN').status).toBe(409);
+    expect(new DomainError('ACCRED_RESULTS_STALE', { meta: { computedAt: 1, changedAt: 2 } }).status).toBe(409);
+    expect(new DomainError('MIGRATION_PRECHECK_FAILED', { meta: { reason: 'catalog_changed', count: 3 } }).status).toBe(422);
   });
 
   it('a DomainError of a Phase 2 code takes its status from the registry', () => {
@@ -240,7 +264,7 @@ describe('ERROR_CODES', () => {
     expect(new DomainError('ADMIN_UNAVAILABLE').status).toBe(503);
   });
 
-  it('TX_CONFLICT is 409: a transaction kept losing to deadlocks or serialization failures (ruling R37)', () => {
+  it('TX_CONFLICT is 409: a transaction kept losing to deadlocks or serialization failures, however often withTx ran it', () => {
     const e = new DomainError('TX_CONFLICT', { meta: { attempts: 3, code: 'ER_LOCK_DEADLOCK' } });
     expect(e.status).toBe(409);
     expect(e.meta).toEqual({ attempts: 3, code: 'ER_LOCK_DEADLOCK' });

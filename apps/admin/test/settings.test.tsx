@@ -1,5 +1,13 @@
 import type { RoleItem } from '@altis/shared/api/roles';
-import type { CatalogSettings, EmailSettings, LibrarySettings, OpacSettings, SecuritySettings, SettingsView } from '@altis/shared/api/settings';
+import type {
+  AccreditationSettingsView,
+  CatalogSettings,
+  EmailSettings,
+  LibrarySettings,
+  OpacSettings,
+  SecuritySettings,
+  SettingsView,
+} from '@altis/shared/api/settings';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ROLES, ROLE_ADMIN, ROLE_LIBRARIAN, adminMe, problem, signedIn, startApp, superMe, type FakeHandler, type FakeRequest } from './fake-api';
@@ -43,6 +51,23 @@ const CATALOG: CatalogSettings = {
   dedupe: { threshold: 80 },
 };
 
+/** Reports and accreditation: the accreditation group (its screen has its own tests). */
+const ACCREDITATION: AccreditationSettingsView = {
+  schoolYearStartMonth: 7,
+  fiction: { collectionTypeCodes: ['FIKSI'], callNumberPrefixes: [], ddcPrefixes: [] },
+  referenceCollectionTypeCodes: ['REF'],
+  electronicMaterialTypeCodes: ['EBOOK'],
+  usedUnit: 'titles',
+  websiteFeatures: {},
+  liveFrom: null,
+  evidence: { maxMb: 5, componentLimitMb: 9 },
+  textbookCollectionTypeCodes: [],
+  k7: { processedThresholdPct: 100 },
+  undatedShareMaxPct: 10,
+  visits: { dedupeLegacy: true },
+  unknownMemberGroup: { default: 'auto' },
+};
+
 /** `patch` written into `target`, nested objects merged (a key left out keeps its value, as the server does). */
 function merge(target: Record<string, unknown>, patch: Record<string, unknown>): void {
   for (const [key, value] of Object.entries(patch)) {
@@ -63,6 +88,7 @@ function settingsStore() {
     security: { ...SECURITY },
     opac: structuredClone(OPAC),
     catalog: structuredClone(CATALOG),
+    accreditation: structuredClone(ACCREDITATION),
   };
   const puts: { group: string; body: unknown }[] = [];
   const routes: Record<string, FakeHandler> = {

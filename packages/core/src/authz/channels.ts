@@ -23,7 +23,8 @@ function denied(index: number, reason: 'unknown' | 'forbidden'): DomainError {
  * - `system.update` / `system.backup`: `system.update.read` / `system.backup.read`, held globally;
  * - `system.status`: any staff;
  * - `catalog` (Phase 2 spec §12.6; Task 2): `catalog.records.read`, held globally (a global permission is never held
- *   per branch), through the same `permission` rule of parseChannel.
+ *   per branch), through the same `permission` rule of parseChannel;
+ * - `accreditation`: `accreditation.workspace.read`, held globally, through the same rule.
  *
  * Every name is recognized first, so an unknown one is refused before any job is looked up.
  */

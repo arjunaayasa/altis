@@ -47,6 +47,8 @@ const SECTIONS: readonly { to: string; labelKey: AdminKey }[] = [
   { to: '/admin/settings/opac', labelKey: 'settings.tab.opac' },
   // ---- Phase 2 (catalog): Task 28 ----
   { to: '/admin/settings/catalog', labelKey: 'catalog.settings.tab' },
+  // ---- Komunitas K1 (settings) ----
+  { to: '/admin/settings/accreditation', labelKey: 'settings.tab.accreditation' },
 ];
 
 /** The frame of the settings pages: the title and the links between the groups. */

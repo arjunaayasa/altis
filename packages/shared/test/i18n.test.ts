@@ -3,6 +3,11 @@ import { AUDIT_ACTIONS } from '../src/audit-actions.js';
 import { ERROR_CODES } from '../src/errors.js';
 import { NEEDS_ATTENTION, OP_KINDS, OP_STATES } from '../src/ops.js';
 import { permissionCatalog } from '../src/permissions.js';
+import { DOCUMENT_ASPECTS, DOCUMENT_KINDS, L12_FEATURES } from '../src/accreditation-vocab.js';
+import { ANNEX_COLLECTION_EN, ANNEX_COLLECTION_ID } from '../src/i18n/k1/annex-collection.js';
+import { ANNEX_REGISTERS_EN, ANNEX_REGISTERS_ID } from '../src/i18n/k1/annex-registers.js';
+import { ANNEX_USAGE_EN, ANNEX_USAGE_ID } from '../src/i18n/k1/annex-usage.js';
+import { COLLECTION_REPORTS_EN, COLLECTION_REPORTS_ID } from '../src/i18n/k1/collection-reports.js';
 import { DEFAULT_LOCALE, LOCALES, MESSAGES, fillPlaceholders, resolveLocale, t, type Locale, type MessageKey } from '../src/i18n/index.js';
 
 /** The `{name}` placeholders of a template, as a sorted list of distinct names. */
@@ -10,7 +15,20 @@ function placeholders(template: string): string[] {
   return [...new Set([...template.matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((m) => m[1] as string))].sort();
 }
 
-const TEST_ONLY_KEYS = ['perm.test.branch.manage', 'perm.module.test'] as const;
+const TEST_ONLY_KEYS = [
+  'perm.test.branch.manage',
+  'perm.module.test',
+  // The labels of the test-profile report definitions.
+  'report.test.rows.title',
+  'report.test.personal.title',
+  'report.test.document.title',
+  'report.column.n',
+  'report.column.text',
+  'report.column.amount',
+  'report.param.rows',
+  'report.param.texts',
+  'report.param.countless',
+] as const;
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -147,9 +165,11 @@ describe('MESSAGES', () => {
       'catalog.migration.run',
       'opac.pages.manage',
     ];
-    const audits = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('catalog.record.create'));
+    // The Phase 2 slices end at the last Phase 2 entry, inclusive: later milestones append after them.
+    const audits = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('catalog.record.create'), AUDIT_ACTIONS.indexOf('opac.page.archive') + 1);
     expect(audits).toHaveLength(30);
-    const codes = Object.keys(ERROR_CODES).slice(Object.keys(ERROR_CODES).indexOf('CATALOG_RECORD_HAS_ITEMS'));
+    const codeList = Object.keys(ERROR_CODES);
+    const codes = codeList.slice(codeList.indexOf('CATALOG_RECORD_HAS_ITEMS'), codeList.indexOf('MIGRATION_TARGET_NOT_EMPTY') + 1);
     expect(codes).toHaveLength(13);
     const keys = [
       ...perms.map((p) => `perm.${p}`),
@@ -410,7 +430,7 @@ describe('MESSAGES', () => {
     }
   });
 
-  it('S28: under a production profile the two test-profile keys are gone from both catalogs, nothing else is', async () => {
+  it('S28: under a production profile the test-profile keys are gone from both catalogs, nothing else is', async () => {
     const testKeys = Object.keys(MESSAGES.id).sort();
     vi.resetModules();
     vi.stubGlobal('__BUILD_PROFILE__', 'production');
@@ -427,6 +447,389 @@ describe('MESSAGES', () => {
     const production = await import('../src/i18n/index.js');
     for (const locale of LOCALES) {
       for (const key of TEST_ONLY_KEYS) expect(Object.keys(production.MESSAGES[locale])).not.toContain(key);
+    }
+  });
+});
+
+// ---- Komunitas K1 (reports and accreditation) ----
+// The shared texts of reports and accreditation: the registry labels, the fixed workspace and output texts, the notes,
+// the component, indicator, option, aspect, element and evidence labels, the suggested actions and the report
+// glossary. The owners of the four shared slot files add their fixed row labels there, under their own prefix, and
+// those are held to the same rules here.
+
+const table = (locale: Locale): Readonly<Record<string, string>> => MESSAGES[locale] as Readonly<Record<string, string>>;
+
+/** Every key of a family (the keys that start with `prefix`), sorted. */
+const family = (prefix: string): string[] => Object.keys(MESSAGES.id).filter((k) => k.startsWith(prefix)).sort();
+
+/** The indicator codes of the school instruments (the senior-secondary numbering, 42 in all). */
+const IK_CODES = [
+  ...['K1', 'K2', 'K3', 'K4', 'K5', 'K6', 'K7', 'K8'],
+  ...['SP1', 'SP2', 'SP3', 'SP4', 'SP5', 'SP6', 'SP7'],
+  ...Array.from({ length: 14 }, (_, i) => `L${i + 1}`),
+  ...['T1', 'T2', 'T3', 'T4', 'T5'],
+  ...['F1', 'F2', 'F3', 'F4'],
+  ...['G1', 'G2', 'G3', 'G4'],
+];
+
+/** The evidence checklist codes per indicator. */
+const EVIDENCE: Readonly<Record<string, readonly string[]>> = {
+  K1: ['title_list', 'catalogue_screenshot', 'ddc_recap'],
+  K2: ['fiction_list', 'fiction_screenshot'],
+  K3: ['policy_document'],
+  K4: ['survey_report', 'activity_list'],
+  K5: ['used_list', 'use_photo', 'usage_table'],
+  K6: ['additions_table', 'additions_signed'],
+  K7: ['processed_list', 'shelf_photos', 'data_quality', 'scanner_photo'],
+  K8: ['preservation_list', 'preservation_photos'],
+  SP1: ['floor_plan', 'room_photos'],
+  SP2: ['shelf_photos'],
+  SP3: ['furniture_list', 'furniture_photos'],
+  SP4: ['ict_list', 'population_source', 'ict_photos'],
+  SP5: ['staff_pc_list', 'staff_annex'],
+  SP6: ['bandwidth_proof'],
+  SP7: ['learning_list', 'learning_photos'],
+  L1: ['procedure_documents', 'procedure_display'],
+  L2: ['service_list', 'service_photos'],
+  L3: ['activity_list', 'activity_reports'],
+  L4: ['activity_list', 'activity_reports'],
+  L5: ['activity_list', 'activity_reports'],
+  L6: ['local_work_list', 'local_work_screenshot'],
+  L7: ['activity_list', 'activity_reports'],
+  L8: ['activity_list', 'activity_reports'],
+  L9: ['activity_list', 'activity_reports'],
+  L10: ['survey_report', 'activity_list'],
+  L11: ['membership_screenshot', 'loan_screenshot', 'return_screenshot', 'opac_screenshot', 'website_screenshot'],
+  L12: ['feature_screenshots'],
+  L13: ['activity_list', 'promotion_materials'],
+  L14: ['l14_annex', 'population_source', 'visitor_log'],
+  T1: ['head_diploma', 'head_training', 'head_appointment'],
+  T2: ['performance_report'],
+  T3: ['staff_annex', 'staff_appointments', 'staff_certificates'],
+  T4: ['training_recap', 'training_certificates'],
+  T5: ['ratio_sheet', 'population_source'],
+  F1: ['founding_decree', 'npp_certificate', 'duties', 'org_structure'],
+  F2: ['pos_documents'],
+  F3: ['school_program'],
+  F4: ['lesson_plans', 'teacher_recap'],
+  G1: ['library_program'],
+  G2: ['agreements', 'partnership_photos', 'partnership_list'],
+  G3: ['budget_recap', 'rab_documents'],
+  G4: ['report_documents', 'report_list'],
+};
+
+/** The indicators whose answer is chosen from labelled options a to d. */
+const OPTION_IKS = ['SP1', 'SP2', 'SP3', 'F3', 'K7', 'L11', 'T1', 'T3', 'G4'];
+
+/** The notes of indicators and of the SNP tab (the ones that wait for the members and visits milestone excluded). */
+const NOTES = [
+  'catalogue_synced',
+  'recompute_after_catalogue',
+  'truncated',
+  'mandatory_missing',
+  'register_empty',
+  'input_missing',
+  'population_missing',
+  'activity_multi',
+  'electronic_counted',
+  'replacement_records',
+  'fiction_rule',
+  'k2_overlap',
+  'items_without_received_date',
+  'undated_share_high',
+  'k6_tier',
+  'k6_start_below_1000',
+  'k6_no_start',
+  'k7_unprocessed',
+  'k7_almost',
+  'collection_empty',
+  'k7_threshold_lowered',
+  'l6_kinds',
+  'l6_manual',
+  'usage_no_data',
+  'usage_unit',
+  'school_months',
+  'school_months_prorated',
+  'member_unknown',
+  'visits_deduped',
+  'guests_excluded',
+  'staff_missing',
+  'head_missing',
+  'head_multiple',
+  't1_equivalence',
+  't4_scope',
+  'g2_distinct',
+  'budget_incomplete',
+  'g4_rule',
+  'g4_undated',
+  'l3_sd_option_d',
+  'l13_news',
+  'l11_unverified',
+  'l11_private',
+  'l11_localhost',
+  'base_url_unset',
+  'base_url_public_guess',
+  'l12_features',
+  'l12_not_public',
+  'l12_external',
+  'sp1_floor',
+  'sp3_mandatory_hint',
+  'snp_textbook_default',
+  'snp_serials_approx',
+  'snp_tier_outside',
+  'snp_start_below_1000',
+  'snp_no_previous',
+  'snp_not_available',
+  'snp_selected',
+];
+
+/** The element codes of the required-element lists, the website features, the work kinds and the services. */
+const ELEMENTS = [
+  'rules',
+  'sop_membership',
+  'sop_loan',
+  'sop_return',
+  'founding_decree',
+  'npp',
+  'duties',
+  'org_structure',
+  'pos_collection',
+  'pos_organisation',
+  'pos_service',
+  'pos_preservation',
+  'pos_promotion',
+  'pos_partnership',
+  ...L12_FEATURES,
+  'written_work',
+  'clipping',
+  'short_stories',
+  'poetry',
+  'review',
+  'abstract',
+  'reading_room',
+  'circulation',
+  'reference',
+  'information_literacy',
+  'speed_reading',
+  'extension',
+  'project_learning',
+  'ict',
+  'other',
+];
+
+/** Every report definition (the three test-profile ones included). */
+const REPORT_IDS = [
+  'collection.summary',
+  'collection.ddc_recap',
+  'collection.acquisitions',
+  'collection.title_list',
+  'collection.item_list',
+  'collection.accession_register',
+  'collection.data_quality',
+  'collection.attachment_downloads',
+  'accreditation.annex.ddc',
+  'accreditation.annex.collection_matrix',
+  'accreditation.annex.additions',
+  'accreditation.annex.l14',
+  'accreditation.annex.usage_monthly',
+  'accreditation.annex.staff',
+  'accreditation.annex.budgets',
+  'accreditation.annex.activities',
+  'accreditation.annex.partnerships',
+  'accreditation.annex.documents',
+  'accreditation.dossier',
+  'accreditation.self_assessment',
+  'accreditation.statement_1000',
+  'test.rows',
+  'test.personal',
+  'test.document',
+];
+
+/** Every column key of the report definitions. */
+const REPORT_COLUMNS = [
+  ...['section', 'item', 'titles', 'items', 'class', 'label', 'group', 'year', 'total'],
+  ...['c000', 'c100', 'c200', 'c300', 'c400', 'c500', 'c600', 'c700', 'c800', 'c900', 'c2x', 'cnon'],
+  ...['barcode', 'title', 'collection_type', 'acq_date', 'acq_basis', 'price', 'acq_source', 'supplier'],
+  ...['edition', 'publisher', 'place', 'isbn_issn', 'classification', 'call_number'],
+  ...['inventory_no', 'status', 'location', 'received_date', 'authors', 'isbn', 'collation', 'source'],
+  ...['problem', 'detail', 'attachment', 'mime', 'downloads', 'medium', 'kind', 'pct'],
+  ...['month', 'student', 'teacher', 'edu_staff', 'school_visits', 'population'],
+  ...['visits_student', 'visits_teacher', 'visits_edu_staff', 'visits_public', 'visits_other', 'visits_guest', 'loans', 'in_library_uses'],
+  ...['name', 'position', 'role', 'is_librarian', 'employment', 'education', 'library_training', 'competency_cert', 'association_member'],
+  ...['appointment_ref', 'starts_on', 'ends_on', 'training', 'organizer', 'held_on', 'hours', 'value'],
+  ...['library', 'parent', 'parent_nonpersonnel', 'collection', 'community', 'participants', 'partner', 'scope'],
+  ...['reference', 'issued_on', 'issued_by', 'aspects', 'valid_until'],
+  ...['n', 'text', 'amount'],
+];
+
+/** Every parameter name of the report definitions. */
+const REPORT_PARAMS = [
+  ...['periodId', 'branchId', 'asOf', 'locationId', 'collectionTypeId', 'materialTypeId', 'divisions', 'breakdown'],
+  ...['yearFrom', 'yearTo', 'acqSource', 'unit', 'detailYear', 'classPrefix', 'languageId', 'input', 'pubYearFrom', 'pubYearTo'],
+  ...['fictionOnly', 'localWorkOnly', 'audience', 'status', 'received', 'created', 'access'],
+  ...['section', 'window', 'kinds', 'learning', 'externalLiteracy', 'part', 'zipMode'],
+  ...['rows', 'texts', 'countless'],
+];
+
+/** The options of every `status` parameter that has no vocabulary list of its own. */
+const REPORT_OPTIONS: Readonly<Record<string, readonly string[]>> = {
+  breakdown: ['none', 'material_type', 'collection_type', 'language', 'fnr', 'medium'],
+  unit: ['titles', 'items'],
+  section: ['staff', 'trainings', 'ratio'],
+  window: ['period', 'three_periods'],
+  part: ['all', 'request_letter'],
+  zipMode: ['combined', 'components'],
+  access: ['public', 'staff'],
+};
+
+/** The four shared slot files of the later report owners, with the prefix of their keys. */
+const SLOTS = [
+  { name: 'collection-reports', prefix: 'report.row.collection.', id: COLLECTION_REPORTS_ID, en: COLLECTION_REPORTS_EN },
+  { name: 'annex-registers', prefix: 'report.row.registers.', id: ANNEX_REGISTERS_ID, en: ANNEX_REGISTERS_EN },
+  { name: 'annex-usage', prefix: 'report.row.usage.', id: ANNEX_USAGE_ID, en: ANNEX_USAGE_EN },
+  { name: 'annex-collection', prefix: 'report.row.accred_collection.', id: ANNEX_COLLECTION_ID, en: ANNEX_COLLECTION_EN },
+] as const;
+
+/** A research, decision or criterion reference, or a planning status mark: never part of a product text. */
+const PLANNING_ID = /\b(DK|P|Q|U|R)-?\d{1,3}\b|\b[rR][1-5] §|\bK\d-C\d{2}\b|K1P-|A§|\[(P|U|A)/;
+
+describe('reports and accreditation texts', () => {
+  it('a message in both languages for each new permission, module, audit action and error code', () => {
+    const perms = ['reports.statistics.read', 'accreditation.workspace.read', 'accreditation.workspace.manage'];
+    const audits = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('reports.run.start'));
+    expect(audits).toHaveLength(18);
+    const codes = [
+      'REPORT_TOO_LARGE',
+      'REPORT_RUN_EXPIRED',
+      'ACCRED_PERIOD_FROZEN',
+      'ACCRED_INSTRUMENT_MISMATCH',
+      'ACCRED_PERIOD_SPAN',
+      'ACCRED_RESULTS_STALE',
+      'MIGRATION_PRECHECK_FAILED',
+    ];
+    const keys = [
+      ...perms.map((p) => `perm.${p}`),
+      'perm.module.reports',
+      'perm.module.accreditation',
+      ...audits.map((a) => `audit.${a}`),
+      ...codes.map((c) => `error.${c}`),
+    ];
+    for (const key of keys) {
+      expect(table('id')[key], `id:${key}`).toBeTruthy();
+      expect(table('en')[key], `en:${key}`).toBeTruthy();
+      expect(table('id')[key], key).not.toBe(table('en')[key]);
+      expect(placeholders(table('id')[key]!), key).toEqual([]);
+    }
+    expect(table('id')['perm.reports.statistics.read']).toBe('Melihat dan mengekspor laporan agregat (tanpa data pribadi)');
+    expect(table('id')['perm.accreditation.workspace.read']).toBe('Melihat ruang akreditasi, hasil, snapshot, dan berkas bukti');
+    expect(table('id')['perm.module.reports']).toBe('Laporan');
+    expect(table('id')['perm.module.accreditation']).toBe('Akreditasi');
+  });
+
+  it('the fixed workspace texts read as written, the disclaimer word for word', () => {
+    expect(table('id')['accred.disclaimer.estimate']).toBe(
+      'Perkiraan berdasarkan data ALTIS dan isian Anda. Bukan nilai resmi; penilaian resmi dilakukan asesor Perpusnas.',
+    );
+    expect(table('id')['accred.source.copy']).toBe('salinan, belum dibandingkan dengan JDIH');
+    expect(table('id')['accred.prereq.failed']).toBe('Belum memenuhi prasyarat pendaftaran (Pasal 9)');
+    expect(placeholders(table('id')['accred.prereq.titles']!)).toEqual(['count', 'date']);
+    expect(['A', 'B', 'C', 'D'].map((g) => table('id')[`accred.predicate.${g}`])).toEqual(['Sangat Baik', 'Baik', 'Cukup Baik', 'Tidak Terakreditasi']);
+    expect(table('id')['accred.na.exercise']).toBe('Perkiraan latihan: prasyarat pendaftaran belum terpenuhi');
+    expect(table('en')['accred.na.exercise']).toBe('Practice estimate: registration prerequisites not met');
+    expect(family('accred.prereq.')).toEqual(['accred.prereq.failed', 'accred.prereq.founding_decree', 'accred.prereq.npp', 'accred.prereq.titles']);
+  });
+
+  it('every note, and no note of the members and visits milestone yet', () => {
+    expect(family('accred.note.')).toEqual(NOTES.map((n) => `accred.note.${n}`).sort());
+    for (const k2 of ['online_visits', 'class_visit_adjusted', 'all_registered']) expect(table('id')[`accred.note.${k2}`], k2).toBeUndefined();
+    expect(placeholders(table('id')['accred.note.undated_share_high']!)).toEqual(['max', 'pct']);
+    expect(placeholders(table('id')['accred.note.school_months_prorated']!)).toEqual(['divisor', 'months']);
+  });
+
+  it('the components, every indicator (with the primary-school variants), and the options of the chosen indicators', () => {
+    expect(family('accred.component.')).toEqual(['F', 'G', 'K', 'L', 'SP', 'T'].map((c) => `accred.component.${c}`));
+    const labels = family('accred.ik.').filter((k) => !k.includes('.option.'));
+    expect(labels).toEqual([...IK_CODES.map((c) => `accred.ik.${c}`), 'accred.ik.L4.sd', 'accred.ik.L12.sd'].sort());
+    const options = family('accred.ik.').filter((k) => k.includes('.option.'));
+    expect(options).toEqual(OPTION_IKS.flatMap((ik) => ['a', 'b', 'c', 'd'].map((o) => `accred.ik.${ik}.option.${o}`)).sort());
+    // The middle options of four indicators wait for the verified decree text and point to the instrument.
+    for (const ik of ['SP1', 'SP2', 'SP3', 'F3']) {
+      expect(table('id')[`accred.ik.${ik}.option.b`], ik).toBe('Kondisi di antara pilihan a dan c; lihat deskripsi pilihan b pada instrumen');
+      expect(table('id')[`accred.ik.${ik}.option.c`], ik).toBe('Kondisi di antara pilihan b dan d; lihat deskripsi pilihan c pada instrumen');
+    }
+  });
+
+  it('the aspect labels follow DOCUMENT_ASPECTS, and every element has its label', () => {
+    const aspects = DOCUMENT_KINDS.flatMap((kind) => DOCUMENT_ASPECTS[kind].map((code) => `accred.aspect.${kind}.${code}`));
+    expect(family('accred.aspect.')).toEqual(aspects.sort());
+    expect(table('id')['accred.aspect.library_program.a3']).toBe('Bidang 3');
+    expect(family('accred.element.')).toEqual([...new Set(ELEMENTS)].map((e) => `accred.element.${e}`).sort());
+  });
+
+  it('every evidence item of every indicator, and one suggested action per indicator', () => {
+    const evidence = Object.entries(EVIDENCE).flatMap(([ik, codes]) => codes.map((code) => `accred.evidence.${ik}.${code}`));
+    expect(Object.keys(EVIDENCE)).toEqual(IK_CODES);
+    expect(family('accred.evidence.')).toEqual(evidence.sort());
+    expect(family('accred.gap.action.')).toEqual(IK_CODES.map((ik) => `accred.gap.action.${ik}`).sort());
+  });
+
+  it('the report glossary: titles, columns, parameters, options, groups, sources and fixed texts', () => {
+    expect(family('report.').filter((k) => k.endsWith('.title') && !k.startsWith('report.column.') && !k.startsWith('report.row.'))).toEqual(
+      REPORT_IDS.map((id) => `report.${id}.title`).sort(),
+    );
+    expect(family('report.column.')).toEqual([...new Set(REPORT_COLUMNS)].map((c) => `report.column.${c}`).sort());
+    expect(family('report.param.')).toEqual([...new Set(REPORT_PARAMS)].map((p) => `report.param.${p}`).sort());
+    expect(family('report.group.')).toEqual(
+      ['fnr.fiction', 'fnr.nonfiction', 'fnr.reference', 'medium.electronic', 'medium.print'].map((g) => `report.group.${g}`),
+    );
+    expect(family('report.source.')).toEqual(['report.source.manual', 'report.source.none', 'report.source.slims']);
+    expect(family('report.data_quality.problem.')).toEqual(
+      ['item_no_acq_date', 'item_no_call_number', 'item_no_location', 'item_no_received_date', 'record_no_classification'].map(
+        (p) => `report.data_quality.problem.${p}`,
+      ),
+    );
+    expect(family('report.acq_basis.')).toEqual(['input_on', 'item_created', 'received', 'record_created'].map((b) => `report.acq_basis.${b}`));
+    expect(family('report.summary.section.').length).toBeGreaterThan(0);
+    expect(table('id')['report.row.total']).toBe('Jumlah');
+    expect(table('en')['report.row.total']).toBe('Total');
+    expect(table('id')['report.non_latin_note']).toBe('teks non-Latin: lihat XLSX/CSV');
+    expect(table('id')['report.footer']).toBe('Dicetak {date} oleh {name} · halaman {page}/{pages}');
+    expect(table('en')['report.footer']).toBe('Printed {date} by {name} · page {page}/{pages}');
+    expect(table('id')['report.undated']).toBe('tanpa tanggal');
+    expect(table('id')['report.export_only']).toBe('Laporan ini terlalu besar untuk pratinjau; ekspor saja.');
+  });
+
+  it('every report.option family holds exactly the options of its parameter', () => {
+    const found = family('report.option.');
+    expect(found).toEqual(Object.entries(REPORT_OPTIONS).flatMap(([param, values]) => values.map((v) => `report.option.${param}.${v}`)).sort());
+    for (const [param, values] of Object.entries(REPORT_OPTIONS)) {
+      expect(found.filter((k) => k.startsWith(`report.option.${param}.`)).length, param).toBe(values.length);
+    }
+  });
+
+  it('the accreditation and report texts carry no planning reference, status mark or section sign', () => {
+    const keys = Object.keys(MESSAGES.id).filter((k) => k.startsWith('accred.') || k.startsWith('report.') || k.startsWith('vocab.'));
+    for (const locale of LOCALES) {
+      for (const key of keys) {
+        const text = table(locale)[key]!;
+        expect(text, `${locale}:${key}`).not.toMatch(PLANNING_ID);
+        expect(text, `${locale}:${key}`).not.toContain('§');
+        expect(text, `${locale}:${key}`).not.toContain('[');
+      }
+    }
+  });
+
+  it.each(SLOTS)('the slot $name: the same keys in both languages, under its prefix, held by MESSAGES as written', ({ prefix, id, en }) => {
+    const ids = id as Readonly<Record<string, string>>;
+    const ens = en as Readonly<Record<string, string>>;
+    expect(Object.keys(ens).sort()).toEqual(Object.keys(ids).sort());
+    for (const [key, text] of Object.entries(ids)) {
+      expect(key.startsWith(prefix), key).toBe(true);
+      expect(text.trim(), key).not.toBe('');
+      expect(placeholders(ens[key]!), key).toEqual(placeholders(text));
+      expect(ens[key], key).not.toBe(text);
+      expect(table('id')[key], key).toBe(text);
+      expect(table('en')[key], key).toBe(ens[key]);
     }
   });
 });

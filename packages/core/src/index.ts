@@ -28,6 +28,9 @@ export { SETTINGS, allSettingKeys, groupKeys, isSettingKey } from './settings/re
 export type { SettingDef, SettingKey, SettingsGroup } from './settings/registry.js';
 export { createSettingsCache, readSecret, readSettings, writeSettings } from './settings/service.js';
 export type { SettingsCache, WriteSettingsOptions } from './settings/service.js';
+// ---- Komunitas K1 (settings) ----
+export { loadAccredSettings } from './settings/accreditation.js';
+export type { AccredSettings } from './settings/accreditation.js';
 export {
   PRE_MFA_MS,
   ROTATION_GRACE_MS,
@@ -154,6 +157,9 @@ export { resetKind } from './ops/kinds/reset.js';
 // 1c Task 9: chunked uploads, magic bytes, file serving and the local storage driver.
 export { CHUNK_DEFAULT_BYTES, CHUNK_MIN_BYTES, UPLOADS_PER_SUBJECT, UPLOAD_CONTEXTS, UPLOAD_TTL_MS, uploadContext } from './files/contexts.js';
 export type { UploadContext } from './files/contexts.js';
+// ---- Komunitas K1 (uploads) ----
+export { ORPHAN_UPLOAD_CONTEXTS } from './files/orphan-contexts.js';
+export type { OrphanUploadContext } from './files/orphan-contexts.js';
 export { MAGIC_HEAD_BYTES, detectType } from './files/magic.js';
 export type { DetectedKind, DetectedType } from './files/magic.js';
 export {
@@ -489,7 +495,7 @@ export { unknownManifestFields } from './backup/manifest.js';
 export { RESTORE_SUB_STATES, createRestoreRunner } from './restore/runner.js';
 export type { RestoreRun, RestoreRunParams, RestoreRunner, RestoreSubState, SqliteSwapWait } from './restore/runner.js';
 export { parseManifestJson, signedManifestObject, unverifiedManifestFields } from './backup/manifest.js';
-// 1d Task 10: the keyset store, DATA_DIR/releases/keyset.json (spec §8.3; R65a, R65c; D1d-27): verified root-signed
+// 1d Task 10: the keyset store, DATA_DIR/releases/keyset.json (spec §8.3; D1d-27): verified root-signed
 // documents appended under releases/keyset.lock within the frozen limits, the `system.keyset_full` alert, and the
 // keyset documents of the installation's releases.
 export { appendKeysetDocs, persistKeysetDocs, releaseKeysetDocs } from './updates/keyset-store.js';
@@ -619,7 +625,7 @@ export * from './xml/index.js';
 // ---- Phase 2 (catalog): Task 1 ----
 export * from './catalog/data/index.js';
 // ---- Phase 2 (catalog): Task 3 ----
-// The Phase 2 barrels (plan decision P2-02): each area's names come through its own barrel, filled by the task that
+// The Phase 2 barrels: each area's names come through its own barrel, filled by the task that
 // owns it, so no later task edits this file. `catalog/index.ts` joins the catalog areas but neither `catalog/data`
 // (Task 1) nor `catalog/lib` (Task 5), which have their own lines. test/barrels.test.ts refuses a name two barrels
 // export (M14).
