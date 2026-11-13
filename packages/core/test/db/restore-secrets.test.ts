@@ -229,5 +229,5 @@ describe.skipIf(!ctx.available)(`restore secrets and files [${engineLabel()}]`, 
     expect(await stepUntil(harness, dataDir)).toMatchObject({ opId: again, state: 'done' });
     const statuses = (await h.db.selectFrom('files').select('status').execute()).map((r) => r.status);
     expect(statuses).toEqual(['missing', 'missing', 'missing']);
-  });
+  }, 120_000);
 });

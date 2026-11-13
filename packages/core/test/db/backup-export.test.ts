@@ -497,12 +497,12 @@ describe.skipIf(!ctx.available)(`backup export [${engineLabel()}]`, () => {
   it('a full disk while writing a part leaves no trace of that part and keeps the parts before it (P21)', async () => {
     const o = options();
     resetTestFaults();
-    // The third data-files write of audit_log's parts under backups/ throws a synthetic EDQUOT. With a 60 s deadline
-    // the writes follow the load order: each table before audit_log (Phase 2: `agents`, empty here) writes its one
-    // part and its part-log record first, then audit_log (3 parts), so the fault lands on one of its parts after the
-    // first.
+    // The write of audit_log's second part under backups/ throws a synthetic EDQUOT. With a 60 s deadline the writes
+    // follow the load order: each table before audit_log (empty here) writes its one part, the part log counts once
+    // (when the first part's record creates it), then audit_log writes its 3 parts, so the fault lands on one of its
+    // parts after the first.
     const auditIndex = backupTables(SCHEMA_VERSION).findIndex((t) => t.table === 'audit_log');
-    process.env['ALTIS_TEST_FAULT'] = `disk-full:backups:${2 * auditIndex + 3}`;
+    process.env['ALTIS_TEST_FAULT'] = `disk-full:backups:${auditIndex + 3}`;
     let caught: unknown = null;
     try {
       await createExporter(o).step(null, { deadline: Date.now() + 60_000 });

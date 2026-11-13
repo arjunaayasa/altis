@@ -86,6 +86,21 @@ export const TABLE_CLASSES: Readonly<Record<TableName, TableClass>> = Object.fre
   catalog_runs: 'data',
   migration_map: 'data',
   migration_archive: 'data',
+  // ---- Komunitas K1 (tables): report runs and computed results are volatile, everything else data ----
+  report_runs: 'volatile',
+  accred_periods: 'data',
+  accred_answers: 'data',
+  accred_results: 'volatile',
+  accred_snapshots: 'data',
+  accred_evidence: 'data',
+  usage_stats: 'data',
+  usage_group_map: 'data',
+  library_activities: 'data',
+  library_staff: 'data',
+  staff_trainings: 'data',
+  library_partnerships: 'data',
+  library_budgets: 'data',
+  library_documents: 'data',
   // Test builds only (decision D1d-26): the release fixtures' table, made by 9001_test_expand (fixture level 2 and
   // 3). It is not a table of `DB`; a production build folds the condition and drops the entry (R57). The registry
   // describes the union of the fixture levels: what a given database holds is columnsAt(table, <its schema>).
@@ -132,3 +147,89 @@ export const SECRET_COLUMNS: readonly SecretColumn[] = Object.freeze(
     ] satisfies SecretColumn[]
   ).map((entry) => Object.freeze(entry)),
 );
+
+// ---------------------------------------------------------------------------------------------------------------
+// The personal-data dictionary
+
+/** What a personal column holds. */
+export type PersonalCategory = 'identity' | 'contact' | 'credential' | 'free_text' | 'photo';
+
+/**
+ * One column that holds personal data. `jsonPaths`: for a JSON text column, the fields inside it that are personal
+ * (the rest of the JSON is not).
+ */
+export interface PersonalColumn {
+  readonly column: string;
+  readonly category: PersonalCategory;
+  readonly jsonPaths?: readonly string[];
+}
+
+/** The dictionary's entries typed per table: the compiler checks that each `column` is a column of its table. */
+type PersonalEntries = {
+  readonly [T in TableName]?: readonly {
+    readonly column: keyof DB[T] & string;
+    readonly category: PersonalCategory;
+    readonly jsonPaths?: readonly string[];
+  }[];
+};
+
+/**
+ * The data dictionary of personal data (Indonesia's personal data protection law): the columns that hold data about
+ * a person, by table. Public output (OPAC, feeds, harvesting), events and logs never carry a registered value;
+ * exporting one needs a fresh re-authentication and an audit entry. A test checks that every registered column exists
+ * and that every text column of a newer table is either registered or named as not personal, with the reason.
+ */
+export const PERSONAL_COLUMNS: Readonly<Partial<Record<TableName, readonly PersonalColumn[]>>> = deepFreeze({
+  // ---- Komunitas K1 (personal data) ----
+  suppliers: [
+    { column: 'contact_name', category: 'identity' },
+    { column: 'phone', category: 'contact' },
+    { column: 'email', category: 'contact' },
+    { column: 'address', category: 'contact' },
+  ],
+  staff_users: [
+    { column: 'name', category: 'identity' },
+    { column: 'username_display', category: 'identity' },
+    { column: 'email_key', category: 'contact' },
+    { column: 'email_display', category: 'contact' },
+  ],
+  library_staff: [
+    { column: 'name', category: 'identity' },
+    { column: 'appointment_ref', category: 'identity' },
+  ],
+  accred_answers: [{ column: 'note', category: 'free_text' }],
+  accred_periods: [{ column: 'profile', category: 'identity', jsonPaths: ['schoolHead', 'libraryHead', 'libraryHeadId', 'phone', 'email'] }],
+} satisfies PersonalEntries);
+
+/** `value` with every nested object and array frozen. */
+function deepFreeze<T>(value: T): T {
+  if (typeof value === 'object' && value !== null && !Object.isFrozen(value)) {
+    for (const nested of Object.values(value)) deepFreeze(nested);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+/** True when `column` of `table` is registered in {@link PERSONAL_COLUMNS}. */
+export function isPersonalColumn(table: TableName, column: string): boolean {
+  const list = Object.hasOwn(PERSONAL_COLUMNS, table) ? PERSONAL_COLUMNS[table] : undefined;
+  return list !== undefined && list.some((p) => p.column === column);
+}
+
+/** A field name as the log redaction compares it: lower case, without underscores (`appointment_ref` = `appointmentRef`). */
+function logKey(name: string): string {
+  return name.toLowerCase().replace(/_/g, '');
+}
+
+const PERSONAL_LOG_KEYS: ReadonlySet<string> = new Set(
+  Object.values(PERSONAL_COLUMNS).flatMap((list) => (list ?? []).flatMap((p) => [p.column, ...(p.jsonPaths ?? [])].map(logKey))),
+);
+
+/**
+ * Every registered column name and JSON path, lower case and without underscores: the field names a log line never
+ * carries a value under. Generic names such as `name` or `note` are redacted everywhere on purpose; a field that is not
+ * personal but has such a name is given another name. The same set on every call.
+ */
+export function personalLogKeys(): ReadonlySet<string> {
+  return PERSONAL_LOG_KEYS;
+}
