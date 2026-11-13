@@ -163,6 +163,11 @@ describe('csv-records: K6 (codec half)', () => {
       'summary',
       'notes',
       'opac_visible',
+      // The accreditation fields, appended so that a file written before them stays valid (csv-records-accred.test.ts).
+      'audience',
+      'local_work',
+      'local_work_kind',
+      'reference_kind',
     ]);
     const cells = Object.fromEntries(CSV_RECORD_COLUMNS.map((c, i) => [c, recordCsvCells(recordData(), [])[i]]));
     expect(cells).toMatchObject({
