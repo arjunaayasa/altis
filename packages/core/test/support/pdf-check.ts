@@ -3,10 +3,12 @@
 // - the header and that every stream's /Length ends exactly at `endstream`;
 // - that every xref entry points at its own `n 0 obj` and that /Size counts the objects;
 // - that `startxref` points at `xref`;
-// - the catalog → pages → page → font/content tree.
-// It then reads each page's content stream back into rectangles and text runs with absolute positions, so a test can
-// check where things were drawn. The writer emits a small fixed set of operators, and anything else is refused here.
-// It is not a general PDF parser.
+// - the catalog → pages → page → font/XObject/content tree;
+// - every image XObject: a DCTDecode JPEG whose /Width, /Height and /ColorSpace match its own JPEG frame header (read
+//   here independently of src/print/jpeg.ts) and which ends with the JPEG end marker.
+// It then reads each page's content stream back into rectangles, lines, text runs and picture placements with absolute
+// positions, so a test can check where things were drawn. The writer emits a small fixed set of operators, and
+// anything else is refused here. It is not a general PDF parser.
 
 import { inflateSync } from 'node:zlib';
 
@@ -21,6 +23,37 @@ export interface PdfRect {
   lineWidth: number;
 }
 
+/** A stroked straight line (`m` … `l` … `S`) and the line width in effect when it was painted. */
+export interface PdfLine {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  lineWidth: number;
+}
+
+/** One `Do` of an image XObject: its resource name, its object number and the box it fills (absolute). */
+export interface PdfImagePlacement {
+  name: string;
+  object: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** An image XObject of the file. */
+export interface CheckedImage {
+  object: number;
+  width: number;
+  height: number;
+  colorSpace: 'DeviceGray' | 'DeviceRGB';
+  bitsPerComponent: number;
+  filter: 'DCTDecode';
+  /** The stream bytes: the JPEG file. */
+  data: Uint8Array;
+}
+
 /** One `Tj`: its start point (absolute), its font's BaseFont, its size and its text decoded from WinAnsi. */
 export interface PdfText {
   x: number;
@@ -33,8 +66,16 @@ export interface PdfText {
 export interface CheckedPage {
   width: number;
   height: number;
+  /** The page's /MediaBox as written: [0, 0, width, height]. */
+  mediaBox: number[];
+  /** The BaseFont of each font resource of the page, in resource order. */
+  fonts: string[];
+  /** The resource names of the page's XObjects (image XObjects only). */
+  xobjects: string[];
   rects: PdfRect[];
+  lines: PdfLine[];
   texts: PdfText[];
+  images: PdfImagePlacement[];
   /** The decoded content stream. */
   content: string;
 }
@@ -43,6 +84,8 @@ export interface CheckedPdf {
   /** The number of objects (xref /Size − 1). */
   objects: number;
   pages: CheckedPage[];
+  /** Every image XObject of the file, in object order. */
+  images: CheckedImage[];
   title: string | null;
   producer: string | null;
 }
@@ -310,10 +353,16 @@ function checkXref(s: string, objects: Map<number, RawObject>, xrefAt: number): 
 const CONTENT_OPERANDS: Readonly<Record<string, readonly PdfValue['t'][]>> = {
   w: ['num'],
   re: ['num', 'num', 'num', 'num'],
+  m: ['num', 'num'],
+  l: ['num', 'num'],
   f: [],
   S: [],
   B: [],
   n: [],
+  q: [],
+  Q: [],
+  cm: ['num', 'num', 'num', 'num', 'num', 'num'],
+  Do: ['name'],
   BT: [],
   ET: [],
   Tf: ['name', 'num'],
@@ -321,19 +370,50 @@ const CONTENT_OPERANDS: Readonly<Record<string, readonly PdfValue['t'][]>> = {
   Tj: ['str'],
 };
 
-/** Reads a content stream back into rectangles and text runs (absolute positions). */
-function readContent(content: string, fonts: Map<string, string>): { rects: PdfRect[]; texts: PdfText[] } {
+type Matrix = [number, number, number, number, number, number];
+const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0];
+
+/** `m` × `ctm` (PDF row-vector convention): the CTM after `m cm`. */
+function concat(m: Matrix, ctm: Matrix): Matrix {
+  const [a, b, c, d, e, f] = m;
+  const [A, B, C, D, E, F] = ctm;
+  return [a * A + b * C, a * B + b * D, c * A + d * C, c * B + d * D, e * A + f * C + E, e * B + f * D + F];
+}
+
+const isIdentity = (m: Matrix): boolean => m.every((v, k) => v === IDENTITY[k]);
+
+interface ContentResources {
+  fonts: Map<string, string>;
+  /** XObject resource name → object number. */
+  xobjects: Map<string, number>;
+}
+
+/** Reads a content stream back into rectangles, lines, text runs and picture placements (absolute positions). */
+function readContent(
+  content: string,
+  resources: ContentResources,
+): { rects: PdfRect[]; lines: PdfLine[]; texts: PdfText[]; images: PdfImagePlacement[] } {
   const lexer = new Lexer(content);
   const rects: PdfRect[] = [];
+  const lines: PdfLine[] = [];
   const texts: PdfText[] = [];
+  const images: PdfImagePlacement[] = [];
   let operands: PdfValue[] = [];
   let pending: Omit<PdfRect, 'paint' | 'lineWidth'>[] = [];
+  let segments: Omit<PdfLine, 'lineWidth'>[] = [];
+  let point: [number, number] | null = null;
   let lineWidth = 1;
+  let ctm: Matrix = IDENTITY;
+  const saved: { lineWidth: number; ctm: Matrix }[] = [];
   let inText = false;
   let font: string | null = null;
   let size = 0;
   let lineX = 0;
   let lineY = 0;
+  /** Paths and text are drawn in page space only; the writer transforms nothing but pictures. */
+  const pageSpace = (op: string): void => {
+    if (!isIdentity(ctm)) throw new Error(`${op} under a transformed CTM`);
+  };
   while (!lexer.done()) {
     const token = lexer.value(true);
     if (token.t !== 'op') {
@@ -344,24 +424,65 @@ function readContent(content: string, fonts: Map<string, string>): { rects: PdfR
     if (want === undefined) throw new Error(`unexpected operator ${token.v}`);
     if (operands.length !== want.length || operands.some((o, k) => o.t !== want[k])) throw new Error(`bad operands for ${token.v}`);
     const nums = operands.map((o) => (o.t === 'num' ? o.v : NaN));
+    if (inText && ['re', 'm', 'l', 'f', 'S', 'B', 'n', 'q', 'Q', 'cm', 'Do'].includes(token.v)) {
+      throw new Error(`${token.v} inside BT`);
+    }
     switch (token.v) {
       case 'w':
         lineWidth = nums[0]!;
         break;
       case 're':
-        if (inText) throw new Error('re inside BT');
+        pageSpace('re');
         pending.push({ x: nums[0]!, y: nums[1]!, w: nums[2]!, h: nums[3]! });
+        break;
+      case 'm':
+        pageSpace('m');
+        point = [nums[0]!, nums[1]!];
+        break;
+      case 'l':
+        if (point === null) throw new Error('l without a current point');
+        segments.push({ x1: point[0], y1: point[1], x2: nums[0]!, y2: nums[1]! });
+        point = [nums[0]!, nums[1]!];
         break;
       case 'f':
       case 'S':
       case 'B':
       case 'n':
-        if (pending.length === 0) throw new Error(`${token.v} without a path`);
+        if (pending.length === 0 && segments.length === 0) throw new Error(`${token.v} without a path`);
+        if (segments.length > 0 && token.v !== 'S') throw new Error(`${token.v} of a line path`);
         for (const r of pending) rects.push({ ...r, paint: token.v, lineWidth });
+        for (const s of segments) lines.push({ ...s, lineWidth });
         pending = [];
+        segments = [];
+        point = null;
         break;
+      case 'q':
+        if (pending.length > 0 || point !== null) throw new Error('q inside a path');
+        saved.push({ lineWidth, ctm });
+        break;
+      case 'Q': {
+        const state = saved.pop();
+        if (state === undefined) throw new Error('Q without q');
+        if (pending.length > 0 || point !== null) throw new Error('Q inside a path');
+        ({ lineWidth, ctm } = state);
+        break;
+      }
+      case 'cm':
+        if (saved.length === 0) throw new Error('cm outside a saved graphics state');
+        ctm = concat(nums as Matrix, ctm);
+        break;
+      case 'Do': {
+        const resource = (operands[0] as { v: string }).v;
+        const object = resources.xobjects.get(resource);
+        if (object === undefined) throw new Error(`XObject /${resource} is not a page resource`);
+        const [a, b, c, d, e, f] = ctm;
+        if (b !== 0 || c !== 0 || !(a > 0) || !(d > 0)) throw new Error(`/${resource} is drawn rotated, skewed or flipped`);
+        images.push({ name: resource, object, x: e, y: f, w: a, h: d });
+        break;
+      }
       case 'BT':
         if (inText) throw new Error('nested BT');
+        pageSpace('BT');
         inText = true;
         font = null;
         lineX = 0;
@@ -373,7 +494,7 @@ function readContent(content: string, fonts: Map<string, string>): { rects: PdfR
         break;
       case 'Tf': {
         const resource = (operands[0] as { v: string }).v;
-        const base = fonts.get(resource);
+        const base = resources.fonts.get(resource);
         if (base === undefined) throw new Error(`font /${resource} is not a page resource`);
         font = base;
         size = nums[1]!;
@@ -391,8 +512,54 @@ function readContent(content: string, fonts: Map<string, string>): { rects: PdfR
     }
     operands = [];
   }
-  if (operands.length > 0 || pending.length > 0 || inText) throw new Error('the content stream ends in the middle');
-  return { rects, texts };
+  if (operands.length > 0 || pending.length > 0 || point !== null || inText || saved.length > 0) {
+    throw new Error('the content stream ends in the middle');
+  }
+  return { rects, lines, texts, images };
+}
+
+/** The frame header of a JPEG file: walks the marker segments from the start to the first SOF0-SOF2. */
+function jpegFrame(data: Uint8Array): { width: number; height: number; components: number } {
+  if (data[0] !== 0xff || data[1] !== 0xd8) throw new Error('the image data is not a JPEG file');
+  if (data[data.length - 2] !== 0xff || data[data.length - 1] !== 0xd9) throw new Error('the JPEG data does not end with EOI');
+  let p = 2;
+  while (p + 4 <= data.length) {
+    if (data[p] !== 0xff) throw new Error(`no JPEG marker at byte ${p}`);
+    const marker = data[p + 1]!;
+    if (marker === 0xff) {
+      p++;
+      continue;
+    }
+    if (marker >= 0xc0 && marker <= 0xc2) {
+      return { height: (data[p + 5]! << 8) | data[p + 6]!, width: (data[p + 7]! << 8) | data[p + 8]!, components: data[p + 9]! };
+    }
+    if (marker === 0xda) break;
+    p += 2 + ((data[p + 2]! << 8) | data[p + 3]!);
+  }
+  throw new Error('no JPEG frame header before the first scan');
+}
+
+/** Checks an image XObject against the JPEG it holds. */
+function checkImage(n: number, o: RawObject): CheckedImage {
+  const what = `image object ${n}`;
+  const d = dictOf(o.value, what);
+  if (o.stream === null) throw new Error(`${what} is not a stream`);
+  if (name(d, 'Type', what) !== 'XObject' || name(d, 'Subtype', what) !== 'Image') throw new Error(`${what} is not an image XObject`);
+  const filter = name(d, 'Filter', what);
+  if (filter !== 'DCTDecode') throw new Error(`${what} /Filter /${filter} is not /DCTDecode`);
+  const width = num(d, 'Width', what);
+  const height = num(d, 'Height', what);
+  const colorSpace = name(d, 'ColorSpace', what);
+  const bitsPerComponent = num(d, 'BitsPerComponent', what);
+  if (bitsPerComponent !== 8) throw new Error(`${what} /BitsPerComponent ${bitsPerComponent}`);
+  if (colorSpace !== 'DeviceGray' && colorSpace !== 'DeviceRGB') throw new Error(`${what} /ColorSpace /${colorSpace}`);
+  const frame = jpegFrame(o.stream);
+  if (width !== frame.width) throw new Error(`${what} /Width ${width} is not the JPEG width ${frame.width}`);
+  if (height !== frame.height) throw new Error(`${what} /Height ${height} is not the JPEG height ${frame.height}`);
+  if (frame.components !== (colorSpace === 'DeviceGray' ? 1 : 3)) {
+    throw new Error(`${what} /ColorSpace /${colorSpace} does not match ${frame.components} JPEG components`);
+  }
+  return { object: n, width, height, colorSpace, bitsPerComponent, filter, data: o.stream };
 }
 
 /**
@@ -416,6 +583,7 @@ export function checkPdf(bytes: Uint8Array): CheckedPdf {
   const kids = pagesDict.get('Kids');
   if (kids?.t !== 'arr') throw new Error('the page tree has no /Kids');
   if (num(pagesDict, 'Count', 'the page tree') !== kids.v.length) throw new Error('/Count is not the number of /Kids');
+  const images = new Map<number, CheckedImage>();
 
   const pages = kids.v.map((kid, k): CheckedPage => {
     if (kid.t !== 'ref') throw new Error(`kid ${k} is not a reference`);
@@ -424,9 +592,22 @@ export function checkPdf(bytes: Uint8Array): CheckedPdf {
     if (ref(page, 'Parent', `page ${k}`) !== pagesRef) throw new Error(`page ${k} /Parent is not the page tree`);
     const box = page.get('MediaBox');
     if (box?.t !== 'arr' || box.v.length !== 4 || box.v.some((v) => v.t !== 'num')) throw new Error(`page ${k} /MediaBox`);
-    const [x0, y0, x1, y1] = box.v.map((v) => (v as { v: number }).v) as [number, number, number, number];
+    const mediaBox = box.v.map((v) => (v as { v: number }).v);
+    const [x0, y0, x1, y1] = mediaBox as [number, number, number, number];
     if (x0 !== 0 || y0 !== 0 || !(x1 > 0) || !(y1 > 0)) throw new Error(`page ${k} /MediaBox is not [0 0 w h]`);
     const resources = dictOf(page.get('Resources'), `page ${k} /Resources`);
+    for (const key of resources.keys()) {
+      if (key !== 'Font' && key !== 'XObject') throw new Error(`page ${k} /Resources /${key} is not a font or an XObject`);
+    }
+    const xobjects = new Map<string, number>();
+    if (resources.has('XObject')) {
+      for (const [resource, xref] of dictOf(resources.get('XObject'), `page ${k} /XObject`)) {
+        if (xref.t !== 'ref') throw new Error(`XObject /${resource} is not a reference`);
+        const xobject = get(xref.v, 'XObject');
+        if (!images.has(xref.v)) images.set(xref.v, checkImage(xref.v, xobject));
+        xobjects.set(resource, xref.v);
+      }
+    }
     const fonts = new Map<string, string>();
     for (const [resource, fontRef] of dictOf(resources.get('Font'), `page ${k} /Font`)) {
       if (fontRef.t !== 'ref') throw new Error(`font /${resource} is not a reference`);
@@ -447,8 +628,22 @@ export function checkPdf(bytes: Uint8Array): CheckedPdf {
       data = inflateSync(data);
     }
     const content = Buffer.from(data).toString('latin1');
-    return { width: x1, height: y1, content, ...readContent(content, fonts) };
+    return {
+      width: x1,
+      height: y1,
+      mediaBox,
+      fonts: [...fonts.values()],
+      xobjects: [...xobjects.keys()],
+      content,
+      ...readContent(content, { fonts, xobjects }),
+    };
   });
+  // Image XObjects no page draws are checked too.
+  for (const [n, o] of objects) {
+    if (images.has(n) || o.stream === null) continue;
+    const d = dictOf(o.value, `object ${n}`);
+    if (d.get('Subtype')?.t === 'name' && (d.get('Subtype') as { v: string }).v === 'Image') images.set(n, checkImage(n, o));
+  }
 
   let title: string | null = null;
   let producer: string | null = null;
@@ -459,5 +654,5 @@ export function checkPdf(bytes: Uint8Array): CheckedPdf {
     if (t?.t === 'str') title = textString(t.v);
     if (p?.t === 'str') producer = textString(p.v);
   }
-  return { objects: objects.size, pages, title, producer };
+  return { objects: objects.size, pages, images: [...images.values()].sort((a, b) => a.object - b.object), title, producer };
 }

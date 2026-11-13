@@ -1,12 +1,25 @@
-// A small PDF 1.4 writer for the label sheets (Phase 2 spec §7, D2-16): pages with filled or stroked rectangles and
-// single-line text in the standard Type 1 fonts Helvetica, Helvetica-Bold and Courier. The fonts use WinAnsiEncoding
-// and are not embedded, so the release archive stays the same size. Content streams are Flate-compressed. Objects are
-// written in number order with a classic xref table. No native module and no dependency. Pure apart from node:zlib.
+// A small PDF 1.4 writer for the label sheets and the report layout: pages with filled or stroked rectangles, straight
+// lines, single-line text in the standard Type 1 fonts Helvetica, Helvetica-Bold and Courier, and JPEG pictures. The
+// fonts use WinAnsiEncoding and are not embedded, so the release archive stays the same size. Content streams are
+// Flate-compressed; a JPEG file is stored unchanged as a DCTDecode image XObject. Every page stays open for drawing
+// until `toBytes()`, so a layout can number its pages once it knows how many there are. Objects are written in number
+// order with a classic xref table; the pictures come after the pages, so a document without pictures or lines is
+// written exactly as before they existed. No native module and no dependency. Pure apart from node:zlib.
 
 import { deflateSync } from 'node:zlib';
 import { PDF_FONTS } from './afm.js';
 import type { PdfFont } from './afm.js';
+import { jpegInfo } from './jpeg.js';
 import { toWinAnsi } from './winansi.js';
+
+/** A JPEG picture added to one document (`PdfDocument.addJpeg`), drawn on its pages with `PdfPage.image`. */
+export interface PdfImage {
+  /** The size in pixels, from the JPEG frame header. */
+  readonly width: number;
+  readonly height: number;
+  /** 1 = grey (DeviceGray), 3 = colour (DeviceRGB). */
+  readonly components: 1 | 3;
+}
 
 /** One page; coordinates are PDF points (1/72 in) from the bottom left corner of the page. */
 export interface PdfPage {
@@ -14,6 +27,10 @@ export interface PdfPage {
   text(x: number, y: number, s: string, o: { font: PdfFont; size: number }): void;
   /** A rectangle with its lower left corner at (x, y). Filled unless `stroke` is set without `fill`. */
   rect(x: number, y: number, w: number, h: number, o?: { fill?: boolean; stroke?: boolean }): void;
+  /** A straight stroked line from (x1, y1) to (x2, y2), `PDF_LINE_WIDTH` wide unless `width` (points, > 0) is given. */
+  line(x1: number, y1: number, x2: number, y2: number, o?: { width?: number }): void;
+  /** Draws a picture of this document stretched over the box with its lower left corner at (x, y); `w`, `h` > 0. */
+  image(img: PdfImage, x: number, y: number, w: number, h: number): void;
 }
 
 /** The smallest and largest page side PDF 1.4 allows (Appendix C: 3-14 400 units). */
@@ -54,10 +71,36 @@ function pdfTextString(s: string): string {
   return `${hex}>`;
 }
 
+/** A picture of one document: its place in the document's list (resource `/Im<index + 1>`) and its bytes. */
+class JpegImage implements PdfImage {
+  constructor(
+    readonly owner: object,
+    readonly index: number,
+    readonly data: Uint8Array,
+    readonly width: number,
+    readonly height: number,
+    readonly components: 1 | 3,
+  ) {}
+}
+
+/** A positive finite size (a line width, a picture's width or height). */
+function positive(n: number, what: string): string {
+  if (!(n > 0)) throw new RangeError(`pdf: ${what} ${n} is not positive`);
+  return pdfNumber(n, what);
+}
+
+/** Content operators are joined into one flat string per this many; it keeps a long report small in memory. */
+const OPS_PER_CHUNK = 64;
+
 class Page implements PdfPage {
-  readonly ops: string[] = [`${PDF_LINE_WIDTH} w`];
+  /** The joined chunks of the content stream, then the operators not joined yet. */
+  readonly #chunks: string[] = [];
+  #ops: string[] = [`${PDF_LINE_WIDTH} w`];
+  /** The pictures this page draws, by their index in the document. */
+  readonly images = new Set<number>();
 
   constructor(
+    readonly owner: object,
     readonly width: number,
     readonly height: number,
   ) {}
@@ -68,14 +111,44 @@ class Page implements PdfPage {
     const at = `${pdfNumber(x, 'x')} ${pdfNumber(y, 'y')}`;
     const size = pdfNumber(o.size, 'font size');
     if (s === '') return;
-    this.ops.push(`BT /${FONT_RESOURCE[o.font]} ${size} Tf ${at} Td ${pdfLiteral(toWinAnsi(s).bytes)} Tj ET`);
+    this.#push(`BT /${FONT_RESOURCE[o.font]} ${size} Tf ${at} Td ${pdfLiteral(toWinAnsi(s).bytes)} Tj ET`);
   }
 
   rect(x: number, y: number, w: number, h: number, o?: { fill?: boolean; stroke?: boolean }): void {
     const stroke = o?.stroke ?? false;
     const fill = o?.fill ?? !stroke;
     const path = [pdfNumber(x, 'x'), pdfNumber(y, 'y'), pdfNumber(w, 'width'), pdfNumber(h, 'height')].join(' ');
-    this.ops.push(`${path} re ${fill && stroke ? 'B' : fill ? 'f' : stroke ? 'S' : 'n'}`);
+    this.#push(`${path} re ${fill && stroke ? 'B' : fill ? 'f' : stroke ? 'S' : 'n'}`);
+  }
+
+  line(x1: number, y1: number, x2: number, y2: number, o?: { width?: number }): void {
+    const path = `${pdfNumber(x1, 'x')} ${pdfNumber(y1, 'y')} m ${pdfNumber(x2, 'x')} ${pdfNumber(y2, 'y')} l S`;
+    const width = o?.width ?? PDF_LINE_WIDTH;
+    const w = positive(width, 'line width');
+    // Another width is set inside a saved graphics state, so later strokes keep the page's width.
+    this.#push(width === PDF_LINE_WIDTH ? path : `q ${w} w ${path} Q`);
+  }
+
+  image(img: PdfImage, x: number, y: number, w: number, h: number): void {
+    if (!(img instanceof JpegImage) || img.owner !== this.owner) {
+      throw new TypeError('pdf: the picture was not added to this document');
+    }
+    const box = `${positive(w, 'picture width')} 0 0 ${positive(h, 'picture height')} ${pdfNumber(x, 'x')} ${pdfNumber(y, 'y')}`;
+    this.images.add(img.index);
+    this.#push(`q ${box} cm /Im${img.index + 1} Do Q`);
+  }
+
+  /** The content stream: the operators, one per line. */
+  content(): string {
+    return [...this.#chunks, ...this.#ops].join('\n');
+  }
+
+  #push(op: string): void {
+    this.#ops.push(op);
+    if (this.#ops.length === OPS_PER_CHUNK) {
+      this.#chunks.push(this.#ops.join('\n'));
+      this.#ops = [];
+    }
   }
 }
 
@@ -85,6 +158,9 @@ const ascii = (s: string): Uint8Array => Buffer.from(s, 'latin1');
 export class PdfDocument {
   readonly #title: string | null;
   readonly #pages: Page[] = [];
+  readonly #images: JpegImage[] = [];
+  /** Identifies this document's pictures, so a page never draws another document's picture. */
+  readonly #owner = {};
 
   constructor(o?: { title?: string }) {
     this.#title = o?.title ?? null;
@@ -97,20 +173,32 @@ export class PdfDocument {
         throw new RangeError(`pdf: page side ${side} is outside ${PAGE_MIN_PT}-${PAGE_MAX_PT} pt`);
       }
     }
-    const page = new Page(widthPt, heightPt);
+    const page = new Page(this.#owner, widthPt, heightPt);
     this.#pages.push(page);
     return page;
   }
 
   /**
-   * The file. Objects: 1 catalog, 2 page tree, 3 information, 4-6 the fonts, then each page and its content stream.
-   * Writing does not change the document, so pages may be added and the file written again.
+   * Adds a JPEG file as a picture of this document (a copy of the bytes is kept). Throws `JpegError` for a file a PDF
+   * reader could not show as an 8-bit grey or RGB picture (see `jpegInfo`), CMYK included.
+   */
+  addJpeg(bytes: Uint8Array): PdfImage {
+    const info = jpegInfo(bytes);
+    const img = new JpegImage(this.#owner, this.#images.length, bytes.slice(), info.width, info.height, info.components);
+    this.#images.push(img);
+    return img;
+  }
+
+  /**
+   * The file. Objects: 1 catalog, 2 page tree, 3 information, 4-6 the fonts, then each page and its content stream,
+   * then the pictures. Writing does not change the document, so pages may be added and the file written again.
    */
   toBytes(): Uint8Array {
     if (this.#pages.length === 0) throw new Error('pdf: a document needs at least one page (no page was added)');
     const fontObject = (font: PdfFont): number => 4 + PDF_FONTS.indexOf(font);
     const firstPage = 4 + PDF_FONTS.length;
     const pageObject = (k: number): number => firstPage + 2 * k;
+    const imageObject = (index: number): number => firstPage + 2 * this.#pages.length + index;
     const fontDict = PDF_FONTS.map((f) => `/${FONT_RESOURCE[f]} ${fontObject(f)} 0 R`).join(' ');
 
     const kids = this.#pages.map((_, k) => `${pageObject(k)} 0 R`).join(' ');
@@ -123,12 +211,21 @@ export class PdfDocument {
     ];
     this.#pages.forEach((page, k) => {
       const box = `[0 0 ${pdfNumber(page.width, 'width')} ${pdfNumber(page.height, 'height')}]`;
-      const resources = `<< /Font << ${fontDict} >> >>`;
+      const used = [...page.images].sort((a, b) => a - b);
+      const xobjects = used.map((index) => `/Im${index + 1} ${imageObject(index)} 0 R`).join(' ');
+      const resources = `<< /Font << ${fontDict} >>${used.length === 0 ? '' : ` /XObject << ${xobjects} >>`} >>`;
       const contents = `${pageObject(k) + 1} 0 R`;
       bodies.push(`<< /Type /Page /Parent 2 0 R /MediaBox ${box} /Resources ${resources} /Contents ${contents} >>`);
-      const data = deflateSync(ascii(page.ops.join('\n')));
+      const data = deflateSync(ascii(page.content()));
       bodies.push({ dict: `<< /Length ${data.length} /Filter /FlateDecode >>`, data });
     });
+    for (const img of this.#images) {
+      const colorSpace = img.components === 1 ? 'DeviceGray' : 'DeviceRGB';
+      const dict =
+        `<< /Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace /${colorSpace}` +
+        ` /BitsPerComponent 8 /Length ${img.data.length} /Filter /DCTDecode >>`;
+      bodies.push({ dict, data: img.data });
+    }
 
     const chunks: Uint8Array[] = [];
     let length = 0;
