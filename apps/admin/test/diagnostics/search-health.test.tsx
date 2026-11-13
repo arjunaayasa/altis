@@ -50,6 +50,8 @@ function report(o: Partial<DiagnosticsReport> = {}): DiagnosticsReport {
     disk: { lowAt: null },
     search: { status: 'ready', docs: 130, records: 130, builtAt: AT - 3_600_000, jobId: null },
     oai: { enabled: true, adminEmailSet: true },
+    // ---- Komunitas K1 (edition lane) ----
+    editionLane: { applied: 0 },
     ...o,
   };
 }
@@ -82,7 +84,7 @@ function jobView(o: Partial<JobView> = {}): JobView {
     createdAt: AT,
     updatedAt: AT,
     finishedAt: null,
-    createdBy: 'U1',
+    createdBy: adminMe().user.id, // the signed-in user's own job
     retryable: 'origin-only',
     cancellable: true,
     interactive: false,

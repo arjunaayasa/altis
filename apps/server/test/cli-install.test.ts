@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CliError, describeFailure, describeKey } from '../src/cli/common.js';
 import { InstallInputSchema, createFirstSuperAdmin, defaultProxyHops, seedInstall } from '../src/cli/install.js';
 import { runCli } from '../src/cli/index.js';
+import { describeOutcome } from '../src/cli/migrate.js';
 import { writeConfig } from '../src/config.js';
 import { captureIo, openInstalled, runCliChild, writeInput, type CapturedIo } from './cli-support.js';
 import { bootContext, sampleConfig, useDataDir } from './support.js';
@@ -818,6 +819,7 @@ describe('migrate', () => {
       applied: [],
       schemaVersion: LATEST_SCHEMA,
       minCodeVersion: '0.0.0',
+      edition: { mode: 'empty', applied: [] },
     });
   });
 
@@ -827,6 +829,15 @@ describe('migrate', () => {
     expect(code).toBe(0);
     expect(JSON.parse(io.out)).toMatchObject({ ok: true, mode: 'migrated', applied: Object.keys(PHASE1_MIGRATIONS) });
     expect((await cli(['migrate'])).io.out).toMatch(/up-to-date/);
+  });
+
+  it('the human line names the migrations of another lane only when a run applied some', () => {
+    const outcome = { mode: 'up-to-date' as const, applied: [], schemaVersion: '0029', minCodeVersion: '0.0.0' };
+    const line = 'up-to-date: skema 0029 sudah terbaru / schema 0029 is up to date';
+    expect(describeOutcome({ ...outcome, edition: { mode: 'empty', applied: [] } })).toBe(line);
+    expect(describeOutcome({ ...outcome, edition: { mode: 'migrated', applied: ['e0001_x'] } })).toBe(
+      `${line} (+1 migrasi jalur lain / 1 migration(s) of another lane)`,
+    );
   });
 
   it('a database ahead of this release: exit 0 with a note (schema-ahead)', async () => {

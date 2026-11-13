@@ -406,7 +406,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
   it('fresh DB: applies all three, records schema_meta and mirrors it to releases/schema-meta.json', async () => {
     const [migrateToLatest] = spyMigrator();
     const outcome = await runMigrations(h, options());
-    expect(outcome).toEqual({ mode: 'migrated', applied: ALL, schemaVersion: '0003', minCodeVersion: '0.2.0' });
+    expect(outcome).toEqual({ mode: 'migrated', applied: ALL, schemaVersion: '0003', minCodeVersion: '0.2.0', edition: { mode: 'empty', applied: [] } });
     // Positive control for the "never called" assertions elsewhere: the spies do see the runner's Migrator.
     expect(migrateToLatest).toHaveBeenCalledTimes(1);
     expect(await schemaMeta()).toEqual([{ id: 1, schema_version: '0003', min_code_version: '0.2.0' }]);
@@ -417,7 +417,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
     expect(await readSchemaMetaMirror(dataDir)).toEqual({ schemaVersion: '0003', minCodeVersion: '0.2.0' });
   });
 
-  it("registers Kysely's two tables in schema_tables as class migrator (R4)", async () => {
+  it("registers the Kysely Migrators' tables in schema_tables as class migrator, the other lane's two included", async () => {
     await runMigrations(h, options());
     const rows = await meta(h)
       .selectFrom('schema_tables')
@@ -425,9 +425,11 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       .where('name', 'in', [...MIGRATOR_TABLES])
       .orderBy('name')
       .execute();
-    expect(MIGRATOR_TABLES).toEqual(['schema_migrations', 'schema_migrations_lock']);
+    expect(MIGRATOR_TABLES).toEqual(['schema_migrations', 'schema_migrations_lock', 'schema_migrations_edition', 'schema_migrations_edition_lock']);
     expect(rows).toEqual([
       { name: 'schema_migrations', class: 'migrator', created_by: 'migrator' },
+      { name: 'schema_migrations_edition', class: 'migrator', created_by: 'migrator' },
+      { name: 'schema_migrations_edition_lock', class: 'migrator', created_by: 'migrator' },
       { name: 'schema_migrations_lock', class: 'migrator', created_by: 'migrator' },
     ]);
   });
@@ -490,13 +492,13 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
   it('second run: up-to-date, nothing executed again', async () => {
     await runMigrations(h, options());
     const outcome = await runMigrations(h, options());
-    expect(outcome).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0003', minCodeVersion: '0.2.0' });
+    expect(outcome).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0003', minCodeVersion: '0.2.0', edition: { mode: 'empty', applied: [] } });
     expect(await runsPerName(h.db)).toEqual({ '0001_a': 1, '0002_b': 1, '0003_c': 1 });
   });
 
   it('an empty set of migrations on a fresh DB: up-to-date at 0000 / 0.0.0', async () => {
     const outcome = await runMigrations(h, options({ migrations: {} }));
-    expect(outcome).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0000', minCodeVersion: '0.0.0' });
+    expect(outcome).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0000', minCodeVersion: '0.0.0', edition: { mode: 'empty', applied: [] } });
     expect(await readSchemaMetaMirror(dataDir)).toEqual({ schemaVersion: '0000', minCodeVersion: '0.0.0' });
   });
 
@@ -513,6 +515,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       applied: ['0003_c'],
       schemaVersion: '0003',
       minCodeVersion: '0.2.0',
+      edition: { mode: 'empty', applied: [] },
     });
   });
 
@@ -527,7 +530,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       await migratedByNewerCode('0.2.0');
       const spies = spyMigrator();
       const outcome = await runMigrations(h, options({ appVersion: '0.3.0' }));
-      expect(outcome).toEqual({ mode: 'schema-ahead', applied: [], schemaVersion: '9999', minCodeVersion: '0.2.0' });
+      expect(outcome).toEqual({ mode: 'schema-ahead', applied: [], schemaVersion: '9999', minCodeVersion: '0.2.0', edition: { mode: 'empty', applied: [] } });
       for (const spy of spies) expect(spy).not.toHaveBeenCalled();
       expect(await runsPerName(h.db)).toEqual({ '0001_a': 1, '0002_b': 1, '0003_c': 1 });
       // The mirror follows the database, so the bootloader sees what the newer code wrote.
@@ -538,7 +541,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       await migratedByNewerCode('9.0.0');
       const spies = spyMigrator();
       const outcome = await runMigrations(h, options({ appVersion: '0.3.0' }));
-      expect(outcome).toEqual({ mode: 'too-old', applied: [], schemaVersion: '9999', minCodeVersion: '9.0.0' });
+      expect(outcome).toEqual({ mode: 'too-old', applied: [], schemaVersion: '9999', minCodeVersion: '9.0.0', edition: { mode: 'empty', applied: [] } });
       for (const spy of spies) expect(spy).not.toHaveBeenCalled();
       expect(await readSchemaMetaMirror(dataDir)).toEqual({ schemaVersion: '9999', minCodeVersion: '9.0.0' });
     });
@@ -576,6 +579,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       applied: [],
       schemaVersion: '0003',
       minCodeVersion: '0.4.0',
+      edition: { mode: 'empty', applied: [] },
     });
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   });
@@ -617,6 +621,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       applied: ['0001_x', '0002_y'],
       schemaVersion: '0002',
       minCodeVersion: '0.3.0',
+      edition: { mode: 'empty', applied: [] },
     });
     expect(seen).toEqual(['0.3.0']);
   });
@@ -648,6 +653,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       applied: [],
       schemaVersion: '0003',
       minCodeVersion: '0.2.0',
+      edition: { mode: 'empty', applied: [] },
     });
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
     expect(await schemaMeta()).toEqual([{ id: 1, schema_version: '0003', min_code_version: '0.2.0' }]);
@@ -683,6 +689,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       applied: h.dialect === 'postgres' ? ALL : ['0002_b', '0003_c'],
       schemaVersion: '0003',
       minCodeVersion: '0.2.0',
+      edition: { mode: 'empty', applied: [] },
     });
     expect(await appliedNames()).toEqual(ALL);
     expect(await runsPerName(h.db)).toEqual({ '0001_a': 1, '0002_b': 1, '0003_c': 1 });

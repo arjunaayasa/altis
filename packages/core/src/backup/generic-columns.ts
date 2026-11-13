@@ -1,5 +1,7 @@
 import {
-  readSchemaTableEntries,
+  EDITION_MIGRATIONS,
+  isEditionCreatedBy,
+  readSchemaTableOrigins,
   readTableColumns,
   readTableKeys,
   tableLoadOrder,
@@ -87,7 +89,9 @@ export interface CatalogBackupTable {
  * The tables a catalog export holds: every table `schema_tables` records with class `data`, `config` or `history`
  * (a name whose table does not exist, which ddl.ts may leave behind a crash, is skipped), in load order by the
  * catalog's foreign keys (tableLoadOrder: parents first, ties by name), so that on a database the registry describes
- * the order is backupTables()'.
+ * the order is backupTables()'. A table made by a migration of the other lane ("migrasi jalur lain": its
+ * `created_by` is an `eNNNN_slug` name) that this code does not ship is left out: no restore by this code could
+ * load it.
  *
  * A key column of the `decimal` family is refused (ruling R1d-3): its values are exact decimal strings, which the
  * keyset reads and a restore's resume compare in byte order (`'10.00' < '9.00'`), not in the database's numeric
@@ -99,8 +103,10 @@ export interface CatalogBackupTable {
 export async function catalogBackupTables(db: Kysely<DB> | Transaction<DB>, dialect: Dialect): Promise<CatalogBackupTable[]> {
   const found = new Map<string, CatalogBackupTable>();
   const foreignKeys = new Map<string, { fks: CatalogForeignKey[] }>();
-  for (const entry of await readSchemaTableEntries(db)) {
+  for (const entry of await readSchemaTableOrigins(db)) {
     if (!BACKUP_CLASSES.has(entry.class)) continue;
+    // ---- Komunitas K1 (edition lane) ----
+    if (isEditionCreatedBy(entry.createdBy) && !Object.hasOwn(EDITION_MIGRATIONS, entry.createdBy)) continue;
     const catalog = await readTableColumns(db, dialect, entry.name);
     if (catalog.length === 0) continue;
     const keys = await readTableKeys(db, dialect, entry.name);
