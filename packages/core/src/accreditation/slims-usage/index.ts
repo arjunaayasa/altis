@@ -1,34 +1,14 @@
-// Stub: replaced by a later change in this milestone.
-// The SLiMS usage import: the connection test and the start of an import. The signatures are final; every body
-// throws until the import is written.
-/* eslint-disable @typescript-eslint/no-unused-vars -- the parameters of the final signatures are not read yet */
-import type { DB } from '@altis/db';
-import type { SlimsDbConfigBody, SlimsUsageStartBody, SlimsUsageTestResponse } from '@altis/shared/api/accreditation';
-import type { Transaction } from 'kysely';
-import type { KeyringEntry } from '../../crypto/secret-box.js';
-import type { JobRegistry } from '../../jobs/types.js';
-import type { AccredSettings } from '../../settings/accreditation.js';
+// The read-only SLiMS usage import (spec §11.2, §10.7): the connection test, the start of an import and its job, which
+// counts SLiMS loans, visits and in-library use per month (members only as keyed hashes) and replaces the imported rows
+// of the usage table at its end.
 
 export { importSlimsUsageJob, importSlimsUsagePayload } from './job.js';
 export type { ImportSlimsUsagePayload } from './job.js';
 export { slimsUsageRunSettings } from './settings.js';
 export type { SlimsUsageRunSettings } from './settings.js';
-
-function notImplemented(): never {
-  throw new Error('not implemented yet');
-}
-
-/** Opens a SLiMS database read only and answers what an import would read (a failure is `{ok: false}`). */
-export async function testSlimsUsageConnection(cfg: SlimsDbConfigBody): Promise<SlimsUsageTestResponse> {
-  return notImplemented();
-}
-
-/** Creates a `slims_usage` run started from the period `periodId` and queues its import job. */
-export async function startSlimsUsageImport(
-  trx: Transaction<DB>,
-  periodId: string,
-  body: SlimsUsageStartBody,
-  o: { now: number; createdBy: string; registry: JobRegistry; keyring: readonly KeyringEntry[]; settings: AccredSettings },
-): Promise<{ runId: string; jobId: string }> {
-  return notImplemented();
-}
+export { testSlimsUsageConnection } from './test-connection.js';
+export { SLIMS_USAGE_JOB, SLIMS_USAGE_UNIQUE_KEY, closeAbandonedUsageRun, startSlimsUsageImport } from './start.js';
+export type { SlimsUsageStarted, UsageSourceRef } from './start.js';
+export { guessGroup } from './guess.js';
+export { __setSlimsUsageConnect, slimsUsageConnect } from './source.js';
+export type { SlimsUsageConnect } from './source.js';
