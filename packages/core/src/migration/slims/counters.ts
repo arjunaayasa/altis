@@ -22,6 +22,10 @@ import type { SlimsCounters, SlimsFixKind } from './stage.js';
 //
 // Names come from the source (a dump is untrusted): the counts live in Maps and reach JSON through Object.fromEntries,
 // so a table called `__proto__` is a key like any other.
+//
+// The catalogue re-sync adds two counts per table: `vanished`, the mapped rows whose source row is gone and that the run
+// archived (they are in `archived` too, and reconcile.ts takes them out again, as they are no source rows), and
+// `changes`, the rows the run writes or would write (a sync dry run's `catalogChanges`).
 
 /** The bytes the samples may take in the summary (M6: the summary stays far below its 60 000). */
 export const SLIMS_SAMPLES_MAX_BYTES = 24_000;
@@ -42,6 +46,11 @@ export interface SlimsCountersJson {
   unread: string[];
   fixes: Record<string, Record<string, number>>;
   samples: MigrationSample[];
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  /** Per table: the mapped rows archived because their source row is gone (also counted in `archived`). */
+  vanished: Record<string, number>;
+  /** Per table: the catalogue rows written, or that a dry run would write (new, changed, gone). */
+  changes: Record<string, number>;
 }
 
 /** What a sample hands the report besides the summary: the column, the repair, both values uncut. */
@@ -99,6 +108,8 @@ export function createCounters(initial: object | null, o: { onSample?: SlimsSamp
   const samples: MigrationSample[] = [];
   const perColumn = new Map<string, number>();
   const lastFix = new Map<string, string>();
+  const vanished = new Map<string, number>();
+  const changes = new Map<string, number>();
   let bytes = 0;
 
   const table = (t: string): TableCounts => {
@@ -137,6 +148,10 @@ export function createCounters(initial: object | null, o: { onSample?: SlimsSamp
     const kinds = new Map<string, number>();
     for (const [kind, n] of Object.entries(objectOf(raw) ?? {})) kinds.set(kind, nonNegative(n));
     fixes.set(column, kinds);
+  }
+  for (const [name, n] of Object.entries(objectOf(start?.['vanished']) ?? {})) if (tables.has(name)) vanished.set(name, nonNegative(n));
+  for (const [name, n] of Object.entries(objectOf(start?.['changes']) ?? {})) {
+    if (name !== '' && name.length <= NAME_MAX && changes.size < TABLES_MAX) changes.set(name, nonNegative(n));
   }
   const startSamples = start?.['samples'];
   if (Array.isArray(startSamples)) {
@@ -181,6 +196,17 @@ export function createCounters(initial: object | null, o: { onSample?: SlimsSamp
       kinds.set(kind, (kinds.get(kind) ?? 0) + added);
       fixes.set(key, kinds);
     },
+    vanished(t, n) {
+      const added = count(n, 'vanished');
+      table(t).archived += added;
+      vanished.set(t, (vanished.get(t) ?? 0) + added);
+    },
+    changed(t, n) {
+      const name = tableName(t);
+      const added = count(n, 'changed');
+      if (!changes.has(name) && changes.size >= TABLES_MAX) throw new TypeError(`SLiMS counters: more than ${TABLES_MAX} tables`);
+      changes.set(name, (changes.get(name) ?? 0) + added);
+    },
     sample(column, before, after) {
       const name = cut(String(column), COLUMN_MAX);
       const fix = lastFix.get(name) ?? 'fix';
@@ -198,6 +224,8 @@ export function createCounters(initial: object | null, o: { onSample?: SlimsSamp
         unread: [...unread],
         fixes: Object.fromEntries([...fixes].map(([column, kinds]) => [column, Object.fromEntries(kinds)])),
         samples: samples.map((s) => ({ ...s })),
+        vanished: Object.fromEntries(vanished),
+        changes: Object.fromEntries(changes),
       };
     },
   };

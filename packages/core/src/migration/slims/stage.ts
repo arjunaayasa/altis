@@ -35,6 +35,15 @@ export interface SlimsRunOptions {
   sourceName: string;
   /** Migrate into a catalogue that already has live records (§11.2: with the explicit confirmation). */
   allowNonEmpty: boolean;
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  /**
+   * `append`: a row mapped by an earlier run is skipped `already_migrated`. `sync`: it is compared with what a first
+   * run would write from the source now and rewritten when it differs and no one edited it in ALTIS; a mapped row whose
+   * source row is gone is archived.
+   */
+  catalogMode: 'append' | 'sync';
+  /** The catalogue stages are skipped: each counts the rows of its tables as skipped `catalog_skipped`. */
+  skipCatalog: boolean;
 }
 
 /** Text repairs counted per column (§11.5). */
@@ -55,6 +64,14 @@ export interface SlimsCounters {
   fix(column: string, kind: SlimsFixKind, n: number): void;
   /** A before/after sample of a repaired value (at most 5 per column are kept in the summary). */
   sample(column: string, before: string, after: string): void;
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  /**
+   * Mapped rows of `table` whose source row is gone and that a re-sync archived: counted under `archived`, and outside
+   * the source's rows, so the reconciliation still balances (reconcile.ts).
+   */
+  vanished(table: string, n: number): void;
+  /** Catalogue rows a re-sync writes or would write: a source row new or changed, a mapped row whose source is gone. */
+  changed(table: string, n: number): void;
 }
 
 /** One row of the report CSV: what happened to one source row (or to a whole table). */

@@ -129,6 +129,16 @@ export class Ledger {
     if (n > 0) this.ops.push((c) => c.counters.skipped(table, reason, n));
   }
 
+  /** Catalogue rows a re-sync writes or would write (counters.ts `changed`). */
+  changed(table: string, n = 1): void {
+    if (n > 0) this.ops.push((c) => c.counters.changed(table, n));
+  }
+
+  /** Mapped rows archived because their source row is gone (counters.ts `vanished`). */
+  vanished(table: string, n = 1): void {
+    if (n > 0) this.ops.push((c) => c.counters.vanished(table, n));
+  }
+
   /** A report row, unless its code had its {@link ROWS_PER_CODE} rows in the stage already (see above). */
   report(table: string, legacyKey: string | null, code: string, detail: string): void {
     if (!NEVER_HELD.has(code)) {

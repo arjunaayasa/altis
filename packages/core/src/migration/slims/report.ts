@@ -180,7 +180,9 @@ function pairs(values: Readonly<Record<string, string | number | boolean>>): str
  * The framework's own rows of the final report, before the stages' rows (so a report cut at 10 000 rows keeps them):
  * the run, the reconciliation per table, the rows per target table before and after (M13), the random check sample
  * with each record's admin URL (§11.6), the text repairs and the character-set picture per column, and the two fixed
- * notes: the old SLiMS OAI identifiers are not served (§9.9), and the "Fase 3" tables are not read.
+ * notes: the old SLiMS OAI identifiers are not served (§9.9), and the tables of the Members and Circulation modules are not
+ * read (the separate aggregate usage import reads some of their columns, without migrating them). The run row names the
+ * catalogue mode, and a sync dry run's count of catalogue changes.
  */
 export function slimsSummaryRows(o: {
   summary: MigrationSummary;
@@ -207,6 +209,9 @@ export function slimsSummaryRows(o: {
         version: s.version ?? 'unknown',
         priceMode: o.settings.priceMode,
         adoptedFrom: o.settings.adoptedFrom ?? '-',
+        catalogMode: o.settings.catalogMode ?? 'append',
+        skipCatalog: o.settings.skipCatalog ?? false,
+        ...(s.catalogChanges === undefined ? {} : { catalogChanges: s.catalogChanges }),
       }),
     ],
   ];
@@ -256,6 +261,12 @@ export function slimsSummaryRows(o: {
       'The old SLiMS OAI identifiers are not served; harvesters must harvest again',
   ]);
   const phase3 = [...SLIMS_PHASE3_PREFIXES.map((p) => `${p}*`), ...SLIMS_PHASE3_TABLES].join(', ');
-  rows.push(['', '', 'phase3_tables', `Tabel ini tidak dibaca di Fase 2 / These tables are not read in Phase 2 (Phase 3): ${phase3}`]);
+  rows.push([
+    '',
+    '',
+    'phase3_tables',
+    'Tidak dibaca: modul Anggota/Sirkulasi; impor agregat terpisah membaca sebagian kolom tanpa memigrasi / ' +
+      `Not read: Members/Circulation module; the separate aggregate import reads some columns without migrating them: ${phase3}`,
+  ]);
   return rows;
 }

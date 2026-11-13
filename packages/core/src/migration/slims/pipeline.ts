@@ -532,6 +532,33 @@ export const slimsSplitStage: SlimsStage = Object.freeze({
 });
 
 // ---------------------------------------------------------------------------------------------------------------
+// A skipped catalogue stage
+
+/** The catalogue stages a run with `skipCatalog` skips. */
+export const SLIMS_CATALOG_STAGES: readonly SlimsStage['name'][] = Object.freeze(['masters', 'records', 'relations', 'items', 'attachments', 'covers']);
+
+/**
+ * `stage` skipped (a run with `skipCatalog`, job.ts): it writes and counts nothing, and reports the skip once. Its
+ * `reads` stay (the analyze stage counts their rows as the source's); the run's end counts every row of them that no
+ * other stage accounted for as skipped `catalog_skipped` (finish, below), so the reconciliation balances.
+ */
+export function catalogSkippedStage(stage: SlimsStage): SlimsStage {
+  return Object.freeze({
+    name: stage.name,
+    reads: stage.reads,
+    async run(c: SlimsStageContext): Promise<{ done: boolean; cursor: string | null }> {
+      c.report({
+        table: '',
+        legacyKey: null,
+        code: 'catalog_skipped',
+        detail: `Tahap katalog ${stage.name} dilewati: uji kering sinkron tidak menemukan perubahan / The catalogue stage ${stage.name} was skipped: the sync dry run found no change`,
+      });
+      return { done: true, cursor: null };
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // One slice
 
 /**
@@ -591,6 +618,9 @@ export async function runSlimsMigrationSlice(
 
   function summaryOf(withReconciliation: boolean): Record<string, unknown> {
     const counts = counters.toJSON();
+    // A sync dry run that ran the catalogue stages counts what a real sync would write (startSlimsMigration's precheck
+    // of a run that skips them); its per-table counts are kept for the next slice.
+    const catalogDry = dryRun && settings.catalogMode === 'sync' && settings.skipCatalog !== true;
     const doc = {
       version: state.version,
       stage: state.stage,
@@ -608,6 +638,8 @@ export async function runSlimsMigrationSlice(
       indexBuilding: state.indexBuilding,
       resume: state.resume,
       checkSource: { ...state.checkSource },
+      vanished: counts.vanished,
+      ...(catalogDry ? { changes: counts.changes, catalogChanges: Object.values(counts.changes).reduce((a, b) => a + b, 0) } : {}),
     };
     return bounded(doc);
   }
@@ -686,8 +718,26 @@ export async function runSlimsMigrationSlice(
     }
   }
 
+  /**
+   * A run that skipped the catalogue stages: every row of their tables that no stage accounted for is skipped
+   * `catalog_skipped` (computed from the counters, so a finish done again adds nothing).
+   */
+  function countSkippedCatalogue(): void {
+    if (settings.skipCatalog !== true) return;
+    const counts = counters.toJSON();
+    const tables = new Set(stages.filter((s) => SLIMS_CATALOG_STAGES.includes(s.name)).flatMap((s) => [...s.reads]));
+    for (const table of [...tables].sort()) {
+      if (!Object.hasOwn(counts.tables, table) || counts.unread.includes(table)) continue;
+      const t = counts.tables[table]!;
+      const skipped = Object.values(t.skipped).reduce((a, b) => a + b, 0);
+      const left = t.source - (t.migrated + t.merged + skipped + t.archived - (counts.vanished[table] ?? 0));
+      if (left > 0) counters.skipped(table, 'catalog_skipped', left);
+    }
+  }
+
   async function finish(status: RunEnd): Promise<void> {
     if (finished) return;
+    if (status === 'succeeded') countSkippedCatalogue();
     if (status !== 'succeeded') await freeStaging();
     const now = ctx.now();
     const counts = await slimsTargetCounts(ctx.db);

@@ -99,6 +99,11 @@ export class Ledger {
     if (n > 0) this.ops.push((c) => c.counters.skipped(table, reason, n));
   }
 
+  /** Catalogue rows a re-sync writes or would write (counters.ts `changed`). */
+  changed(table: string, n = 1): void {
+    if (n > 0) this.ops.push((c) => c.counters.changed(table, n));
+  }
+
   /**
    * A report row. Past {@link REPORT_ROWS_PER_CODE} rows of one code in the table being read, the rows are only counted
    * (`o:<code>`) and the table's end sums them up in one row: a flood of one problem (zero dates, say) does not push the
@@ -423,6 +428,13 @@ export interface Replay {
   marks: ReadonlySet<ReplayMark>;
 }
 
+/** A row of a batch that an earlier run mapped (`catalogMode = sync`): its key, its row and its target. */
+export interface DoneRow {
+  key: string;
+  row: SlimsRow;
+  targetId: string;
+}
+
 /** One row of a batch that is the stage's to handle, with its legacy key. */
 export interface FreshRow {
   key: string;
@@ -445,6 +457,9 @@ export function markOf(c: SlimsStageContext, table: string, key: string, targetI
  * batch `duplicate_key` (a table without a primary key), each reported; then (unless `o.mapped` is false, for the
  * tables that map nothing) a key an earlier run mapped under the run's source is skipped `already_migrated` (§11.2,
  * D2-26: never updated), and a key this very run mapped comes back as a replay with its marks.
+ *
+ * With `o.done` (a catalogue re-sync) a key an earlier run mapped is not skipped: it is pushed onto `o.done` with its
+ * target, and the caller counts it.
  */
 export async function freshRows(
   c: SlimsStageContext,
@@ -453,7 +468,7 @@ export async function freshRows(
   table: string,
   rows: readonly SlimsRow[],
   keyColumns: readonly string[],
-  o: { mapped?: boolean } = {},
+  o: { mapped?: boolean; done?: DoneRow[] } = {},
 ): Promise<FreshRow[]> {
   const out: FreshRow[] = [];
   const seen = new Set<string>();
@@ -486,7 +501,8 @@ export async function freshRows(
     const m = mapped.get(r.key);
     const state = stateOf(c, m);
     if (state === 'done') {
-      l.skipped(table, 'already_migrated');
+      if (o.done !== undefined) o.done.push({ key: r.key, row: r.row, targetId: m!.targetId });
+      else l.skipped(table, 'already_migrated');
       continue;
     }
     if (state === 'replay') {
