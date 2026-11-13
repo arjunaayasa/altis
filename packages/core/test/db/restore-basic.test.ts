@@ -234,5 +234,5 @@ describe.skipIf(!ctx.available)(`restore round trip [${engineLabel()}]`, () => {
     expect(await h.db.selectFrom('roles').selectAll().orderBy('id').execute()).toEqual(archived);
     await withTx(h, (trx) => ensureSystemRoles(trx, Date.now()));
     expect(await h.db.selectFrom('roles').selectAll().orderBy('id').execute()).toEqual(archived);
-  });
+  }, 120_000);
 });

@@ -11,6 +11,8 @@ perf-reports/
 
 # Agent and editor state: never part of the repository.
 .claude/
+# Nested git worktrees of this repository (one checkout per task branch).
+.worktrees/
 [.]superpowers/
 CLAUDE.local.md
 
