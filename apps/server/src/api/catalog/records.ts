@@ -1,5 +1,6 @@
 import {
   archiveRecord,
+  bulkUpdateRecords,
   checkDuplicates,
   createRecord,
   listRecords,
@@ -15,10 +16,12 @@ import {
   CoverBody,
   DuplicateCheckBody,
   MergeBody,
+  RecordBulkBody,
   RecordCreateBody,
   RecordListQuery,
   RecordPatchBody,
   type DuplicateCheckResponse,
+  type RecordBulkResponse,
   type RecordDetail,
   type RecordListResponse,
 } from '@altis/shared/api/catalog/records';
@@ -39,6 +42,8 @@ import { route, type RouteDecl } from '../../http/route.js';
 //   publish `catalog.record.changed` as their last statement.
 // - `POST catalog/records/duplicates` only reads (`mode: read`, nothing stored): the editor calls it while a
 //   librarian types; the threshold is the setting `catalog.dedupe.threshold`.
+// - `POST catalog/records/bulk` sets the accreditation fields of many records; its stored answer is the compact
+//   `{updated, refused}` (at most 500 refusals, far below 60 000 bytes).
 
 const RECORDS = '/api/v1/catalog/records';
 const RecordParams = z.strictObject({ id: ulidField });
@@ -60,6 +65,28 @@ const recordsList = route({
   query: RecordListQuery,
   handler: async (rc) => {
     const body: RecordListResponse = await listRecords(rc.db.db, rc.query, { now: rc.now });
+    return { body };
+  },
+});
+
+// ---- Komunitas K1 (catalogue accreditation fields) ----
+
+/**
+ * POST catalog/records/bulk: sets the accreditation fields of up to 500 records (an annotation: no record's
+ * `updated_by`, `updated_at` or `changed_at` moves) and answers `{updated, refused}`. A literal path, declared before
+ * the routes of one record.
+ */
+const recordsBulk = route({
+  id: 'catalog.records.bulk',
+  method: 'POST',
+  path: `${RECORDS}/bulk`,
+  permission: 'catalog.records.manage',
+  idempotency: 'store',
+  audit: 'catalog.record.bulk_update',
+  body: RecordBulkBody,
+  handler: async (rc) => {
+    const tx = rc.tx();
+    const body: RecordBulkResponse = await bulkUpdateRecords(tx, rc.body, tx.now);
     return { body };
   },
 });
@@ -188,6 +215,8 @@ const recordsDuplicates = route({
 
 export const RECORDS_ROUTES: RouteDecl[] = [
   recordsList,
+  // ---- Komunitas K1 (catalogue accreditation fields) ----
+  recordsBulk,
   recordsGet,
   recordsCreate,
   recordsUpdate,
