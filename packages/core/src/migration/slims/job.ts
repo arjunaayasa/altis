@@ -14,7 +14,15 @@ import { slimsStagesOverride } from './factory.js';
 import { closeAbandonedSlimsRun } from './ending.js';
 import { assertTargetEmpty } from './guard.js';
 import { parseSlimsRunSettings, type SlimsDbTarget, type SlimsRunSettings } from './options.js';
-import { SLIMS_MIGRATION_JOB, migrateSlimsPayload, runSlimsMigrationSlice, slimsSplitStage, type MigrateSlimsPayload } from './pipeline.js';
+import {
+  SLIMS_CATALOG_STAGES,
+  SLIMS_MIGRATION_JOB,
+  catalogSkippedStage,
+  migrateSlimsPayload,
+  runSlimsMigrationSlice,
+  slimsSplitStage,
+  type MigrateSlimsPayload,
+} from './pipeline.js';
 import { slimsReportStage } from './report-stage.js';
 import type { SlimsStage } from './stage.js';
 import { archiveStage } from './stages/archive.js';
@@ -46,6 +54,18 @@ import { relationsStage } from './stages/relations.js';
 // - the run (`catalog_runs`, kind `migration`) with options that never hold the password, the job with the password
 //   sealed in `secret_param` (cleared at its terminal status), and `catalog.migration.start` (`meta`: dryRun,
 //   sourceKind, priceMode, sourceName, adoptedFrom).
+//
+// The catalogue re-sync: `catalogMode` (`append`, or `sync`) and `skipCatalog` are stored with the options. A real run
+// that skips the catalogue stages must follow a sync dry run (`fromRunId`, taken over as above) that ran them and found
+// no source record or copy new, changed or gone (`catalogChanges` 0 in its summary): without such a dry run the start
+// is refused `{path: 'skipCatalog', code: 'dry_run_required'}`, and with changes found 422 MIGRATION_PRECHECK_FAILED
+// `{reason: 'catalog_changed', count}`. The target guard still applies. A dry run may skip them without a precheck (it
+// writes nothing, and its summary never qualifies a skip). A run that skips them keeps their place in its stage list
+// (the job's payload counts stages by index), each replaced by catalogSkippedStage, and the run's end counts the rows of
+// their tables that no other stage accounted for as skipped `catalog_skipped`, so the reconciliation balances.
+//
+// The CLI starts its runs as the `cli` actor, which has no user id: it takes over the dry runs it started itself
+// (`created_by` null), and no one else's.
 
 /** One migration at a time per installation (§11.2). */
 export const SLIMS_MIGRATION_UNIQUE_KEY = 'catalog.migrate_slims';
@@ -65,10 +85,15 @@ export const SLIMS_STAGES: readonly SlimsStage[] = Object.freeze([
   slimsReportStage,
 ]);
 
-/** The stage list a run uses: SLIMS_STAGES, or the framework's own around a test's middle stages (test profile). */
-export function slimsRunStages(): readonly SlimsStage[] {
+/**
+ * The stage list a run uses: SLIMS_STAGES, or the framework's own around a test's middle stages (test profile); with
+ * `skipCatalog`, each catalogue stage in it replaced by catalogSkippedStage (its place kept, see the top of this file).
+ */
+export function slimsRunStages(o: { skipCatalog?: boolean } = {}): readonly SlimsStage[] {
   const middle = slimsStagesOverride();
-  return middle === null ? SLIMS_STAGES : Object.freeze([slimsSplitStage, slimsAnalyzeStage, ...middle, slimsReportStage]);
+  const stages = middle === null ? SLIMS_STAGES : Object.freeze([slimsSplitStage, slimsAnalyzeStage, ...middle, slimsReportStage]);
+  if (o.skipCatalog !== true) return stages;
+  return Object.freeze(stages.map((stage) => (SLIMS_CATALOG_STAGES.includes(stage.name) ? catalogSkippedStage(stage) : stage)));
 }
 
 type Db = Kysely<DB> | Transaction<DB>;
@@ -96,7 +121,8 @@ export function migrateSlimsJob(deps: () => CatalogJobDeps): JobHandler<MigrateS
       }
       // A slice retried after the run ended (P7) has nothing left to do.
       if (run.status !== 'queued' && run.status !== 'running') return { done: true, message: run.status };
-      return runSlimsMigrationSlice(ctx, payload, d, slimsRunStages(), run, parseSlimsRunSettings(run.options));
+      const settings = parseSlimsRunSettings(run.options);
+      return runSlimsMigrationSlice(ctx, payload, d, slimsRunStages({ skipCatalog: settings.skipCatalog === true }), run, settings);
     },
   };
 }
@@ -187,18 +213,25 @@ export interface SlimsStartInput {
   confirmLibraryName: string | null;
   /** S3: the dry run whose work this run takes over. */
   fromRunId: string | null;
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  /** `append` when absent. */
+  catalogMode?: 'append' | 'sync';
+  /** Skip the catalogue stages (a real run: after a sync dry run that found no change). */
+  skipCatalog?: boolean;
 }
 
 /**
- * The checks of S3 on `fromRunId` (see the top of this file) for the staff user `userId`.
+ * The checks on `fromRunId` (see the top of this file) for the staff user `userId` (null with `cli`: the CLI,
+ * which takes over the dry runs it started itself).
  *
- * @returns the dry run's settings and its options text (for the compare-and-set)
+ * @returns the dry run's settings, its options text (for the compare-and-set), and the catalogue changes its summary
+ *   counted (a sync dry run; null for any other)
  * @throws DomainError `VALIDATION_FAILED` at `fromRunId` (`not_found`) or `source` (`exclusive`, `required`, `mismatch`)
  */
 export async function checkSlimsAdoption(
   db: Db,
-  o: { fromRunId: string; userId: string | null; now: number; sourceKind: 'db' | 'dump' | null; db: SlimsDbTarget | null },
-): Promise<{ settings: SlimsRunSettings; optionsText: string }> {
+  o: { fromRunId: string; userId: string | null; cli?: boolean; now: number; sourceKind: 'db' | 'dump' | null; db: SlimsDbTarget | null },
+): Promise<{ settings: SlimsRunSettings; optionsText: string; catalogChanges: number | null }> {
   const run = await getRun(db, o.fromRunId);
   const notFound = fieldError('fromRunId', 'not_found');
   if (
@@ -206,7 +239,7 @@ export async function checkSlimsAdoption(
     run.kind !== 'migration' ||
     Number(run.dry_run) !== 1 ||
     run.status !== 'succeeded' ||
-    o.userId === null ||
+    (o.userId === null && o.cli !== true) ||
     run.created_by !== o.userId ||
     run.finished_at === null ||
     Number(run.finished_at) <= o.now - RUN_WORK_KEEP_MS
@@ -229,7 +262,40 @@ export async function checkSlimsAdoption(
       throw fieldError('source', 'mismatch');
     }
   }
-  return { settings, optionsText: run.options };
+  return { settings, optionsText: run.options, catalogChanges: catalogChangesOf(run.summary) };
+}
+
+/** `catalogChanges` of a stored summary: a non-negative integer, or null when the summary has none. */
+function catalogChangesOf(summary: string): number | null {
+  try {
+    const n = (JSON.parse(summary) as { catalogChanges?: unknown } | null)?.catalogChanges;
+    return typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The precheck of a real run that skips the catalogue stages (see the top of this file), on the dry run it takes over.
+ *
+ * @throws DomainError `VALIDATION_FAILED {path: 'skipCatalog', code: 'dry_run_required'}`, 422
+ *   `MIGRATION_PRECHECK_FAILED {reason: 'catalog_changed', count}`
+ */
+function checkSkipCatalog(adopted: { settings: SlimsRunSettings; catalogChanges: number | null } | null): void {
+  if (adopted === null || adopted.settings.catalogMode !== 'sync' || adopted.settings.skipCatalog === true || adopted.catalogChanges === null) {
+    throw fieldError('skipCatalog', 'dry_run_required');
+  }
+  const count = adopted.catalogChanges;
+  if (count > 0) {
+    throw new DomainError('MIGRATION_PRECHECK_FAILED', {
+      detail:
+        `Uji kering menemukan ${count} cantuman atau eksemplar SLiMS yang baru, berubah, atau hilang (catalog_changed); ` +
+        'jalankan dengan mode katalog sync agar katalog ikut diselaraskan / ' +
+        `The dry run found ${count} SLiMS records or copies that are new, changed or gone (catalog_changed); ` +
+        'run with the catalogue mode sync so that the catalogue is re-synced too',
+      meta: { reason: 'catalog_changed', count },
+    });
+  }
 }
 
 /**
@@ -250,16 +316,20 @@ export async function startSlimsMigration(
   const trx = tx.trx;
   const branch = await trx.selectFrom('branches').select('id').where('id', '=', input.branchId).where('archived_at', 'is', null).executeTakeFirst();
   if (branch === undefined) throw fieldError('branchId', 'not_found');
-  let adopted: { settings: SlimsRunSettings; optionsText: string } | null = null;
+  let adopted: { settings: SlimsRunSettings; optionsText: string; catalogChanges: number | null } | null = null;
+  const skipCatalog = input.skipCatalog === true;
+  if (skipCatalog && !input.dryRun && input.fromRunId === null) throw fieldError('skipCatalog', 'dry_run_required');
   if (input.fromRunId !== null) {
     adopted = await checkSlimsAdoption(trx, {
       fromRunId: input.fromRunId,
       userId: tx.actor.id,
+      cli: tx.actor.type === 'cli',
       now: tx.now,
       sourceKind: adoptedSourceKind(input),
       db: input.db,
     });
   }
+  if (skipCatalog && !input.dryRun) checkSkipCatalog(adopted);
   if (!input.dryRun) {
     const libraryName = String((await readSettings(trx, ['library.name'], []))['library.name']);
     await assertTargetEmpty(trx, { allowNonEmpty: input.allowNonEmpty, confirmLibraryName: input.confirmLibraryName, libraryName });
@@ -280,6 +350,8 @@ export async function startSlimsMigration(
     filesStagingId: adopted === null ? input.filesStagingId : null,
     filesDir: adopted === null ? input.filesDir : null,
     adoptedFrom: input.fromRunId,
+    catalogMode: input.catalogMode ?? 'append',
+    skipCatalog,
   };
   const runId = await createRun(tx, { kind: 'migration', dryRun: input.dryRun, format: null, options: settings });
   // A database source and an adopted dump start at `analyze` (S3: no split).
