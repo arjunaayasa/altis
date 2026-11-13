@@ -50,14 +50,17 @@ export interface CoreLogger {
   error(msg: string, fields?: Record<string, unknown>): void;
 }
 
-/** What core logs a failure with: codes and names only, never a message (it could quote SQL or values). */
+/**
+ * What core logs a failure with: codes and names only, never a message (it could quote SQL or values). The error's
+ * class is `errorName`: the server log redacts every field called `name` (a person's name is personal data).
+ */
 export function errorFields(error: unknown): Record<string, unknown> {
   if (isDomainError(error)) return { code: error.code };
   if (error instanceof Error) {
     const code = (error as { code?: unknown }).code;
-    return { name: error.name, code: typeof code === 'string' ? code : undefined };
+    return { errorName: error.name, code: typeof code === 'string' ? code : undefined };
   }
-  return { name: typeof error };
+  return { errorName: typeof error };
 }
 
 /**

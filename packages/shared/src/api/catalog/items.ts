@@ -117,10 +117,18 @@ export const ItemBulkBody = z.strictObject({
       locationId: ulidField.nullable().optional(),
       status: z.enum(ITEM_STATUSES).optional(),
       collectionTypeId: ulidField.optional(),
+      // ---- Komunitas K1 (receiving date) ----
+      receivedDate: dateField.optional(),
     })
     .check((ctx) => {
       if (Object.keys(ctx.value).length === 0) ctx.issues.push({ code: 'custom', params: { code: 'required' }, message: 'required', input: ctx.value });
     }),
+  // ---- Komunitas K1 (receiving date) ----
+  /**
+   * How `set.receivedDate` is applied: `fill_empty` (when absent) sets it only on copies that have none, and refuses
+   * the others with `received_date_set`; `overwrite` sets it on every copy.
+   */
+  receivedDateMode: z.enum(['fill_empty', 'overwrite']).optional(),
 });
 
 export type ItemBulkBody = z.infer<typeof ItemBulkBody>;
@@ -132,7 +140,10 @@ export type ItemBulkBody = z.infer<typeof ItemBulkBody>;
  */
 export interface ItemBulkResponse {
   updated: number;
-  refused: { id: string; code: 'invalid_transition' | 'not_found' | 'invalid_location' | 'record_archived' | 'archived_reference' }[];
+  refused: {
+    id: string;
+    code: 'invalid_transition' | 'not_found' | 'invalid_location' | 'record_archived' | 'archived_reference' | 'received_date_set';
+  }[];
 }
 
 /** `GET catalog/items`: filters, then a keyset page. */

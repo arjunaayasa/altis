@@ -81,4 +81,8 @@ export const SCHEDULES: readonly ScheduleDef[] = Object.freeze([
   // ---- Phase 2 (catalog): Task 3 ----
   // §12.6: the catalog's daily upkeep at 03:40 (catalog/housekeeping.ts: the search index, orphan uploads, expired exports).
   def({ name: 'catalog.housekeeping', expr: '40 3 * * *', jobType: 'catalog.housekeeping', permission: 'system.jobs.manage', enabledByDefault: true }),
+  // ---- Komunitas K1 (reports) ----
+  // The reports' daily upkeep at 03:50 (reports/housekeeping: abandoned and expired runs, report files, work folders,
+  // the community contexts' orphan uploads), after the catalogue's.
+  def({ name: 'reports.housekeeping', expr: '50 3 * * *', jobType: 'reports.housekeeping', permission: 'system.jobs.manage', enabledByDefault: true }),
 ]);

@@ -75,3 +75,7 @@ export type { ExportFileExt } from './datapath.js';
 export { adoptRunWork } from './data-files.js';
 // Phase 2 Task 10: a file below an operator-named folder (realpath-bounded), and a run work file from its folder.
 export { dataDirOf, openUnderRoot, runWorkFileIn } from './root-files.js';
+// ---- Komunitas K1 (report paths) ----
+// A report run's file and work files: the only builders of paths under `exports/reports/` and `tmp/reports/`.
+export { reportExportPath, reportExportsDir, reportWorkDir, reportWorkPath, reportWorkRoot } from './datapath.js';
+export type { ReportFileExt } from './datapath.js';

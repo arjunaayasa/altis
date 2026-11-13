@@ -47,6 +47,7 @@ import { ALL_ROUTES } from '../../src/routes.js';
 import { appPrecheck, createAppOps } from '../../src/services.js';
 import { createAgent, type Agent, type AgentReply } from '../agent.js';
 import { PHASE2_AUDIT_SCRIPTS, PHASE2_PENDING_ALLOWED, type AuditBrowser, type AuditScriptContext } from '../audit/catalog.js';
+import { K1_PENDING_ALLOWED, KOMUNITAS_AUDIT_SCRIPTS } from '../audit/komunitas.js';
 import { captureIo } from '../cli-support.js';
 import { NEW_PASSWORD, PERSONA_PASSWORD, seedJob, seedUser, stagedArchive, totpCode, type SeedContext } from '../matrix-fixtures.js';
 import { seedStaff, sessionCookieFor, sessionCsrfFor } from '../support-auth.js';
@@ -994,8 +995,32 @@ describe('audit coverage: the Phase 2 scripts own every Phase 2 action, once', (
   });
 });
 
-describe.skipIf(!ctx.available)(`audit coverage of the Phase 2 actions [${engineLabel()}]`, () => {
-  const ready = Object.values(PHASE2_AUDIT_SCRIPTS).some((s) => s.run !== null);
+// ---- Komunitas K1 (reports and accreditation) ----
+// The community actions, one script per area (../audit/komunitas.ts), run after the catalogue's on the same
+// installation with the same checks; a script still null lists its actions as pending while K1_PENDING_ALLOWED.
+
+/** The community actions: AUDIT_ACTIONS from the first action of reports and accreditation to the end. */
+const K1_ACTIONS: readonly AuditAction[] = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('reports.run.start'));
+
+/** Every script the installation runs: the catalogue's, then the community's. */
+const AUDIT_SCRIPTS = { ...PHASE2_AUDIT_SCRIPTS, ...KOMUNITAS_AUDIT_SCRIPTS };
+
+/** Whether the null script of `area` may list its actions as pending. */
+const pendingAllowed = (area: string): boolean => (Object.hasOwn(KOMUNITAS_AUDIT_SCRIPTS, area) ? K1_PENDING_ALLOWED : PHASE2_PENDING_ALLOWED);
+
+describe('audit coverage: the community scripts own every community action, once', () => {
+  it('the seven areas list the 18 actions between them, each in exactly one, under names of their own', () => {
+    expect(K1_ACTIONS).toHaveLength(18);
+    expect(Object.keys(KOMUNITAS_AUDIT_SCRIPTS)).toEqual(['reports', 'periods', 'registers', 'usage', 'results', 'slims-usage', 'catalog']);
+    expect(Object.keys(KOMUNITAS_AUDIT_SCRIPTS).filter((area) => Object.hasOwn(PHASE2_AUDIT_SCRIPTS, area))).toEqual([]);
+    const owned = Object.values(KOMUNITAS_AUDIT_SCRIPTS).flatMap((s) => [...s.actions]);
+    expect(new Set(owned).size).toBe(owned.length);
+    expect([...owned].sort()).toEqual([...K1_ACTIONS].sort());
+  });
+});
+
+describe.skipIf(!ctx.available)(`audit coverage of the Phase 2 and community actions [${engineLabel()}]`, () => {
+  const ready = Object.values(AUDIT_SCRIPTS).some((s) => s.run !== null);
   /** Six hours behind the real clock: room for a script to move it on, an entry never dated ahead of the real one. */
   const clock = { now: Date.now() - 6 * 3_600_000 };
   let root: string;
@@ -1117,11 +1142,11 @@ describe.skipIf(!ctx.available)(`audit coverage of the Phase 2 actions [${engine
     if (root !== undefined) await fsp.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
-  for (const [area, script] of Object.entries(PHASE2_AUDIT_SCRIPTS)) {
+  for (const [area, script] of Object.entries(AUDIT_SCRIPTS)) {
     const run = script.run;
     if (run === null) {
       for (const action of script.actions) {
-        if (PHASE2_PENDING_ALLOWED) it.todo(`${area}: ${action} (its script is not written yet)`);
+        if (pendingAllowed(area)) it.todo(`${area}: ${action} (its script is not written yet)`);
         else it(`${area}: ${action}`, () => expect.fail(`the ${area} audit script is still null, so ${action} is not covered (A10)`));
       }
       continue;
