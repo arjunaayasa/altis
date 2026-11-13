@@ -1,12 +1,12 @@
 import { randomBytes } from 'node:crypto';
 import type { FileHandle } from 'node:fs/promises';
-import { crc32 } from 'node:zlib';
 import { canonicalize, decodeBase64Url, encodeBase64Url } from '@altis/crypto';
-import { ALTISBAK_ENTRY, altisbakCentralPath, openReadWrite, truncateFile, type DataPath } from '@altis/platform';
+import { ALTISBAK_ENTRY, altisbakCentralPath, openRead, openReadWrite, truncateFile, type DataPath } from '@altis/platform';
 import { DomainError } from '@altis/shared';
 import { z } from 'zod';
 import { ALTISBAK_HEADER_ENTRY, altisbakHeaderSchema, type AltisbakHeader } from './altisbak.js';
-import { ByteQueue, NONCE_PREFIX_BYTES, STREAM_CHUNK, STREAM_TAG_BYTES, encryptChunk, encryptedSize, streamChunkCount } from './stream-cipher.js';
+import { ByteQueue, NONCE_PREFIX_BYTES, STREAM_CHUNK, STREAM_TAG_BYTES, encryptChunk, streamChunkCount } from './stream-cipher.js';
+import { openZipWriter, type ZipEntryState, type ZipWriter } from './zip-writer.js';
 
 // The resumable `.altisbak` writer (spec §9.9 "Download": "ZIP64, entri stored, bisa dilanjutkan dengan append";
 // decision C13; M18). Every entry is written in chunks of 1 MiB of plaintext, so a job slice can stop between two
@@ -39,40 +39,23 @@ import { ByteQueue, NONCE_PREFIX_BYTES, STREAM_CHUNK, STREAM_TAG_BYTES, encryptC
 // the source yields the same bytes again. So only table parts and blobs (files never rewritten) pause inside;
 // `manifest.json` is written whole, and from its start under a fresh prefix should a checkpoint lie inside it (R1c-6).
 //
+// The bytes are written by the shared resumable ZIP writer (zip-writer.ts) with ZIP64 fields forced and a data
+// descriptor on every entry: this file keeps what is particular to `.altisbak` (the clear header first, the entry
+// names, 1 MiB chunks, encryption, where an entry may pause) and maps its own checkpoint onto the shared one.
+//
 // The writer opens its files for each call and closes them before returning, so a paused writer holds nothing open
 // and can simply be dropped. The sidecar stays after finish() (a repeated finish() needs it); it goes with its
 // folder.
 
-/** The flags of every entry: bit 3 (data descriptor) and bit 11 (UTF-8 name). */
-const FLAGS = 0x0808;
-/** Version 4.5 (ZIP64); made by Unix (3). */
-const VERSION_NEEDED = 45;
-const VERSION_MADE_BY = (3 << 8) | 45;
-/** 1980-01-01 00:00:00, the earliest DOS date: constant, so that a resumed archive is byte-identical. */
-const DOS_DATE = (0 << 9) | (1 << 5) | 1;
-const DOS_TIME = 0;
-/** A regular file, mode 0600, in the high half of the external attributes. */
-const EXTERNAL_ATTRIBUTES = (0o100600 << 16) >>> 0;
+/** The local header before the name, and its ZIP64 extra field (the layout zip-writer.ts writes with forceZip64). */
 const LOCAL_HEADER_BYTES = 30;
 const LOCAL_EXTRA_BYTES = 4 + 16;
+/** A central record before the name, and its ZIP64 extra field. */
 const CENTRAL_HEADER_BYTES = 46;
 const CENTRAL_EXTRA_BYTES = 4 + 24;
-const DESCRIPTOR_BYTES = 24;
-const ZIP64_EOCD_BYTES = 56;
-const ZIP64_LOCATOR_BYTES = 20;
-const EOCD_BYTES = 22;
-const MARK16 = 0xffff;
 const MARK32 = 0xffff_ffff;
 /** A 7-byte nonce prefix as unpadded base64url. */
 const PREFIX_TEXT = /^[A-Za-z0-9_-]{10}$/;
-
-/** One finished entry: its name, the CRC-32 and size of its stored bytes, and where its local header begins. */
-interface CentralRecord {
-  name: string;
-  crc32: number;
-  size: number;
-  offset: number;
-}
 
 /**
  * What is durable in the archive and its sidecar (see the module comment). Plain JSON of a fixed size (well under
@@ -166,8 +149,10 @@ const CENTRAL_RECORD_MAX = CENTRAL_HEADER_BYTES + 82 + CENTRAL_EXTRA_BYTES;
  * one makes the writer write it again from its start under a fresh prefix (ruling R1c-6).
  */
 const RESUMABLE_ENTRY = /^(tables|blobs)\//;
-/** How much of the sidecar finish() copies at a time. */
+/** How much of the sidecar finish() checks at a time. */
 const CENTRAL_COPY_BYTES = 1_048_576;
+/** The `.altisbak` layout of the shared writer: ZIP64 fields and a data descriptor on every entry, DOS time 1980-01-01. */
+const ZIP_LAYOUT = { forceZip64: true, descriptor: 'always' } as const;
 
 /** The sidecar is shorter than its checkpoint, or does not hold the central records of the entries written. */
 function centralCorrupt(path: string, reason: 'central_short' | 'central_mismatch'): DomainError {
@@ -186,122 +171,6 @@ function sizeMismatch(name: string, plainSize: number): DomainError {
       `The content of entry ${name} is not the ${plainSize} bytes declared`,
     meta: { reason: 'size_mismatch' },
   });
-}
-
-/** `ENOSPC`/`EDQUOT` from a write or fsync as DISK_QUOTA (P21); anything else as it is. */
-function quotaMapped(error: unknown, path: string): unknown {
-  const code = typeof error === 'object' && error !== null ? (error as NodeJS.ErrnoException).code : undefined;
-  if (code !== 'ENOSPC' && code !== 'EDQUOT') return error;
-  return new DomainError('DISK_QUOTA', {
-    detail:
-      `Ruang disk atau kuota hosting habis saat menulis ${path} (${code}) / ` +
-      `The disk is full or the hosting quota is used up while writing ${path} (${code})`,
-    meta: { code },
-    cause: error,
-  });
-}
-
-function u64(buffer: Buffer, value: number, at: number): void {
-  buffer.writeBigUInt64LE(BigInt(value), at);
-}
-
-function localHeader(name: Buffer): Buffer {
-  const b = Buffer.alloc(LOCAL_HEADER_BYTES + name.byteLength + LOCAL_EXTRA_BYTES);
-  b.writeUInt32LE(0x04034b50, 0);
-  b.writeUInt16LE(VERSION_NEEDED, 4);
-  b.writeUInt16LE(FLAGS, 6);
-  b.writeUInt16LE(0, 8); // stored
-  b.writeUInt16LE(DOS_TIME, 10);
-  b.writeUInt16LE(DOS_DATE, 12);
-  b.writeUInt32LE(0, 14); // CRC-32: in the data descriptor
-  b.writeUInt32LE(MARK32, 18);
-  b.writeUInt32LE(MARK32, 22);
-  b.writeUInt16LE(name.byteLength, 26);
-  b.writeUInt16LE(LOCAL_EXTRA_BYTES, 28);
-  name.copy(b, LOCAL_HEADER_BYTES);
-  const x = LOCAL_HEADER_BYTES + name.byteLength;
-  b.writeUInt16LE(0x0001, x);
-  b.writeUInt16LE(16, x + 2);
-  // original and compressed size: 0 here, as bit 3 asks; the data descriptor holds them
-  return b;
-}
-
-function dataDescriptor(crc: number, size: number): Buffer {
-  const b = Buffer.alloc(DESCRIPTOR_BYTES);
-  b.writeUInt32LE(0x08074b50, 0);
-  b.writeUInt32LE(crc, 4);
-  u64(b, size, 8);
-  u64(b, size, 16);
-  return b;
-}
-
-function centralRecord(r: CentralRecord): Buffer {
-  const name = Buffer.from(r.name, 'utf8');
-  const b = Buffer.alloc(CENTRAL_HEADER_BYTES + name.byteLength + CENTRAL_EXTRA_BYTES);
-  b.writeUInt32LE(0x02014b50, 0);
-  b.writeUInt16LE(VERSION_MADE_BY, 4);
-  b.writeUInt16LE(VERSION_NEEDED, 6);
-  b.writeUInt16LE(FLAGS, 8);
-  b.writeUInt16LE(0, 10);
-  b.writeUInt16LE(DOS_TIME, 12);
-  b.writeUInt16LE(DOS_DATE, 14);
-  b.writeUInt32LE(r.crc32, 16);
-  b.writeUInt32LE(MARK32, 20);
-  b.writeUInt32LE(MARK32, 24);
-  b.writeUInt16LE(name.byteLength, 28);
-  b.writeUInt16LE(CENTRAL_EXTRA_BYTES, 30);
-  b.writeUInt16LE(0, 32); // comment
-  b.writeUInt16LE(0, 34); // disk
-  b.writeUInt16LE(0, 36); // internal attributes
-  b.writeUInt32LE(EXTERNAL_ATTRIBUTES, 38);
-  b.writeUInt32LE(MARK32, 42);
-  name.copy(b, CENTRAL_HEADER_BYTES);
-  const x = CENTRAL_HEADER_BYTES + name.byteLength;
-  b.writeUInt16LE(0x0001, x);
-  b.writeUInt16LE(24, x + 2);
-  u64(b, r.size, x + 4); // original size
-  u64(b, r.size, x + 12); // compressed size
-  u64(b, r.offset, x + 20); // local header offset
-  return b;
-}
-
-/** The ZIP64 end of central directory record, its locator and the classic EOCD with the ZIP64 markers. */
-function endRecords(entries: number, cdOffset: number, cdSize: number): Buffer {
-  const b = Buffer.alloc(ZIP64_EOCD_BYTES + ZIP64_LOCATOR_BYTES + EOCD_BYTES);
-  b.writeUInt32LE(0x06064b50, 0);
-  u64(b, ZIP64_EOCD_BYTES - 12, 4);
-  b.writeUInt16LE(VERSION_MADE_BY, 12);
-  b.writeUInt16LE(VERSION_NEEDED, 14);
-  b.writeUInt32LE(0, 16); // this disk
-  b.writeUInt32LE(0, 20); // the disk of the central directory
-  u64(b, entries, 24);
-  u64(b, entries, 32);
-  u64(b, cdSize, 40);
-  u64(b, cdOffset, 48);
-  const l = ZIP64_EOCD_BYTES;
-  b.writeUInt32LE(0x07064b50, l);
-  b.writeUInt32LE(0, l + 4);
-  u64(b, cdOffset + cdSize, l + 8);
-  b.writeUInt32LE(1, l + 16);
-  const e = l + ZIP64_LOCATOR_BYTES;
-  b.writeUInt32LE(0x06054b50, e);
-  b.writeUInt16LE(0, e + 4);
-  b.writeUInt16LE(0, e + 6);
-  b.writeUInt16LE(MARK16, e + 8);
-  b.writeUInt16LE(MARK16, e + 10);
-  b.writeUInt32LE(MARK32, e + 12);
-  b.writeUInt32LE(MARK32, e + 16);
-  b.writeUInt16LE(0, e + 20);
-  return b;
-}
-
-async function writeAt(handle: FileHandle, data: Uint8Array, position: number): Promise<void> {
-  let done = 0;
-  while (done < data.byteLength) {
-    const { bytesWritten } = await handle.write(data, done, data.byteLength - done, position + done);
-    if (!(bytesWritten > 0)) throw new Error('write made no progress');
-    done += bytesWritten;
-  }
 }
 
 async function readAt(handle: FileHandle, length: number, position: number): Promise<Buffer> {
@@ -388,8 +257,8 @@ function stateOf(cp: AltisbakCheckpoint, encrypted: boolean): State {
 }
 
 /**
- * Checks, as finish() copies them, that the sidecar's bytes are `entries` central records as centralRecord() writes
- * them: names of the grammar, the header first, no name twice, local headers in increasing order before `offset`.
+ * Checks, before finish() has them copied in, that the sidecar's bytes are `entries` central records of an archive:
+ * names of the grammar, the header first, no name twice, local headers in increasing order before `offset`.
  */
 class CentralCheck {
   private pending: Buffer = Buffer.alloc(0);
@@ -468,12 +337,14 @@ export async function openAltisbakWriter(path: DataPath, o: OpenAltisbakWriterOp
   };
 
   let state: State;
+  /**
+   * The shared writer, kept from one entry to the next while the calls succeed (it then holds exactly `state`);
+   * null after a pause or a failure, when the next call opens one from `state`.
+   */
+  let zip: ZipWriter | null = null;
   if (o.checkpoint === null) {
     state = { offset: 0, entry: 0, chunk: 0, plainSize: 0, crc32: 0, prefix: null, centralBytes: 0 };
-    await sizeOf(path);
-    await truncateFile(path, 0);
-    await sizeOf(central);
-    await truncateFile(central, 0);
+    zip = await openZipWriter(path, central, { checkpoint: null, ...ZIP_LAYOUT });
   } else {
     state = stateOf(o.checkpoint, dek !== null);
     if ((await sizeOf(path)) < state.offset) {
@@ -489,26 +360,16 @@ export async function openAltisbakWriter(path: DataPath, o: OpenAltisbakWriterOp
   /** The names written by this writer: a name already written by an earlier one is refused by finish(). */
   const written = new Set<string>();
 
-  /**
-   * Appends `record` at `state.centralBytes` of the sidecar (cut there first) and fsyncs it; on failure the sidecar
-   * is cut back again.
-   */
-  async function appendCentral(record: Buffer): Promise<void> {
-    const handle = await openReadWrite(central);
-    try {
-      await handle.truncate(state.centralBytes);
-      await writeAt(handle, record, state.centralBytes);
-      await handle.sync();
-    } catch (error) {
-      await handle.truncate(state.centralBytes).catch(() => undefined);
-      throw quotaMapped(error, central);
-    } finally {
-      await handle.close();
-    }
-  }
-
   let busy = false;
   let finished = false;
+
+  /** The shared writer over both files, carrying on from `open` (the entry in progress) or from between entries. */
+  function zipWriter(open: ZipEntryState | null): Promise<ZipWriter> {
+    return openZipWriter(path, central, {
+      checkpoint: { offset: state.offset, entries: state.entry, centralBytes: state.centralBytes, open },
+      ...ZIP_LAYOUT,
+    });
+  }
 
   /** One entry, or its continuation (see AltisbakWriter.writeEntry). */
   async function write(
@@ -521,25 +382,23 @@ export async function openAltisbakWriter(path: DataPath, o: OpenAltisbakWriterOp
     const nameBytes = Buffer.from(name, 'utf8');
     const headerBytes = LOCAL_HEADER_BYTES + nameBytes.byteLength + LOCAL_EXTRA_BYTES;
     const chunks = streamChunkCount(plainSize);
-    const storedSize = encrypted ? encryptedSize(plainSize) : plainSize;
     const resumable = RESUMABLE_ENTRY.test(name);
     let chunk = state.chunk;
-    let { offset: position, crc32: crc, prefix } = state;
+    let prefix = state.prefix;
     // A part or blob goes on where it paused: it must be the same size (its chunks then reach past `chunk`). A
     // generated entry starts again below, whatever its size now.
     if (chunk > 0 && resumable && (plainSize !== state.plainSize || chunk >= chunks)) {
       throw new TypeError(`writeEntry: the entry in progress has ${state.plainSize} bytes, not ${plainSize}`);
     }
 
-    const handle = await openReadWrite(path);
     let pull: Pull | null = null;
     try {
-      let headerAt = position;
+      let open: ZipEntryState | null = null;
       if (chunk > 0) {
         // Inside an entry: every chunk before `chunk` was a full one, so the header lies a known distance back.
         const stored = encrypted ? NONCE_PREFIX_BYTES + chunk * (STREAM_CHUNK + STREAM_TAG_BYTES) : chunk * STREAM_CHUNK;
-        headerAt = position - stored - headerBytes;
-        const head = headerAt >= 0 ? await readAt(handle, LOCAL_HEADER_BYTES + nameBytes.byteLength, headerAt) : Buffer.alloc(0);
+        const headerAt = state.offset - stored - headerBytes;
+        const head = headerAt >= 0 ? await readHead(headerAt, LOCAL_HEADER_BYTES + nameBytes.byteLength) : Buffer.alloc(0);
         if (
           head.byteLength !== LOCAL_HEADER_BYTES + nameBytes.byteLength ||
           head.readUInt32LE(0) !== 0x04034b50 ||
@@ -547,26 +406,25 @@ export async function openAltisbakWriter(path: DataPath, o: OpenAltisbakWriterOp
         ) {
           throw new TypeError(`writeEntry: the entry in progress is not ${name}`);
         }
-        if (!resumable) {
+        if (resumable) {
+          open = { name, method: 0, headerOffset: headerAt, crc32: state.crc32, compressedSize: stored, size: stored, zip64: true };
+        } else {
           // A generated entry may come out with other bytes this time: it is written again from its start under a
-          // fresh nonce prefix, so that no (prefix, index) nonce encrypts two different plaintexts (ruling R1c-6). The
-          // durable state steps back to the entry's start, which is durable since the checkpoint lies after it.
+          // fresh nonce prefix, so that no (prefix, index) nonce ever encrypts two different plaintexts. The durable
+          // state steps back to the entry's start, which is durable since the checkpoint lies after it.
           state = { ...state, offset: headerAt, chunk: 0, plainSize: 0, crc32: 0, prefix: null };
-          position = headerAt;
           chunk = 0;
         }
       }
+      const w = chunk === 0 && zip !== null ? zip : await zipWriter(open);
+      zip = null;
       if (chunk === 0) {
-        await writeAt(handle, localHeader(nameBytes), position);
-        position += headerBytes;
-        crc = 0;
+        await w.beginEntry(name, { method: 0 });
         prefix = null;
         if (encrypted) {
           prefix = random(NONCE_PREFIX_BYTES);
           if (!(prefix instanceof Uint8Array) || prefix.byteLength !== NONCE_PREFIX_BYTES) throw new TypeError('random() must return the bytes asked for');
-          await writeAt(handle, prefix, position);
-          position += NONCE_PREFIX_BYTES;
-          crc = crc32(prefix, crc);
+          await w.write(prefix);
         }
       }
 
@@ -575,41 +433,58 @@ export async function openAltisbakWriter(path: DataPath, o: OpenAltisbakWriterOp
         const want = Math.min(STREAM_CHUNK, plainSize - k * STREAM_CHUNK);
         const plain = await pull.take(want);
         if (plain === null) throw sizeMismatch(name, plainSize);
-        const data = encrypted ? encryptChunk(dek!, prefix!, k, k === chunks - 1, name, plain) : plain;
-        await writeAt(handle, data, position);
-        position += data.byteLength;
-        crc = crc32(data, crc);
+        await w.write(encrypted ? encryptChunk(dek!, prefix!, k, k === chunks - 1, name, plain) : plain);
         if (resumable && k + 1 < chunks && clock() >= deadline) {
-          await handle.sync();
-          state = { ...state, offset: position, chunk: k + 1, plainSize, crc32: crc, prefix };
+          const cp = await w.checkpoint();
+          state = { ...state, offset: cp.offset, chunk: k + 1, plainSize, crc32: cp.open!.crc32, prefix };
           return 'paused';
         }
       }
       if (!(await pull.exhausted())) throw sizeMismatch(name, plainSize);
-      await writeAt(handle, dataDescriptor(crc, storedSize), position);
-      position += DESCRIPTOR_BYTES;
-      if (position - headerAt !== headerBytes + storedSize + DESCRIPTOR_BYTES) throw new Error('writeEntry: the entry has the wrong length');
-      await handle.sync();
-      const record = centralRecord({ name, crc32: crc >>> 0, size: storedSize, offset: headerAt });
-      await appendCentral(record);
+      await w.endEntry();
+      const cp = await w.checkpoint();
       written.add(name);
-      state = {
-        offset: position,
-        entry: state.entry + 1,
-        chunk: 0,
-        plainSize: 0,
-        crc32: 0,
-        prefix: null,
-        centralBytes: state.centralBytes + record.byteLength,
-      };
+      state = { offset: cp.offset, entry: cp.entries, chunk: 0, plainSize: 0, crc32: 0, prefix: null, centralBytes: cp.centralBytes };
+      zip = w;
       return 'done';
     } catch (error) {
-      // Back to the last durable state, which also frees what this call wrote (P21: no partial bytes left).
-      await handle.truncate(state.offset).catch(() => undefined);
-      throw quotaMapped(error, path);
+      // Back to the last durable state, which also frees what this call wrote: no partial bytes are left on a full
+      // disk. (The shared writer has cut both files back itself when its own write failed.)
+      await truncateFile(path, state.offset).catch(() => undefined);
+      throw error;
     } finally {
       await pull?.close().catch(() => undefined);
+    }
+  }
+
+  /** `length` bytes of the archive at `at` (fewer at its end). */
+  async function readHead(at: number, length: number): Promise<Buffer> {
+    const handle = await openRead(path);
+    try {
+      return await readAt(handle, length, at);
+    } finally {
       await handle.close();
+    }
+  }
+
+  /**
+   * Checks the sidecar's first `state.centralBytes` bytes with CentralCheck.
+   *
+   * @throws DomainError STATE_CORRUPT `central_short`, `central_mismatch`
+   */
+  async function checkCentral(): Promise<void> {
+    const records = await openRead(central);
+    try {
+      const check = new CentralCheck(state.offset);
+      for (let at = 0; at < state.centralBytes; ) {
+        const piece = await readAt(records, Math.min(CENTRAL_COPY_BYTES, state.centralBytes - at), at);
+        if (piece.byteLength === 0) throw centralCorrupt(central, 'central_short');
+        if (!check.push(piece)) throw centralCorrupt(central, 'central_mismatch');
+        at += piece.byteLength;
+      }
+      if (!check.end(state.entry)) throw centralCorrupt(central, 'central_mismatch');
+    } finally {
+      await records.close();
     }
   }
 
@@ -648,35 +523,14 @@ export async function openAltisbakWriter(path: DataPath, o: OpenAltisbakWriterOp
     finish() {
       return guarded(async () => {
         if (state.chunk !== 0) throw new TypeError('finish: an entry is still in progress');
-        const directoryBytes = state.centralBytes;
-        const tail = endRecords(state.entry, state.offset, directoryBytes);
-        await truncateFile(path, state.offset);
-        const records = await openReadWrite(central);
-        let handle: FileHandle | null = null;
-        try {
-          if ((await records.stat()).size < directoryBytes) throw centralCorrupt(central, 'central_short');
-          handle = await openReadWrite(path);
-          // the central directory: the sidecar's records, checked as they are copied in
-          const check = new CentralCheck(state.offset);
-          for (let at = 0; at < directoryBytes; ) {
-            const piece = await readAt(records, Math.min(CENTRAL_COPY_BYTES, directoryBytes - at), at);
-            if (piece.byteLength === 0) throw centralCorrupt(central, 'central_short');
-            if (!check.push(piece)) throw centralCorrupt(central, 'central_mismatch');
-            await writeAt(handle, piece, state.offset + at);
-            at += piece.byteLength;
-          }
-          if (!check.end(state.entry)) throw centralCorrupt(central, 'central_mismatch');
-          await writeAt(handle, tail, state.offset + directoryBytes);
-          await handle.sync();
-        } catch (error) {
-          await handle?.truncate(state.offset).catch(() => undefined);
-          throw quotaMapped(error, path);
-        } finally {
-          await handle?.close();
-          await records.close();
-        }
+        // a writer opened from the checkpoint cuts the archive back to it; finish() copies the sidecar's records in
+        // (checking them as an archive's) and writes the end records
+        const w = zip ?? (await zipWriter(null));
+        zip = null;
+        await checkCentral();
+        const { size } = await w.finish();
         finished = true;
-        return { size: state.offset + directoryBytes + tail.byteLength };
+        return { size };
       });
     },
   };

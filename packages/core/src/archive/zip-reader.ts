@@ -16,8 +16,8 @@ import yauzl, { type Entry, type ReadStreamOptions, type ZipFile } from 'yauzl';
 //                    ending in `/`), a name the caller's allowlist refuses, or a name seen before;
 //   reason `format`  encrypted (traditional or strong, or a masked central directory), compressed with anything but
 //                    stored (0) or deflate (8), more entries than `maxEntries`, or not a readable zip at all;
-//   reason `bomb`    a deflate entry declaring more than 10 times its compressed size, or entries whose data overlap
-//                    (the overlapping-file zip bomb).
+//   reason `bomb`    a deflate entry declaring more than `maxRatio` (default 10) times its compressed size, or entries
+//                    whose data overlap (the overlapping-file zip bomb).
 //
 // Names are decoded here, not by yauzl (`decodeStrings: false`): the checks see the bytes the archive holds, and an
 // Info-ZIP Unicode-path extra field cannot show yauzl another name than the one checked. Reading checks again what
@@ -30,7 +30,7 @@ import yauzl, { type Entry, type ReadStreamOptions, type ZipFile } from 'yauzl';
 
 /** The default bound on the number of entries (`maxEntries`). */
 export const ARCHIVE_MAX_ENTRIES = 100_000;
-/** A deflate entry may declare at most this many times its compressed size. */
+/** A deflate entry may declare at most this many times its compressed size (the default `maxRatio`). */
 export const DEFLATE_MAX_RATIO = 10;
 
 /** The bytes of a local file header before its name and extra field. */
@@ -83,6 +83,11 @@ export interface OpenArchiveOptions {
   allow: RegExp;
   /** At most this many entries (default {@link ARCHIVE_MAX_ENTRIES}). */
   maxEntries?: number;
+  /**
+   * A deflate entry may declare at most this many times its compressed size (default {@link DEFLATE_MAX_RATIO}). Only
+   * for files ALTIS wrote itself, such as an XLSX read back in a test: spreadsheet XML compresses far beyond 10:1.
+   */
+  maxRatio?: number;
 }
 
 function invalid(reason: InvalidReason, why: string, cause?: unknown): DomainError {
@@ -194,12 +199,15 @@ function notRegular(entry: Entry, name: string): boolean {
  *
  * @throws DomainError BACKUP_INVALID (`meta.reason` `path`, `entry`, `format` or `bomb`); the open error of the file
  *   (ENOENT, ...) as it is
- * @throws TypeError for an `allow` that is not a RegExp or a `maxEntries` that is not a positive integer
+ * @throws TypeError for an `allow` that is not a RegExp, a `maxEntries` that is not a positive integer or a `maxRatio`
+ *   that is not a positive finite number
  */
 export async function openArchive(path: DataPath, o: OpenArchiveOptions): Promise<ArchiveReader> {
   if (!(o?.allow instanceof RegExp)) throw new TypeError('openArchive: allow must be a RegExp');
   const maxEntries = o.maxEntries ?? ARCHIVE_MAX_ENTRIES;
   if (!Number.isSafeInteger(maxEntries) || maxEntries < 1) throw new TypeError('openArchive: maxEntries must be a positive integer');
+  const maxRatio = o.maxRatio ?? DEFLATE_MAX_RATIO;
+  if (typeof maxRatio !== 'number' || !Number.isFinite(maxRatio) || maxRatio <= 0) throw new TypeError('openArchive: maxRatio must be a positive finite number');
   // A global or sticky RegExp keeps state between test() calls; a copy without those flags does not.
   const allow = new RegExp(o.allow.source, o.allow.flags.replace(/[gy]/g, ''));
 
@@ -232,8 +240,8 @@ export async function openArchive(path: DataPath, o: OpenArchiveOptions): Promis
       if (method !== METHOD_STORED && method !== METHOD_DEFLATE) {
         throw invalid('format', `${shown(name)} memakai metode kompresi ${method} / ${shown(name)} uses compression method ${method}`);
       }
-      if (method === METHOD_DEFLATE && entry.uncompressedSize > DEFLATE_MAX_RATIO * entry.compressedSize) {
-        throw invalid('bomb', `${shown(name)} mengembang lebih dari ${DEFLATE_MAX_RATIO}× / ${shown(name)} inflates more than ${DEFLATE_MAX_RATIO}×`);
+      if (method === METHOD_DEFLATE && entry.uncompressedSize > maxRatio * entry.compressedSize) {
+        throw invalid('bomb', `${shown(name)} mengembang lebih dari ${maxRatio}× / ${shown(name)} inflates more than ${maxRatio}×`);
       }
       raw.push(entry);
       entries.push(
