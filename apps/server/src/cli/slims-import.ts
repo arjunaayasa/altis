@@ -33,7 +33,9 @@ import { notInstalled } from './migrate.js';
 //
 // ---- Komunitas K1 (catalogue re-sync) ----
 // `[--catalog-mode append|sync] [--skip-catalog --from-run <id>]`: the catalogue mode, the skip of the catalogue stages
-// and the dry run a run follows, checked by cli/index.ts and taken over by the run's options.
+// and the dry run a run follows, checked by cli/index.ts and taken over by the run's options. With `--from-run` the run
+// takes over a dry run this command started (its work folder; a dump is not given again, a database is), and with
+// `--skip-catalog` the start refuses it unless that dry run was a sync one that found no catalogue change.
 //
 // 1. Before anything is written: the database password from `ALTIS_SLIMS_DB_PASSWORD`, else a prompt without echo at
 //    the terminal (never an argument: cli/index.ts refuses `--password`); with `--allow-non-empty` the library's name
@@ -261,7 +263,9 @@ export async function slimsImport(ctx: BootContext, env: Env, o: SlimsImportOpti
             sourceName: 'slims',
             allowNonEmpty: o.allowNonEmpty,
             confirmLibraryName,
-            fromRunId: null,
+            fromRunId: o.fromRunId ?? null,
+            ...(o.catalogMode === undefined ? {} : { catalogMode: o.catalogMode }),
+            ...(o.skipCatalog === undefined ? {} : { skipCatalog: o.skipCatalog }),
           },
           { keyring: config.keyring },
         );

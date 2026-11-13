@@ -4,12 +4,31 @@ import type { AcqSource } from '@altis/shared';
 // Pure; the items stage reads `mst_item_status` once and hands each item's row here.
 //
 // - `item_status_id` `''` or `'0'` (SLiMS's "available", stored either way) → `available`;
-// - `R` → `repair`, `MIS` → `missing`, `NL` or a status row with `no_loan = 1` → `not_for_loan`;
+// - `R` → `repair`, `MIS` → `missing`;
+// - a status the library added for weeding or for a copy declared lost, told by its name (SLiMS has no such status of
+//   its own): `Disiangi`, `Penyiangan`, `Weeded`, `Withdrawn` → `withdrawn` (archived); `Hilang`, `Lost` → `lost`;
+// - `NL` or a status row with `no_loan = 1` → `not_for_loan`;
 // - any other status → `available` with the SLiMS name and code in `status_note`, and a report row (`unknown`).
-// Codes compare without case and outer blanks (MySQL compares them under a case-insensitive collation).
+// Codes compare without case and outer blanks (MySQL compares them under a case-insensitive collation); names without
+// case, accents and repeated blanks, the whole name only.
 
 /** The ALTIS statuses a SLiMS status becomes. */
-export type SlimsItemStatus = 'available' | 'not_for_loan' | 'repair' | 'missing';
+export type SlimsItemStatus = 'available' | 'not_for_loan' | 'repair' | 'missing' | 'withdrawn' | 'lost';
+
+/** Status names of weeded copies. */
+const WEEDED_NAMES: ReadonlySet<string> = new Set(['disiangi', 'penyiangan', 'weeded', 'weeding', 'withdrawn']);
+/** Status names of copies declared lost. */
+const LOST_NAMES: ReadonlySet<string> = new Set(['hilang', 'dinyatakan hilang', 'lost']);
+
+/** A status name as it is compared: lower case, without accents, blanks collapsed. */
+function nameKey(name: string): string {
+  return name
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 /** A row of `mst_item_status`, as the items stage reads it. */
 export interface SlimsStatusRow {
@@ -37,6 +56,9 @@ export function slimsItemStatus(id: string, row: SlimsStatusRow | null): { statu
   if (upper === '' || upper === '0') return { status: 'available', note: null, unknown: false };
   if (upper === 'R') return { status: 'repair', note: null, unknown: false };
   if (upper === 'MIS') return { status: 'missing', note: null, unknown: false };
+  const named = nameKey(row?.name ?? '');
+  if (WEEDED_NAMES.has(named)) return { status: 'withdrawn', note: null, unknown: false };
+  if (LOST_NAMES.has(named)) return { status: 'lost', note: null, unknown: false };
   if (upper === 'NL' || row?.noLoan === true) return { status: 'not_for_loan', note: null, unknown: false };
   const name = row?.name.trim() ?? '';
   const note = name === '' || name === code ? `SLiMS: ${code}` : `SLiMS: ${name} (${code})`;
