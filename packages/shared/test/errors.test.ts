@@ -166,22 +166,29 @@ describe('ERROR_CODES', () => {
     MIGRATION_TARGET_NOT_EMPTY: 409,
   };
 
+  // ---- Komunitas K1 (edition lane) ----
+  // A restore or an update revert onto a database holding tables of another migration lane.
+  const k1EditionLane: Record<string, number> = {
+    BACKUP_EDITION_TABLES: 409,
+  };
+
   const expected: Record<ErrorCode, number> = {
     ...phase1a,
     ...phase1b,
     ...phase1c,
     ...phase1d,
     ...phase2,
+    ...k1EditionLane,
   } as Record<ErrorCode, number>;
 
-  it('registers exactly the Phase 1a, 1b, 1c, 1d and 2 codes with their HTTP status', () => {
+  it('registers exactly the Phase 1a, 1b, 1c, 1d, 2 and Komunitas K1 codes with their HTTP status', () => {
     expect(Object.keys(ERROR_CODES).sort()).toEqual(Object.keys(expected).sort());
     for (const [code, status] of Object.entries(expected)) {
       expect(ERROR_CODES[code as ErrorCode].status, code).toBe(status);
     }
   });
 
-  it('keeps the 19 Phase 1a codes unchanged, and appends the 1b, the 1c, the 1d and then the Phase 2 codes after them in order', () => {
+  it('keeps the 19 Phase 1a codes unchanged, and appends the 1b, the 1c, the 1d, the Phase 2 and then the Komunitas K1 codes after them in order', () => {
     expect(Object.keys(phase1a)).toHaveLength(19);
     expect(Object.keys(phase1b)).toHaveLength(38);
     expect(Object.keys(phase1c)).toHaveLength(40);
@@ -193,6 +200,7 @@ describe('ERROR_CODES', () => {
       ...Object.keys(phase1c),
       ...Object.keys(phase1d),
       ...Object.keys(phase2),
+      ...Object.keys(k1EditionLane),
     ]);
     for (const [code, status] of Object.entries(phase1a)) {
       expect(ERROR_CODES[code as ErrorCode].status, code).toBe(status);
@@ -222,6 +230,12 @@ describe('ERROR_CODES', () => {
     expect(new DomainError('CATALOG_RUN_EXPIRED').status).toBe(410);
     expect(new DomainError('CATALOG_OUTBOUND_FAILED', { meta: { reason: 'timeout' } }).status).toBe(502);
     expect(new DomainError('MIGRATION_SOURCE_UNSUPPORTED').status).toBe(422);
+  });
+
+  it('a DomainError of the other migration lane takes its status from the registry', () => {
+    const e = new DomainError('BACKUP_EDITION_TABLES', { meta: { count: 2 } });
+    expect(e.status).toBe(409);
+    expect(e.meta).toEqual({ count: 2 });
   });
 
   it('a DomainError of a 1c code takes its status from the registry', () => {

@@ -296,6 +296,12 @@ export const ERROR_CODES = Object.freeze({
   MIGRATION_SOURCE_UNSUPPORTED: Object.freeze({ status: 422 }),
   /** The target catalog already holds data and the migration was not allowed to add to it. */
   MIGRATION_TARGET_NOT_EMPTY: Object.freeze({ status: 409 }),
+  // ---- Komunitas K1 (edition lane) ----
+  /**
+   * A restore or an update revert onto a database that holds migrations or tables of another migration lane, which
+   * this code does not ship; `meta.count`.
+   */
+  BACKUP_EDITION_TABLES: Object.freeze({ status: 409 }),
 });
 
 export type ErrorCode = keyof typeof ERROR_CODES;
