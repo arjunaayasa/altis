@@ -31,9 +31,9 @@ const silent: CoreLogger = { info() {}, warn() {}, error() {} };
 const NOW = Date.UTC(2026, 10, 14, 20, 50, 0);
 
 describe('the reports housekeeping steps and handler', () => {
-  it('five steps in order, the work folders not age-based; the handler as the schedule names it', () => {
+  it('five steps in order, the abandoned runs and the work folders not age-based; the handler as the schedule names it', () => {
     expect(REPORTS_HOUSEKEEPING_STEPS.map((s) => [s.name, s.ageBased])).toEqual([
-      ['abandoned_runs', true],
+      ['abandoned_runs', false],
       ['expired_runs', true],
       ['report_files', true],
       ['work_dirs', false],

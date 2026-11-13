@@ -1,6 +1,7 @@
 import { withTx } from '@altis/db';
 import { isUlid } from '@altis/shared';
 import { errorFields } from '../../context.js';
+import { ORPHAN_UPLOAD_CONTEXTS, type OrphanUploadContext } from '../../files/orphan-contexts.js';
 import type { CatalogHousekeepingStep, HousekeepingStepContext } from '../housekeeping.js';
 
 /**
@@ -20,10 +21,12 @@ import type { CatalogHousekeepingStep, HousekeepingStepContext } from '../housek
  * A run killed anywhere leaves at worst marked rows (some without their blob), which the next run finishes, so no blob
  * is ever left without its row. Two runs at once do the same idempotent deletes. The step ends after a short batch,
  * or returns its cursor (the last id of the batch) when the slice's budget runs low; a batch always runs first.
+ *
+ * The contexts a job sweeps are the entries of the orphan-upload registry (files/orphan-contexts.ts) that name it:
+ * `catalog.housekeeping` keeps the four catalogue contexts, `reports.housekeeping` runs the same sweep over the
+ * community contexts (reports/housekeeping/orphan-uploads.ts), so neither job ever removes the other's uploads.
  */
 
-/** The upload contexts whose unclaimed files are removed. */
-const ORPHAN_CONTEXTS = ['catalog.cover', 'catalog.attachment', 'catalog.floor_plan', 'opac.page_image'] as const;
 /** An upload has this long to be claimed (spec §8: 24 hours). */
 const ORPHAN_AGE_MS = 24 * 3_600_000;
 /** Rows per batch. */
@@ -33,16 +36,21 @@ const BATCH_MARGIN_MS = 1000;
 /** The `owner_type` of a row this step is removing (see step 1 above). */
 const ORPHAN_MARK = 'orphan';
 
-export const orphanUploadsStep: CatalogHousekeepingStep = Object.freeze({
-  name: 'orphan_uploads',
-  async run(c: HousekeepingStepContext) {
+/**
+ * The orphan-upload sweep of the contexts the orphan-upload registry gives to `sweptBy` (see the top of this file), as
+ * a step's `run`.
+ */
+export function sweepOrphanUploads(sweptBy: OrphanUploadContext['sweptBy']): (c: HousekeepingStepContext) => Promise<{ done: boolean; cursor: string | null }> {
+  const contexts = ORPHAN_UPLOAD_CONTEXTS.filter((entry) => entry.sweptBy === sweptBy).map((entry) => entry.context);
+  return async (c) => {
+    if (contexts.length === 0) return { done: true, cursor: null };
     const cutoff = c.now - ORPHAN_AGE_MS;
     let cursor = c.cursor !== null && isUlid(c.cursor) ? c.cursor : null;
     for (;;) {
       let q = c.h.db
         .selectFrom('files')
         .select('id')
-        .where('context', 'in', ORPHAN_CONTEXTS)
+        .where('context', 'in', contexts)
         .where('owner_id', 'is', null)
         .where('created_at', '<', cutoff);
       if (cursor !== null) q = q.where('id', '>', cursor);
@@ -54,7 +62,7 @@ export const orphanUploadsStep: CatalogHousekeepingStep = Object.freeze({
           .updateTable('files')
           .set({ owner_type: ORPHAN_MARK, access: 'staff' })
           .where('id', 'in', batch)
-          .where('context', 'in', ORPHAN_CONTEXTS)
+          .where('context', 'in', contexts)
           .where('owner_id', 'is', null)
           .where('created_at', '<', cutoff)
           .execute();
@@ -68,7 +76,7 @@ export const orphanUploadsStep: CatalogHousekeepingStep = Object.freeze({
           await c.deps.storage.delete(id);
           gone.push(id);
         } catch (error) {
-          c.deps.log.warn('catalog.housekeeping: an orphan upload could not be removed; the next run tries again', { fileId: id, ...errorFields(error) });
+          c.deps.log.warn(`${sweptBy}: an orphan upload could not be removed; the next run tries again`, { fileId: id, ...errorFields(error) });
         }
       }
       if (gone.length > 0) {
@@ -79,5 +87,11 @@ export const orphanUploadsStep: CatalogHousekeepingStep = Object.freeze({
       if (batch.length < BATCH) return { done: true, cursor: null };
       if (c.budgetLeftMs() < BATCH_MARGIN_MS) return { done: false, cursor };
     }
-  },
+  };
+}
+
+/** The orphan-upload step of `catalog.housekeeping`: the catalogue contexts (see the top of this file). */
+export const orphanUploadsStep: CatalogHousekeepingStep = Object.freeze({
+  name: 'orphan_uploads',
+  run: sweepOrphanUploads('catalog.housekeeping'),
 });
