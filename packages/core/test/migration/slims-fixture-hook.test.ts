@@ -30,14 +30,15 @@ describe('the SLiMS fixture hooks', () => {
     expect(usage.filesZip.equals(plain.filesZip)).toBe(true);
   });
 
-  it('with both options and the hooks still empty, the dump is the plain one and the hooks expectations come back', () => {
+  it('with both options and the catalogue hook still empty, the catalogue tables are the plain ones and the hooks expectations come back', () => {
     const both = slimsFixtureBytes(SLIMS_FIXTURE_SEED, { usage: {}, mutateCatalog: true });
     const a = sections(plain.dump);
     const b = sections(both.dump);
     for (const table of catalogueTables) expect(b.get(table), table).toBe(a.get(table));
-    expect(both.hooks).toEqual({ usage: null, mutation: { catalogChanges: 0 } });
+    expect(both.hooks.mutation).toEqual({ catalogChanges: 0 });
+    expect(both.hooks.usage?.rows.visitor_count).toBe(5000);
     expect(plain.hooks).toEqual({ usage: null, mutation: null });
-    expect(both.expected.tables).toEqual(plain.expected.tables);
+    for (const table of catalogueTables) expect(both.expected.tables[table], table).toEqual(plain.expected.tables[table]);
   });
 
   it('expected: the catalogue tables and roles as before, plus the two empty usage tables, not read by the catalogue migration', () => {
