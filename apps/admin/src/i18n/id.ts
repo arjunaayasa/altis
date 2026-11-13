@@ -1201,6 +1201,11 @@ export const ADMIN_ID = {
   // The catalogue's screens: one file per area (i18n/catalog/*.ts, each owned by its task), joined in
   // i18n/catalog/index.ts.
   ...CATALOG_ID,
+
+  // ---- Komunitas K1 (edition lane) ----
+  // Diagnostik: the migrations of another lane the database records.
+  'diagnostics.edition_lane.title': 'Jalur migrasi lain',
+  'diagnostics.edition_lane.applied': 'Migrasi jalur lain terpasang: {count}',
 } satisfies Record<string, string>;
 
 export type AdminKey = keyof typeof ADMIN_ID;

@@ -1,6 +1,8 @@
 import {
+  EDITION_MIGRATIONS,
   TABLE_KEYS,
   dropRegisteredTables,
+  isEditionCreatedBy,
   migrationsUpTo,
   readPkBatch,
   runMigrations,
@@ -379,7 +381,11 @@ export async function loadStep(ctx: LoadContext, cp: LoadCheckpoint): Promise<Lo
 
   if (!c.dropped) {
     ctx.lock.assertHeld();
-    await dropRegisteredTables(work.db, work.dialect);
+    // ---- Komunitas K1 (edition lane): while this code ships no migration of the other lane, the tables such a
+    // migration made stay (the restore refuses before this point, prepass.ts assertNoEditionTables; this is the guard
+    // behind that refusal).
+    const keep = Object.keys(EDITION_MIGRATIONS).length === 0 ? { keep: (t: { createdBy: string }) => isEditionCreatedBy(t.createdBy) } : {};
+    await dropRegisteredTables(work.db, work.dialect, keep);
     killPoint('after-drop', ctx.replay);
     c.dropped = true;
     return result(false);

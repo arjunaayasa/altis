@@ -147,9 +147,13 @@ describe('MESSAGES', () => {
       'catalog.migration.run',
       'opac.pages.manage',
     ];
-    const audits = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('catalog.record.create'));
+    // The Phase 2 entries, from the first one through the last one (later milestones append after them).
+    const audits = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('catalog.record.create'), AUDIT_ACTIONS.indexOf('opac.page.archive') + 1);
     expect(audits).toHaveLength(30);
-    const codes = Object.keys(ERROR_CODES).slice(Object.keys(ERROR_CODES).indexOf('CATALOG_RECORD_HAS_ITEMS'));
+    const codes = Object.keys(ERROR_CODES).slice(
+      Object.keys(ERROR_CODES).indexOf('CATALOG_RECORD_HAS_ITEMS'),
+      Object.keys(ERROR_CODES).indexOf('MIGRATION_TARGET_NOT_EMPTY') + 1,
+    );
     expect(codes).toHaveLength(13);
     const keys = [
       ...perms.map((p) => `perm.${p}`),
@@ -172,6 +176,14 @@ describe('MESSAGES', () => {
     for (const def of permissionCatalog('production')) {
       for (const locale of LOCALES) expect((MESSAGES[locale] as Record<string, string>)[`perm.module.${def.module}`], def.key).toBeTruthy();
     }
+  });
+
+  // ---- Komunitas K1 (edition lane) ----
+  it('the refusal of a restore onto tables of another migration lane, in both languages, without placeholders', () => {
+    expect(MESSAGES.id['error.BACKUP_EDITION_TABLES']).toBe('Database ini memuat tabel jalur lain; pulihkan dengan kode yang mengenalnya.');
+    expect(MESSAGES.en['error.BACKUP_EDITION_TABLES']).toBe(
+      'This database holds tables from another migration lane; restore it with code that knows them.',
+    );
   });
 
   it('1c: every notification has a title and a body, the body key being the title key with .title replaced by .body (M44)', () => {

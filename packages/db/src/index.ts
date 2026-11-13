@@ -70,3 +70,9 @@ export { AggregateOverflowError, countDistinctGrouped, countGrouped, datePrefix,
 export type { GroupKeys } from './aggregate.js';
 export { PERSONAL_COLUMNS, isPersonalColumn, personalLogKeys } from './registry.js';
 export type { PersonalCategory, PersonalColumn } from './registry.js';
+// ---- Komunitas K1 (edition lane): migrasi jalur lain (its own bookkeeping, restore and revert refusal) ----
+export { EDITION_MIGRATIONS, EDITION_MIGRATION_NAME, EDITION_MIGRATOR_TABLES, editionLaneState, isEditionCreatedBy } from './edition-migrations.js';
+export { readSchemaTableOrigins } from './catalog.js';
+export type { SchemaTableOrigin } from './catalog.js';
+export type { DropRegisteredOptions } from './ddl.js';
+export type { EditionLaneMode } from './migrator.js';

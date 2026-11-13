@@ -30,6 +30,7 @@ import { restoreFilesStep } from './files.js';
 import { KEPT_TABLES, newPreserve, preserveCheckpointSchema, preserveStep, restoreKeptStep } from './keep.js';
 import { loadCheckpointSchema, loadStep, newLoad } from './load.js';
 import {
+  assertNoEditionTables,
   conflictsError,
   newPrepass,
   prepassCheckpointSchema,
@@ -529,6 +530,8 @@ export function createRestoreEngine(deps: RestoreKindDeps, mode: RestoreMode): R
 
   async function prechecked(ctx: OpStepContext, op: OpFile, p: Params): Promise<OpFile> {
     const h = await live(ctx);
+    // ---- Komunitas K1 (edition lane): tables of the other migration lane this code does not ship are never dropped ----
+    await assertNoEditionTables(h.db);
     const target = await dialectOf(ctx);
     return withSource(ctx, op, p, async (source) => {
       const r = await prepassStep(source, p.check ?? newPrepass(), {

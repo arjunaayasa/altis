@@ -662,6 +662,8 @@ const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   'vocab.page_locale.en': 'English',
   'vocab.body_format.markdown': 'Simple Markdown',
   'vocab.body_format.html': 'HTML (sanitized)',
+  // ---- Komunitas K1 (edition lane) ----
+  'error.BACKUP_EDITION_TABLES': 'This database holds tables from another migration lane; restore it with code that knows them.',
 };
 
 /** Spread in only under the test profile, like the Indonesian one (see `id.ts`). */

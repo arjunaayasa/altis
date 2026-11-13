@@ -645,6 +645,14 @@ function OaiBlock({ report }: BlockProps) {
   );
 }
 
+// ---- Komunitas K1 (edition lane) ----------------------------------------------------------------------------------
+
+/** The migrations of another lane the database records (0 on a database only this edition migrated). */
+function EditionLaneBlock({ report }: BlockProps) {
+  const t = useT();
+  return <p className="text-sm">{t('diagnostics.edition_lane.applied', { count: report.editionLane.applied })}</p>;
+}
+
 /** One block per section of the report, in this order; typed by the report's keys (a new section needs its block). */
 const BLOCKS: { readonly [K in keyof DiagnosticsReport]: { title: TKey; Body(props: BlockProps): ReactNode } } = {
   release: { title: 'diagnostics.release.title', Body: ReleaseBlock },
@@ -665,6 +673,8 @@ const BLOCKS: { readonly [K in keyof DiagnosticsReport]: { title: TKey; Body(pro
   // ---- Phase 2 (catalog): Task 3 (B2) ----
   search: { title: 'diagnostics.search.title', Body: SearchBlock },
   oai: { title: 'diagnostics.oai.title', Body: OaiBlock },
+  // ---- Komunitas K1 (edition lane) ----
+  editionLane: { title: 'diagnostics.edition_lane.title', Body: EditionLaneBlock },
 };
 
 const BLOCK_ORDER = Object.keys(BLOCKS) as (keyof DiagnosticsReport)[];

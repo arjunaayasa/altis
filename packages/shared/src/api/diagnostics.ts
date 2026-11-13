@@ -251,6 +251,12 @@ export interface DiagnosticsReport {
   search: SearchHealth | null;
   /** OAI-PMH (spec §10): `opac.oai.enabled`, and whether `opac.oai.adminEmail` is set; null until Task 15 fills it. */
   oai: { enabled: boolean; adminEmailSet: boolean } | null;
+  // ---- Komunitas K1 (edition lane) ----
+  /**
+   * Migrations of another lane recorded in this database (the rows of `schema_migrations_edition`): 0 on a database
+   * only this edition migrated.
+   */
+  editionLane: { applied: number };
 }
 
 // ---- Phase 2 (catalog): Task 3 (B2) ----

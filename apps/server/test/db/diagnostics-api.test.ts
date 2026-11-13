@@ -54,6 +54,8 @@ const REPORT_KEYS = [
   // ---- Phase 2 (catalog): Task 3 (B2), filled by Task 15 ----
   'search',
   'oai',
+  // ---- Komunitas K1 (edition lane) ----
+  'editionLane',
 ].sort();
 
 describe.skipIf(!ctx.available)(`Diagnostik API [${engineLabel()}]`, () => {
@@ -134,6 +136,8 @@ describe.skipIf(!ctx.available)(`Diagnostik API [${engineLabel()}]`, () => {
       // Phase 2 (B2, Task 15): the search index's health, and OAI on without an admin e-mail (the spec's defaults).
       expect(report.search).toEqual(await searchHealth(h.db));
       expect(report.oai).toEqual({ enabled: true, adminEmailSet: false });
+      // No migration of another lane on a community install.
+      expect(report.editionLane).toEqual({ applied: 0 });
       expect(report.release).toMatchObject({ version: '0.1.0', appJsVersion: '0.1.0', bootProtocol: 1, pending: null, pinned: null, bundled: null });
       expect(report.release.keyset).toEqual({ docs: 0, maxSeq: 0, full: false });
       expect(report.runtime).toMatchObject({ runtime: 'passenger', transport: 'polling', runner: { mode: 'external' } });
