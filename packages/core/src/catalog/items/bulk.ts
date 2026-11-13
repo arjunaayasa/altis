@@ -16,14 +16,21 @@ import {
   type ItemRow,
 } from './service.js';
 
-// Bulk changes of items (Phase 2 spec §3.4): up to 500 items of one branch get a location, a status or a collection
-// type in one transaction. Each item's status change is checked on its own: a refused item is reported (`not_found`
-// for an id that names no item of the branch, `invalid_transition`, `invalid_location` when the location is not a live
-// one of the branch; for an item leaving `withdrawn`, reviveErrors in service.ts: `record_archived` when its record
-// is archived, `archived_reference` when the collection type, location or supplier it keeps is) and left as it is,
-// the others proceed. An item already as asked counts as updated and is not
-// written. One audit entry `catalog.item.bulk_update` (`meta {count, updated, refused, fields}`), history rows per
-// changed item, its record's `changed_at` and index, and `catalog.item.changed` per changed item last.
+// Bulk changes of items (Phase 2 spec §3.4): up to 500 items of one branch get a location, a status, a collection
+// type or a receiving date in one transaction. Each item's status change is checked on its own: a refused item is
+// reported (`not_found` for an id that names no item of the branch, `invalid_transition`, `invalid_location` when the
+// location is not a live one of the branch; for an item leaving `withdrawn`, reviveErrors in service.ts:
+// `record_archived` when its record is archived, `archived_reference` when the collection type, location or supplier
+// it keeps is; `received_date_set`, below) and left as it is, the others proceed. An item already as asked counts as
+// updated and is not written. One audit entry `catalog.item.bulk_update` (`meta {count, updated, refused, fields}`),
+// history rows per changed item, its record's index (and `changed_at` when a field of its public representation
+// changed: status, location, collection type), and `catalog.item.changed` per changed item last.
+//
+// The receiving date (`set.receivedDate`) completes copies that have none, migrated ones above all: with
+// `receivedDateMode` `fill_empty` (the default) a copy that already has a date is refused `received_date_set` and left
+// as it is; `overwrite` sets it on every copy. A filled date is an ordinary edit of the copy (`updated_by` is its
+// editor), so a migrated copy filled this way no longer follows a later SLiMS re-sync, which would otherwise compare the
+// source's empty date and clear it.
 //
 // The item rows are locked first (a write that changes nothing, before any read), then their records' rows
 // (lockItemRecords, C05), as one item's update does, then the collection type and the location the change names, each
@@ -32,6 +39,9 @@ import {
 // there.
 
 const ID_BATCH = 500;
+
+/** The fields of the change that show in the record's public representation (the receiving date does not). */
+const PUBLIC_FIELDS: ReadonlySet<string> = new Set(['status', 'locationId', 'collectionTypeId']);
 
 /**
  * Applies `body.set` to the items `body.ids` of `branchId` (see the top of this file); `updated` counts the items not
@@ -66,8 +76,11 @@ export async function bulkUpdateItems(tx: TxCtx, branchId: string, body: ItemBul
   const locationId = b.set.locationId;
   const badLocation = locationId !== undefined && locationId !== null && (await lockLiveLocation(trx, branchId, locationId, 'set.locationId')) !== null;
 
+  const receivedDate = b.set.receivedDate;
+  const fillEmpty = (b.receivedDateMode ?? 'fill_empty') === 'fill_empty';
+
   const refused: ItemBulkResponse['refused'] = [];
-  const written: { id: string; recordId: string }[] = [];
+  const written: { id: string; recordId: string; public: boolean }[] = [];
   let updated = 0;
   for (const id of ids) {
     const row = rows.get(id);
@@ -93,9 +106,13 @@ export async function bulkUpdateItems(tx: TxCtx, branchId: string, body: ItemBul
         continue;
       }
     }
+    if (receivedDate !== undefined && fillEmpty && row.received_date !== null) {
+      refused.push({ id, code: 'received_date_set' });
+      continue;
+    }
     updated += 1;
     const changed: string[] = [];
-    const set: { status?: string; archived_at?: number | null; location_id?: string | null; collection_type_id?: string } = {};
+    const set: { status?: string; archived_at?: number | null; location_id?: string | null; collection_type_id?: string; received_date?: string } = {};
     if (to !== from) {
       changed.push('status');
       set.status = to;
@@ -109,6 +126,10 @@ export async function bulkUpdateItems(tx: TxCtx, branchId: string, body: ItemBul
       changed.push('collectionTypeId');
       set.collection_type_id = b.set.collectionTypeId;
     }
+    if (receivedDate !== undefined && receivedDate !== row.received_date) {
+      changed.push('receivedDate');
+      set.received_date = receivedDate;
+    }
     if (changed.length === 0) continue;
     await trx
       .updateTable('items')
@@ -120,14 +141,14 @@ export async function bulkUpdateItems(tx: TxCtx, branchId: string, body: ItemBul
       tx,
       changeEvents(id, changed, { status: from, locationId: row.location_id }, { status: to, locationId: locationId === undefined ? row.location_id : locationId }),
     );
-    written.push({ id, recordId: row.record_id });
+    written.push({ id, recordId: row.record_id, public: changed.some((f) => PUBLIC_FIELDS.has(f)) });
   }
 
   await afterItemsWrite(
     tx,
     written,
     {
-      publicRecords: written.map((w) => w.recordId),
+      publicRecords: written.flatMap((w) => (w.public ? [w.recordId] : [])),
       audit: {
         action: 'catalog.item.bulk_update',
         entity: 'items',

@@ -7,7 +7,7 @@ import { TEXT_MAX_BYTES, utf8Length } from '@altis/shared/api/catalog/common';
 /** A problem with one cell (or, with `column: ''`, with the row): the cell's field is left out of the result. */
 export interface CsvFieldError {
   column: string;
-  code: 'required' | 'too_big' | 'too_small' | 'invalid_format' | 'invalid_value' | 'too_many_cells' | 'unknown_column' | 'duplicate_column';
+  code: 'required' | 'too_big' | 'too_small' | 'invalid_format' | 'invalid_value' | 'invalid' | 'too_many_cells' | 'unknown_column' | 'duplicate_column';
 }
 
 /**
