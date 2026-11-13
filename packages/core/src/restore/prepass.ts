@@ -1,6 +1,17 @@
-import { TABLE_KEYS, columnsAt, type ColumnSpec, type Dialect, type PkValue, type TableName } from '@altis/db';
+import {
+  EDITION_MIGRATIONS,
+  TABLE_KEYS,
+  columnsAt,
+  editionLaneState,
+  type ColumnSpec,
+  type DB,
+  type Dialect,
+  type PkValue,
+  type TableName,
+} from '@altis/db';
 import { dataPath, readBytes, writeBytesAtomic } from '@altis/platform';
 import { DomainError, isUlid } from '@altis/shared';
+import type { Kysely } from 'kysely';
 import { z } from 'zod';
 import { backupTables } from '../backup/canonical.js';
 import type { BackupManifest } from '../backup/manifest.js';
@@ -383,5 +394,30 @@ export function conflictsError(count: number): DomainError {
     detail:
       `Pemeriksaan awal menemukan ${count} baris yang tidak dapat dimuat; unduh laporan konflik / ` +
       `The pre-check found ${count} row(s) that cannot be loaded; download the conflict report`,
+  });
+}
+
+// ---- Komunitas K1 (edition lane) ----
+
+/**
+ * Refuses a restore, or the update revert's restore, onto a database that holds what a migration of the other lane
+ * ("migrasi jalur lain") made, while this code ships none (its lane is empty): rows of `schema_migrations_edition`, or
+ * tables whose `schema_tables.created_by` names such a migration (`eNNNN_slug`). This code cannot tell what those tables
+ * need, so the restore stops before its point of no return and the database stays as it is; code that knows them
+ * restores it. Behind this refusal the restore's drop also keeps them (load.ts).
+ *
+ * @throws DomainError BACKUP_EDITION_TABLES (409) with `meta.count`: the rows of the lane, or its tables when it has no
+ *   rows
+ */
+export async function assertNoEditionTables(db: Kysely<DB>): Promise<void> {
+  if (Object.keys(EDITION_MIGRATIONS).length > 0) return;
+  const { rows, tables } = await editionLaneState(db);
+  if (rows === 0 && tables.length === 0) return;
+  const count = rows > 0 ? rows : tables.length;
+  throw new DomainError('BACKUP_EDITION_TABLES', {
+    detail:
+      `Database ini memuat ${count} migrasi atau tabel jalur lain; pulihkan dengan kode yang mengenalnya / ` +
+      `This database holds ${count} migration(s) or table(s) of another migration lane; restore it with code that knows them`,
+    meta: { count },
   });
 }

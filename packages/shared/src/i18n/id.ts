@@ -693,6 +693,8 @@ const BASE = {
   'vocab.page_locale.en': 'Bahasa Inggris',
   'vocab.body_format.markdown': 'Markdown sederhana',
   'vocab.body_format.html': 'HTML (disanitasi)',
+  // ---- Komunitas K1 (edition lane) ----
+  'error.BACKUP_EDITION_TABLES': 'Database ini memuat tabel jalur lain; pulihkan dengan kode yang mengenalnya.',
 } satisfies Record<string, string>;
 
 /**

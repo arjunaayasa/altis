@@ -88,7 +88,7 @@ describe.skipIf(!ctx.available)(`the Phase 2 migrations [${engineLabel()}]`, () 
     expect(first.applied.slice(-(CATALOG_MIGRATIONS.length + K1_MIGRATIONS.length))).toEqual([...CATALOG_MIGRATIONS, ...K1_MIGRATIONS]);
     expect(first.schemaVersion).toBe('0033');
     const second = await runMigrations(h, { appVersion: '0.1.0', dataDir, migrations: PHASE1_MIGRATIONS });
-    expect(second).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0033', minCodeVersion: '0.0.0' });
+    expect(second).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0033', minCodeVersion: '0.0.0', edition: { mode: 'empty', applied: [] } });
     expect(await h.db.selectFrom('schema_meta').select('schema_version').execute()).toEqual([{ schema_version: '0033' }]);
   });
 

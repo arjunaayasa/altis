@@ -101,6 +101,9 @@ export const TABLE_CLASSES: Readonly<Record<TableName, TableClass>> = Object.fre
   library_partnerships: 'data',
   library_budgets: 'data',
   library_documents: 'data',
+  // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping, made by the runner on every run ----
+  schema_migrations_edition: 'migrator',
+  schema_migrations_edition_lock: 'migrator',
   // Test builds only (decision D1d-26): the release fixtures' table, made by 9001_test_expand (fixture level 2 and
   // 3). It is not a table of `DB`; a production build folds the condition and drops the entry (R57). The registry
   // describes the union of the fixture levels: what a given database holds is columnsAt(table, <its schema>).

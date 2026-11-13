@@ -54,6 +54,8 @@ export interface TableKeySpec {
 /**
  * The `since` of the tables the migration runner makes before any migration (schema_tables, schema_meta,
  * schema_migrations, schema_migrations_lock; rulings R4, R27): it sorts before every migration name.
+ * The other migration lane's two tables (schema_migrations_edition, schema_migrations_edition_lock) are made the same
+ * way and carry it too.
  */
 export const RUNNER_TABLES_SINCE = '0000_runner';
 
@@ -977,6 +979,9 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
     ),
     ...archivedTrail(M0032),
   ]),
+  // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping (made by the runner, like the two above) ----
+  schema_migrations_edition: frozen(added(RUNNER_TABLES_SINCE, t.key191('name'), t.varchar('timestamp', 64))),
+  schema_migrations_edition_lock: frozen(added(RUNNER_TABLES_SINCE, t.key191('id'), t.int('is_locked'))),
   // Test builds only (decision D1d-26): the release fixtures' table, made by 9001_test_expand and widened by
   // 9002_test_contract. The migration names are literals inside the dead branch, so a production build keeps none of
   // it (R57; the release's leak scan checks).
@@ -1095,6 +1100,9 @@ export const TABLE_KEYS: Readonly<Record<TableName, TableKeySpec>> = Object.free
   library_partnerships: keys(['id']),
   library_budgets: keys(['id'], { unique: [['scope_key', 'year']] }),
   library_documents: keys(['id']),
+  // ---- Komunitas K1 (edition lane) ----
+  schema_migrations_edition: keys(['name']),
+  schema_migrations_edition_lock: keys(['id']),
   // Test builds only (decision D1d-26), as in TABLE_COLUMNS.
   ...(typeof __BUILD_PROFILE__ !== 'undefined' && __BUILD_PROFILE__ === 'test' ? { test_fixture: keys(['id']) } : {}),
 } satisfies Record<TableName, TableKeySpec>);

@@ -1,5 +1,5 @@
 import { SLICE_BUDGET_MS, type OpActor, type OpStatus, type OpsMachine } from '@altis/core';
-import { connect, listCatalogTables, releaseMigrations, type DbHandle, type MigrationOutcome } from '@altis/db';
+import { EDITION_MIGRATIONS, connect, listCatalogTables, releaseMigrations, type DbHandle, type MigrationOutcome } from '@altis/db';
 import type { Env } from '@altis/platform';
 import { DomainError, ERROR_CODES, isDomainError, type ErrorCode } from '@altis/shared';
 import type { AppState } from '../app.js';
@@ -21,7 +21,9 @@ import { CliError } from './common.js';
 //   too-old      this release is older than the database's min_code_version   SCHEMA_TOO_NEW, exit 3
 //
 // The outcome is read from the database around the op (what schema_migrations gained, names this code does not know,
-// schema_meta afterwards), so it holds whoever stepped the op meanwhile.
+// schema_meta afterwards), so it holds whoever stepped the op meanwhile. Its `edition` (the other migration lane) is
+// read the same way from schema_migrations_edition, and is `{mode: 'empty', applied: []}` without reading that table
+// while this code ships no migration of that lane; `mode` is then `schema-ahead` too when only that lane is ahead.
 
 /** Who the CLI's ops are begun, cancelled and audited by. */
 export const CLI_OP_ACTOR: OpActor = { type: 'cli', id: null };
@@ -85,6 +87,23 @@ async function appliedNames(h: DbHandle): Promise<string[]> {
   return (await h.db.selectFrom('schema_migrations').select('name').execute()).map((r) => r.name);
 }
 
+// ---- Komunitas K1 (edition lane) ----
+
+/** The names in schema_migrations_edition (none before the migrator's tables exist). */
+async function editionNames(h: DbHandle): Promise<string[]> {
+  if (!(await listCatalogTables(h)).includes('schema_migrations_edition')) return [];
+  return (await h.db.selectFrom('schema_migrations_edition').select('name').execute()).map((r) => r.name);
+}
+
+/** The other lane's part of the outcome, from its names before the op (null: this code ships no migration of it). */
+async function editionOutcome(h: DbHandle, before: ReadonlySet<string> | null): Promise<MigrationOutcome['edition']> {
+  if (before === null) return { mode: 'empty', applied: [] };
+  const now = await editionNames(h);
+  const applied = now.filter((name) => !before.has(name)).sort();
+  const ahead = now.some((name) => !Object.hasOwn(EDITION_MIGRATIONS, name));
+  return { mode: ahead ? 'schema-ahead' : applied.length > 0 ? 'migrated' : 'up-to-date', applied };
+}
+
 async function schemaMeta(h: DbHandle): Promise<{ schemaVersion: string; minCodeVersion: string }> {
   const row = await h.db.selectFrom('schema_meta').select(['schema_version', 'min_code_version']).where('id', '=', 1).executeTakeFirst();
   return { schemaVersion: row?.schema_version ?? '', minCodeVersion: row?.min_code_version ?? '0.0.0' };
@@ -116,6 +135,7 @@ export async function migrate(ctx: BootContext, env: Env): Promise<MigrationOutc
   const ops = createAppOps(state, { dataDir: ctx.dataDir, version: ctx.release.version, log, clock: () => Date.now(), runtime: ctx.runtime });
   try {
     const before = new Set(await appliedNames(h));
+    const editionBefore = Object.keys(EDITION_MIGRATIONS).length === 0 ? null : new Set(await editionNames(h));
     const { opId } = await ops.begin('migrate', CLI_OP_ACTOR, {});
     const status = await runOpToEnd(ops, opId);
     const meta = await schemaMeta(h);
@@ -127,16 +147,26 @@ export async function migrate(ctx: BootContext, env: Env): Promise<MigrationOutc
     const applied = now.filter((name) => !before.has(name)).sort();
     const known = releaseMigrations();
     const ahead = now.some((name) => !Object.hasOwn(known, name));
-    const mode = applied.length > 0 ? 'migrated' : ahead ? 'schema-ahead' : 'up-to-date';
-    return { mode, applied, ...meta };
+    const edition = await editionOutcome(h, editionBefore);
+    const mode = edition.mode === 'schema-ahead' || (applied.length === 0 && ahead) ? 'schema-ahead' : applied.length > 0 ? 'migrated' : 'up-to-date';
+    return { mode, applied, ...meta, edition };
   } finally {
     await ops.close();
     await h.close();
   }
 }
 
-/** The human line for an outcome (bilingual; the mode word first, so scripts can match it). */
+/**
+ * The human line for an outcome (bilingual; the mode word first, so scripts can match it). The migrations of the other
+ * lane this run applied follow it, when there are any (never while this code ships none).
+ */
 export function describeOutcome(outcome: MigrationOutcome): string {
+  const line = coreLine(outcome);
+  const n = outcome.edition.applied.length;
+  return n === 0 ? line : `${line} (+${n} migrasi jalur lain / ${n} migration(s) of another lane)`;
+}
+
+function coreLine(outcome: MigrationOutcome): string {
   const v = outcome.schemaVersion;
   switch (outcome.mode) {
     case 'migrated':

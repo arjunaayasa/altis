@@ -1141,4 +1141,8 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'jobs.type.catalog.housekeeping': 'Maintain the catalogue',
   'jobs.schedule.catalog.housekeeping': 'Daily catalogue upkeep',
   ...CATALOG_EN,
+
+  // ---- Komunitas K1 (edition lane) ----
+  'diagnostics.edition_lane.title': 'Other migration lane',
+  'diagnostics.edition_lane.applied': 'Migrations from another lane installed: {count}',
 };

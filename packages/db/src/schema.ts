@@ -1186,6 +1186,21 @@ export interface SchemaMigrationsLockTable {
   is_locked: Generated<number>;
 }
 
+// ---- Komunitas K1 (edition lane) ----
+// The other migration lane's bookkeeping (edition-migrations.ts): the same shapes as Kysely's two tables above, made by
+// migrator.ts on every run.
+
+/** Kysely's Migrator of the other lane: `timestamp` is an ISO 8601 string. */
+export interface SchemaMigrationsEditionTable {
+  name: string;
+  timestamp: string;
+}
+
+export interface SchemaMigrationsEditionLockTable {
+  id: string;
+  is_locked: Generated<number>;
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 
 /** Every table of the database. TABLE_CLASSES (registry.ts) classifies exactly these. */
@@ -1265,4 +1280,7 @@ export interface DB {
   library_partnerships: LibraryPartnershipsTable;
   library_budgets: LibraryBudgetsTable;
   library_documents: LibraryDocumentsTable;
+  // ---- Komunitas K1 (edition lane) ----
+  schema_migrations_edition: SchemaMigrationsEditionTable;
+  schema_migrations_edition_lock: SchemaMigrationsEditionLockTable;
 }

@@ -1,7 +1,7 @@
 import { sql, type Kysely } from 'kysely';
 import { describe } from './checks.js';
 import { DIALECTS, type Dialect } from './connect.js';
-import { identifier } from './ddl.js';
+import { identifier, type TableClass } from './ddl.js';
 
 // The database's own catalog, as the generic exporter reads it (1d; spec §9.8 row 3: a bundled newer release in
 // `schemaHold` backs the database up "dengan eksportir generik (kolom dibaca dari skema DB, bukan registri kode)",
@@ -106,6 +106,33 @@ export async function readSchemaTables(
   db: Kysely<any>,
 ): Promise<string[]> {
   return (await readSchemaTableEntries(db)).map((e) => e.name);
+}
+
+// ---- Komunitas K1 (edition lane) ----
+
+/** One row of `schema_tables` with the migration (or runner) that made the table: its `created_by`. */
+export interface SchemaTableOrigin {
+  name: string;
+  class: TableClass;
+  createdBy: string;
+}
+
+/** The schema_tables registry's row type with `created_by`, for the query builder. */
+type OriginTables = { schema_tables: { name: string; class: string; created_by: string } };
+
+/**
+ * Every row of `schema_tables` with its `created_by`, sorted by name in byte order: what made each table (a
+ * migration's name, `bootstrap` or `migrator`; a migration of the other lane records its own `eNNNN_slug` name). `db`
+ * may be any Kysely instance or transaction on an ALTIS database.
+ */
+export async function readSchemaTableOrigins(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: Kysely<any>,
+): Promise<SchemaTableOrigin[]> {
+  const rows = await (db as Kysely<OriginTables>).selectFrom('schema_tables').select(['name', 'class', 'created_by']).execute();
+  return rows
+    .map((r) => ({ name: String(r.name), class: String(r.class) as TableClass, createdBy: String(r.created_by) }))
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
 /** The character length in a declared type such as `VARCHAR(191)` or `character(26)`; null when it has none. */

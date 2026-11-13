@@ -1,6 +1,6 @@
 import os from 'node:os';
 import { KEYSET_FILE, readKeysetWithBak, resolveTrustedKeys, type KeysetSource, type TrustedKey } from '@altis/crypto';
-import { checkServer, countRows, withTx, type DB, type DbHandle } from '@altis/db';
+import { checkServer, countRows, editionLaneState, withTx, type DB, type DbHandle } from '@altis/db';
 import {
   dataDirUsage,
   dataPath,
@@ -54,6 +54,9 @@ import { wasmProbe } from './wasm.js';
 //   `failed_before`, `update.bundled_blocked` for `blocked`); DATA_DIR/releases/keyset.json (its documents, the
 //   highest `seq` among those that verify against the embedded roots, and `system.keyset_full`).
 // Diagnostik itself raises no alert (preflight S13): the dashboard does (dashboard/summary.ts).
+//
+// Komunitas K1 (edition lane): `editionLane.applied`, the migrations of another lane the database records (a count of
+// `schema_migrations_edition`), shown as "Migrasi jalur lain terpasang: N".
 
 /** The search provider interface (spec §10.10). Phase 1 brings the interface and the full-text detection only. */
 export interface SearchProvider {
@@ -354,6 +357,8 @@ export async function collectDiagnostics(o: CollectOptions): Promise<Diagnostics
       enabled: s['opac.oai.enabled'] === true,
       adminEmailSet: typeof s['opac.oai.adminEmail'] === 'string' && s['opac.oai.adminEmail'].trim() !== '',
     },
+    // ---- Komunitas K1 (edition lane) ----
+    editionLane: { applied: (await editionLaneState(h.db)).rows },
   };
 }
 
