@@ -9,3 +9,5 @@ export { recordBodyFromDraft } from './draft.js';
 export { loadRecordData } from './data.js';
 export { listRecords } from './list.js';
 export { recordDetail } from './detail.js';
+// ---- Komunitas K1 (catalogue accreditation fields) ----
+export { bulkUpdateRecords } from './bulk.js';

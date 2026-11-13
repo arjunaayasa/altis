@@ -3,6 +3,7 @@ import { Writable } from 'node:stream';
 import { JOBS_RUN_DEFAULT_S } from '@altis/core';
 import type { TrustedKey } from '@altis/crypto';
 import { RUNTIMES, type Env, type Runtime } from '@altis/platform';
+import { isUlid } from '@altis/shared';
 import { notWellFormed } from '../http/validate.js';
 import type { BootContext } from '../index.js';
 import { backupCreate, backupRestore, describeBackupCreate, describeBackupRestore, describeRestoreStatus } from './backup.js';
@@ -103,7 +104,8 @@ const COMMANDS = [
 
 type Command = (typeof COMMANDS)[number];
 
-interface Args {
+/** A parsed command line. */
+export interface Args {
   command: Command;
   json: boolean;
   smoke: boolean;
@@ -124,7 +126,7 @@ interface Args {
   withoutFiles: boolean;
   yesExternal?: string;
   /** Phase 2 Task 3: the flags of `slims:import` (spec §12.6) that take a value. */
-  slims: Pick<SlimsImportOptions, 'db' | 'user' | 'dump' | 'filesZip' | 'filesDir' | 'branch' | 'priceMode'>;
+  slims: Pick<SlimsImportOptions, 'db' | 'user' | 'dump' | 'filesZip' | 'filesDir' | 'branch' | 'priceMode' | 'catalogMode' | 'skipCatalog' | 'fromRunId'>;
   /** `slims:import --dry-run` and `--allow-non-empty`. */
   dryRun: boolean;
   allowNonEmpty: boolean;
@@ -142,6 +144,9 @@ const LIBRARY_NAME_MAX = 191;
 const SLIMS_VALUE_MAX = 1024;
 /** `slims:import --price-mode` (§11.4). */
 const PRICE_MODES = ['major', 'minor', 'skip'] as const;
+// ---- Komunitas K1 (catalogue re-sync) ----
+/** `slims:import --catalog-mode`: new rows only, or also rewrite the mapped rows no one edited in ALTIS. */
+const CATALOG_MODES = ['append', 'sync'] as const;
 /** The `slims:import` flags that take a value, and the field each fills. */
 const SLIMS_VALUE_FLAGS: Readonly<Record<string, 'db' | 'user' | 'dump' | 'filesZip' | 'filesDir' | 'branch'>> = {
   '--db': 'db',
@@ -195,9 +200,13 @@ export const USAGE = [
   '  catalog:reindex           bangun ulang indeks pencarian katalog / rebuild the catalogue search index',
   '  slims:import (--db <host:port/db> --user <pengguna / user> | --dump <berkas / file>)',
   '               [--files-zip <zip> | --files-dir <folder>] [--branch <kode / code>] [--price-mode major|minor|skip]',
-  '               [--dry-run] [--allow-non-empty]',
+  '               [--dry-run] [--allow-non-empty] [--catalog-mode append|sync] [--skip-catalog --from-run <id>]',
   '                            migrasi katalog SLiMS (sandi database: ALTIS_SLIMS_DB_PASSWORD atau prompt) / migrate a',
   '                            SLiMS catalogue (database password: ALTIS_SLIMS_DB_PASSWORD or a prompt)',
+  '                            --catalog-mode sync: selaraskan juga katalog yang belum disunting di ALTIS / also',
+  '                            re-sync the catalogue rows not edited in ALTIS; --skip-catalog --from-run <id>: lewati',
+  '                            tahap katalog setelah uji coba sinkron tanpa perubahan / skip the catalogue stages after',
+  '                            a sync dry run that found no change',
 ].join('\n');
 
 /** Options each command accepts (besides --json). */
@@ -222,7 +231,21 @@ const OPTIONS: Readonly<Record<Command, readonly string[]>> = {
   'release:rollback': ['--force'],
   'release:unpin': [],
   'catalog:reindex': [],
-  'slims:import': ['--db', '--user', '--dump', '--files-zip', '--files-dir', '--branch', '--price-mode', '--dry-run', '--allow-non-empty'],
+  'slims:import': [
+    '--db',
+    '--user',
+    '--dump',
+    '--files-zip',
+    '--files-dir',
+    '--branch',
+    '--price-mode',
+    '--dry-run',
+    '--allow-non-empty',
+    // ---- Komunitas K1 (catalogue re-sync) ----
+    '--catalog-mode',
+    '--skip-catalog',
+    '--from-run',
+  ],
 };
 
 /** The operands each command takes, by name (exactly these, in this order). */
@@ -258,7 +281,8 @@ function isCommand(word: string): word is Command {
   return (COMMANDS as readonly string[]).includes(word);
 }
 
-function parseArgs(argv: readonly string[]): Args {
+/** The parsed command line `argv` (exported for the tests of its flags). @throws CliError `USAGE` */
+export function parseArgs(argv: readonly string[]): Args {
   const [first, ...rest] = argv;
   if (first === undefined) throw usage('perintah tidak ada / no command given');
   const command: Command | undefined = first === '--help' || first === '-h' ? 'help' : isCommand(first) ? first : undefined;
@@ -358,6 +382,18 @@ function parseArgs(argv: readonly string[]): Args {
       const mode = PRICE_MODES.find((candidate) => candidate === value);
       if (mode === undefined) throw usage(`--price-mode harus salah satu dari / --price-mode must be one of ${PRICE_MODES.join(', ')}`);
       args.slims.priceMode = mode;
+    } else if (name === '--catalog-mode') {
+      // ---- Komunitas K1 (catalogue re-sync) ----
+      const value = inline ?? rest[(i += 1)];
+      const mode = CATALOG_MODES.find((candidate) => candidate === value);
+      if (mode === undefined) throw usage(`Nilai --catalog-mode tidak dikenal / Unknown --catalog-mode value (${CATALOG_MODES.join(', ')})`);
+      args.slims.catalogMode = mode;
+    } else if (name === '--skip-catalog' && inline === undefined) {
+      args.slims.skipCatalog = true;
+    } else if (name === '--from-run') {
+      const value = inline ?? rest[(i += 1)];
+      if (value === undefined || !isUlid(value)) throw usage('--from-run memerlukan id run (ULID) / --from-run needs a run id (ULID)');
+      args.slims.fromRunId = value;
     } else if (name === '--dry-run' && inline === undefined) {
       args.dryRun = true;
     } else if (name === '--allow-non-empty' && inline === undefined) {
@@ -401,6 +437,11 @@ function checkSlimsSources(s: Args['slims']): void {
   if (db && (s.db === undefined || s.user === undefined)) throw usage('--db dan --user dipakai bersama / --db and --user go together');
   if (s.filesZip !== undefined && s.filesDir !== undefined) {
     throw usage('pilih --files-zip atau --files-dir, tidak keduanya / choose --files-zip or --files-dir, not both');
+  }
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  // Skipping the catalogue stages is accepted only after a sync dry run that found nothing to change: the run names it.
+  if (s.skipCatalog === true && s.fromRunId === undefined) {
+    throw usage('--skip-catalog butuh --from-run <id uji coba sinkron> / --skip-catalog needs --from-run <sync dry run id>');
   }
 }
 

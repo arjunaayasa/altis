@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { AGENT_TYPES, RELATION_TYPES, RELATOR_ROLES, SUBJECT_TYPES } from '../../catalog-vocab.js';
 import { ulidField, versionField } from '../common.js';
 import { customValuesField, cursorQuery, epochMsQuery, longText, shortText, yearField } from './common.js';
-import { IdentifierInput, LinkInput, MarcExtraField, RECORD_LIST_MAX, rdaCodeField, titleText, type RecordData } from './record-data.js';
+import { IdentifierInput, LinkInput, MarcExtraField, RECORD_LIST_MAX, rdaCodeField, recordAccredFields, titleText, type RecordData } from './record-data.js';
 
 // ---- the list ------------------------------------------------------------------------------------------------------
 
@@ -148,6 +148,8 @@ const recordFields = {
   custom: customValuesField.optional(),
   source: z.string().regex(RECORD_SOURCE).optional(),
   marcExtra: z.array(MarcExtraField).max(RECORD_LIST_MAX.marcExtra).optional(),
+  // ---- Komunitas K1 (catalogue accreditation fields) ----
+  ...recordAccredFields,
 };
 
 /**
@@ -236,4 +238,34 @@ export interface DuplicateCandidate {
 export interface DuplicateCheckResponse {
   candidates: DuplicateCandidate[];
   threshold: number;
+}
+
+// ---- Komunitas K1 (catalogue accreditation fields) ----
+
+/** The most records one bulk change takes. */
+export const RECORD_BULK_MAX = 500;
+
+/**
+ * `POST catalog/records/bulk`: set the accreditation fields of up to 500 records (distinct ids); `set` names at least
+ * one field (`{path: 'set', code: 'required'}`), null clears it.
+ */
+export const RecordBulkBody = z.strictObject({
+  ids: z
+    .array(ulidField)
+    .min(1)
+    .max(RECORD_BULK_MAX)
+    .check((ctx) => {
+      if (new Set(ctx.value).size !== ctx.value.length) ctx.issues.push({ code: 'custom', params: { code: 'duplicate' }, message: 'duplicate', input: ctx.value });
+    }),
+  set: z.strictObject(recordAccredFields).check((ctx) => {
+    if (Object.keys(ctx.value).length === 0) ctx.issues.push({ code: 'custom', params: { code: 'required' }, message: 'required', input: ctx.value });
+  }),
+});
+
+export type RecordBulkBody = z.infer<typeof RecordBulkBody>;
+
+/** The answer of a bulk change: the refused records with their reason; the others were changed. */
+export interface RecordBulkResponse {
+  updated: number;
+  refused: { id: string; code: 'not_found' | 'archived' }[];
 }

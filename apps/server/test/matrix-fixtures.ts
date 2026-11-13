@@ -37,6 +37,7 @@ import { csrfKey, opsCsrfToken, preSessionCsrfToken } from '../src/http/csrf.js'
 import type { RouteDecl } from '../src/http/route.js';
 import { createAgent, type AgentReply } from './agent.js';
 import { CATALOG_MATRIX } from './matrix/catalog.js';
+import { KOMUNITAS_MATRIX, KOMUNITAS_SYSTEM_ROUTES } from './matrix/komunitas.js';
 import { removeOp, writeOp } from './ops-support.js';
 import { sessionCookieFor, sessionCsrfFor } from './support-auth.js';
 import { releasePackage, stagedUpdateUpload } from './update-support.js';
@@ -829,6 +830,9 @@ export const MATRIX_FIXTURES: Record<string, MatrixFixture> = {
   // ---- Phase 2 (catalog): Task 3 ----
   // The catalog routes' fixtures, one file per area (matrix/catalog-<area>.ts), at the place of their rows in CATALOG.
   ...CATALOG_MATRIX.fixtures,
+  // ---- Komunitas K1 (reports and accreditation) ----
+  // The community routes' fixtures, one file per area (matrix/komunitas-<area>.ts), at the place of their rows in CATALOG.
+  ...KOMUNITAS_MATRIX.fixtures,
 };
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -896,6 +900,8 @@ export const EXPECTED_MAINTENANCE: Readonly<Record<string, 'allow' | 'deny' | 'r
   // ---- Phase 2 (catalog): Task 3 ----
   // The catalog routes that are not `deny` (every OPAC page, feed and OAI route is `allow`), from their area files.
   ...CATALOG_MATRIX.maintenance,
+  // ---- Komunitas K1 (reports and accreditation) ----
+  ...KOMUNITAS_MATRIX.maintenance,
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -983,6 +989,10 @@ export const EXPECTED_SYSTEM_ROUTES: readonly string[] = Object.freeze([
   'catalog.runs.download',
   'catalog.runs.report',
   'catalog.search.reindex',
+  // ---- Komunitas K1 (reports and accreditation) ----
+  // §8.6 "Fase 3 dan seterusnya: tindakan PDP, ekspor data, dan laporan": the report runs, their download, and the
+  // accreditation documents and a snapshot's dossier, from the area files' `systemRoutes`.
+  ...KOMUNITAS_SYSTEM_ROUTES,
   // Exception: the upload routes. 1d's `backup` and `update` upload contexts (C7) serve the `system` uses above; Phase
   // 2's catalog contexts (an import file, a SLiMS dump and its files, an attachment) are only used by `write` routes,
   // which a gate refusing writes refuses too, so a file uploaded then serves nothing. The test context exists under the
