@@ -435,18 +435,74 @@ export const FIXTURE_TABLES: readonly FixtureTable[] = [
   // ---- not read in Phase 2 ("Fase 3"), derived, and a plugin's table
   {
     name: 'member',
-    columns: [['member_id', 'varchar(20) NOT NULL'], ['member_name', 'varchar(100) NOT NULL'], ['member_email', 'varchar(100) DEFAULT NULL'], ['member_since_date', 'date DEFAULT NULL']],
+    columns: [
+      ['member_id', 'varchar(20) NOT NULL'],
+      ['member_name', 'varchar(100) NOT NULL'],
+      ['member_email', 'varchar(100) DEFAULT NULL'],
+      ['member_since_date', 'date DEFAULT NULL'],
+      // ---- Komunitas K1 (usage tables) ----
+      // SLiMS 9 table/column names (interoperability facts, no SLiMS code): the member type, the address (personal data
+      // the usage import must never stage) and the expiry the active-member counts read.
+      ['member_type_id', 'int(6) DEFAULT NULL'],
+      ['member_address', 'varchar(255) DEFAULT NULL'],
+      ['expire_date', 'date DEFAULT NULL'],
+    ],
     primaryKey: ['member_id'],
   },
   {
     name: 'loan',
-    columns: [['loan_id', 'int(11) NOT NULL AUTO_INCREMENT'], ['item_code', 'varchar(20) DEFAULT NULL'], ['member_id', 'varchar(20) DEFAULT NULL'], ['loan_date', 'date NOT NULL'], ['due_date', 'date NOT NULL']],
+    columns: [
+      ['loan_id', 'int(11) NOT NULL AUTO_INCREMENT'],
+      ['item_code', 'varchar(20) DEFAULT NULL'],
+      ['member_id', 'varchar(20) DEFAULT NULL'],
+      ['loan_date', 'date NOT NULL'],
+      ['due_date', 'date NOT NULL'],
+      // ---- Komunitas K1 (usage tables) ----
+      // SLiMS 9 table/column names (interoperability facts, no SLiMS code): whether the copy went out and came back.
+      ['is_lent', 'int(1) NOT NULL DEFAULT 0'],
+      ['is_return', 'int(1) NOT NULL DEFAULT 0'],
+      ['return_date', 'date DEFAULT NULL'],
+    ],
     primaryKey: ['loan_id'],
   },
   {
     name: 'loan_history',
-    columns: [['loan_id', 'int(11) NOT NULL'], ['item_code', 'varchar(20) NOT NULL'], ['biblio_id', 'int(11) NOT NULL'], ['title', 'text'], ['member_id', 'varchar(20) NOT NULL']],
+    columns: [
+      ['loan_id', 'int(11) NOT NULL'],
+      ['item_code', 'varchar(20) NOT NULL'],
+      ['biblio_id', 'int(11) NOT NULL'],
+      ['title', 'text'],
+      ['member_id', 'varchar(20) NOT NULL'],
+      // ---- Komunitas K1 (usage tables) ----
+      // SLiMS 9 table/column names (interoperability facts, no SLiMS code): the class and member type kept with a loan.
+      ['classification', 'varchar(40) DEFAULT NULL'],
+      ['member_type_name', 'varchar(50) DEFAULT NULL'],
+      ['loan_date', 'date DEFAULT NULL'],
+    ],
     primaryKey: ['loan_id'],
+  },
+  // ---- Komunitas K1 (usage tables) ----
+  // SLiMS 9 table/column names (interoperability facts, no SLiMS code): the visitor log (a member's id, or a guest's
+  // name and institution) and the member types. The catalogue migration reads neither; both are empty unless the
+  // fixture is built with its usage option.
+  {
+    name: 'visitor_count',
+    columns: [
+      ['visitor_id', 'int(11) NOT NULL AUTO_INCREMENT'],
+      ['member_id', 'varchar(20) DEFAULT NULL'],
+      ['member_name', 'varchar(255) NOT NULL'],
+      ['institution', 'varchar(100) DEFAULT NULL'],
+      ['checkin_date', 'datetime NOT NULL'],
+    ],
+    primaryKey: ['visitor_id'],
+  },
+  {
+    name: 'mst_member_type',
+    columns: [
+      ['member_type_id', 'int(11) NOT NULL AUTO_INCREMENT'],
+      ['member_type_name', 'varchar(50) NOT NULL'],
+    ],
+    primaryKey: ['member_type_id'],
   },
   {
     name: 'search_biblio',

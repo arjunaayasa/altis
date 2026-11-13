@@ -534,6 +534,13 @@ const RUN_WORK_FILES: ReadonlySet<string> = new Set(['import.bin', 'dump.bin', '
 /** `<table>.ndjson`: a SLiMS source table name (lower-case snake case, at most 64 characters) and the extension. */
 const RUN_WORK_TABLE = /^[a-z][a-z0-9_]{0,63}\.ndjson$/;
 
+// ---- Komunitas K1 (usage import work files) ----
+/**
+ * The staged files of a SLiMS usage import, one per part of its work (`usage-visits-2025-07.bin`,
+ * `usage-loans.json`): `part` is 1-40 of `a-z 0-9 -`.
+ */
+const RUN_WORK_USAGE = /^usage-[a-z0-9-]{1,40}\.(json|bin)$/;
+
 /**
  * `exports/<runId>.<ext>`: the file a catalog export run writes (spec §5.4), removed by `catalog.housekeeping` once it
  * expired.
@@ -560,12 +567,84 @@ export function runWorkDir(dataDir: string, runId: string): DataPath {
 /**
  * `tmp/<runId>/<name>`: one work file of a catalog run. `name` is `import.bin`, `dump.bin`, `files.bin`,
  * `report.csv`, `tables.json`, or `<table>.ndjson` with `<table>` matching `/^[a-z][a-z0-9_]{0,63}$/` (a SLiMS dump split per table).
+ * A SLiMS usage import also stages `usage-<part>.json` and `usage-<part>.bin`, `<part>` 1-40 of `a-z 0-9 -`.
  *
  * @throws DomainError `INVALID_PATH_SEGMENT` for any other name, a `runId` that is not a ULID, or a path that leaves
  *   the area
  */
 export function runWorkPath(dataDir: string, runId: string, name: string): DataPath {
   const id = checkedId('tmp', runId);
-  if (typeof name !== 'string' || !(RUN_WORK_FILES.has(name) || RUN_WORK_TABLE.test(name))) throw invalidSegment('tmp', name);
+  if (typeof name !== 'string' || !(RUN_WORK_FILES.has(name) || RUN_WORK_TABLE.test(name) || RUN_WORK_USAGE.test(name))) {
+    throw invalidSegment('tmp', name);
+  }
   return build(dataDir, 'tmp', [id, name]);
+}
+
+// ---- Komunitas K1 (report paths) ----
+// A report run's file and its work files live in their own sub-folders, `exports/reports/` and `tmp/reports/`, which
+// the catalogue's housekeeping never lists (it reads `exports/<runId>.<ext>` and `tmp/<runId>/` only) and the reports'
+// housekeeping only sweeps. These builders are the only way to name a path there: dataPath accepts none of them.
+
+/** The extensions of a report run's file. */
+export type ReportFileExt = 'csv' | 'xlsx' | 'pdf' | 'zip';
+
+const REPORT_EXTS: ReadonlySet<string> = new Set<ReportFileExt>(['csv', 'xlsx', 'pdf', 'zip']);
+
+/** The folder of the report files, in `exports` and in `tmp`. */
+const REPORTS_FOLDER = 'reports';
+
+/** The fixed work files of a report run: its rows, the output being written and its central directory, a dossier. */
+const REPORT_WORK_FILES: ReadonlySet<string> = new Set(['rows.ndjson', 'output.part', 'output.central', 'dossier.pdf']);
+
+/** One component's ZIP of an evidence ZIP, and its central directory (`component-SP.zip`, `component-profil.central`). */
+const REPORT_WORK_COMPONENT = /^component-(K|SP|L|T|F|G|profil)\.(zip|central)$/;
+
+/** A generated PDF of an evidence ZIP: `entry-<n>.pdf`, n from 1 to 9 999. */
+const REPORT_WORK_ENTRY = /^entry-[1-9]\d{0,3}\.pdf$/;
+
+/** `exports/reports`: the folder of every report run's file. */
+export function reportExportsDir(dataDir: string): DataPath {
+  return build(dataDir, 'exports', [REPORTS_FOLDER]);
+}
+
+/**
+ * `exports/reports/<runId>.<ext>`: the file a report run writes, removed by `reports.housekeeping` once it expired.
+ *
+ * @throws DomainError `INVALID_PATH_SEGMENT` when `runId` is not a ULID, `ext` is not one of `csv`, `xlsx`, `pdf`,
+ *   `zip`, or the path leaves the area (see {@link dataPath})
+ */
+export function reportExportPath(dataDir: string, runId: string, ext: ReportFileExt): DataPath {
+  const id = checkedId('exports', runId);
+  if (typeof ext !== 'string' || !REPORT_EXTS.has(ext)) throw invalidSegment('exports', ext);
+  return build(dataDir, 'exports', [REPORTS_FOLDER, `${id}.${ext}`]);
+}
+
+/** `tmp/reports`: the folder of every report run's work folder. */
+export function reportWorkRoot(dataDir: string): DataPath {
+  return build(dataDir, 'tmp', [REPORTS_FOLDER]);
+}
+
+/**
+ * `tmp/reports/<runId>`: the work folder of a report run.
+ *
+ * @throws DomainError `INVALID_PATH_SEGMENT` when `runId` is not a ULID, or the path leaves the area
+ */
+export function reportWorkDir(dataDir: string, runId: string): DataPath {
+  return build(dataDir, 'tmp', [REPORTS_FOLDER, checkedId('tmp', runId)]);
+}
+
+/**
+ * `tmp/reports/<runId>/<name>`: one work file of a report run. `name` is `rows.ndjson`, `output.part`,
+ * `output.central`, `dossier.pdf`, `component-<K|SP|L|T|F|G|profil>.zip` or `.central`, or `entry-<n>.pdf` with n from 1
+ * to 9 999.
+ *
+ * @throws DomainError `INVALID_PATH_SEGMENT` for any other name, a `runId` that is not a ULID, or a path that leaves
+ *   the area
+ */
+export function reportWorkPath(dataDir: string, runId: string, name: string): DataPath {
+  const id = checkedId('tmp', runId);
+  if (typeof name !== 'string' || !(REPORT_WORK_FILES.has(name) || REPORT_WORK_COMPONENT.test(name) || REPORT_WORK_ENTRY.test(name))) {
+    throw invalidSegment('tmp', name);
+  }
+  return build(dataDir, 'tmp', [REPORTS_FOLDER, id, name]);
 }

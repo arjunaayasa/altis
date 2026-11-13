@@ -182,7 +182,7 @@ export async function tickSchedules(h: DbHandle, reg: JobRegistry, o: TickOption
       if (created) enqueued += 1;
     } catch (error) {
       const fields = errorFields(error);
-      noteOnce(log, `fail:${row.name}:${String(fields['code'] ?? fields['name'])}`, 'warn', 'scheduler: a scheduled run could not be enqueued', {
+      noteOnce(log, `fail:${row.name}:${String(fields['code'] ?? fields['errorName'])}`, 'warn', 'scheduler: a scheduled run could not be enqueued', {
         schedule: row.name,
         ...fields,
       });

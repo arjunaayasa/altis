@@ -41,6 +41,7 @@ import {
   type UserSnapshot,
 } from '../matrix-fixtures.js';
 import { CATALOG_MATRIX } from '../matrix/catalog.js';
+import { KOMUNITAS_MATRIX } from '../matrix/komunitas.js';
 import { removeOp } from '../ops-support.js';
 import { recordingLogger, sampleConfig } from '../support.js';
 import { devPackageKeys } from '../update-support.js';
@@ -274,6 +275,9 @@ const CATALOG: Readonly<Record<string, string>> = {
   // The catalog routes' rows, one file per area (matrix/catalog-<area>.ts); matrix-fixtures.ts spreads their fixtures
   // at the same place, so the order of the two maps stays the same.
   ...CATALOG_MATRIX.rows,
+  // ---- Komunitas K1 (reports and accreditation) ----
+  // The community rows, one file per area (matrix/komunitas-<area>.ts), merged in matrix/komunitas.ts.
+  ...KOMUNITAS_MATRIX.rows,
 };
 
 /** `d` as a row of {@link CATALOG}. */
