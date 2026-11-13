@@ -5,7 +5,7 @@
 
 /**
  * The 19 permissions of Phase 1, all of global scope, in the order of spec §13.4; then the 10 of Phase 2 (its spec
- * §12.1), in that spec's order.
+ * §12.1), in that spec's order; then the community edition's reports and accreditation keys, all global.
  */
 export const PERMISSIONS = Object.freeze([
   'system.settings.read',
@@ -38,6 +38,13 @@ export const PERMISSIONS = Object.freeze([
   'catalog.export.run',
   'catalog.migration.run',
   'opac.pages.manage',
+  // ---- Komunitas K1 (reports and accreditation) ----
+  // Aggregate reports without personal data (viewing and exporting them), then the accreditation workspace: reading it
+  // (results, snapshots, evidence files) apart from managing it (periods, profile, answers, registers, evidence,
+  // manual usage, the SLiMS statistics import, freezing and unfreezing).
+  'reports.statistics.read',
+  'accreditation.workspace.read',
+  'accreditation.workspace.manage',
 ] as const);
 
 /** A catalog key. The second member exists only in the test profile (spec §12.5): see {@link permissionCatalog}. */
@@ -47,7 +54,7 @@ export type Permission = (typeof PERMISSIONS)[number] | 'test.branch.manage';
 export type PermissionScope = 'global' | 'branch';
 
 /** The module of a permission: its key's first segment. */
-export type PermissionModule = 'system' | 'test' | 'catalog' | 'opac';
+export type PermissionModule = 'system' | 'test' | 'catalog' | 'opac' | 'reports' | 'accreditation';
 
 export interface PermissionDef {
   key: Permission;
@@ -64,7 +71,7 @@ type Profile = 'test' | 'production';
  */
 const BRANCH_SCOPED: ReadonlySet<string> = new Set(['catalog.locations.manage', 'catalog.items.manage']);
 
-/** The module of a production key: its prefix (`system`, `catalog` or `opac`). */
+/** The module of a production key: its prefix (`system`, `catalog`, `opac`, `reports` or `accreditation`). */
 function moduleOf(key: (typeof PERMISSIONS)[number]): PermissionModule {
   return key.slice(0, key.indexOf('.')) as PermissionModule;
 }
@@ -83,8 +90,8 @@ let testCatalog: readonly PermissionDef[] | undefined;
  * The test-only entry `{key: 'test.branch.manage', scope: 'branch', module: 'test'}` is appended only when the
  * build profile is `test` (`__BUILD_PROFILE__`, substituted by esbuild and by Vitest; undefined counts as production)
  * and `profile` is not `'production'`. The argument can only remove the entry, never add it, so in a production bundle
- * the whole branch is dead code and the entry's text never ships (spec §12.5, ruling R57, S28); the release build's
- * leak scan fails when it does.
+ * the whole branch is dead code and the entry's text never ships (spec §12.5, S28: test hooks exist only under the test
+ * build profile); the release build's leak scan fails when it does.
  */
 export function permissionCatalog(profile?: Profile): readonly PermissionDef[] {
   if (typeof __BUILD_PROFILE__ !== 'undefined' && __BUILD_PROFILE__ === 'test' && profile !== 'production') {

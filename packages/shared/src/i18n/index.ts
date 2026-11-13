@@ -3,7 +3,8 @@
  *
  * - `id.ts` is the source of truth: {@link MessageKey} is its key set, and `en.ts` is typed `Record<MessageKey, string>`.
  * - Key families: `error.<CODE>`, `perm.<permission>`, `audit.<action>`, `role.<key>`, `mail.*`, `opac.*`, `banner.*`,
- *   and since 1c `ops.*`, `notification.*`, `alert.*`, `maintenance.*`.
+ *   and since 1c `ops.*`, `notification.*`, `alert.*`, `maintenance.*`; the vocabularies `vocab.<list>.<value>`; and for
+ *   reports and accreditation `report.*` and `accred.*` (the later report owners' row labels come from i18n/k1/*.ts).
  *   A new error code, permission, audit action, op kind (`ops.kind.<kind>`) or op state (`ops.state.<state>`) without its
  *   message fails `tsc` (see `id.ts`) and the unit test.
  * - The SPA's own screen strings live in `apps/admin/src/i18n/`; its `useT()` falls back to {@link t} for the shared

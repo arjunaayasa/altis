@@ -74,4 +74,24 @@ describe('the catalogue admin copy', () => {
     }
     expect(ADMIN_MESSAGES.id['jobs.schedule.catalog.housekeeping']).toBe('Perawatan harian katalog');
   });
+
+  // ---- Komunitas K1 (jobs) ----
+  it('the job types, the schedule and the job messages of reports and accreditation have their labels in both languages', () => {
+    const keys = [
+      'jobs.type.reports.export',
+      'jobs.type.reports.housekeeping',
+      'jobs.type.accreditation.evaluate',
+      'jobs.type.accreditation.import_slims_usage',
+      'jobs.schedule.reports.housekeeping',
+      'jobs.message.reports.housekeeping.date_jobs_postponed',
+      'jobs.message.reports.export.warnings',
+    ] as const;
+    for (const key of keys) {
+      expect(ADMIN_MESSAGES.id[key], key).toBeTruthy();
+      expect(ADMIN_MESSAGES.en[key], key).toBeTruthy();
+      expect(ADMIN_MESSAGES.id[key], key).not.toBe(ADMIN_MESSAGES.en[key]);
+    }
+    expect(ADMIN_MESSAGES.id['jobs.message.reports.housekeeping.date_jobs_postponed']).toBe('Tugas berbasis tanggal ditunda: jam sistem melompat');
+    expect(ADMIN_MESSAGES.en['jobs.message.reports.export.warnings']).toBe('Finished with warnings; see the export list for details');
+  });
 });

@@ -9,12 +9,14 @@ import type { AdminKey } from '@/i18n';
  * convenience only: the server refuses whatever the menus hide (§4.8).
  *
  * Phase 2 (its spec §13; plan Task 2) groups them: Katalog, OPAC, then Sistem (the Phase 1 screens); Beranda stays
- * above the groups. The shell and the command palette show each group under its heading (`nav.group.<group>`).
+ * above the groups. The shell and the command palette show each group under its heading (`nav.group.<group>`). The
+ * community milestones add Laporan (reports and accreditation) after Katalog; the service and member groups of later
+ * milestones go before it.
  */
-export type NavGroup = 'catalog' | 'opac' | 'system';
+export type NavGroup = 'catalog' | 'reports' | 'opac' | 'system';
 
 /** The groups in the order the shell and the palette show them. */
-export const NAV_GROUPS: readonly NavGroup[] = Object.freeze(['catalog', 'opac', 'system'] as const);
+export const NAV_GROUPS: readonly NavGroup[] = Object.freeze(['catalog', 'reports', 'opac', 'system'] as const);
 
 export interface NavItem {
   to: string;
@@ -54,6 +56,11 @@ export const NAV: readonly NavItem[] = Object.freeze([
   { to: '/admin/backups', labelKey: 'nav.backups', permission: 'system.backup.read', group: 'system' },
   { to: '/admin/diagnostics', labelKey: 'nav.diagnostics', permission: 'system.diagnostics.read', group: 'system' },
   { to: '/admin/about', labelKey: 'nav.about', group: 'system' },
+  // ---- Komunitas K1 (nav) ----
+  // Laporan: the report catalogue and the accreditation workspace, each behind its own permission (managing the
+  // workspace needs reading it first).
+  { to: '/admin/reports', labelKey: 'nav.reports.reports', permission: 'reports.statistics.read', group: 'reports' },
+  { to: '/admin/accreditation', labelKey: 'nav.reports.accreditation', permission: 'accreditation.workspace.read', group: 'reports' },
   // The edition's own items (ruling R2, edition/index.ts), after the community ones: none in the community edition.
   ...editionNav,
 ] satisfies NavItem[]);
