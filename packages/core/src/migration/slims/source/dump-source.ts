@@ -8,6 +8,9 @@ import type { SlimsRow, SlimsSource, SlimsTableInfo } from './types.js';
 // `<table>.ndjson` per table the migration reads, written by splitDump, one JSON object per row, a byte value as
 // `{"$hex": "…"}`. The cursor is the line number of the next row, with its byte offset (`<line>:<offset>`) so that a
 // resumed stage does not read the file again from its start; a plain line number is accepted too.
+//
+// The usage import (spec §11.2) splits with its own table and column list and reads back through `allowed`: only those
+// tables are served, and each row only with those columns.
 
 /** The most rows one call returns (§11.1: batches of at most 500). */
 export const STAGED_BATCH_MAX = 500;
@@ -16,6 +19,22 @@ const READ_CHUNK = 64 * 1024;
 const LINE_MAX = 128 * 1024 * 1024;
 const CURSOR = /^(\d{1,15})(?::(\d{1,15}))?$/;
 const HEX = /^(?:[0-9a-f]{2})*$/;
+
+/** A row with only `columns`, in that order: those the row has (a column it lacks is left out, not NULL). */
+export function projectRow(row: SlimsRow, columns: readonly string[]): SlimsRow {
+  const out: SlimsRow = {};
+  for (const c of columns) {
+    if (!Object.hasOwn(row, c)) continue;
+    if (c === '__proto__') Object.defineProperty(out, c, { value: row[c], enumerable: true, writable: true, configurable: true });
+    else out[c] = row[c]!;
+  }
+  return out;
+}
+
+/** A table's info with only the columns of `columns` it has, in the order of `columns`. */
+export function projectTableInfo(t: SlimsTableInfo, columns: readonly string[]): SlimsTableInfo {
+  return { name: t.name, columns: columns.filter((c) => t.columns.includes(c)), primaryKey: [...t.primaryKey], rows: t.rows };
+}
 
 /** One row as a staging line (without its line feed). */
 export function encodeStagedRow(row: SlimsRow): string {
@@ -82,10 +101,15 @@ async function offsetOfLine(handle: FileHandle, line: number, size: number): Pro
  * The rows of a dump split by splitDump into `stagingDir` (the run's work folder), for the tables `tables` (splitDump's
  * last answer). Only the tables the migration reads were staged: any other table has no rows here. Each call opens
  * the table's file and closes it again, so the source holds nothing open between calls.
+ *
+ * With `o.allowed` (a split made with its own table list) only those tables are listed and served, each with only
+ * those columns; without it, the tables of SLIMS_COLUMNS, whole.
  */
-export function openStagedDumpSource(stagingDir: DataPath, tables: SlimsTableInfo[]): SlimsSource {
+export function openStagedDumpSource(stagingDir: DataPath, tables: SlimsTableInfo[], o: { allowed?: Readonly<Record<string, readonly string[]>> } = {}): SlimsSource {
+  const allowed = o.allowed;
+  const served = allowed ?? SLIMS_COLUMNS;
   const copy = (t: SlimsTableInfo): SlimsTableInfo => ({ name: t.name, columns: [...t.columns], primaryKey: [...t.primaryKey], rows: t.rows });
-  const list = tables.map(copy);
+  const list = allowed === undefined ? tables.map(copy) : tables.filter((t) => Object.hasOwn(allowed, t.name)).map((t) => projectTableInfo(t, allowed[t.name]!));
   const known = new Set(list.map((t) => t.name));
 
   return {
@@ -97,7 +121,8 @@ export function openStagedDumpSource(stagingDir: DataPath, tables: SlimsTableInf
       if (!Number.isSafeInteger(limit) || limit < 1) throw new TypeError('rows: limit must be a positive integer');
       const m = after === null ? null : CURSOR.exec(after);
       if (after !== null && m === null) throw new TypeError('rows: not a cursor of this source');
-      if (!known.has(table) || !Object.hasOwn(SLIMS_COLUMNS, table)) return { rows: [], next: null };
+      if (!known.has(table) || !Object.hasOwn(served, table)) return { rows: [], next: null };
+      const columns = allowed === undefined ? null : allowed[table]!;
       const take = Math.min(limit, STAGED_BATCH_MAX);
       let handle: FileHandle;
       try {
@@ -124,7 +149,8 @@ export function openStagedDumpSource(stagingDir: DataPath, tables: SlimsTableInf
           for (let i = 0; i < chunk.length && rows.length < take; i += 1) {
             if (chunk[i] !== 0x0a) continue;
             pieces.push(chunk.subarray(from, i));
-            rows.push(decodeStagedRow(Buffer.concat(pieces).toString('utf8')));
+            const row = decodeStagedRow(Buffer.concat(pieces).toString('utf8'));
+            rows.push(columns === null ? row : projectRow(row, columns));
             pieces = [];
             pending = 0;
             from = i + 1;
