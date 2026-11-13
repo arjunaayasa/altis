@@ -6,6 +6,8 @@ import type { Kysely } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
 import { catalogSampleRows, type CatalogTable } from '../../../db/test/fixtures/catalog-tables.js';
+// ---- Komunitas K1 (tables) ----
+import { k1SampleRows, type K1Table } from '../../../db/test/fixtures/komunitas-k1-tables.js';
 import { backupTables, tableChecksumFromDb } from '../../src/backup/canonical.js';
 import { createExporter, type ExportCheckpoint } from '../../src/backup/exporter.js';
 import { readManifest, type BackupManifest } from '../../src/backup/manifest.js';
@@ -16,7 +18,7 @@ import { readManifest, type BackupManifest } from '../../src/backup/manifest.js'
 // The rows cover every column kind, NULLs, non-ASCII text (byte order of keys: 'A' < 'a' < 'é'), composite keys,
 // a secret settings row and an instance settings row (left out of the backup). Phase 2 (catalog): the catalog tables
 // hold the full sample rows of packages/db's table test, with fixed ids; the seed rows of 0027 (new ids on each
-// database) are removed first.
+// database) are removed first. Komunitas K1: its data tables hold the K1 sample rows the same way.
 
 const ctx = testDbContext();
 const T = 1_800_000_000_000;
@@ -53,6 +55,12 @@ const HASH = (c: string): string => c.repeat(64);
 function catalogRows(): ReturnType<typeof catalogSampleRows> {
   let n = 0;
   return catalogSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JQ${String((n += 1)).padStart(22, '0')}` });
+}
+
+/** The K1 sample rows with ids numbered from another fixed prefix. */
+function k1Rows(): ReturnType<typeof k1SampleRows> {
+  let n = 0;
+  return k1SampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JR${String((n += 1)).padStart(22, '0')}` });
 }
 
 /** The same rows, written through Kysely, on any dialect. */
@@ -180,6 +188,12 @@ async function seed(db: Kysely<DB>): Promise<void> {
   const backedUp = (Object.keys(rows) as CatalogTable[]).filter((t) => TABLE_CLASSES[t] === 'data');
   for (const t of tableLoadOrder(backedUp).order as CatalogTable[]) {
     await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(rows[t]).execute();
+  }
+  // ---- Komunitas K1 (tables): the backed-up K1 tables, parents first ----
+  const k1 = k1Rows();
+  const k1BackedUp = (Object.keys(k1) as K1Table[]).filter((t) => TABLE_CLASSES[t] === 'data');
+  for (const t of tableLoadOrder(k1BackedUp).order as K1Table[]) {
+    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(k1[t]).execute();
   }
 }
 

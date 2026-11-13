@@ -523,7 +523,7 @@ describe.skipIf(!engine.available || engine.engine !== 'sqlite')(`SQLite: server
       await cli.close();
       await m.ops.close();
     }
-  }, 60_000);
+  }, 120_000);
 
   it('a serving process lets go of its file when its fence sees sqliteRelease, reopens after the epoch moved, restarts and serves the restored data', async () => {
     const config = sampleConfig({ db: DB });

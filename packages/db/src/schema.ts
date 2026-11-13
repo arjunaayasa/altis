@@ -1,7 +1,7 @@
 import type { ColumnType, Generated } from 'kysely';
 
 // The Kysely database interface: one entry per table, written by hand to match the migrations
-// (src/migrations/0001_* … 0009_*, Phase 2's 0020_* … 0028_*) and the runner's own tables (ddl.ts ensureBootstrap, migrator.ts). columns.ts
+// (src/migrations/0001_* … 0009_*, Phase 2's 0020_* … 0029_*, Komunitas K1's 0030_* … 0033_*) and the runner's own tables (ddl.ts ensureBootstrap, migrator.ts). columns.ts
 // (TABLE_COLUMNS, TABLE_KEYS) describes the same tables column by column; its drift test checks both against the
 // catalog.
 //
@@ -577,6 +577,15 @@ export interface RecordsTable extends ArchivedTrail {
   merged_into: string | null;
   /** The last change of the record's public representation (OAI datestamp, sitemap, RSS). */
   changed_at: EpochMs;
+  // ---- Komunitas K1 (tables): 0033, the accreditation fields (none changes the public representation) ----
+  /** `general` | `children` | `special_needs`; null: not stated. */
+  audience: string | null;
+  /** Who made a local work: `student` | `teacher` | `staff` | `school` | `local`; null: not a local work. */
+  local_work: string | null;
+  /** The kind of local work (`LOCAL_WORK_KINDS`). */
+  local_work_kind: string | null;
+  /** `encyclopedia` | `dictionary` | `handbook` | `atlas` | `globe` | `biography` | `almanac` | `directory` | `other`. */
+  reference_kind: string | null;
 }
 
 /** Class data. `record_id` references records (ON DELETE CASCADE). */
@@ -737,6 +746,9 @@ export interface ItemsTable extends ArchivedTrail {
   price: number | null;
   currency: string | null;
   note: string | null;
+  // ---- Komunitas K1 (tables): 0033 ----
+  /** `YYYY-MM-DD`: the date the copy was entered in the source system (library time zone); written by a migration only. */
+  input_on: string | null;
 }
 
 /** Class data. `item_id` references items (ON DELETE CASCADE). */
@@ -880,6 +892,273 @@ export interface MigrationArchiveTable {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// ---- Komunitas K1 (tables) ----
+// Migrations 0030–0032: report runs, accreditation and the library's registers. Every text column of a primary or
+// unique key is key191() (binary), except usage_stats.source and usage_stats.metric (see 0031). Codes ALTIS writes from
+// fixed lists are `string`; dates are `YYYY-MM-DD`; money is in the currency's minor unit.
+
+// 0030_reports_core
+
+/** Class volatile. One export of a report definition. */
+export interface ReportRunsTable {
+  id: string;
+  /** The id of a report definition in the code (≤ 64). */
+  report_id: string;
+  /** `csv` | `xlsx` | `pdf` | `zip`. */
+  format: string;
+  /** The language the export is written in (`id` | `en`). */
+  locale: string;
+  /** JSON (≤ 8 000 bytes): the stored parameters. */
+  params: string;
+  /** 1 when the export holds personal data. */
+  personal: Flag;
+  /** `queued` | `running` | `succeeded` | `failed` | `cancelled`. */
+  status: string;
+  row_count: number | null;
+  /** PDF rows marked as holding characters the PDF fonts cannot print. */
+  non_latin_rows: number | null;
+  /** The file under the reports export folder, once the run succeeded. */
+  output_name: string | null;
+  output_size: number | null;
+  error_code: string | null;
+  job_id: string | null;
+  expires_at: EpochMs | null;
+  created_at: EpochMs;
+  created_by: string | null;
+  finished_at: EpochMs | null;
+}
+
+// 0031_accreditation
+
+/** Class data. One assessment period; global (`branch_id` stays null in this edition). */
+export interface AccredPeriodsTable extends ArchivedTrail {
+  id: string;
+  branch_id: string | null;
+  name: string;
+  /** `school_year` | `calendar_year` | `rolling_12` | `custom`. */
+  kind: string;
+  starts_on: string;
+  ends_on: string;
+  instrument_id: string;
+  /** `open` | `frozen`. */
+  status: string;
+  frozen_at: EpochMs | null;
+  frozen_by: string | null;
+  /** JSON (≤ 16 000 bytes): the institution's profile; some of its fields are personal data (PERSONAL_COLUMNS). */
+  profile: string;
+  students: number | null;
+  teachers: number | null;
+  edu_staff: number | null;
+  classes: number | null;
+  population_served: number | null;
+  teachers_using: number | null;
+  /** Default 0: the statement that every member of the school is registered as a library member. */
+  all_registered_confirmed: Generated<Flag>;
+  user_pcs: number | null;
+  staff_pcs: number | null;
+  ict_devices: number | null;
+  scanners: number | null;
+  floor_m2: number | null;
+  bandwidth_mbps: number | null;
+  hours_per_week: number | null;
+  /** JSON list of service codes. */
+  services: string | null;
+  external_website_url: string | null;
+}
+
+/** Class data. `period_id` references accred_periods (ON DELETE CASCADE). */
+export interface AccredAnswersTable {
+  period_id: string;
+  /** key191() (≤ 16 enforced by the code). */
+  indicator_code: string;
+  /** `a` | `b` | `c` | `d`. */
+  answer: string;
+  /** `manual` | `override`. */
+  mode: string;
+  /** Personal data (free text). */
+  note: string | null;
+  updated_at: EpochMs;
+  updated_by: string | null;
+}
+
+/** Class volatile. A computed indicator value; `indicator_code` `_meta` holds the evaluation's state. No foreign key. */
+export interface AccredResultsTable {
+  period_id: string;
+  /** key191() (≤ 16 enforced by the code). */
+  indicator_code: string;
+  /** JSON (≤ 16 000 bytes). */
+  payload: string;
+  computed_at: EpochMs;
+}
+
+/** Class data. A frozen copy of a period's results. `period_id` references accred_periods (ON DELETE CASCADE). */
+export interface AccredSnapshotsTable {
+  id: string;
+  period_id: string;
+  instrument_id: string;
+  /** JSON (≤ 60 000 bytes): the compact frozen values. */
+  result_values: string;
+  /** The score as a decimal string; null while not every indicator is answered. */
+  na: string | null;
+  na_low: string;
+  na_high: string;
+  /** `A` | `B` | `C` | `D`. */
+  grade: string | null;
+  prerequisites_met: Flag;
+  dossier_file_id: string | null;
+  note: string | null;
+  created_at: EpochMs;
+  created_by: string | null;
+}
+
+/** Class data. An evidence file of a period's indicator or of a register row. No foreign key. */
+export interface AccredEvidenceTable {
+  id: string;
+  period_id: string | null;
+  indicator_code: string | null;
+  evidence_code: string | null;
+  /** The register table of `entity_id`: `library_activities` | `library_staff` | `staff_trainings` | … */
+  entity: string | null;
+  entity_id: string | null;
+  file_id: string;
+  caption: string;
+  /** Default 0. */
+  sort_order: Generated<number>;
+  created_at: EpochMs;
+  created_by: string | null;
+}
+
+/** Class data. One monthly usage cell. */
+export interface UsageStatsTable {
+  /** `manual` | `slims` (plain varchar, see 0031). */
+  source: string;
+  /** A usage metric code (plain varchar, see 0031). */
+  metric: string;
+  span_from: string;
+  span_to: string;
+  /** key191() (≤ 26): '' = every branch. */
+  branch_key: string;
+  /** key191() (≤ 48): '' = total, `grp:<group>`, `guest`, `slims_type:<id>`, `member_unknown`, `ddc:<class>`. */
+  group_key: string;
+  value: number;
+  run_id: string | null;
+  updated_at: EpochMs;
+  updated_by: string | null;
+}
+
+/** Class data. How a source system's member type counts in the population groups. */
+export interface UsageGroupMapTable {
+  /** key191() (≤ 48): `slims_type:<id>` or `member_unknown`. */
+  group_key: string;
+  label: string;
+  /** null: not counted. */
+  accred_group: string | null;
+  updated_at: EpochMs;
+  updated_by: string | null;
+}
+
+// 0032_library_registers
+
+/** Class data. */
+export interface LibraryActivitiesTable extends ArchivedTrail {
+  id: string;
+  branch_id: string | null;
+  /** `ACTIVITY_KINDS`. */
+  kind: string;
+  title: string;
+  held_on: string;
+  ended_on: string | null;
+  participants: number | null;
+  partner: string | null;
+  /** Default 0. */
+  uses_library_facility: Generated<Flag>;
+  /** Default 0. */
+  external_speaker: Generated<Flag>;
+  description: string | null;
+}
+
+/** Class data. `name` and `appointment_ref` are personal data. */
+export interface LibraryStaffTable extends ArchivedTrail {
+  id: string;
+  branch_id: string | null;
+  staff_user_id: string | null;
+  name: string;
+  position: string | null;
+  /** `head` | `librarian` | `ict` | `technical` | `other`. */
+  role: string;
+  /** Default 0. */
+  is_librarian: Generated<Flag>;
+  /** `civil_servant` | `contract` | `honorary` | `foundation` | `other`. */
+  employment: string | null;
+  /** `sma` | `d1` | `d2` | `d3` | `d4` | `s1` | `s2` | `s3` | `other`. */
+  education_level: string | null;
+  education_library: Flag;
+  library_training: Flag;
+  competency_cert: Flag;
+  association_member: Flag;
+  appointment_ref: string | null;
+  starts_on: string | null;
+  ends_on: string | null;
+}
+
+/** Class data. `library_staff_id` references library_staff (ON DELETE CASCADE). */
+export interface StaffTrainingsTable extends ArchivedTrail {
+  id: string;
+  library_staff_id: string;
+  title: string;
+  organizer: string | null;
+  held_on: string;
+  hours: number | null;
+  certificate_file_id: string | null;
+}
+
+/** Class data. */
+export interface LibraryPartnershipsTable extends ArchivedTrail {
+  id: string;
+  branch_id: string | null;
+  partner: string;
+  /** `mou` | `pks` | `other`. */
+  kind: string;
+  starts_on: string;
+  ends_on: string | null;
+  scope: string | null;
+  document_file_id: string | null;
+}
+
+/** Class data. UNIQUE (scope_key, year); an archived year's `scope_key` is `~<id>`. */
+export interface LibraryBudgetsTable extends ArchivedTrail {
+  id: string;
+  /** key191() (≤ 32): '' = the whole library. */
+  scope_key: string;
+  branch_id: string | null;
+  year: number;
+  library_minor: number;
+  parent_minor: number | null;
+  /** The parent institution's budget without staff, maintenance and building upkeep. */
+  parent_nonpersonnel_minor: number | null;
+  collection_minor: number | null;
+  community_minor: number | null;
+  currency: string;
+  note: string | null;
+}
+
+/** Class data. */
+export interface LibraryDocumentsTable extends ArchivedTrail {
+  id: string;
+  branch_id: string | null;
+  /** `DOCUMENT_KINDS`. */
+  kind: string;
+  title: string;
+  reference: string | null;
+  issued_on: string | null;
+  issued_by: string | null;
+  /** JSON list of aspect codes. */
+  aspect_codes: string | null;
+  valid_until: string | null;
+  file_id: string | null;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // The runner's tables (class migrator): made by ensureBootstrap (ddl.ts) and migrator.ts, never by a migration.
 
 export interface SchemaTablesTable {
@@ -971,4 +1250,19 @@ export interface DB {
   catalog_runs: CatalogRunsTable;
   migration_map: MigrationMapTable;
   migration_archive: MigrationArchiveTable;
+  // ---- Komunitas K1 (tables) ----
+  report_runs: ReportRunsTable;
+  accred_periods: AccredPeriodsTable;
+  accred_answers: AccredAnswersTable;
+  accred_results: AccredResultsTable;
+  accred_snapshots: AccredSnapshotsTable;
+  accred_evidence: AccredEvidenceTable;
+  usage_stats: UsageStatsTable;
+  usage_group_map: UsageGroupMapTable;
+  library_activities: LibraryActivitiesTable;
+  library_staff: LibraryStaffTable;
+  staff_trainings: StaffTrainingsTable;
+  library_partnerships: LibraryPartnershipsTable;
+  library_budgets: LibraryBudgetsTable;
+  library_documents: LibraryDocumentsTable;
 }
