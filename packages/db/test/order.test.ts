@@ -91,6 +91,41 @@ describe('tableLoadOrder', () => {
     for (const t of catalog) expect(TABLE_KEYS[t].fks.filter((fk) => fk.table === t)).toEqual([]);
   });
 
+  // ---- Komunitas K1 (tables) ----
+  it('Komunitas K1: a period before its answers and snapshots, a staff member before their trainings; nothing self-referencing', () => {
+    const { order, selfRefs } = tableLoadOrder(ALL);
+    expect(precedes(order, 'accred_periods', 'accred_answers')).toBe(true);
+    expect(precedes(order, 'accred_periods', 'accred_snapshots')).toBe(true);
+    expect(precedes(order, 'library_staff', 'staff_trainings')).toBe(true);
+    expect(selfRefs).toEqual({});
+    const k1: TableName[] = [
+      'report_runs',
+      'accred_periods',
+      'accred_answers',
+      'accred_results',
+      'accred_snapshots',
+      'accred_evidence',
+      'usage_stats',
+      'usage_group_map',
+      'library_activities',
+      'library_staff',
+      'staff_trainings',
+      'library_partnerships',
+      'library_budgets',
+      'library_documents',
+    ];
+    expect(k1).toHaveLength(14);
+    const own = tableLoadOrder(k1);
+    expect(own.selfRefs).toEqual({});
+    expect(precedes(own.order, 'accred_periods', 'accred_answers')).toBe(true);
+    expect(precedes(own.order, 'accred_periods', 'accred_snapshots')).toBe(true);
+    expect(precedes(own.order, 'library_staff', 'staff_trainings')).toBe(true);
+    for (const t of k1) expect(TABLE_KEYS[t].fks.filter((fk) => fk.table === t)).toEqual([]);
+    // Only ownership relations have a foreign key: computed results and evidence reference nothing.
+    expect(TABLE_KEYS.accred_results.fks).toEqual([]);
+    expect(TABLE_KEYS.accred_evidence.fks).toEqual([]);
+  });
+
   it('ignores a foreign key to a table that is not loaded', () => {
     expect(tableLoadOrder(['user_roles', 'roles']).order).toEqual(['roles', 'user_roles']);
     expect(tableLoadOrder(['user_roles']).order).toEqual(['user_roles']);

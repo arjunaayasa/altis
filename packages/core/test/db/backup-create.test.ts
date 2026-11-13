@@ -321,7 +321,9 @@ describe.skipIf(!ctx.available)(`backup.create (snapshot) [${engineLabel()}]`, (
     expect(stored!.snapshot).toBe('sqlite-copy');
     const written = Object.values(stored!.checkpoint!.written).reduce((a, b) => a + b, 0);
     expect(written).toBeGreaterThanOrEqual(2);
-    const firstPart = path.join(backupDir(id), 'tables', 'audit_log', '00001.jsonl.gz');
+    // The first part written: of the first table in load order the checkpoint lists.
+    const firstTable = Object.keys(stored!.checkpoint!.written)[0]!;
+    const firstPart = path.join(backupDir(id), 'tables', firstTable, '00001.jsonl.gz');
     const before = await fsp.stat(firstPart);
     // Another process: no session of this one, no handle of its own on the copy.
     await closeJobSessions();

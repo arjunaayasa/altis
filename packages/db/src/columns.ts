@@ -4,7 +4,7 @@ import type { TableName } from './registry.js';
 export type { ColumnKind } from './ddl.js';
 
 // The column registry (decision C11): every column of every table, in table-definition order, and every table's
-// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0027) and the runner's own tables (ddl.ts ensureBootstrap,
+// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0029; Komunitas K1: 0030–0033) and the runner's own tables (ddl.ts ensureBootstrap,
 // migrator.ts). Backup and restore read it for the canonical row (registry column order), the per-version checks of
 // an archive's rows (columnsAt) and the length checks against the code's DDL; restore's read-only pre-pass reads the
 // unique keys (S5c) and the load order follows the foreign keys (order.ts).
@@ -110,6 +110,11 @@ const M0024 = '0024_search_index';
 const M0025 = '0025_catalog_runs_migration';
 const M0026 = '0026_custom_fields_i18n';
 const M0029 = '0029_search_token_version';
+// ---- Komunitas K1 (tables) ----
+const M0030 = '0030_reports_core';
+const M0031 = '0031_accreditation';
+const M0032 = '0032_library_registers';
+const M0033 = '0033_catalog_accred_fields';
 
 /** `archived_at` + `version`, then the trail columns (Phase 2 spec §2.2 "arsip+ver, jejak"). */
 function archivedTrail(since: string): ColumnSpec[] {
@@ -527,6 +532,14 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
       t.timestamp('changed_at'),
     ),
     ...archivedTrail(M0021),
+    // ---- Komunitas K1 (tables): the accreditation fields ----
+    ...added(
+      M0033,
+      nul(t.varchar('audience', 16)),
+      nul(t.varchar('local_work', 16)),
+      nul(t.varchar('local_work_kind', 16)),
+      nul(t.varchar('reference_kind', 16)),
+    ),
   ]),
   record_identifiers: frozen(
     added(
@@ -643,6 +656,8 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
       nul(t.text('note')),
     ),
     ...archivedTrail(M0022),
+    // ---- Komunitas K1 (tables): the source system's entry date ----
+    ...added(M0033, nul(t.date('input_on'))),
   ]),
   item_events: frozen(
     added(
@@ -742,6 +757,226 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
       t.timestamp('created_at'),
     ),
   ),
+  // ---- Komunitas K1 (tables) ----
+  report_runs: frozen(
+    added(
+      M0030,
+      t.id(),
+      t.varchar('report_id', 64),
+      t.varchar('format', 8),
+      t.char('locale', 2),
+      t.json('params'),
+      t.bool('personal'),
+      t.varchar('status', 16),
+      nul(t.int('row_count')),
+      nul(t.int('non_latin_rows')),
+      nul(t.varchar('output_name', 191)),
+      nul(t.bigint('output_size')),
+      nul(t.varchar('error_code', 64)),
+      nul(t.ulid('job_id')),
+      nul(t.timestamp('expires_at')),
+      t.timestamp('created_at'),
+      nul(t.ulid('created_by')),
+      nul(t.timestamp('finished_at')),
+    ),
+  ),
+  accred_periods: frozen([
+    ...added(
+      M0031,
+      t.id(),
+      nul(t.ulid('branch_id')),
+      t.varchar('name', 191),
+      t.varchar('kind', 16),
+      t.date('starts_on'),
+      t.date('ends_on'),
+      t.varchar('instrument_id', 32),
+      t.varchar('status', 16),
+      nul(t.timestamp('frozen_at')),
+      nul(t.ulid('frozen_by')),
+      t.json('profile'),
+      nul(t.int('students')),
+      nul(t.int('teachers')),
+      nul(t.int('edu_staff')),
+      nul(t.int('classes')),
+      nul(t.int('population_served')),
+      nul(t.int('teachers_using')),
+      t.bool('all_registered_confirmed'),
+      nul(t.smallint('user_pcs')),
+      nul(t.smallint('staff_pcs')),
+      nul(t.smallint('ict_devices')),
+      nul(t.smallint('scanners')),
+      nul(t.int('floor_m2')),
+      nul(t.int('bandwidth_mbps')),
+      nul(t.smallint('hours_per_week')),
+      nul(t.json('services')),
+      nul(t.varchar('external_website_url', 191)),
+    ),
+    ...archivedTrail(M0031),
+  ]),
+  accred_answers: frozen(
+    added(
+      M0031,
+      t.ulid('period_id'),
+      t.key191('indicator_code'),
+      t.char('answer', 1),
+      t.varchar('mode', 16),
+      nul(t.text('note')),
+      t.timestamp('updated_at'),
+      nul(t.ulid('updated_by')),
+    ),
+  ),
+  accred_results: frozen(added(M0031, t.ulid('period_id'), t.key191('indicator_code'), t.json('payload'), t.timestamp('computed_at'))),
+  accred_snapshots: frozen(
+    added(
+      M0031,
+      t.id(),
+      t.ulid('period_id'),
+      t.varchar('instrument_id', 32),
+      t.json('result_values'),
+      nul(t.varchar('na', 8)),
+      t.varchar('na_low', 8),
+      t.varchar('na_high', 8),
+      nul(t.char('grade', 1)),
+      t.bool('prerequisites_met'),
+      nul(t.ulid('dossier_file_id')),
+      nul(t.varchar('note', 191)),
+      t.timestamp('created_at'),
+      nul(t.ulid('created_by')),
+    ),
+  ),
+  accred_evidence: frozen(
+    added(
+      M0031,
+      t.id(),
+      nul(t.ulid('period_id')),
+      nul(t.varchar('indicator_code', 16)),
+      nul(t.varchar('evidence_code', 32)),
+      nul(t.varchar('entity', 32)),
+      nul(t.ulid('entity_id')),
+      t.ulid('file_id'),
+      t.varchar('caption', 191),
+      t.int('sort_order'),
+      t.timestamp('created_at'),
+      nul(t.ulid('created_by')),
+    ),
+  ),
+  usage_stats: frozen(
+    added(
+      M0031,
+      t.varchar('source', 16),
+      t.varchar('metric', 32),
+      t.date('span_from'),
+      t.date('span_to'),
+      t.key191('branch_key'),
+      t.key191('group_key'),
+      t.bigint('value'),
+      nul(t.ulid('run_id')),
+      t.timestamp('updated_at'),
+      nul(t.ulid('updated_by')),
+    ),
+  ),
+  usage_group_map: frozen(
+    added(M0031, t.key191('group_key'), t.varchar('label', 191), nul(t.varchar('accred_group', 16)), t.timestamp('updated_at'), nul(t.ulid('updated_by'))),
+  ),
+  library_activities: frozen([
+    ...added(
+      M0032,
+      t.id(),
+      nul(t.ulid('branch_id')),
+      t.varchar('kind', 32),
+      t.varchar('title', 191),
+      t.date('held_on'),
+      nul(t.date('ended_on')),
+      nul(t.int('participants')),
+      nul(t.varchar('partner', 191)),
+      t.bool('uses_library_facility'),
+      t.bool('external_speaker'),
+      nul(t.text('description')),
+    ),
+    ...archivedTrail(M0032),
+  ]),
+  library_staff: frozen([
+    ...added(
+      M0032,
+      t.id(),
+      nul(t.ulid('branch_id')),
+      nul(t.ulid('staff_user_id')),
+      t.varchar('name', 191),
+      nul(t.varchar('position', 191)),
+      t.varchar('role', 16),
+      t.bool('is_librarian'),
+      nul(t.varchar('employment', 16)),
+      nul(t.varchar('education_level', 16)),
+      t.bool('education_library'),
+      t.bool('library_training'),
+      t.bool('competency_cert'),
+      t.bool('association_member'),
+      nul(t.varchar('appointment_ref', 191)),
+      nul(t.date('starts_on')),
+      nul(t.date('ends_on')),
+    ),
+    ...archivedTrail(M0032),
+  ]),
+  staff_trainings: frozen([
+    ...added(
+      M0032,
+      t.id(),
+      t.ulid('library_staff_id'),
+      t.varchar('title', 191),
+      nul(t.varchar('organizer', 191)),
+      t.date('held_on'),
+      nul(t.smallint('hours')),
+      nul(t.ulid('certificate_file_id')),
+    ),
+    ...archivedTrail(M0032),
+  ]),
+  library_partnerships: frozen([
+    ...added(
+      M0032,
+      t.id(),
+      nul(t.ulid('branch_id')),
+      t.varchar('partner', 191),
+      t.varchar('kind', 16),
+      t.date('starts_on'),
+      nul(t.date('ends_on')),
+      nul(t.text('scope')),
+      nul(t.ulid('document_file_id')),
+    ),
+    ...archivedTrail(M0032),
+  ]),
+  library_budgets: frozen([
+    ...added(
+      M0032,
+      t.id(),
+      t.key191('scope_key'),
+      nul(t.ulid('branch_id')),
+      t.smallint('year'),
+      t.bigint('library_minor'),
+      nul(t.bigint('parent_minor')),
+      nul(t.bigint('parent_nonpersonnel_minor')),
+      nul(t.bigint('collection_minor')),
+      nul(t.bigint('community_minor')),
+      t.char('currency', 3),
+      nul(t.text('note')),
+    ),
+    ...archivedTrail(M0032),
+  ]),
+  library_documents: frozen([
+    ...added(
+      M0032,
+      t.id(),
+      nul(t.ulid('branch_id')),
+      t.varchar('kind', 32),
+      t.varchar('title', 191),
+      nul(t.varchar('reference', 191)),
+      nul(t.date('issued_on')),
+      nul(t.varchar('issued_by', 191)),
+      nul(t.json('aspect_codes')),
+      nul(t.date('valid_until')),
+      nul(t.ulid('file_id')),
+    ),
+    ...archivedTrail(M0032),
+  ]),
   // Test builds only (decision D1d-26): the release fixtures' table, made by 9001_test_expand and widened by
   // 9002_test_contract. The migration names are literals inside the dead branch, so a production build keeps none of
   // it (R57; the release's leak scan checks).
@@ -845,6 +1080,21 @@ export const TABLE_KEYS: Readonly<Record<TableName, TableKeySpec>> = Object.free
   catalog_runs: keys(['id']),
   migration_map: keys(['source', 'entity', 'legacy_key']),
   migration_archive: keys(['id'], { unique: [['source', 'table_name', 'legacy_key']] }),
+  // ---- Komunitas K1 (tables): foreign keys only for ownership (a period's answers and snapshots, a staff member's trainings) ----
+  report_runs: keys(['id']),
+  accred_periods: keys(['id']),
+  accred_answers: keys(['period_id', 'indicator_code'], { fks: [{ column: 'period_id', table: 'accred_periods', refColumn: 'id' }] }),
+  accred_results: keys(['period_id', 'indicator_code']),
+  accred_snapshots: keys(['id'], { fks: [{ column: 'period_id', table: 'accred_periods', refColumn: 'id' }] }),
+  accred_evidence: keys(['id']),
+  usage_stats: keys(['source', 'metric', 'span_from', 'span_to', 'branch_key', 'group_key']),
+  usage_group_map: keys(['group_key']),
+  library_activities: keys(['id']),
+  library_staff: keys(['id']),
+  staff_trainings: keys(['id'], { fks: [{ column: 'library_staff_id', table: 'library_staff', refColumn: 'id' }] }),
+  library_partnerships: keys(['id']),
+  library_budgets: keys(['id'], { unique: [['scope_key', 'year']] }),
+  library_documents: keys(['id']),
   // Test builds only (decision D1d-26), as in TABLE_COLUMNS.
   ...(typeof __BUILD_PROFILE__ !== 'undefined' && __BUILD_PROFILE__ === 'test' ? { test_fixture: keys(['id']) } : {}),
 } satisfies Record<TableName, TableKeySpec>);

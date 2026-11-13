@@ -10,6 +10,8 @@ import { PHASE1_MIGRATIONS, releaseMigrations } from '../src/migrations/index.js
 import { runMigrations } from '../src/migrator.js';
 import { migrationsUpTo } from '../src/order.js';
 import { TABLE_CLASSES, type TableName } from '../src/registry.js';
+// ---- Komunitas K1 (tables) ----
+import { K1_TABLES_BY_MIGRATION } from './fixtures/komunitas-k1-tables.js';
 
 // The column registry (decision C11) against the live catalog: the drift test. TABLE_COLUMNS and TABLE_KEYS are
 // written by hand; this keeps them honest on the engine picked by ALTIS_TEST_DB (default sqlite), after every
@@ -357,10 +359,10 @@ describe.skipIf(!ctx.available)(`the column registry against the catalog: drift 
   });
 
   it('Phase 2: the 27 tables of 0020–0025 match the catalog, and custom_field_defs ends with the three columns of 0026', async () => {
-    // Made by a migration of Phase 2's range 0020–0039.
+    // Made by a migration of Phase 2's migrations 0020–0029 (Komunitas K1 starts at 0030).
     const catalogTables = TABLES.filter((t) => {
       const since = TABLE_COLUMNS[t][0]?.since ?? '';
-      return since >= '0020' && since < '0040';
+      return since >= '0020' && since < '0030';
     });
     expect(catalogTables).toHaveLength(27);
     for (const table of catalogTables) {
@@ -373,6 +375,41 @@ describe.skipIf(!ctx.available)(`the column registry against the catalog: drift 
       ['is_searchable', '0026_custom_fields_i18n'],
     ]);
     expect((await catalogColumns('custom_field_defs')).slice(-3).map((c) => c.name)).toEqual(['label_en', 'is_public', 'is_searchable']);
+  });
+
+  // ---- Komunitas K1 (tables) ----
+  it('Komunitas K1: the 14 tables of 0030–0032 and their keys match the catalog; records and items end with the columns of 0033', async () => {
+    const k1Tables = TABLES.filter((t) => {
+      const since = TABLE_COLUMNS[t][0]?.since ?? '';
+      return since >= '0030' && since < '0040';
+    });
+    expect(k1Tables).toEqual(Object.values(K1_TABLES_BY_MIGRATION).flat());
+    expect(k1Tables).toHaveLength(14);
+    for (const table of k1Tables) {
+      expect({ table, columns: await catalogColumns(table) }).toEqual({ table, columns: expected(TABLE_COLUMNS[table]) });
+      const keys = TABLE_KEYS[table];
+      expect({ table, pk: await primaryKey(table) }).toEqual({ table, pk: keys.pk });
+      expect({ table, unique: await uniqueKeys(table) }).toEqual({ table, unique: keys.unique.map((u) => [...u]) });
+      expect({ table, fks: await foreignKeys(table) }).toEqual({
+        table,
+        fks: keys.fks.map((f) => ({ ...f })).sort((a, b) => a.column.localeCompare(b.column)),
+      });
+    }
+    const since0033 = (table: TableName) => TABLE_COLUMNS[table].filter((c) => c.since === '0033_catalog_accred_fields');
+    expect(since0033('records')).toEqual(TABLE_COLUMNS.records.slice(-4));
+    expect(since0033('records').map((c) => [c.name, c.kind, c.length, c.nullable])).toEqual([
+      ['audience', 'varchar', 16, true],
+      ['local_work', 'varchar', 16, true],
+      ['local_work_kind', 'varchar', 16, true],
+      ['reference_kind', 'varchar', 16, true],
+    ]);
+    expect(since0033('items')).toEqual(TABLE_COLUMNS.items.slice(-1));
+    expect(since0033('items').map((c) => [c.name, c.kind, c.length, c.nullable])).toEqual([['input_on', 'date', 10, true]]);
+    expect((await catalogColumns('records')).slice(-4).map((c) => c.name)).toEqual(['audience', 'local_work', 'local_work_kind', 'reference_kind']);
+    expect((await catalogColumns('items')).slice(-1).map((c) => c.name)).toEqual(['input_on']);
+    for (const table of ['records', 'items'] as const) {
+      expect({ table, columns: await catalogColumns(table) }).toEqual({ table, columns: expected(TABLE_COLUMNS[table]) });
+    }
   });
 
   it('the first column of a table names the migration that made it (schema_tables.created_by)', async () => {
