@@ -74,7 +74,8 @@ describe('the metric providers', () => {
 
   it('a provider not written yet answers no value at once', async () => {
     const ctx = {} as AccredMetricContext;
-    for (const p of ACCRED_METRIC_PROVIDERS) {
+    const written = new Set(['usage']);
+    for (const p of ACCRED_METRIC_PROVIDERS.filter((q) => !written.has(q.id))) {
       const step = await p.compute(ctx, p.metrics, null);
       expect(step.done, p.id).toBe(true);
       if (step.done) expect(step.values.size, p.id).toBe(0);
