@@ -16,6 +16,8 @@ import { parseTemplate } from './template.js';
 // - Agents, subjects and the publisher become text refs (createRecord finds or creates them by key).
 // - `draft.links` → `body.links` (S4): createRecord stores the http(s) ones as public URL attachments.
 // - `items` stay with the caller (Task 17 creates them); `custom` passes as it is (a CSV caller coerces it first, S19).
+// - The accreditation fields (`audience`, `localWork`, `localWorkKind`, `referenceKind`) pass as they are; a draft
+//   without them (MARC, SRU, the SLiMS migration) leaves them out of the body, so an update keeps the stored values.
 // - The warnings are codes, never values (they go into run reports as they are).
 
 type Db = Kysely<DB> | Transaction<DB>;
@@ -112,6 +114,11 @@ export async function recordBodyFromDraft(
     links: draft.links.map((l) => ({ url: l.url, ...(l.title === undefined ? {} : { title: l.title }) })),
     marcExtra: draft.marcExtra.map((f) => ({ tag: f.tag, ind1: f.ind1, ind2: f.ind2, data: f.data })),
     custom: draft.custom,
+    // ---- Komunitas K1 (catalogue accreditation fields): as the draft has them (null clears one on an update) ----
+    audience: draft.audience,
+    localWork: draft.localWork,
+    localWorkKind: draft.localWorkKind,
+    referenceKind: draft.referenceKind,
   };
   // Leave out what the draft does not have, so the body reads as one a client would send.
   for (const key of Object.keys(body) as (keyof RecordCreateBody)[]) if (body[key] === undefined) delete body[key];

@@ -12,12 +12,26 @@
 // - `year`: a bare year is `publicationYear`; anything else is `publicationDateText` with its first year.
 // - `opac_visible`: `0/1/true/false/ya/tidak` in any case. `custom.<code>`: raw strings in `draft.custom`; the import
 //   coerces them with coerceCustomValues before validation (S19).
+// - `audience`, `local_work`, `local_work_kind`, `reference_kind` (the accreditation fields, after `opac_visible`, so a
+//   file without them stays valid): the codes of their lists, read in any case; an unknown code is `invalid`.
 // - A cell that does not fit its field (too long, not a code, an unknown role) is reported in `errors` and left out of
 //   the draft; an empty cell is left out (an update keeps the stored value). The `'` csvCell puts before a formula
 //   start is removed, so an export reads back as written.
 // Pure; no I/O.
 
-import { AGENT_TYPES, RELATOR_ROLES, SUBJECT_TYPES, isUlid, type AgentType, type RelatorRole, type SubjectType } from '@altis/shared';
+import {
+  AGENT_TYPES,
+  AUDIENCES,
+  LOCAL_WORKS,
+  LOCAL_WORK_KINDS,
+  REFERENCE_KINDS,
+  RELATOR_ROLES,
+  SUBJECT_TYPES,
+  isUlid,
+  type AgentType,
+  type RelatorRole,
+  type SubjectType,
+} from '@altis/shared';
 import { RECORD_LIST_MAX, type RecordData, type RecordDraft } from '@altis/shared/api/catalog/record-data';
 import { agentNameKey, subjectTermKey } from '../data/keys.js';
 import { splitIdentifierText } from '../lib/identifiers.js';
@@ -61,6 +75,11 @@ export const CSV_RECORD_COLUMNS = Object.freeze([
   'summary',
   'notes',
   'opac_visible',
+  // ---- Komunitas K1 (catalogue accreditation fields): after opac_visible, so a file written before them stays valid ----
+  'audience',
+  'local_work',
+  'local_work_kind',
+  'reference_kind',
 ] as const);
 
 type RecordColumn = (typeof CSV_RECORD_COLUMNS)[number];
@@ -211,6 +230,17 @@ function agentText(a: { type: AgentType; name: string; dates?: string; role: Rel
   return `${a.name} [${parts.join(', ')}]`;
 }
 
+/**
+ * An accreditation field's cell: one of `values` (any case), or undefined for an empty cell; an unknown code is the
+ * error `invalid` at `column` and left out.
+ */
+function accredCode<T extends string>(r: CellReader, column: string, raw: string, values: readonly T[]): T | undefined {
+  const v = oneLine(raw).toLowerCase();
+  if (v === '') return undefined;
+  if (!(values as readonly string[]).includes(v)) return r.error(column, 'invalid');
+  return v as T;
+}
+
 const TYPE_PREFIX = /^([A-Za-z]+)\s*:\s*(.*)$/;
 
 /** `tipe:istilah` → the subject (`topic` when the prefix is not a type). */
@@ -303,6 +333,11 @@ export function csvRecordRow(header: readonly string[], cells: readonly string[]
   else if (FALSE_WORDS.has(visible)) opacVisible = false;
   else if (visible !== '') r.error('opac_visible', 'invalid_value');
 
+  put('audience', accredCode(r, 'audience', get('audience'), AUDIENCES));
+  put('localWork', accredCode(r, 'local_work', get('local_work'), LOCAL_WORKS));
+  put('localWorkKind', accredCode(r, 'local_work_kind', get('local_work_kind'), LOCAL_WORK_KINDS));
+  put('referenceKind', accredCode(r, 'reference_kind', get('reference_kind'), REFERENCE_KINDS));
+
   put('custom', customCells(index, cells));
   if (hasExtraCells(cells, header.length)) r.error('', 'too_many_cells');
 
@@ -357,6 +392,10 @@ export function recordCsvCells(d: RecordData, customCodes: readonly string[]): s
     summary: d.summary ?? '',
     notes: d.notes ?? '',
     opac_visible: d.opacVisible ? '1' : '0',
+    audience: d.audience ?? '',
+    local_work: d.localWork ?? '',
+    local_work_kind: d.localWorkKind ?? '',
+    reference_kind: d.referenceKind ?? '',
   };
   const custom = d.custom ?? {};
   return [...CSV_RECORD_COLUMNS.map((c) => by[c]), ...customCodes.map((code) => customValueText(Object.hasOwn(custom, code) ? custom[code] : undefined))];
