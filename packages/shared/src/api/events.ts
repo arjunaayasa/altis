@@ -49,6 +49,8 @@ export const EVENT_TYPES: readonly string[] = Object.freeze([
   'catalog.record.changed', // catalog: {id} of a record written (Phase 2 spec §12.6; payloads carry ids only)
   'catalog.item.changed', // catalog: the ids of an item written (never a barcode or another value)
   'catalog.bulk.changed', // catalog: {runId} per slice of an import, a migration or a reindex
+  // ---- Komunitas K1 (accreditation) ----
+  'accreditation.results.changed', // accreditation: {periodId} when a period's stored results changed
 ]);
 
 /** Whether `type` is in {@link EVENT_TYPES}. */

@@ -118,7 +118,8 @@ describe('records, authorities and the other lists', () => {
     expect([...ATTACHMENT_MEDIA]).toEqual(['pdf', 'audio', 'video', 'image', 'url', 'other']);
     expect([...IMPORT_FORMATS]).toEqual(['marc21', 'marcxml', 'csv-records', 'csv-items', 'csv-slims', 'csv-slims-items']);
     expect([...EXPORT_FORMATS]).toEqual(['marc21', 'marcxml', 'marcjson', 'csv-records', 'csv-items']);
-    expect([...RUN_KINDS]).toEqual(['import', 'export', 'migration', 'dedupe_scan']);
+    // The SLiMS usage statistics import of the accreditation workspace is a catalogue run too.
+    expect([...RUN_KINDS]).toEqual(['import', 'export', 'migration', 'dedupe_scan', 'slims_usage']);
     expect([...RUN_STATUSES]).toEqual(['queued', 'running', 'succeeded', 'failed', 'cancelled']);
     expect([...BODY_FORMATS]).toEqual(['markdown', 'html']);
   });

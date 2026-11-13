@@ -10,7 +10,7 @@ import type { StorageDriver } from '../../files/serve.js';
 // scan, which its job moves from `queued` through `running` to a terminal status. `options` (never a secret) and
 // `summary` are JSON capped at 60 000 bytes (MySQL TEXT; a run reports counters, the details go to the report file).
 //
-// - The report (decision P2-23) is a `files` row with `context 'catalog.report'`, owned by the run (`owner_type
+// - The report is a generated `files` row (not an upload) with `context 'catalog.report'`, owned by the run (`owner_type
 //   'catalog_runs'`), staff-only, `text/csv`: the header, the first 10 000 rows, and `# truncated,<n>` when n more came.
 //   It is written outside any transaction (a file, then its row: a row never names a missing file).
 // - A run's work folder `tmp/<runId>/` holds its staging (an import's `import.bin`, the dump's NDJSON, `files.bin`,
@@ -18,8 +18,14 @@ import type { StorageDriver } from '../../files/serve.js';
 //   protectedRunWorkIds before removing an old `tmp/<ulid>/` (S2): a queued or running run keeps its folder, and so
 //   does a finished one for 7 days, since a real run adopts its dry run's input (S3).
 
-/** What a catalog run does. */
-export type RunKind = 'import' | 'export' | 'migration' | 'dedupe_scan';
+/** What a catalog run does; `slims_usage` is the read-only import of SLiMS usage statistics into an accreditation period. */
+export type RunKind =
+  | 'import'
+  | 'export'
+  | 'migration'
+  | 'dedupe_scan'
+  // ---- Komunitas K1 (runs) ----
+  | 'slims_usage';
 
 /** A run's terminal status. */
 export type RunEnd = 'succeeded' | 'failed' | 'cancelled';
@@ -34,7 +40,14 @@ export const RUN_REPORT_MAX_ROWS = 10_000;
 /** A finished run's work folder is kept this long after it finished (S2: a dry run's input is reused, S3). */
 export const RUN_WORK_KEEP_MS = 7 * 86_400_000;
 
-const RUN_KINDS: readonly RunKind[] = ['import', 'export', 'migration', 'dedupe_scan'];
+const RUN_KINDS: readonly RunKind[] = [
+  'import',
+  'export',
+  'migration',
+  'dedupe_scan',
+  // ---- Komunitas K1 (runs) ----
+  'slims_usage',
+];
 const RUN_ENDS: readonly RunEnd[] = ['succeeded', 'failed', 'cancelled'];
 const ID_BATCH = 500;
 
@@ -153,7 +166,7 @@ export async function getRun(db: Db, id: string): Promise<RunRow | null> {
 }
 
 /**
- * Writes the report of run `runId` (decision P2-23): a CSV (BOM, `,`, every cell through csvRow) of `header` and the
+ * Writes the report of run `runId` (a generated `files` row): a CSV (BOM, `,`, every cell through csvRow) of `header` and the
  * first 10 000 of `rows`, then `# truncated,<n>` when n more came (all of `rows` is read, to count them). The file is
  * stored through `storage`, then its `files` row is written (`context 'catalog.report'`, `owner_type 'catalog_runs'`,
  * `owner_id` the run, `access 'staff'`, `mime 'text/csv'`). Call it outside any transaction: it runs its own.
