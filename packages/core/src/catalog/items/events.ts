@@ -7,7 +7,8 @@ import type { TxCtx } from '../../context.js';
 // The history of items (`item_events`, Phase 2 spec §2.2, §3.4): every change of an item writes rows here, in the
 // transaction of the change: `created` (or `imported`/`migrated`) when it is made, `status` when its status changes
 // (`archived` when it becomes withdrawn), `moved` when its location changes, `updated` for the other fields. `meta`
-// names the changed fields only, never their values; `actor_type`/`actor_id` are the transaction's actor.
+// names the changed fields only, never their values; `actor_type`/`actor_id` are the transaction's actor. A row a
+// SLiMS catalogue re-sync writes also says so in `meta.via` (`sync`).
 
 /** One row to write. */
 export interface ItemEventInput {
@@ -19,6 +20,9 @@ export interface ItemEventInput {
   toLocationId?: string | null;
   /** The API names of the changed fields. */
   fields?: readonly string[];
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  /** What wrote the change besides the actor: `sync`, a SLiMS catalogue re-sync (stored in `meta.via`). */
+  via?: 'sync';
 }
 
 /** Rows per INSERT (12 columns: far below every engine's parameter limit). */
@@ -42,7 +46,7 @@ export async function writeItemEvents(tx: TxCtx, events: readonly ItemEventInput
     to_location_id: e.toLocationId ?? null,
     actor_type: tx.actor.type,
     actor_id: tx.actor.id,
-    meta: JSON.stringify({ fields: [...(e.fields ?? [])] }),
+    meta: JSON.stringify(e.via === undefined ? { fields: [...(e.fields ?? [])] } : { fields: [...(e.fields ?? [])], via: e.via }),
   }));
   for (let i = 0; i < rows.length; i += INSERT_BATCH) {
     await tx.trx.insertInto('item_events').values(rows.slice(i, i + INSERT_BATCH)).execute();

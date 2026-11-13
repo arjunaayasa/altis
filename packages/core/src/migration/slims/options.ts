@@ -14,6 +14,9 @@ import type { SlimsRunOptions } from './stage.js';
 // - `adoptedFrom`: the dry run whose work folder this run takes over (S3), renamed after the start's COMMIT and again
 //   by the first slice when that was lost. `adoptedBy` is written on the dry run itself, in the start's transaction,
 //   so a dry run is adopted once.
+// - `catalogMode`, `skipCatalog`: the catalogue re-sync (`sync` also rewrites the mapped rows no one edited in ALTIS)
+//   and the skip of the catalogue stages. Both are optional, so the stored options of an older run still parse
+//   (`append` and `false`).
 
 /** The longest `filesDir` (a real path typed at the CLI). */
 export const SLIMS_FILES_DIR_MAX = 1024;
@@ -37,6 +40,9 @@ export const slimsRunSettings = z.strictObject({
   filesDir: z.string().min(1).max(SLIMS_FILES_DIR_MAX).nullable(),
   adoptedFrom: ulidField.nullable(),
   adoptedBy: ulidField.optional(),
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  catalogMode: z.enum(['append', 'sync']).optional(),
+  skipCatalog: z.boolean().optional(),
 });
 
 export type SlimsRunSettings = z.infer<typeof slimsRunSettings>;
@@ -60,5 +66,12 @@ export function parseSlimsRunSettings(json: string): SlimsRunSettings {
 
 /** What the stages get of the settings (stage.ts's SlimsRunOptions). */
 export function stageOptions(s: SlimsRunSettings): SlimsRunOptions {
-  return { branchId: s.branchId, priceMode: s.priceMode, sourceName: s.sourceName, allowNonEmpty: s.allowNonEmpty };
+  return {
+    branchId: s.branchId,
+    priceMode: s.priceMode,
+    sourceName: s.sourceName,
+    allowNonEmpty: s.allowNonEmpty,
+    catalogMode: s.catalogMode ?? 'append',
+    skipCatalog: s.skipCatalog ?? false,
+  };
 }

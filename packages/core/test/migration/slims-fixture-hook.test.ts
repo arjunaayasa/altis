@@ -30,15 +30,23 @@ describe('the SLiMS fixture hooks', () => {
     expect(usage.filesZip.equals(plain.filesZip)).toBe(true);
   });
 
-  it('with both options and the catalogue hook still empty, the catalogue tables are the plain ones and the hooks expectations come back', () => {
+  it('with both options, only the tables the catalogue changes touch differ from the plain dump, and the hooks expectations come back', () => {
     const both = slimsFixtureBytes(SLIMS_FIXTURE_SEED, { usage: {}, mutateCatalog: true });
     const a = sections(plain.dump);
     const b = sections(both.dump);
-    for (const table of catalogueTables) expect(b.get(table), table).toBe(a.get(table));
-    expect(both.hooks.mutation).toEqual({ catalogChanges: 0 });
+    const touched = both.hooks.mutation!.tables;
+    for (const table of catalogueTables.filter((t) => !touched.includes(t))) expect(b.get(table), table).toBe(a.get(table));
+    for (const table of touched) expect(b.get(table), table).not.toBe(a.get(table));
     expect(both.hooks.usage?.rows.visitor_count).toBe(5000);
+    expect(both.hooks.mutation).toMatchObject({ catalogChanges: 10 });
     expect(plain.hooks).toEqual({ usage: null, mutation: null });
-    for (const table of catalogueTables) expect(both.expected.tables[table], table).toEqual(plain.expected.tables[table]);
+    for (const table of catalogueTables) if (!touched.includes(table)) expect(both.expected.tables[table], table).toEqual(plain.expected.tables[table]);
+    // One copy added, two gone with their title; two titles gone; two item statuses and two loans added.
+    expect(both.expected.tables['item']!.source).toBe(plain.expected.tables['item']!.source - 1);
+    expect(both.expected.tables['biblio']!.source).toBe(plain.expected.tables['biblio']!.source - 2);
+    expect(both.expected.tables['mst_item_status']!.source).toBe(plain.expected.tables['mst_item_status']!.source + 2);
+    const usageOnly = slimsFixtureBytes(SLIMS_FIXTURE_SEED, { usage: {} });
+    expect(both.expected.tables['loan']!.source).toBe(usageOnly.expected.tables['loan']!.source + 2);
   });
 
   it('expected: the catalogue tables and roles as before, plus the two empty usage tables, not read by the catalogue migration', () => {

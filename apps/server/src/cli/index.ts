@@ -433,7 +433,10 @@ function slimsValueValid(value: string): boolean {
 function checkSlimsSources(s: Args['slims']): void {
   const db = s.db !== undefined || s.user !== undefined;
   if (db && s.dump !== undefined) throw usage('pilih --db atau --dump, tidak keduanya / choose --db or --dump, not both');
-  if (!db && s.dump === undefined) throw usage('slims:import memerlukan --db dan --user, atau --dump / slims:import needs --db and --user, or --dump');
+  // A run that takes a dump dry run over (`--from-run`) reads that dry run's staging: it names no source again.
+  if (!db && s.dump === undefined && s.fromRunId === undefined) {
+    throw usage('slims:import memerlukan --db dan --user, atau --dump / slims:import needs --db and --user, or --dump');
+  }
   if (db && (s.db === undefined || s.user === undefined)) throw usage('--db dan --user dipakai bersama / --db and --user go together');
   if (s.filesZip !== undefined && s.filesDir !== undefined) {
     throw usage('pilih --files-zip atau --files-dir, tidak keduanya / choose --files-zip or --files-dir, not both');
