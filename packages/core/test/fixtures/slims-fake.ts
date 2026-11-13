@@ -1,9 +1,11 @@
-import { withTx } from '@altis/db';
+import { withTx, type ForeignMysql, type ForeignMysqlConfig } from '@altis/db';
 import { DomainError, newId } from '@altis/shared';
 import { mapLegacy } from '../../src/catalog/data/legacy-map.js';
 import type { SlimsSourceFactory } from '../../src/migration/slims/factory.js';
 import type { SlimsFilesSource, SlimsRow, SlimsSource, SlimsTableInfo, SplitCheckpoint } from '../../src/migration/slims/source/types.js';
 import type { SlimsStage, SlimsStageContext, SlimsStageName } from '../../src/migration/slims/stage.js';
+import type { FixtureCell, FixtureData } from '../support/slims-fixture/generate.js';
+import { FIXTURE_TABLES } from '../support/slims-fixture/schema.js';
 
 // An in-memory SLiMS source and fake stages for the migration framework's tests (Phase 2 Task 23, B1): the framework
 // test, the route tests, the CLI test and the audit script run whole migrations on them through the factory seam
@@ -167,4 +169,124 @@ export function fakeCountingStage(
       return { done: batch.next === null, cursor: batch.next };
     },
   };
+}
+
+// ---- Komunitas K1 (usage tables) ----
+// A fake SLiMS MySQL/MariaDB server for the direct-connection source, over the synthetic fixture's tables: the usage
+// import's tests read the same rows through it as through the dump. SLiMS 9 table/column names (interoperability facts,
+// no SLiMS code).
+
+/** A cell as the foreign client hands it over: text as bytes, integers as numbers, dates as their text. */
+export type FakeMysqlCell = Buffer | number | string | null;
+
+/** A table of the fake server: its columns in order, its primary key and its rows. */
+export interface FakeMysqlTable {
+  columns: string[];
+  primaryKey: string[];
+  rows: Record<string, FakeMysqlCell>[];
+}
+
+/** The fake server: `connect` is the source's test seam; `log` holds every statement with its values. */
+export interface FakeForeignMysql {
+  connect: (cfg: ForeignMysqlConfig, o: { connectTimeoutMs: number }) => Promise<ForeignMysql>;
+  log: { sql: string; params: unknown[] }[];
+  /** What each connection was opened with. */
+  opened: { cfg: ForeignMysqlConfig; connectTimeoutMs: number }[];
+  readonly closed: number;
+}
+
+/** The comparable form of a key value as the fake server sees it. */
+const fakeKey = (v: unknown): string | number => (Buffer.isBuffer(v) ? v.toString('utf8') : typeof v === 'number' ? v : String(v));
+
+function compareKeys(a: readonly (string | number)[], b: readonly (string | number)[]): number {
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i]! < b[i]!) return -1;
+    if (a[i]! > b[i]!) return 1;
+  }
+  return 0;
+}
+
+/**
+ * A fake server that answers the statements the direct-connection source sends: the three information_schema reads,
+ * `SELECT COUNT(*)`, and a SELECT of `??` columns with a keyset WHERE, an ORDER BY, a LIMIT and an OFFSET. Any other
+ * statement throws, so a statement the source should not send fails the test.
+ */
+export function fakeForeignMysql(tables: ReadonlyMap<string, FakeMysqlTable>): FakeForeignMysql {
+  const log: { sql: string; params: unknown[] }[] = [];
+  const opened: { cfg: ForeignMysqlConfig; connectTimeoutMs: number }[] = [];
+  const state = { closed: 0 };
+  const b = (s: string): Buffer => Buffer.from(s, 'utf8');
+  const db: ForeignMysql = {
+    async query(sql, params) {
+      log.push({ sql, params: [...params] });
+      if (sql.includes('information_schema.TABLES')) return [...tables.keys()].map((t) => ({ name: b(t) }));
+      if (sql.includes('information_schema.COLUMNS')) return [...tables].flatMap(([t, def]) => def.columns.map((c, i) => ({ tname: b(t), cname: b(c), position: i + 1 })));
+      if (sql.includes('information_schema.STATISTICS')) return [...tables].flatMap(([t, def]) => def.primaryKey.map((c, i) => ({ tname: b(t), cname: b(c), seq: i + 1 })));
+      if (sql === 'SELECT COUNT(*) AS n FROM ??') return [{ n: tables.get(params[0] as string)!.rows.length }];
+      const m = /^SELECT ((?:\?\?, )*\?\?) FROM \?\?(?: WHERE \(((?:\?\?, )*\?\?)\) > \(((?:\?, )*\?)\))?(?: ORDER BY ((?:\?\?, )*\?\?))? LIMIT \?(?: OFFSET \?)?$/.exec(sql);
+      if (m === null) throw new Error(`fake SLiMS server: unexpected statement ${sql}`);
+      const ncols = m[1]!.split(', ').length;
+      const columns = params.slice(0, ncols) as string[];
+      const table = tables.get(params[ncols] as string)!;
+      for (const c of columns) if (!table.columns.includes(c)) throw new Error(`fake SLiMS server: unknown column ${c}`);
+      let at = ncols + 1;
+      let rows = table.rows;
+      let after: (string | number)[] | null = null;
+      if (m[2] !== undefined) {
+        const nkey = m[2].split(', ').length;
+        after = params.slice(at + nkey, at + 2 * nkey).map(fakeKey);
+        at += 2 * nkey;
+      }
+      if (m[4] !== undefined) {
+        const nkey = m[4].split(', ').length;
+        const keyColumns = params.slice(at, at + nkey) as string[];
+        at += nkey;
+        const of = (r: Record<string, unknown>): (string | number)[] => keyColumns.map((c) => fakeKey(r[c]));
+        rows = [...rows].sort((x, y) => compareKeys(of(x), of(y)));
+        if (after !== null) rows = rows.filter((r) => compareKeys(of(r), after) > 0);
+      }
+      const limit = params[at] as number;
+      const offset = sql.endsWith('OFFSET ?') ? (params[at + 1] as number) : 0;
+      return rows.slice(offset, offset + limit).map((r) => Object.fromEntries(columns.map((c) => [c, r[c] ?? null])));
+    },
+    async close() {
+      state.closed += 1;
+    },
+  };
+  return {
+    connect: async (cfg, o) => {
+      opened.push({ cfg, connectTimeoutMs: o.connectTimeoutMs });
+      return db;
+    },
+    log,
+    opened,
+    get closed() {
+      return state.closed;
+    },
+  };
+}
+
+/** A fixture cell as the foreign client returns it for a column of SQL type `type`. */
+function mysqlCell(cell: FixtureCell | undefined, type: string): FakeMysqlCell {
+  if (cell === undefined || cell === null) return null;
+  if (/^(date|datetime|timestamp|time)\b/i.test(type)) return typeof cell === 'string' ? cell : null;
+  if (/^(tinyint|smallint|mediumint|int|bigint)\b/i.test(type)) return typeof cell === 'number' ? cell : Number(cell);
+  if (typeof cell === 'number') return Buffer.from(String(cell), 'utf8');
+  if (typeof cell === 'string') return Buffer.from(cell, 'utf8');
+  return Buffer.from(cell instanceof Uint8Array ? cell : cell.raw);
+}
+
+/**
+ * The fixture's data as the fake server holds it: the tables `only` names (default every table of the fixture's
+ * schema), with the schema's columns and keys, text as UTF-8 bytes (or the raw bytes of a non-UTF-8 cell).
+ */
+export function fixtureMysqlTables(data: FixtureData, only?: readonly string[]): Map<string, FakeMysqlTable> {
+  const out = new Map<string, FakeMysqlTable>();
+  for (const t of FIXTURE_TABLES) {
+    if (only !== undefined && !only.includes(t.name)) continue;
+    const columns = t.columns.map(([name]) => name);
+    const rows = (data.rows.get(t.name) ?? []).map((row) => Object.fromEntries(t.columns.map(([name, type]) => [name, mysqlCell(Object.hasOwn(row, name) ? row[name] : undefined, type)])));
+    out.set(t.name, { columns, primaryKey: [...t.primaryKey], rows });
+  }
+  return out;
 }

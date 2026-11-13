@@ -17,6 +17,13 @@ import type { SlimsDbConfig, SlimsRow, SlimsSource, SlimsTableInfo } from './typ
 //   compares it in the column's collation, as it orders it.
 // - Text cells come back as text when their bytes are valid UTF-8 and as bytes otherwise (textCell), as from a dump.
 //
+// The usage import (spec §11.2) opens it with its own list (`tables`: only those tables are listed, counted and read,
+// and only those of their columns are named in a SELECT), a row transform (the member id replaced by its keyed hash
+// before a row is returned) and `secretColumns` (the hashed columns): a table whose primary key is not wholly among the
+// selected columns, or holds a secret column, is paged by `ORDER BY <primary key> LIMIT ? OFFSET ?` with the cursor
+// `o:<offset>`, so neither a raw member id nor an unread column ever travels in a cursor or a statement's values. Rows
+// the server adds or removes during the read may then be skipped or read twice, as for a table without a key.
+//
 // An unreachable server, a refused login, an unknown database or a TLS failure is DomainError
 // MIGRATION_SOURCE_UNREACHABLE with a short `meta.reason` (never the server's own message, which names hosts).
 
@@ -29,6 +36,15 @@ export interface OpenDbSourceOptions {
   connectTimeoutMs?: number;
   /** The foreign client (default @altis/db's openForeignMysql); a test seam. */
   connect?: (cfg: ForeignMysqlConfig, o: { connectTimeoutMs: number }) => Promise<ForeignMysql>;
+  /**
+   * Read only these tables (any other is neither listed nor read), and of each only these columns, those the table has,
+   * in this order; every listed table is counted. Without it every table and column (the catalogue migration).
+   */
+  tables?: Readonly<Record<string, readonly string[]>>;
+  /** Applied to each row (after the projection) before `rows()` returns it: the usage import hashes here. */
+  transform?: (table: string, row: SlimsRow) => SlimsRow;
+  /** Per table, the columns whose values never go into a cursor (see the module comment). */
+  secretColumns?: Readonly<Record<string, readonly string[]>>;
 }
 
 /** Why the source cannot be read (`meta.reason`). */
@@ -123,6 +139,9 @@ const placeholders = (n: number, p: string): string => Array.from({ length: n },
  */
 export async function openDbSource(cfg: SlimsDbConfig, o: OpenDbSourceOptions = {}): Promise<SlimsSource> {
   const connect = o.connect ?? openForeignMysql;
+  const projection = o.tables;
+  const transform = o.transform;
+  const secrets = o.secretColumns ?? {};
   let db: ForeignMysql;
   try {
     db = await connect(
@@ -163,10 +182,14 @@ export async function openDbSource(cfg: SlimsDbConfig, o: OpenDbSourceOptions = 
     const ordered = (list: { name: string; at: number }[] | undefined): string[] => [...(list ?? [])].sort((a, b) => a.at - b.at).map((c) => c.name);
     const out = new Map<string, SlimsTableInfo>();
     for (const name of [...names].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
+      if (projection !== undefined && !Object.hasOwn(projection, name)) continue;
       const role = slimsTableRole(name);
-      const rows = role === 'read' || role === 'phase3' ? Number((await query('SELECT COUNT(*) AS n FROM ??', [name]))[0]?.['n'] ?? 0) : null;
+      const counted = projection !== undefined || role === 'read' || role === 'phase3';
+      const rows = counted ? Number((await query('SELECT COUNT(*) AS n FROM ??', [name]))[0]?.['n'] ?? 0) : null;
       const primaryKey = ordered(keys.get(name));
-      out.set(name, { name, columns: ordered(columns.get(name)), primaryKey, rows, ...(primaryKey.length === 0 ? { flags: ['no_pk' as const] } : {}) });
+      const present = ordered(columns.get(name));
+      const selected = projection === undefined ? present : projection[name]!.filter((c) => present.includes(c));
+      out.set(name, { name, columns: selected, primaryKey, rows, ...(primaryKey.length === 0 ? { flags: ['no_pk' as const] } : {}) });
     }
     return out;
   };
@@ -188,16 +211,21 @@ export async function openDbSource(cfg: SlimsDbConfig, o: OpenDbSourceOptions = 
       const take = Math.min(limit, DB_BATCH_MAX);
       const columns = info.columns;
       const select = `SELECT ${placeholders(columns.length, '??')} FROM ??`;
+      const out = (r: Record<string, unknown>): SlimsRow => (transform === undefined ? cells(r, columns) : transform(table, cells(r, columns)));
+      const key = info.primaryKey;
+      const secret = Object.hasOwn(secrets, table) ? secrets[table]! : [];
+      const keyset = key.length > 0 && key.every((c) => columns.includes(c) && !secret.includes(c));
 
-      if (info.primaryKey.length === 0) {
+      if (!keyset) {
+        // No key (flagged no_pk), or one a cursor must not carry: by offset, in key order when there is a key.
         const m = after === null ? null : /^o:(\d{1,15})$/.exec(after);
         if (after !== null && m === null) throw new TypeError('rows: not a cursor of this source');
         const offset = m === null ? 0 : Number(m[1]);
-        const raw = await query(`${select} LIMIT ? OFFSET ?`, [...columns, table, take, offset]);
-        return { rows: raw.map((r) => cells(r, columns)), next: raw.length === take ? `o:${offset + take}` : null };
+        const order = key.length === 0 ? '' : ` ORDER BY ${placeholders(key.length, '??')}`;
+        const raw = await query(`${select}${order} LIMIT ? OFFSET ?`, [...columns, table, ...key, take, offset]);
+        return { rows: raw.map(out), next: raw.length === take ? `o:${offset + take}` : null };
       }
 
-      const key = info.primaryKey;
       let last: unknown[] | null = null;
       if (after !== null) {
         let parsed: unknown;
@@ -214,7 +242,7 @@ export async function openDbSource(cfg: SlimsDbConfig, o: OpenDbSourceOptions = 
       const raw = await query(sql, [...columns, table, ...(last === null ? [] : [...key, ...last]), ...key, take]);
       const end = raw[raw.length - 1];
       return {
-        rows: raw.map((r) => cells(r, columns)),
+        rows: raw.map(out),
         next: raw.length === take && end !== undefined ? `k:${JSON.stringify(key.map((c) => cursorValue(end[c])))}` : null,
       };
     },
