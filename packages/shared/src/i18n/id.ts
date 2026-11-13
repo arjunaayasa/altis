@@ -1316,6 +1316,56 @@ const BASE = {
   'accred.gap.action.G3': 'Ajukan anggaran perpustakaan yang lebih besar dan lengkapi data anggaran tiga tahun.',
   'accred.gap.action.G4':
     'Buat laporan tahunan, semester, dan bulanan atau triwulanan secara rutin dan catat di register Dokumen.',
+  // Accreditation: the school standards of the compliance tab, `accred.snp.<code>`, and the rule each prints,
+  // `accred.snp.<code>.rule` (`.rule.<sd|smp|sma>` where the level changes it); our own wording with the numbers.
+  'accred.snp.S-01': 'Jumlah koleksi minimal',
+  'accred.snp.S-02': 'Perbandingan buku pengayaan fiksi dan nonfiksi',
+  'accred.snp.S-03': 'Buku pengayaan menurut jumlah rombel',
+  'accred.snp.S-04': 'Ragam koleksi referensi',
+  'accred.snp.S-05': 'Terbitan berkala',
+  'accred.snp.S-06': 'Penambahan koleksi per tahun',
+  'accred.snp.S-07': 'Cacah ulang dan penyiangan koleksi',
+  'accred.snp.S-08': 'Waktu pelayanan',
+  'accred.snp.S-09': 'Laporan kunjungan dan peminjaman',
+  'accred.snp.S-10': 'Promosi perpustakaan',
+  'accred.snp.S-11': 'Jumlah tenaga perpustakaan',
+  'accred.snp.S-12': 'Anggaran minimal perpustakaan',
+  'accred.snp.S-13': 'Tingkat kegemaran membaca',
+  'accred.snp.S-14': 'IPLM sekolah',
+  'accred.snp.S-01.rule': 'Paling sedikit 1.000 judul.',
+  'accred.snp.S-02.rule.sd': 'Buku pengayaan fiksi dan nonfiksi berbanding 40 : 60.',
+  'accred.snp.S-02.rule.smp': 'Buku pengayaan fiksi dan nonfiksi berbanding 30 : 70.',
+  'accred.snp.S-02.rule.sma': 'Buku pengayaan fiksi dan nonfiksi berbanding 25 : 75.',
+  'accred.snp.S-03.rule.sd':
+    'Buku pengayaan paling sedikit 1.000 judul untuk 1–6 rombel, 1.500 judul untuk 7–12 rombel, dan 2.000 judul untuk 13–24 rombel.',
+  'accred.snp.S-03.rule.smp':
+    'Buku pengayaan paling sedikit 1.000 judul untuk 3–6 rombel, 1.500 judul untuk 7–12 rombel, 2.000 judul untuk 13–18 rombel, dan 2.500 judul untuk 19–24 rombel.',
+  'accred.snp.S-03.rule.sma':
+    'Buku pengayaan paling sedikit 1.000 judul untuk 3–6 rombel, 1.500 judul untuk 7–12 rombel, 2.000 judul untuk 13–18 rombel, dan 2.500 judul untuk 19–27 rombel.',
+  'accred.snp.S-04.rule.sd': 'Ada ensiklopedia, kamus, buku pedoman, dan globe; paling sedikit 4 jenis referensi.',
+  'accred.snp.S-04.rule.smp': 'Ada ensiklopedia, kamus, buku pedoman, dan globe; paling sedikit 5 jenis referensi.',
+  'accred.snp.S-04.rule.sma': 'Ada ensiklopedia, kamus, buku pedoman, globe, dan biografi; paling sedikit 5 jenis referensi.',
+  'accred.snp.S-05.rule.sd': 'Paling sedikit 2 judul terbitan berkala yang diterima dalam 12 bulan terakhir.',
+  'accred.snp.S-05.rule.smp': 'Paling sedikit 2 judul terbitan berkala yang diterima dalam 12 bulan terakhir.',
+  'accred.snp.S-05.rule.sma': 'Paling sedikit 3 judul terbitan berkala yang diterima dalam 12 bulan terakhir.',
+  'accred.snp.S-06.rule':
+    'Penambahan judul dalam periode paling sedikit 10 % dari koleksi awal 1.000–1.500 judul, 8 % dari 1.501–2.000 judul, dan 6 % dari lebih dari 2.000 judul.',
+  'accred.snp.S-07.rule': 'Cacah ulang dan penyiangan masing-masing paling sedikit sekali dalam 3 tahun terakhir.',
+  'accred.snp.S-08.rule.sd': 'Paling sedikit 30 jam pelayanan per minggu.',
+  'accred.snp.S-08.rule.smp': 'Paling sedikit 35 jam pelayanan per minggu.',
+  'accred.snp.S-08.rule.sma': 'Paling sedikit 35 jam pelayanan per minggu.',
+  'accred.snp.S-09.rule': 'Ada data kunjungan dan data peminjaman, masing-masing paling sedikit untuk satu bulan.',
+  'accred.snp.S-10.rule.sd': 'Paling sedikit 4 kegiatan promosi dalam setahun.',
+  'accred.snp.S-10.rule.smp': 'Paling sedikit 7 kegiatan promosi dalam setahun.',
+  'accred.snp.S-10.rule.sma': 'Paling sedikit 8 kegiatan promosi dalam setahun.',
+  'accred.snp.S-11.rule.sd': 'Paling sedikit 3 tenaga bila lebih dari 6 rombel, selain itu paling sedikit 1 tenaga.',
+  'accred.snp.S-11.rule.smp': 'Paling sedikit 3 tenaga bila lebih dari 3 rombel, selain itu paling sedikit 1 tenaga.',
+  'accred.snp.S-11.rule.sma': 'Paling sedikit 3 tenaga bila lebih dari 3 rombel, selain itu paling sedikit 1 tenaga.',
+  'accred.snp.S-12.rule':
+    'Anggaran perpustakaan paling sedikit 5 % dari anggaran sekolah di luar belanja pegawai, pemeliharaan, dan perawatan gedung.',
+  'accred.snp.S-13.rule':
+    'Dilaporkan: pertumbuhan kunjungan, frekuensi kunjungan, dan pertumbuhan peminjaman dibandingkan 12 bulan sebelumnya.',
+  'accred.snp.S-14.rule': 'Dilaporkan: perbandingan anggota dengan buku, tenaga dengan anggota, dan kelas yang terlayani.',
   // Reports: titles, column and parameter labels, the options of the status parameters without a vocabulary, the
   // output groups and sources, the summary sections, the data quality problems, the acquisition date bases and the
   // fixed texts of an export.

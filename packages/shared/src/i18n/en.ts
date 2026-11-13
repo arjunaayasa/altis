@@ -1269,6 +1269,53 @@ const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   'accred.gap.action.G3': 'Ask for a larger library budget and complete the budget data for the three years.',
   'accred.gap.action.G4':
     'Make annual, semester and monthly or quarterly reports regularly and record them in the Documents register.',
+  // Accreditation: the school standards of the compliance tab and the rule each prints.
+  'accred.snp.S-01': 'Minimum collection size',
+  'accred.snp.S-02': 'Ratio of fiction to non-fiction enrichment books',
+  'accred.snp.S-03': 'Enrichment books by number of classes',
+  'accred.snp.S-04': 'Range of reference works',
+  'accred.snp.S-05': 'Periodicals',
+  'accred.snp.S-06': 'Yearly collection additions',
+  'accred.snp.S-07': 'Stock-taking and weeding',
+  'accred.snp.S-08': 'Service hours',
+  'accred.snp.S-09': 'Reports of visits and loans',
+  'accred.snp.S-10': 'Library promotion',
+  'accred.snp.S-11': 'Number of library staff',
+  'accred.snp.S-12': 'Minimum library budget',
+  'accred.snp.S-13': 'Reading interest',
+  'accred.snp.S-14': 'School literacy development index (IPLM)',
+  'accred.snp.S-01.rule': 'At least 1,000 titles.',
+  'accred.snp.S-02.rule.sd': 'Fiction and non-fiction enrichment books in the ratio 40 : 60.',
+  'accred.snp.S-02.rule.smp': 'Fiction and non-fiction enrichment books in the ratio 30 : 70.',
+  'accred.snp.S-02.rule.sma': 'Fiction and non-fiction enrichment books in the ratio 25 : 75.',
+  'accred.snp.S-03.rule.sd':
+    'At least 1,000 enrichment titles for 1–6 classes, 1,500 titles for 7–12 classes and 2,000 titles for 13–24 classes.',
+  'accred.snp.S-03.rule.smp':
+    'At least 1,000 enrichment titles for 3–6 classes, 1,500 titles for 7–12 classes, 2,000 titles for 13–18 classes and 2,500 titles for 19–24 classes.',
+  'accred.snp.S-03.rule.sma':
+    'At least 1,000 enrichment titles for 3–6 classes, 1,500 titles for 7–12 classes, 2,000 titles for 13–18 classes and 2,500 titles for 19–27 classes.',
+  'accred.snp.S-04.rule.sd': 'An encyclopaedia, a dictionary, a handbook and a globe; at least 4 kinds of reference works.',
+  'accred.snp.S-04.rule.smp': 'An encyclopaedia, a dictionary, a handbook and a globe; at least 5 kinds of reference works.',
+  'accred.snp.S-04.rule.sma': 'An encyclopaedia, a dictionary, a handbook, a globe and biographies; at least 5 kinds of reference works.',
+  'accred.snp.S-05.rule.sd': 'At least 2 periodical titles received in the last 12 months.',
+  'accred.snp.S-05.rule.smp': 'At least 2 periodical titles received in the last 12 months.',
+  'accred.snp.S-05.rule.sma': 'At least 3 periodical titles received in the last 12 months.',
+  'accred.snp.S-06.rule':
+    'Titles added in the period: at least 10% of a starting collection of 1,000–1,500 titles, 8% of 1,501–2,000 titles and 6% of more than 2,000 titles.',
+  'accred.snp.S-07.rule': 'A stock-take and a weeding, each at least once in the last 3 years.',
+  'accred.snp.S-08.rule.sd': 'At least 30 service hours a week.',
+  'accred.snp.S-08.rule.smp': 'At least 35 service hours a week.',
+  'accred.snp.S-08.rule.sma': 'At least 35 service hours a week.',
+  'accred.snp.S-09.rule': 'Visit data and loan data, each for at least one month.',
+  'accred.snp.S-10.rule.sd': 'At least 4 promotion activities a year.',
+  'accred.snp.S-10.rule.smp': 'At least 7 promotion activities a year.',
+  'accred.snp.S-10.rule.sma': 'At least 8 promotion activities a year.',
+  'accred.snp.S-11.rule.sd': 'At least 3 staff with more than 6 classes, otherwise at least 1.',
+  'accred.snp.S-11.rule.smp': 'At least 3 staff with more than 3 classes, otherwise at least 1.',
+  'accred.snp.S-11.rule.sma': 'At least 3 staff with more than 3 classes, otherwise at least 1.',
+  'accred.snp.S-12.rule': 'A library budget of at least 5% of the school budget excluding staff, maintenance and building upkeep.',
+  'accred.snp.S-13.rule': 'Reported: growth in visits, visit frequency and growth in loans against the previous 12 months.',
+  'accred.snp.S-14.rule': 'Reported: members to books, staff to members and the classes served.',
   // Reports: titles, column and parameter labels, the options of the status parameters without a vocabulary, the
   // output groups and sources, the summary sections, the data quality problems, the acquisition date bases and the
   // fixed texts of an export.
