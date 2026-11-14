@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   aggregateMonth,
   countMember,
+  countMemberType,
   countVisit,
   emptyCounts,
   type MemberInfo,
@@ -12,7 +13,8 @@ import {
 import { usageRowTransform } from '../../src/migration/slims/source/usage.js';
 
 // The row rules of the SLiMS usage import over rows as its readers leave them (columns projected, member ids hashed):
-// one member whose id SLiMS stores in two cases is one member, as SLiMS's own tables compare ids.
+// one member whose id SLiMS stores in two cases is one member, as SLiMS's own tables compare ids; a member type's name
+// keeps no character a database text column refuses.
 
 const KEY = Uint8Array.from({ length: 32 }, (_, i) => i + 7);
 const SPANS = [{ from: '2026-01-01', to: '2026-12-31' }];
@@ -69,5 +71,15 @@ describe('member ids as SLiMS compares them', () => {
     const lower = transform('loan', { loan_id: 1, member_id: Uint8Array.from([0x61, 0x30, 0x31, 0xe9]) }); // "a01é" in latin1
     const upper = transform('loan', { loan_id: 2, member_id: Uint8Array.from([0x41, 0x30, 0x31, 0xe9, 0x20]) }); // "A01é "
     expect(lower['member_id']).toBe(upper['member_id']);
+  });
+});
+
+describe('member type names', () => {
+  it('a name with NUL or other control characters is kept without them', () => {
+    const { c } = context(emptyCounts());
+    countMemberType(c, { member_type_id: 1, member_type_name: 'Sis\u0000wa\u0000' });
+    countMemberType(c, { member_type_id: 2, member_type_name: 'Guru\tTetap\u0007' });
+    countMemberType(c, { member_type_id: 3, member_type_name: '\u0000' });
+    expect(c.types).toEqual({ '1': 'Siswa', '2': 'Guru Tetap', '3': '' });
   });
 });

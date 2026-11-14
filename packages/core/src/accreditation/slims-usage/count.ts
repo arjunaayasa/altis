@@ -224,11 +224,20 @@ export interface RowContext {
 /** The longest member type name kept (the width of the group map's label). */
 const LABEL_MAX = 191;
 
+/**
+ * A name read from SLiMS as a text column of every engine takes it: NUL dropped (PostgreSQL refuses it in text), every
+ * other control character a space, trimmed, at most the label's width.
+ */
+export function importedLabel(name: string): string {
+  const clean = name.split(String.fromCharCode(0)).join('').replace(/\p{Cc}/gu, ' ').trim();
+  return Array.from(clean).slice(0, LABEL_MAX).join('').trimEnd();
+}
+
 /** A `mst_member_type` row: the type's name (the first row of an id wins). */
 export function countMemberType(c: RowContext, row: SlimsRow): void {
   const id = typeIdOfCell(row['member_type_id']);
   if (id === null || Object.hasOwn(c.types, id)) return;
-  c.types[id] = Array.from(cellText(row['member_type_name']) ?? '').slice(0, LABEL_MAX).join('');
+  c.types[id] = importedLabel(cellText(row['member_type_name']) ?? '');
 }
 
 /** A `member` row: its type and the day its membership ends (the first row of a member wins). */
