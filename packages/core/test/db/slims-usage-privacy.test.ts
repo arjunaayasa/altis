@@ -128,9 +128,16 @@ describe.skipIf(!ctx.available)(`SLiMS usage import privacy [${engineLabel()}]`,
   it('a cancel during the split leaves no dump, no staging and no upload behind', async () => {
     const uploadId = await t.upload(dump);
     const { runId, jobId } = await t.start(periodId, { source: { kind: 'dump', uploadId } });
-    expect((await t.slice(jobId, 0)).outcome).toBe('continued');
+    // A slice with no time left still splits for a moment; how much it stages in that moment depends on the machine, so
+    // slices run until the first staged table exists, the split still unfinished.
+    const staged = async (): Promise<boolean> =>
+      (await fsp.readdir(dataPath(t.dataDir, 'tmp', runId)).catch(() => [] as string[])).some((n) => n.endsWith('.ndjson'));
+    for (let i = 0; i < 200 && !(await staged()); i += 1) {
+      expect((await t.slice(jobId, 0)).outcome).toBe('continued');
+      expect((await t.payload(jobId)).phase).toBe('split');
+    }
     expect((await t.payload(jobId)).phase).toBe('split');
-    expect((await fsp.readdir(dataPath(t.dataDir, 'tmp', runId))).some((n) => n.endsWith('.ndjson'))).toBe(true);
+    expect(await staged()).toBe(true);
     expect((await t.slice(jobId, 0, { cancel: true })).outcome).toBe('cancelled');
     expect((await t.run(runId)).status).toBe('cancelled');
     expect(await workFolderExists(t.dataDir, runId)).toBe(false);
