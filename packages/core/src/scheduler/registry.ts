@@ -89,4 +89,8 @@ export const SCHEDULES: readonly ScheduleDef[] = Object.freeze([
   // Every 15 minutes: holds not picked up by their deadline (or waiting past their end) expire, and the kept copy goes
   // to the next in the queue (circulation/holds-job.ts). Skipped while the clock looks wrong.
   def({ name: 'circulation.holds', expr: '*/15 * * * *', jobType: 'circulation.holds', permission: 'system.jobs.manage', enabledByDefault: true }),
+  // ---- Komunitas K2 (privacy) ----
+  // The history loses the person after the library's retention periods, daily at 02:15 (skipped while the clock looks
+  // wrong).
+  def({ name: 'privacy.anonymize', expr: '15 2 * * *', jobType: 'privacy.anonymize', permission: 'system.jobs.manage', enabledByDefault: true }),
 ]);

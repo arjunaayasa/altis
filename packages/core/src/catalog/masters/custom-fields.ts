@@ -191,6 +191,16 @@ export async function listCustomFields(db: Db, q: MasterListQuery): Promise<Cust
   return rows.map((r) => toView(r, usage.get(r.id) ?? 0));
 }
 
+// ---- Komunitas K2 (members) ----
+/** A member's custom field is never public nor searchable (personal data): `{path, code: 'not_allowed_for_members'}`. */
+function memberFlagErrors(entity: string, isPublic: boolean | undefined, isSearchable: boolean | undefined): FieldWarning[] {
+  if (entity !== 'members') return [];
+  const out: FieldWarning[] = [];
+  if (isPublic === true) out.push({ path: 'isPublic', code: 'not_allowed_for_members' });
+  if (isSearchable === true) out.push({ path: 'isSearchable', code: 'not_allowed_for_members' });
+  return out;
+}
+
 /**
  * Creates a custom field of `body.entity` and audits `catalog.master.create` (`entity` custom_field_defs,
  * `meta.fields`).
@@ -202,7 +212,9 @@ export async function createCustomField(tx: TxCtx, input: CustomFieldBody): Prom
   const body = parseBody(CustomFieldBody, input);
   const { trx } = tx;
   const key = codeKey(body.code);
-  const errors = [codeFormatError(body.code), optionsError(body.type, body.options)].filter((e): e is FieldWarning => e !== null);
+  const errors = [codeFormatError(body.code), optionsError(body.type, body.options), ...memberFlagErrors(body.entity, body.isPublic, body.isSearchable)].filter(
+    (e): e is FieldWarning => e !== null,
+  );
   if (errors.every((e) => e.path !== 'code') && (await keyTaken(trx, body.entity, key))) errors.unshift({ path: 'code', code: 'taken' });
   if (errors.length > 0) throw validationFailed(errors);
   const id = newId();
@@ -269,6 +281,7 @@ export async function updateCustomField(tx: TxCtx, id: string, input: CustomFiel
     nextOptions = optionsJson(patch.options);
     set.options = nextOptions;
   }
+  errors.push(...memberFlagErrors(before.entity, patch.isPublic, patch.isSearchable));
   if (errors.length > 0) throw validationFailed(errors);
   const labelEn = patch.labelEn === undefined ? undefined : blankToNull(patch.labelEn);
   if (patch.labelId !== undefined) set.label = patch.labelId;

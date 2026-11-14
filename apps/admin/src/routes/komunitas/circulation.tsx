@@ -58,5 +58,16 @@ export function circulationRoutes(shell: typeof shellRoute) {
       path: 'layanan/kalender',
       component: lazyScreen(() => import('@/screens/circulation/calendar'), 'CalendarScreen'),
     }),
+    // ---- Komunitas K2 (visits): the visit list and check-ins, and the guestbook stations ----
+    createRoute({
+      getParentRoute: () => shell,
+      path: 'layanan/kunjungan',
+      component: lazyScreen(() => import('@/screens/visits/visits'), 'VisitsScreen'),
+    }),
+    createRoute({
+      getParentRoute: () => shell,
+      path: 'layanan/buku-tamu',
+      component: lazyScreen(() => import('@/screens/visits/visits'), 'StationsScreen'),
+    }),
   ];
 }

@@ -61,6 +61,15 @@ export const PERMISSIONS = Object.freeze([
   // Forcing a refused loan (limit, hold, block, collection type, rule), a loan dated before today, a changed due date,
   // and voiding another staff member's last loan; at a branch, like the desk.
   'circulation.desk.override',
+  // ---- Komunitas K2 (members extended and visits) ----
+  // The member list export (personal data), the member's own data export and anonymisation, then visits: reading
+  // the visit list and its statistics (library-wide), recording visits at a branch (staff check-in, manual and class
+  // visits, voiding one) and the guestbook stations of a branch (create, activation code, revoke).
+  'members.export.run',
+  'members.privacy.manage',
+  'visits.records.read',
+  'visits.records.manage',
+  'visits.stations.manage',
 ] as const);
 
 /** A catalog key. The second member exists only in the test profile (spec §12.5): see {@link permissionCatalog}. */
@@ -70,7 +79,7 @@ export type Permission = (typeof PERMISSIONS)[number] | 'test.branch.manage';
 export type PermissionScope = 'global' | 'branch';
 
 /** The module of a permission: its key's first segment. */
-export type PermissionModule = 'system' | 'test' | 'catalog' | 'opac' | 'reports' | 'accreditation' | 'members' | 'circulation';
+export type PermissionModule = 'system' | 'test' | 'catalog' | 'opac' | 'reports' | 'accreditation' | 'members' | 'circulation' | 'visits';
 
 export interface PermissionDef {
   key: Permission;
@@ -93,6 +102,10 @@ const BRANCH_SCOPED: ReadonlySet<string> = new Set([
   'circulation.desk.use',
   // ---- Komunitas (circulation core) ----
   'circulation.desk.override',
+  // ---- Komunitas K2 (members extended and visits) ----
+  // Visits and guestbook stations belong to a branch (`branches/:branchId/visits/...`).
+  'visits.records.manage',
+  'visits.stations.manage',
 ]);
 
 /** The module of a production key: its prefix (`system`, `catalog`, `opac`, `reports`, `accreditation`, `members` or `circulation`). */

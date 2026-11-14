@@ -88,6 +88,18 @@ import {
   CIRC_CORE_UNIQUE,
   circCoreSampleRows,
 } from './fixtures/komunitas-circ-core-tables.js';
+// ---- Komunitas K2 (visits) ----
+import {
+  VISITS_CLASSES,
+  VISITS_COLUMNS,
+  VISITS_DEFAULTS,
+  VISITS_FOREIGN_KEYS,
+  VISITS_INDEXES,
+  VISITS_PRIMARY_KEYS,
+  VISITS_TABLES_BY_MIGRATION,
+  VISITS_UNIQUE,
+  visitsSampleRows,
+} from './fixtures/komunitas-visits-tables.js';
 import { MIGRATION_NAME, runMigrations } from '../src/migrator.js';
 import { PHASE1_MIGRATIONS } from '../src/migrations/index.js';
 import { SECRET_COLUMNS, SETTINGS_SCOPE_CLASS, TABLE_CLASSES, type SettingsScope, type TableName } from '../src/registry.js';
@@ -162,6 +174,8 @@ const EXPECTED_CLASSES = {
   ...HOLDS_CLASSES,
   // ---- Komunitas (circulation core) ----
   ...CIRC_CORE_CLASSES,
+  // ---- Komunitas K2 (visits) ----
+  ...VISITS_CLASSES,
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping, made by the runner ----
   schema_migrations_edition: 'migrator',
   schema_migrations_edition_lock: 'migrator',
@@ -190,6 +204,8 @@ const TABLES_BY_MIGRATION: Record<string, TableName[]> = {
   ...HOLDS_TABLES_BY_MIGRATION,
   // ---- Komunitas (circulation core) ----
   ...CIRC_CORE_TABLES_BY_MIGRATION,
+  // ---- Komunitas K2 (visits) ----
+  ...VISITS_TABLES_BY_MIGRATION,
 };
 
 /** The created_by of the tables the runner makes itself (ensureBootstrap, ruling R27). */
@@ -247,6 +263,8 @@ const EXPECTED_PRIMARY_KEYS: Record<TableName, string[]> = {
   ...HOLDS_PRIMARY_KEYS,
   // ---- Komunitas (circulation core) ----
   ...CIRC_CORE_PRIMARY_KEYS,
+  // ---- Komunitas K2 (visits) ----
+  ...VISITS_PRIMARY_KEYS,
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: ['name'],
   schema_migrations_edition_lock: ['id'],
@@ -328,6 +346,8 @@ const EXPECTED_INDEXES: IndexFacts[] = [
   ...HOLDS_INDEXES,
   // ---- Komunitas (circulation core) ----
   ...CIRC_CORE_INDEXES,
+  // ---- Komunitas K2 (visits) ----
+  ...VISITS_INDEXES,
 ].sort((a, b) => a.table.localeCompare(b.table) || a.name.localeCompare(b.name));
 
 /** The full-text indexes, which {@link indexes} leaves out (an expression index has no column list on PostgreSQL). */
@@ -360,6 +380,8 @@ const EXPECTED_FOREIGN_KEYS: ForeignKeyFacts[] = [
   ...HOLDS_FOREIGN_KEYS,
   // ---- Komunitas (circulation core) ----
   ...CIRC_CORE_FOREIGN_KEYS,
+  // ---- Komunitas K2 (visits) ----
+  ...VISITS_FOREIGN_KEYS,
 ].sort((a, b) => a.table.localeCompare(b.table) || a.column.localeCompare(b.column));
 
 type MigratorTable =
@@ -652,6 +674,8 @@ const EXPECTED_COLUMNS: Record<Phase1Table, Record<string, string>> = {
   ...HOLDS_COLUMNS,
   // ---- Komunitas (circulation core) ----
   ...CIRC_CORE_COLUMNS,
+  // ---- Komunitas K2 (visits) ----
+  ...VISITS_COLUMNS,
 };
 
 /**
@@ -721,14 +745,15 @@ describe('the table-class registry and the Phase 1 migration list (spec §6.5)',
     expect(k1).toEqual(Object.keys(K1_TABLES_BY_MIGRATION));
     expect(k1.at(-1)).toBe('0033_catalog_accred_fields');
     // Komunitas, members and circulation: one migration, 0040, in its range 0040–0049.
-    // Holds: 0041, after it.
+    // Holds: 0041, after it; the circulation core 0042; visits 0043.
     const circulation = MIGRATION_NAMES.filter((name) => name >= '0040' && name < '0050');
     expect(circulation).toEqual([
       ...Object.keys(CIRCULATION_TABLES_BY_MIGRATION),
       ...Object.keys(HOLDS_TABLES_BY_MIGRATION),
       ...Object.keys(CIRC_CORE_TABLES_BY_MIGRATION),
+      ...Object.keys(VISITS_TABLES_BY_MIGRATION),
     ]);
-    expect(circulation.at(-1)).toBe('0042_circulation_core');
+    expect(circulation.at(-1)).toBe('0043_visits');
     for (const [name, m] of Object.entries(PHASE1_MIGRATIONS)) {
       expect(name).toMatch(MIGRATION_NAME);
       expect(typeof m.up).toBe('function');
@@ -1303,6 +1328,8 @@ function sampleRows(): { [T in RoundTripTable]: Selectable<DB[T]>[] } {
     ...holdsSampleRows({ branchId, staffId }),
     // ---- Komunitas (circulation core) ----
     ...circCoreSampleRows({ branchId, staffId }),
+    // ---- Komunitas K2 (visits) ----
+    ...visitsSampleRows({ branchId, staffId }),
   };
 }
 
@@ -1360,6 +1387,8 @@ const DEFAULTS: { [T in RoundTripTable]: { [K in GeneratedKeys<DB[T]>]: SelectTy
   ...HOLDS_DEFAULTS,
   // ---- Komunitas (circulation core) ----
   ...CIRC_CORE_DEFAULTS,
+  // ---- Komunitas K2 (visits) ----
+  ...VISITS_DEFAULTS,
 };
 
 /** One row of each table the runner fills itself, typed by `DB`: their keys are the columns the type declares. */
@@ -1672,6 +1701,8 @@ describe.skipIf(!ctx.available)(`Phase 1 tables [${engineLabel()}]`, () => {
         ...HOLDS_UNIQUE,
         // ---- Komunitas (circulation core) ----
         ...CIRC_CORE_UNIQUE,
+        // ---- Komunitas K2 (visits) ----
+        ...VISITS_UNIQUE,
       ].sort(),
     );
   });

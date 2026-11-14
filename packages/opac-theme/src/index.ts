@@ -20,13 +20,15 @@ import { DETAIL_CSS } from './detail.js';
 import { PAGES_CSS } from './pages.js';
 import { SEARCH_CSS } from './search.js';
 import { SHELL_CSS } from './shell.js';
+// ---- Komunitas K2 (visits) ----
+import { VISITS_CSS } from './visits.js';
 
 export { ACCENTS, DEFAULT_ACCENT, isAccent } from './base.js';
 export type { AccentName } from './base.js';
-export { BASE_CSS, DETAIL_CSS, PAGES_CSS, SEARCH_CSS, SHELL_CSS };
+export { BASE_CSS, DETAIL_CSS, PAGES_CSS, SEARCH_CSS, SHELL_CSS, VISITS_CSS };
 
 /** The modules of the stylesheet, in the order they are joined (S16). */
-export const OPAC_CSS_MODULES: readonly string[] = Object.freeze([BASE_CSS, SHELL_CSS, PAGES_CSS, SEARCH_CSS, DETAIL_CSS]);
+export const OPAC_CSS_MODULES: readonly string[] = Object.freeze([BASE_CSS, SHELL_CSS, PAGES_CSS, SEARCH_CSS, DETAIL_CSS, VISITS_CSS]);
 
 /** `modules` as one stylesheet: the non-empty ones, in order, one line break apart. */
 export function joinOpacCss(modules: readonly string[]): string {

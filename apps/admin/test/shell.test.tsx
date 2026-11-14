@@ -251,10 +251,13 @@ describe('navigation and language', () => {
       ['Terlambat & Jatuh Tempo', '/admin/layanan/terlambat'],
       ['Aturan Peminjaman', '/admin/layanan/aturan'],
       ['Kalender', '/admin/layanan/kalender'],
+      ['Kunjungan', '/admin/layanan/kunjungan'],
+      ['Perangkat Buku Tamu', '/admin/layanan/buku-tamu'],
       ['Daftar Anggota', '/admin/anggota'],
       ['Tipe Anggota', '/admin/anggota/tipe'],
       ['Impor Anggota', '/admin/anggota/impor'],
       ['Surat Bebas Pustaka', '/admin/anggota/bebas-pustaka'],
+      ['Cetak Kartu', '/admin/anggota/kartu'],
       // The Laporan group: the report catalogue and the accreditation workspace.
       ['Laporan', '/admin/reports'],
       ['Akreditasi', '/admin/accreditation'],
@@ -316,8 +319,10 @@ describe('navigation and language', () => {
       'Terlambat & Jatuh Tempo',
       'Aturan Peminjaman',
       'Kalender',
+      'Kunjungan',
+      'Perangkat Buku Tamu',
     ]);
-    expect(within(groups[2]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Daftar Anggota', 'Tipe Anggota', 'Impor Anggota', 'Surat Bebas Pustaka']);
+    expect(within(groups[2]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Daftar Anggota', 'Tipe Anggota', 'Impor Anggota', 'Surat Bebas Pustaka', 'Cetak Kartu']);
     expect(within(groups[3]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Laporan', 'Akreditasi']);
     expect(within(groups[4]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Halaman & Berita']);
     expect(within(groups[5]!).getByRole('link', { name: 'Konfigurasi Sistem' })).toBeTruthy();

@@ -184,6 +184,25 @@ export const AUDIT_ACTIONS = Object.freeze([
   // numbered clearance letters
   'members.clearance.issue',
   'members.clearance.void',
+  // ---- Komunitas K2 (members extended and visits) ----
+  // `meta` holds field names, counts and reason names only, never a personal value.
+  // members: restore an archived one, the bulk actions (one entry, `meta.count`), the photo, the card sheet
+  'members.member.restore',
+  'members.member.bulk_update',
+  'members.member.photo_set',
+  'members.card.print',
+  // personal data: a member's own data exported by staff, and anonymisation (by staff; the daily job as the system)
+  'members.privacy.export',
+  'members.privacy.anonymize',
+  'privacy.anonymize.run',
+  // visits (a staff check-in is not audited: it is a count, not a change) and guestbook stations
+  'visits.visit.create',
+  'visits.visit.void',
+  'visits.station.create',
+  'visits.station.activation_code',
+  'visits.station.revoke',
+  // written with the station as the actor when a station is activated with its code
+  'visits.station.activated',
 ] as const);
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

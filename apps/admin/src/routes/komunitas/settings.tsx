@@ -18,5 +18,16 @@ export function accreditationSettingsRoutes(shell: typeof shellRoute) {
       path: 'settings/circulation',
       component: lazyScreen(() => import('@/screens/settings/circulation'), 'CirculationSettingsScreen'),
     }),
+    // ---- Komunitas K2 (visits, privacy) ----
+    createRoute({
+      getParentRoute: () => shell,
+      path: 'settings/kunjungan',
+      component: lazyScreen(() => import('@/screens/settings/visits'), 'VisitsSettingsScreen'),
+    }),
+    createRoute({
+      getParentRoute: () => shell,
+      path: 'settings/privasi',
+      component: lazyScreen(() => import('@/screens/settings/visits'), 'PrivacySettingsScreen'),
+    }),
   ];
 }

@@ -28,8 +28,10 @@ import {
   clearancePrefixField,
   loanVoidMinutesField,
   minorAmountField,
+  anonymizeYearsField,
 } from '@altis/shared/api/settings';
 import { z } from 'zod';
+import { CardProfile, DEFAULT_CARD_PROFILE } from '@altis/shared/api/member-ops';
 
 // The registry of settings (spec §6.5, §7.6; D26, D41): every key the `settings` table may hold, with the group
 // the admin screens file it under, its scope, its Zod schema and its default. A row that is absent reads as the
@@ -64,7 +66,9 @@ export type SettingsGroup =
   | 'visits'
   // ---- Komunitas (holds, circulation core) ----
   | 'circulation'
-  | 'members';
+  // ---- Komunitas K2 (members extended, visits, privacy) ----
+  | 'members'
+  | 'privacy';
 
 /** Every registered key. The compiler checks {@link SETTINGS} against it both ways (no missing key, no extra one). */
 export type SettingKey =
@@ -111,7 +115,13 @@ export type SettingKey =
   // ---- Komunitas (circulation core) ----
   | 'circulation.loanVoidMinutes'
   | `circulation.lost.${'useItemPrice' | 'processingFeeMinor'}`
-  | `members.clearance.${'prefix' | 'profile'}`;
+  | `members.clearance.${'prefix' | 'profile'}`
+  // ---- Komunitas K2 (members extended, visits, privacy) ----
+  | 'members.card.profile'
+  | `visits.${'fromDesk' | 'fromOnline' | 'askPurpose'}`
+  | `visits.station.${'showPhoto' | 'welcome.id' | 'welcome.en'}`
+  | `privacy.${'loans' | 'visits'}.anonymizeAfterYears`
+  | 'privacy.members.anonymizeArchivedAfterYears';
 
 export interface SettingDef {
   group: SettingsGroup;
@@ -554,6 +564,22 @@ export const SETTINGS: Readonly<Record<SettingKey, SettingDef>> = Object.freeze(
     schema: ClearanceProfile,
     default: seed(ClearanceProfile, { paper: 'A4', city: '', signerTitle: 'Kepala Perpustakaan', signerName: '', signerId: '', bodyText: '' }),
   }),
+  // ---- Komunitas K2 (members extended, visits, privacy) ----
+  // How member cards are printed (the barcode and QR code hold the member number only).
+  'members.card.profile': def({ group: 'members', schema: CardProfile, default: seed(CardProfile, DEFAULT_CARD_PROFILE) }),
+  // Visits: a member's first desk action of the day, and an OPAC sign-in, count as a visit; the station asks why one
+  // came, shows the member's photo, and greets with the library's own words (null: the built-in greeting).
+  'visits.fromDesk': def({ group: 'visits', schema: z.boolean(), default: true }),
+  'visits.fromOnline': def({ group: 'visits', schema: z.boolean(), default: true }),
+  'visits.askPurpose': def({ group: 'visits', schema: z.boolean(), default: false }),
+  'visits.station.showPhoto': def({ group: 'visits', schema: z.boolean(), default: false }),
+  'visits.station.welcome.id': def({ group: 'visits', schema: textOrNull(300), default: null }),
+  'visits.station.welcome.en': def({ group: 'visits', schema: textOrNull(300), default: null }),
+  // Personal data is kept this many years after a loan closed, a visit, or a member was archived; then the history
+  // rows lose the link to the person (an archived member is anonymised in full). null: never.
+  'privacy.loans.anonymizeAfterYears': def({ group: 'privacy', schema: anonymizeYearsField, default: 5 }),
+  'privacy.visits.anonymizeAfterYears': def({ group: 'privacy', schema: anonymizeYearsField, default: 2 }),
+  'privacy.members.anonymizeArchivedAfterYears': def({ group: 'privacy', schema: anonymizeYearsField, default: null }),
 });
 
 /** The registered keys in registry order. */

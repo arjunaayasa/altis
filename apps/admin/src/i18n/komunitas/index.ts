@@ -9,6 +9,7 @@ import { CIRCULATION_EN, CIRCULATION_ID } from './circulation';
 // ---- Komunitas (holds) ----
 import { HOLDS_EN, HOLDS_ID } from './holds';
 import { MEMBERS_EN, MEMBERS_ID } from './members';
+import { MEMBERS_TOOLS_EN, MEMBERS_TOOLS_ID } from './members-tools';
 import { KOMUNITAS_SETTINGS_EN, KOMUNITAS_SETTINGS_ID } from './settings';
 
 // The admin copy of reports and accreditation, members and circulation: one file per area, each owned by the task that builds its screens,
@@ -72,6 +73,8 @@ export const KOMUNITAS_AREAS_ID = Object.freeze({
   holds: HOLDS_ID,
   // ---- Komunitas (circulation core) ----
   circCore: CIRC_CORE_ID,
+  // ---- Komunitas K2 (members extended and visits) ----
+  membersTools: MEMBERS_TOOLS_ID,
   placeholder: PLACEHOLDER_ID,
 });
 
@@ -89,6 +92,8 @@ export const KOMUNITAS_AREAS_EN: { readonly [A in keyof typeof KOMUNITAS_AREAS_I
   holds: HOLDS_EN,
   // ---- Komunitas (circulation core) ----
   circCore: CIRC_CORE_EN,
+  // ---- Komunitas K2 (members extended and visits) ----
+  membersTools: MEMBERS_TOOLS_EN,
   placeholder: PLACEHOLDER_EN,
 });
 
@@ -105,6 +110,7 @@ export const KOMUNITAS_ID = {
   ...CIRCULATION_ID,
   ...HOLDS_ID,
   ...CIRC_CORE_ID,
+  ...MEMBERS_TOOLS_ID,
   ...PLACEHOLDER_ID,
 } as const;
 
@@ -121,5 +127,6 @@ export const KOMUNITAS_EN: Record<keyof typeof KOMUNITAS_ID, string> = {
   ...CIRCULATION_EN,
   ...HOLDS_EN,
   ...CIRC_CORE_EN,
+  ...MEMBERS_TOOLS_EN,
   ...PLACEHOLDER_EN,
 };

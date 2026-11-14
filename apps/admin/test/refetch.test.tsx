@@ -1,3 +1,4 @@
+import { DEFAULT_CARD_PROFILE } from '@altis/shared/api/member-ops';
 import type { SettingsView } from '@altis/shared/api/settings';
 import type { SystemConfigView } from '@altis/shared/api/system-config';
 import type { QueryKey } from '@tanstack/react-query';
@@ -78,7 +79,13 @@ const SETTINGS: SettingsView = {
   },
   // ---- Komunitas (circulation core) ----
   circulation: { loanVoidMinutes: 10, lost: { useItemPrice: true, processingFeeMinor: 0 } },
-  members: { clearance: { prefix: 'BP', profile: { paper: 'A4', city: '', signerTitle: 'Kepala Perpustakaan', signerName: '', signerId: '', bodyText: '' } } },
+  // ---- Komunitas K2: members (clearance and card), visits and privacy (their screens have their own tests) ----
+  members: {
+    clearance: { prefix: 'BP', profile: { paper: 'A4', city: '', signerTitle: 'Kepala Perpustakaan', signerName: '', signerId: '', bodyText: '' } },
+    card: { profile: DEFAULT_CARD_PROFILE },
+  },
+  visits: { dedupeMinutes: 60, fromDesk: true, fromOnline: true, askPurpose: false, station: { showPhoto: false, welcome: { id: null, en: null } } },
+  privacy: { loans: { anonymizeAfterYears: 5 }, visits: { anonymizeAfterYears: 2 }, members: { anonymizeArchivedAfterYears: null } },
 };
 
 const SYSTEM: SystemConfigView = {

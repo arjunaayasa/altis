@@ -34,6 +34,23 @@ import {
 } from './common.js';
 import { memberNameKey, memberNoDisplay, memberNoProblem, nameKeyWords, normalizeMemberNo } from './keys.js';
 import { lockLiveMemberType } from './types.js';
+// ---- Komunitas K2 (members extended) ----
+import { customValuesSchema, loadCustomDefs, readCustomValues, writeCustomValues } from '../catalog/data/custom-fields.js';
+
+/**
+ * Writes the member's custom field values `values` (checked against the live `members` definitions; a required one
+ * is not enforced on a member, whose record often starts from an import).
+ *
+ * @throws DomainError VALIDATION_FAILED at `custom.<code>`
+ */
+async function saveMemberCustom(tx: TxCtx, id: string, values: Record<string, unknown>): Promise<void> {
+  const defs = await loadCustomDefs(tx.trx, 'members');
+  const parsed = customValuesSchema(defs, 'patch').safeParse(values);
+  if (!parsed.success) {
+    throw memberValidationFailed(parsed.error.issues.map((issue) => ({ path: ['custom', ...issue.path.map(String)].join('.'), code: issue.code === 'unrecognized_keys' ? 'unknown_field' : issue.code })));
+  }
+  await writeCustomValues(tx.trx, 'members', id, parsed.data, defs, { now: tx.now, actor: tx.actor.id });
+}
 
 // Members: create, edit (suspend and reactivate are an edit of `status`), extend, archive, read, look up by number,
 // search, and the member's history.
@@ -175,6 +192,7 @@ export async function createMember(tx: TxCtx, input: MemberBody, o: MemberSaveOp
       })
       .execute(),
   );
+  if (b.custom !== undefined) await saveMemberCustom(tx, id, b.custom);
   const fields = Object.keys(b)
     .filter((k) => {
       const v = b[k as keyof typeof b];
@@ -269,6 +287,10 @@ export async function updateMember(tx: TxCtx, id: string, input: MemberPatchBody
     events.push({ type: toStatus === 'suspended' ? 'suspended' : 'reactivated', meta: { fields: ['status'] } });
   }
   if (errors.length > 0) throw memberValidationFailed(errors);
+  if (p.custom !== undefined && Object.keys(p.custom).length > 0) {
+    await saveMemberCustom(tx, id, p.custom);
+    fields.push('custom');
+  }
 
   const updated = await takenOnRace('memberNo', () =>
     trx
@@ -403,7 +425,10 @@ function memberView(row: MemberRow, type: MemberTypeRef, today: string, openLoan
 
 async function viewOf(db: Db, row: MemberRow, now: number): Promise<MemberView> {
   const type = (await typeRefs(db, [row.member_type_id])).get(row.member_type_id) ?? missingType(row.member_type_id);
-  return memberView(row, type, await libraryToday(db, now), await openLoanCount(db, row.id));
+  const view = memberView(row, type, await libraryToday(db, now), await openLoanCount(db, row.id));
+  // ---- Komunitas K2 (members extended) ----
+  view.custom = (await readCustomValues(db, 'members', [row.id])).get(row.id) ?? {};
+  return view;
 }
 
 /**

@@ -113,6 +113,9 @@ export const TABLE_CLASSES: Readonly<Record<TableName, TableClass>> = Object.fre
   calendars: 'data',
   item_uses: 'data',
   member_clearances: 'data',
+  // ---- Komunitas K2 (visits): data ----
+  visit_stations: 'data',
+  visits: 'data',
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping, made by the runner on every run ----
   schema_migrations_edition: 'migrator',
   schema_migrations_edition_lock: 'migrator',
@@ -236,6 +239,12 @@ export const PERSONAL_COLUMNS: Readonly<Partial<Record<TableName, readonly Perso
   loans: [{ column: 'override_note', category: 'free_text' }],
   // ---- Komunitas (circulation core) ----
   member_clearances: [{ column: 'void_reason', category: 'free_text' }],
+  // ---- Komunitas K2 (visits) ----
+  visits: [
+    { column: 'guest_name', category: 'identity' },
+    { column: 'guest_institution', category: 'identity' },
+    { column: 'note', category: 'free_text' },
+  ],
 } satisfies PersonalEntries);
 
 /** `value` with every nested object and array frozen. */

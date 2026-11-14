@@ -90,6 +90,13 @@ const CATALOGUE: Readonly<Record<string, { kind: 'table' | 'document'; personal:
   'accreditation.dossier': { kind: 'document', personal: true, orientation: 'portrait' },
   'accreditation.self_assessment': { kind: 'document', personal: true, orientation: 'portrait' },
   'accreditation.statement_1000': { kind: 'document', personal: false, orientation: 'portrait' },
+  // ---- Komunitas K2 (members) ----
+  'members.list': {
+    kind: 'table',
+    personal: true,
+    orientation: 'landscape',
+    columns: 'member_no:text name:text member_type:text class:text gender:text member_status:text joined_on:date expires_on:date',
+  },
 };
 
 /** The test profile's definitions, appended after the catalogue. */
@@ -130,6 +137,9 @@ describe('REPORTS', () => {
       expect(def.titleKey, id).toBe(`report.${id}.title`);
       if (id.startsWith('collection.')) {
         expect([def.module, def.permission, def.exportPermission ?? def.permission], id).toEqual(['collection', 'reports.statistics.read', 'reports.statistics.read']);
+        expect(def.formats, id).toEqual(['csv', 'xlsx', 'pdf']);
+      } else if (id.startsWith('members.')) {
+        expect([def.module, def.permission, def.exportPermission], id).toEqual(['members', 'members.records.read', 'members.export.run']);
         expect(def.formats, id).toEqual(['csv', 'xlsx', 'pdf']);
       } else {
         expect([def.module, def.permission], id).toEqual(['accreditation', 'accreditation.workspace.read']);
@@ -181,7 +191,7 @@ describe('the personal rule', () => {
     for (const def of REPORTS) {
       if (showsPersonalColumn(def)) expect(def.personal, def.id).toBe(true);
     }
-    expect(REPORTS.filter((def) => def.kind === 'table' && showsPersonalColumn(def)).map((d) => d.id)).toEqual(['accreditation.annex.staff', 'test.personal']);
+    expect(REPORTS.filter((def) => def.kind === 'table' && showsPersonalColumn(def)).map((d) => d.id)).toEqual(['accreditation.annex.staff', 'members.list', 'test.personal']);
   });
 
   it('the staff annex is caught by every section that shows a name, and test.personal only because it is marked', () => {
