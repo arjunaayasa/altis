@@ -351,6 +351,12 @@ export const ERROR_CODES = Object.freeze({
   CIRC_LOAN_NOT_OPEN: Object.freeze({ status: 409 }),
   /** The loan cannot be renewed; `meta {reason}` (RENEW_REFUSALS). */
   CIRC_RENEW_REFUSED: Object.freeze({ status: 409 }),
+
+  // ---- Komunitas (holds) ----
+  /** The item is kept on the hold shelf for another member; `meta {holdId}`. */
+  CIRC_ITEM_ON_HOLD: Object.freeze({ status: 409 }),
+  /** The hold cannot be placed or changed; `meta {reason}` (HOLD_REFUSALS). */
+  CIRC_HOLD_REFUSED: Object.freeze({ status: 409 }),
 });
 
 export type ErrorCode = keyof typeof ERROR_CODES;

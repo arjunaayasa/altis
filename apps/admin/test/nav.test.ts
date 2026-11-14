@@ -67,6 +67,7 @@ const REPORTS_SECTIONS: [string, string][] = [
 const CIRCULATION_SECTIONS: [string, string][] = [
   ['/admin/layanan', 'circulation.desk.use'],
   ['/admin/layanan/kembali', 'circulation.desk.use'],
+  ['/admin/layanan/rak-tunggu', 'circulation.desk.use'],
   ['/admin/layanan/terlambat', 'circulation.records.read'],
   ['/admin/layanan/aturan', 'circulation.policies.manage'],
 ];
@@ -154,10 +155,10 @@ describe('visibleNav', () => {
     ]);
   });
 
-  it('the desk permission held at one branch only shows Meja Layanan and Kembali Cepat; a global grant elsewhere does not', () => {
+  it('the desk permission held at one branch only shows Meja Layanan, Kembali Cepat and the hold shelf; a global grant elsewhere does not', () => {
     expect(sectionsOf(me({ permissions: [], branchPermissions: { B1: ['circulation.desk.use'] } }))).toEqual([
       [null, ['/admin']],
-      ['circulation', ['/admin/layanan', '/admin/layanan/kembali']],
+      ['circulation', ['/admin/layanan', '/admin/layanan/kembali', '/admin/layanan/rak-tunggu']],
       ['system', ['/admin/about']],
     ]);
     // Only the desk is granted per branch: another permission held at a branch opens no menu item.

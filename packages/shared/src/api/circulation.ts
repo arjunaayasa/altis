@@ -32,6 +32,8 @@ import { ulidField, versionField } from './common.js';
 import { codeField, cursorQuery, shortText, type Paged } from './catalog/common.js';
 import { rawBarcodeField } from './catalog/items.js';
 import { rawMemberNoField, type MemberTypeRef } from './members.js';
+// ---- Komunitas (holds) ----
+import type { HoldView, ReturnHoldTrap } from './holds.js';
 
 // ---- shared shapes ---------------------------------------------------------------------------------------------------
 
@@ -125,12 +127,15 @@ export interface DeskMemberView {
   expiresOn: string | null;
   photoFileId: string | null;
   notes: string | null;
-  counts: { openLoans: number; overdue: number };
+  /** `holdsReady`: the member's holds whose copy is kept on a hold shelf now. */
+  counts: { openLoans: number; overdue: number; holdsReady: number };
   canBorrow: boolean;
   /** Why the member may not borrow now: an error code of this API (`MEMBER_SUSPENDED`, `MEMBER_EXPIRED`, `CIRC_LIMIT_REACHED`). */
   borrowRefusal: 'MEMBER_SUSPENDED' | 'MEMBER_EXPIRED' | 'CIRC_LIMIT_REACHED' | null;
   /** The open loans, the oldest due date first. */
   loans: DeskLoanView[];
+  /** The member's active holds (ready first, then waiting by the time they were placed), at every branch. */
+  holds: HoldView[];
   warnings: CirculationWarningView[];
 }
 
@@ -156,6 +161,8 @@ export interface LoanResponse {
   dueOn: string;
   item: LoanItemRef;
   record: LoanRecordRef;
+  /** The member's own hold on the title that this loan fulfilled. */
+  holdFulfilledId?: string;
   warnings?: CirculationWarningView[];
 }
 
@@ -179,6 +186,8 @@ export interface ReturnResponse {
   dueOn: string;
   returnedOn: string;
   daysLate: number;
+  /** The copy is kept on the hold shelf for this member: put it there, with the slip. */
+  hold?: ReturnHoldTrap;
   warnings?: CirculationWarningView[];
 }
 

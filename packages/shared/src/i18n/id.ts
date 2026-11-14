@@ -23,6 +23,8 @@ import { ANNEX_REGISTERS_ID } from './k1/annex-registers.js';
 import { ANNEX_USAGE_ID } from './k1/annex-usage.js';
 import { COLLECTION_REPORTS_ID } from './k1/collection-reports.js';
 import { MEMBERS_CIRCULATION_ID } from './members-circulation.js';
+// ---- Komunitas (holds) ----
+import { HOLDS_ID } from './holds.js';
 
 /**
  * The keys that exist only in the test profile (spec §12.5, ruling S28), next to `permissionCatalog`'s test entry and the
@@ -1572,6 +1574,9 @@ const BASE = {
   // ---- Komunitas (members and circulation) ----
   // Permissions, audit actions, error codes and vocabularies of members and desk circulation (i18n/members-circulation.ts).
   ...MEMBERS_CIRCULATION_ID,
+  // ---- Komunitas (holds) ----
+  // Audit actions, error codes and vocabularies of holds and the hold shelf (i18n/holds.ts).
+  ...HOLDS_ID,
 } satisfies Record<string, string>;
 
 /**

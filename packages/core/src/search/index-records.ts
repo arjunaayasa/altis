@@ -12,6 +12,7 @@ import { sql, type Transaction } from 'kysely';
 import { loadCustomDefs, readCustomValues, type CustomFieldDef } from '../catalog/data/custom-fields.js';
 import { locationPaths } from '../catalog/data/locations.js';
 import { openLoanDueDates } from '../circulation/availability.js';
+import { keptItems } from '../circulation/holds.js';
 import { buildSearchDoc, customSearchTexts, type SearchDoc, type SearchDocSource } from './doc.js';
 
 // The synchronous index (Phase 2 spec §4.1, D2-07): every write path of the catalogue calls indexRecords with the ids it
@@ -164,8 +165,10 @@ async function loadDocs(trx: Transaction<DB>, ids: readonly string[], defs: Inde
     .execute();
   // An item on loan keeps its status; the open loan says it is out (facet `av`).
   const onLoan = itemRows.length === 0 ? new Map<string, string>() : await openLoanDueDates(trx, itemRows.map((i) => i.id));
+  // A copy kept on a hold shelf is not available to others either.
+  const kept = itemRows.length === 0 ? new Map<string, unknown>() : await keptItems(trx, itemRows.map((i) => i.id));
   const items = groupBy(
-    itemRows.map((i) => ({ ...i, on_loan: onLoan.has(i.id) })),
+    itemRows.map((i) => ({ ...i, on_loan: onLoan.has(i.id), on_hold: kept.has(i.id) })),
     'record_id',
   );
   const locationIds = [...new Set(itemRows.map((i) => i.location_id).filter((id): id is string => id !== null))];

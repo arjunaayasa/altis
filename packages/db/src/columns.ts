@@ -119,6 +119,8 @@ const M0032 = '0032_library_registers';
 const M0033 = '0033_catalog_accred_fields';
 // ---- Komunitas (members and circulation) ----
 const M0040 = '0040_members_circulation';
+// ---- Komunitas (holds) ----
+const M0041 = '0041_holds';
 
 /** `archived_at` + `version`, then the trail columns (Phase 2 spec §2.2 "arsip+ver, jejak"). */
 function archivedTrail(since: string): ColumnSpec[] {
@@ -1113,6 +1115,34 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
     ),
     ...trail(M0040),
   ]),
+  // ---- Komunitas (holds) ----
+  holds: frozen([
+    ...added(
+      M0041,
+      t.id(),
+      t.ulid('record_id'),
+      nul(t.ulid('item_id')),
+      t.bool('pinned'),
+      nul(t.ulid('member_id')),
+      t.ulid('pickup_branch_id'),
+      t.varchar('status', 16),
+      nul(t.key191('active_key')),
+      nul(t.ulid('trap_item_id')),
+      t.date('placed_on'),
+      t.timestamp('placed_at'),
+      nul(t.ulid('placed_by')),
+      t.varchar('source', 16),
+      nul(t.date('expires_on')),
+      nul(t.timestamp('ready_at')),
+      nul(t.date('pickup_until')),
+      nul(t.timestamp('closed_at')),
+      nul(t.varchar('close_reason', 24)),
+      nul(t.timestamp('shelf_cleared_at')),
+      nul(t.ulid('loan_id')),
+      t.int('version'),
+    ),
+    ...trail(M0041),
+  ]),
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping (made by the runner, like the two above) ----
   schema_migrations_edition: frozen(added(RUNNER_TABLES_SINCE, t.key191('name'), t.varchar('timestamp', 64))),
   schema_migrations_edition_lock: frozen(added(RUNNER_TABLES_SINCE, t.key191('id'), t.int('is_locked'))),
@@ -1240,6 +1270,8 @@ export const TABLE_KEYS: Readonly<Record<TableName, TableKeySpec>> = Object.free
   member_events: keys(['id'], { fks: [{ column: 'member_id', table: 'members', refColumn: 'id' }] }),
   policies: keys(['id'], { unique: [['code_key'], ['scope_key']] }),
   loans: keys(['id'], { unique: [['open_item_id']] }),
+  // ---- Komunitas (holds) ----
+  holds: keys(['id'], { unique: [['active_key'], ['trap_item_id']] }),
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: keys(['name']),
   schema_migrations_edition_lock: keys(['id']),

@@ -1,5 +1,6 @@
 import type { AreaAuditScript } from './catalog.js';
 import { AUDIT as CIRCULATION } from './komunitas-circulation.js';
+import { AUDIT as HOLDS } from './komunitas-holds.js';
 import { AUDIT as MEMBERS } from './komunitas-members.js';
 
 // The audit scripts of the members and circulation actions: one script per area, each in a file of its own that only
@@ -12,6 +13,8 @@ import { AUDIT as MEMBERS } from './komunitas-members.js';
 export const MEMBERS_CIRCULATION_AUDIT_SCRIPTS: Readonly<Record<string, AreaAuditScript>> = Object.freeze({
   members: MEMBERS,
   circulation: CIRCULATION,
+  // ---- Komunitas (holds) ----
+  holds: HOLDS,
 });
 
 /** While true, a script that is still null lists its actions as pending; both scripts are written, so every action is covered. */

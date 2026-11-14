@@ -5,6 +5,8 @@ import { ACCREDITATION_USAGE_EN, ACCREDITATION_USAGE_ID } from '../accreditation
 import { ACCREDITATION_WORKSPACE_EN, ACCREDITATION_WORKSPACE_ID } from '../accreditation/workspace';
 import { REPORTS_EN, REPORTS_ID } from '../reports';
 import { CIRCULATION_EN, CIRCULATION_ID } from './circulation';
+// ---- Komunitas (holds) ----
+import { HOLDS_EN, HOLDS_ID } from './holds';
 import { MEMBERS_EN, MEMBERS_ID } from './members';
 import { KOMUNITAS_SETTINGS_EN, KOMUNITAS_SETTINGS_ID } from './settings';
 
@@ -65,6 +67,8 @@ export const KOMUNITAS_AREAS_ID = Object.freeze({
   settings: KOMUNITAS_SETTINGS_ID,
   members: MEMBERS_ID,
   circulation: CIRCULATION_ID,
+  // ---- Komunitas (holds) ----
+  holds: HOLDS_ID,
   placeholder: PLACEHOLDER_ID,
 });
 
@@ -79,6 +83,7 @@ export const KOMUNITAS_AREAS_EN: { readonly [A in keyof typeof KOMUNITAS_AREAS_I
   settings: KOMUNITAS_SETTINGS_EN,
   members: MEMBERS_EN,
   circulation: CIRCULATION_EN,
+  holds: HOLDS_EN,
   placeholder: PLACEHOLDER_EN,
 });
 
@@ -93,6 +98,7 @@ export const KOMUNITAS_ID = {
   ...KOMUNITAS_SETTINGS_ID,
   ...MEMBERS_ID,
   ...CIRCULATION_ID,
+  ...HOLDS_ID,
   ...PLACEHOLDER_ID,
 } as const;
 
@@ -107,5 +113,6 @@ export const KOMUNITAS_EN: Record<keyof typeof KOMUNITAS_ID, string> = {
   ...KOMUNITAS_SETTINGS_EN,
   ...MEMBERS_EN,
   ...CIRCULATION_EN,
+  ...HOLDS_EN,
   ...PLACEHOLDER_EN,
 };

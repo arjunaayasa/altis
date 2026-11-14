@@ -17,3 +17,31 @@ export {
 export { listLoans } from './loans.js';
 export { archivePolicy, createPolicy, listPolicies, pickPolicy, policyScopeKey, resolvePolicy, updatePolicy } from './policies.js';
 export type { PolicyDimensions } from './policies.js';
+// ---- Komunitas (holds) ----
+// Holds and the hold shelf: the services the desk, the member area and the other circulation modules call.
+export {
+  HOLD_READY_HOOKS,
+  anonymizeClosedHolds,
+  cancelHold,
+  checkKeptCopy,
+  clearHoldShelf,
+  closeMemberHolds,
+  fulfilHoldOnLoan,
+  holdRefused,
+  holdSettings,
+  holdShelf,
+  keptItems,
+  listHolds,
+  markHoldReady,
+  memberHold,
+  memberHolds,
+  moveHoldsOnMerge,
+  pickupBranchFor,
+  placeHold,
+  renewalHeldBack,
+  returnKeptHoldsToQueue,
+  trapOnReturn,
+} from './holds.js';
+export type { CancelHoldInput, HoldReadyHook, HoldSettings, PlaceHoldInput } from './holds.js';
+export { holdsExpiryJob, holdsJobPayload, runHoldExpiry } from './holds-job.js';
+export type { HoldsJobPayload, HoldsRunCounts } from './holds-job.js';
