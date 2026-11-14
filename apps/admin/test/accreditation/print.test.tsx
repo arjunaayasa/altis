@@ -99,13 +99,17 @@ describe('Cetak', () => {
 
     // A confirmation made on this page counts for four minutes; the request letter is asked for after that.
     const pageClock = performance.now.bind(performance);
-    vi.spyOn(performance, 'now').mockImplementation(() => pageClock() + 300_000);
+    let ahead = 300_000;
+    vi.spyOn(performance, 'now').mockImplementation(() => pageClock() + ahead);
     const dossier = await card(ID['report.accreditation.dossier.title']);
     fireEvent.click(within(dossier).getByRole('button', { name: ADMIN_ID['accreditation.print.request_letter'] }));
     await confirmPassword();
     await waitFor(() => expect(api.to(DOSSIER)).toHaveLength(1));
     expect(api.to(DOSSIER)[0]!.body).toEqual({ format: 'pdf', part: 'request_letter' });
 
+    // Four more minutes on: no confirmation counts any more, so a statement behind the password would open the dialog
+    // here instead of going out.
+    ahead += 300_000;
     const reauths = api.to('POST auth/reauth').length;
     const statement = await card(ID['report.accreditation.statement_1000.title']);
     fireEvent.click(within(statement).getByRole('button', { name: ADMIN_ID['accreditation.print.statement.make'] }));
