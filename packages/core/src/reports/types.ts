@@ -39,6 +39,12 @@ export interface ReportCtx {
   settings: AccredSettings;
   params: Record<string, unknown>;
   budgetLeftMs(): number;
+  /**
+   * Whether this call may read the whole stock through the stock scan: false in a preview of a library above
+   * `REPORT_SCAN_PREVIEW_MAX_RECORDS` live records. A report that reaches the scan only part way through its rows (the
+   * data-quality list's last problem) asks before it starts the scan. Absent: it may (an export, a document).
+   */
+  mayScanStock?(): Promise<boolean>;
 }
 
 /** One row of a table report, in the order of its columns. */
