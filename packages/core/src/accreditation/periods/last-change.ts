@@ -1,5 +1,5 @@
 import type { DB } from '@altis/db';
-import { addMonths } from '@altis/shared';
+import { addMonths, endOfMonth, monthOf } from '@altis/shared';
 import type { UsageImportView } from '@altis/shared/api/accreditation';
 import type { Kysely } from 'kysely';
 import { slimsUsageRunSettings } from '../slims-usage/settings.js';
@@ -8,9 +8,11 @@ import { slimsUsageRunSettings } from '../slims-usage/settings.js';
 // changed at or after the evaluation started. It is the latest of
 // - the period's own row (its profile, population and facilities: `updated_at`, `created_at`);
 // - the `updated_at` of every live period whose span overlaps the days this one reads (its own span and the twelve
-//   months before it, which the reading interest compares it with): a write through such a period (a deleted usage
-//   cell, an archived evidence file) touches that period's row, and may change what this one reads; the previous
-//   school year's period, which does not overlap this one, included;
+//   months before it, which the reading interest compares it with, in whole months, as the usage table is read: a
+//   month cell covers its whole month, so a period that starts or ends inside a month reads that month's cells): a
+//   write through such a period (a deleted usage cell, an archived evidence file) touches that period's row, and may
+//   change what this one reads; the previous school year's period, which does not overlap this one, included, and so
+//   is a period with free dates that only shares a month with this one;
 // - every monthly usage cell and member type mapping (`usage_stats`, `usage_group_map`);
 // - the five registers and the staff trainings (`updated_at`, `created_at`: an archive is a soft change of the row);
 // - the evidence (`accred_evidence.created_at`);
@@ -78,9 +80,13 @@ export interface PeriodTimes {
 /** How many months before its start a period's results read data: the reading interest's previous twelve months. */
 export const READ_MONTHS_BEFORE = 12;
 
-/** The days whose data the results of `p` read: from {@link READ_MONTHS_BEFORE} months before its start to its end. */
+/**
+ * The days whose data the results of `p` read: from the first day of the month {@link READ_MONTHS_BEFORE} months
+ * before its start to the last day of the month it ends in. The usage table is read in whole months (a month cell
+ * covers its whole month), so this span is in whole months too.
+ */
 export function readSpanOf(p: { starts_on: string; ends_on: string }): { starts_on: string; ends_on: string } {
-  return { starts_on: addMonths(p.starts_on, -READ_MONTHS_BEFORE), ends_on: p.ends_on };
+  return { starts_on: `${monthOf(addMonths(p.starts_on, -READ_MONTHS_BEFORE))}-01`, ends_on: endOfMonth(monthOf(p.ends_on)) };
 }
 
 /** The latest `updated_at` of the live periods whose span overlaps the days `p` reads (itself included when live). */
