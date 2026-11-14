@@ -42,6 +42,11 @@ export const ACCREDITATION_ID = {
   'accreditation.tab.snp': 'Kepatuhan SNP',
   'accreditation.tab.cetak': 'Cetak',
   'accreditation.tab.riwayat': 'Riwayat',
+  // Before another tab, another period, a link out of the workspace or the usage import drops unsaved changes.
+  'accreditation.unsaved.title': 'Perubahan belum disimpan',
+  'accreditation.unsaved.body':
+    'Ada isian di halaman ini yang belum Anda simpan. Bila Anda lanjutkan, isian itu hilang. Pilih Batal untuk kembali dan menyimpannya lebih dulu.',
+  'accreditation.unsaved.leave': 'Lanjutkan tanpa menyimpan',
   // The new period form.
   'accreditation.new.title': 'Periode akreditasi baru',
   'accreditation.new.description':
@@ -106,6 +111,10 @@ export const ACCREDITATION_EN: Readonly<Record<keyof typeof ACCREDITATION_ID, st
   'accreditation.tab.snp': 'SNP compliance',
   'accreditation.tab.cetak': 'Print',
   'accreditation.tab.riwayat': 'History',
+  'accreditation.unsaved.title': 'Unsaved changes',
+  'accreditation.unsaved.body':
+    'Some entries on this page are not saved yet. If you continue, they are lost. Choose Cancel to go back and save them first.',
+  'accreditation.unsaved.leave': 'Continue without saving',
   'accreditation.new.title': 'New accreditation period',
   'accreditation.new.description':
     'Choose the instrument and the span of the period. The profile and population are copied from an earlier period and can be edited in the accreditation workspace.',
