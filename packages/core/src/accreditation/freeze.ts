@@ -15,7 +15,14 @@ import { readMeta, readStoredResults } from './evaluate/results.js';
 import { instrumentById } from './instruments/index.js';
 import { parsePeriodBody, periodNotFound } from './periods/errors.js';
 import { lastChangeOf } from './periods/last-change.js';
-import { compactSnapshot, SNAPSHOT_DOSSIER_CONTEXT, SNAPSHOT_DOSSIER_OWNER, SNAPSHOT_VALUES_MAX_BYTES } from './snapshots.js';
+import {
+  compactSnapshot,
+  removeUnfinishedCopy,
+  SNAPSHOT_COPY_UNFINISHED,
+  SNAPSHOT_DOSSIER_CONTEXT,
+  SNAPSHOT_DOSSIER_OWNER,
+  SNAPSHOT_VALUES_MAX_BYTES,
+} from './snapshots.js';
 
 // Freezing a period and opening it again (spec §10.10).
 //
@@ -31,8 +38,10 @@ import { compactSnapshot, SNAPSHOT_DOSSIER_CONTEXT, SNAPSHOT_DOSSIER_OWNER, SNAP
 //   alone) of this period whose run was started once the results were ready and succeeded before the freeze is copied
 //   into the stored files and named on the snapshot. A run started earlier may have printed older results (or results
 //   half rewritten by the evaluation) or annex rows gathered before the last change, so it is never kept; a run started
-//   after it read what the snapshot holds (any change since would have made the results stale). A copy that fails
-//   leaves the snapshot without one, and is logged.
+//   after it read what the snapshot holds (any change since would have made the results stale). The copy's `files`
+//   row is written first (unfinished), then its content, then the snapshot names it and the row is marked complete in
+//   one transaction, so a copy killed on the way leaves a row the reports housekeeping removes with its content
+//   (snapshots.ts), never content without a row. A copy that fails leaves the snapshot without one, and is logged.
 // - Unfreeze: the first statement is the conditional update `'frozen'` → `'open'`; 0 rows is an unknown period (404)
 //   or one that is open (409 CONFLICT_STALE). The snapshots stay as the period's history. Audited
 //   `accreditation.period.unfreeze`. The route asks for a fresh re-authentication.
@@ -234,23 +243,15 @@ export async function copySnapshotDossier(
       return null;
     }
     const sha256 = await sha256Of(source, info.size);
-    const fileId = newId(o.now);
-    stored = fileId;
-    await o.storage.put(fileId, fileBytes(source, info.size), { size: info.size, sha256 });
-
     const settings = await loadAccredSettings(h.db);
     const def = reportById('accreditation.dossier');
     const title = def === null ? 'Berkas bukti' : t('id', def.titleKey as MessageKey);
     const originalName = safeFileName(`${title}-${localDate(settings.timezone, Number(snapshot.created_at))}.pdf`);
-    const named = await withTx(h, async (trx) => {
-      const r = await trx
-        .updateTable('accred_snapshots')
-        .set({ dossier_file_id: fileId })
-        .where('id', '=', snapshotId)
-        .where('dossier_file_id', 'is', null)
-        .executeTakeFirst();
-      if (Number(r.numUpdatedRows) !== 1) return false;
-      await trx
+    const fileId = newId(o.now);
+
+    // The row first, unfinished: a copy killed after this point leaves a row the housekeeping finds.
+    await withTx(h, (trx) =>
+      trx
         .insertInto('files')
         .values({
           id: fileId,
@@ -262,24 +263,40 @@ export async function copySnapshotDossier(
           owner_type: SNAPSHOT_DOSSIER_OWNER,
           owner_id: snapshotId,
           access: 'staff',
-          status: 'ok',
+          status: SNAPSHOT_COPY_UNFINISHED,
           created_at: o.now,
           created_by: null,
         })
-        .execute();
+        .execute(),
+    );
+    stored = fileId;
+    await o.storage.put(fileId, fileBytes(source, info.size), { size: info.size, sha256 });
+
+    const named = await withTx(h, async (trx) => {
+      const r = await trx
+        .updateTable('accred_snapshots')
+        .set({ dossier_file_id: fileId })
+        .where('id', '=', snapshotId)
+        .where('dossier_file_id', 'is', null)
+        .executeTakeFirst();
+      if (Number(r.numUpdatedRows) !== 1) return false;
+      const f = await trx.updateTable('files').set({ status: 'ok' }).where('id', '=', fileId).where('status', '=', SNAPSHOT_COPY_UNFINISHED).executeTakeFirst();
+      // The row went meanwhile (it never does within a copy's seconds): name nothing.
+      if (Number(f.numUpdatedRows) !== 1) throw new Error('the evidence file copy row is gone');
       return true;
     });
-    stored = null;
     if (!named) {
       // Another copy named one first: this one is not needed.
-      await o.storage.delete(fileId);
+      await removeUnfinishedCopy(h.db, o.storage, fileId);
+      stored = null;
       const again = await h.db.selectFrom('accred_snapshots').select('dossier_file_id').where('id', '=', snapshotId).executeTakeFirst();
       return again?.dossier_file_id ?? null;
     }
+    stored = null;
     return fileId;
   } catch (error) {
     o.log.warn('accreditation snapshot: the evidence file could not be copied', { snapshotId, ...errorFields(error) });
-    if (stored !== null) await o.storage.delete(stored).catch(() => undefined);
+    if (stored !== null) await removeUnfinishedCopy(h.db, o.storage, stored).catch(() => undefined);
     return null;
   }
 }
