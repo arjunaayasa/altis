@@ -1,8 +1,9 @@
-import { ArchiveBody, MemberTypeBody, MemberTypeListQuery, MemberTypePatchBody } from '@altis/shared/api/members';
+import { archiveMemberType, createMemberType, listMemberTypes, updateMemberType } from '@altis/core';
+import type { StoreResponse } from '@altis/shared/api/catalog/common';
+import { ArchiveBody, MemberTypeBody, MemberTypeListQuery, MemberTypePatchBody, type MemberTypeListResponse } from '@altis/shared/api/members';
 import { ulidField } from '@altis/shared/api/common';
 import { z } from 'zod';
 import { route, type RouteDecl } from '../../http/route.js';
-import { notImplemented } from '../not-implemented.js';
 
 // Member types (library-wide):
 //
@@ -25,7 +26,10 @@ const typesList = route({
   idempotency: 'none',
   audit: null,
   query: MemberTypeListQuery,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: MemberTypeListResponse = { items: await listMemberTypes(rc.db.db, rc.query) };
+    return { body };
+  },
 });
 
 const typesCreate = route({
@@ -36,7 +40,10 @@ const typesCreate = route({
   idempotency: 'store',
   audit: 'members.type.create',
   body: MemberTypeBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: StoreResponse = await createMemberType(rc.tx(), rc.body);
+    return { status: 201, body };
+  },
 });
 
 const typesUpdate = route({
@@ -48,7 +55,10 @@ const typesUpdate = route({
   audit: 'members.type.update',
   params: IdParams,
   body: MemberTypePatchBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: StoreResponse = await updateMemberType(rc.tx(), rc.params.id, rc.body);
+    return { body };
+  },
 });
 
 const typesArchive = route({
@@ -60,7 +70,10 @@ const typesArchive = route({
   audit: 'members.type.archive',
   params: IdParams,
   body: ArchiveBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: StoreResponse = await archiveMemberType(rc.tx(), rc.params.id, rc.body.version);
+    return { body };
+  },
 });
 
 export const MEMBER_TYPE_ROUTES: RouteDecl[] = [typesList, typesCreate, typesUpdate, typesArchive];

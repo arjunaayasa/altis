@@ -128,6 +128,13 @@ describe('reason (PROBLEM_REASONS, S30)', () => {
       UPDATE_HIDDEN: ['image'],
       // Komunitas K1 (catalogue re-sync)
       MIGRATION_PRECHECK_FAILED: ['catalog_changed'],
+      // Komunitas (members and circulation)
+      NOT_FOUND: ['member_no'],
+      MEMBER_IMPORT_FORMAT: ['empty', 'header', 'unreadable', 'too_many_rows'],
+      CIRC_NOT_LOANABLE: ['status', 'collection_type', 'policy'],
+      CIRC_ITEM_ON_LOAN: ['same_member', 'other_member'],
+      CIRC_LIMIT_REACHED: ['member_type', 'policy'],
+      CIRC_RENEW_REFUSED: ['changed', 'suspended', 'expired', 'same_day', 'limit', 'hold', 'blocked', 'not_online'],
     });
   });
 

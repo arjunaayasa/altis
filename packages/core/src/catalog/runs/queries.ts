@@ -13,7 +13,8 @@ import { getRun, type RunRow } from '../data/runs.js';
 // - A `migration` run is 404 to anyone without `catalog.migration.run` (P2-27): it is left out of the list, and getting
 //   it, its report or its file answers NOT_FOUND. The route says which the viewer holds (`viewer.migration`).
 // - A `slims_usage` run (the SLiMS usage import of the accreditation workspace) is hidden the same way from anyone
-//   without `accreditation.workspace.manage` (`viewer.slimsUsage`; absent counts as not held).
+//   without `accreditation.workspace.manage` (`viewer.slimsUsage`; absent counts as not held). A `member_import` run is
+//   hidden from everyone: the members routes show it.
 // - The list is newest first, keyset over `(created_at, id)` (both descending), paged by an opaque cursor
 //   `<createdAt>.<id>` that names the last row of the page; with `kind`, `ix_catalog_runs_kind_created_at` serves it.
 // - Each run carries its job's status (`jobStatus`, null without a job row): a run still `queued` or `running` whose
@@ -38,6 +39,9 @@ function hiddenKinds(viewer: RunViewer): string[] {
   const hidden: string[] = [];
   if (!viewer.migration) hidden.push('migration');
   if (viewer.slimsUsage !== true) hidden.push('slims_usage');
+  // ---- Komunitas (members and circulation) ----
+  // A member import is read through its own routes (`members/imports/:id`), never as a catalogue run.
+  hidden.push('member_import');
   return hidden;
 }
 

@@ -1,3 +1,5 @@
+import { archiveMember, createMember, extendMember, getMember, listMemberEvents, lookupMember, searchMembers, updateMember } from '@altis/core';
+import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import {
   ArchiveBody,
   MemberBody,
@@ -6,11 +8,13 @@ import {
   MemberLookupBody,
   MemberPatchBody,
   MemberSearchBody,
+  type MemberEventsResponse,
+  type MemberSearchResponse,
+  type MemberView,
 } from '@altis/shared/api/members';
 import { ulidField } from '@altis/shared/api/common';
 import { z } from 'zod';
 import { route, type RouteDecl } from '../../http/route.js';
-import { notImplemented } from '../not-implemented.js';
 
 // Members (library-wide):
 //
@@ -41,7 +45,10 @@ const membersSearch = route({
   audit: null,
   tx: 'self',
   body: MemberSearchBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: MemberSearchResponse = await searchMembers(rc.db.db, rc.body, rc.now);
+    return { body };
+  },
 });
 
 const membersLookup = route({
@@ -54,7 +61,10 @@ const membersLookup = route({
   audit: null,
   tx: 'self',
   body: MemberLookupBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: MemberView = await lookupMember(rc.db.db, rc.body.no, rc.now);
+    return { body };
+  },
 });
 
 const membersCreate = route({
@@ -65,7 +75,10 @@ const membersCreate = route({
   idempotency: 'store',
   audit: 'members.member.create',
   body: MemberBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: StoreResponse = await createMember(rc.tx(), rc.body);
+    return { status: 201, body };
+  },
 });
 
 const membersGet = route({
@@ -76,7 +89,10 @@ const membersGet = route({
   idempotency: 'none',
   audit: null,
   params: IdParams,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: MemberView = await getMember(rc.db.db, rc.params.id, rc.now);
+    return { body };
+  },
 });
 
 const membersUpdate = route({
@@ -88,7 +104,10 @@ const membersUpdate = route({
   audit: 'members.member.update',
   params: IdParams,
   body: MemberPatchBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: StoreResponse = await updateMember(rc.tx(), rc.params.id, rc.body);
+    return { body };
+  },
 });
 
 const membersArchive = route({
@@ -100,7 +119,10 @@ const membersArchive = route({
   audit: 'members.member.archive',
   params: IdParams,
   body: ArchiveBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: StoreResponse = await archiveMember(rc.tx(), rc.params.id, rc.body.version);
+    return { body };
+  },
 });
 
 const membersExtend = route({
@@ -112,7 +134,10 @@ const membersExtend = route({
   audit: 'members.member.extend',
   params: IdParams,
   body: MemberExtendBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: StoreResponse = await extendMember(rc.tx(), rc.params.id, rc.body);
+    return { body };
+  },
 });
 
 const membersEvents = route({
@@ -124,7 +149,10 @@ const membersEvents = route({
   audit: null,
   params: IdParams,
   query: MemberEventsQuery,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: MemberEventsResponse = await listMemberEvents(rc.db.db, rc.params.id, rc.query);
+    return { body };
+  },
 });
 
 export const MEMBER_ROUTES: RouteDecl[] = [

@@ -6,6 +6,7 @@ import { issueCode } from '@altis/shared/api/common';
 import type { Kysely, Selectable, Transaction, Updateable } from 'kysely';
 import type { z } from 'zod';
 import type { AuditInput, TxCtx } from '../../context.js';
+import { refuseItemOnLoan } from '../../circulation/availability.js';
 import { publish } from '../../events/publish.js';
 import { indexRecords } from '../../search/index-records.js';
 import { readSettings } from '../../settings/service.js';
@@ -32,7 +33,8 @@ import { archivedAtAfter, checkTransition, itemStatusOf, ARCHIVED_STATUS } from 
 //   the whole transaction again (R37) and its check then sees the key (as enqueue does for its unique key).
 // - A price is a decimal string with at most 2 decimals; it is stored in minor units (`money()`, exponent 2, §3.4) with
 //   its currency, by default `catalog.currency`. No price, no currency.
-// - Status changes follow ITEM_TRANSITIONS (lifecycle.ts); a change to `withdrawn` archives the item. An item leaving
+// - Status changes follow ITEM_TRANSITIONS (lifecycle.ts); a change to `withdrawn` archives the item. An item with an
+//   open loan keeps its status and is not archived until it is returned (CIRC_ITEM_ON_LOAN). An item leaving
 //   `withdrawn` is live again, so what it points to must be live too (reviveErrors; §3.1: an archived record has no
 //   live item, and the archives of a location, a collection type and a supplier counted no withdrawn item): its record
 //   (`{path: 'status', code: 'record_archived'}`), and the collection type, location and supplier it keeps (`archived`
@@ -607,6 +609,7 @@ export async function updateItem(tx: TxCtx, branchId: string, id: string, patch:
   const fromStatus = itemStatusOf(before.status);
   const toStatus = p.status ?? fromStatus;
   checkTransition(fromStatus, toStatus);
+  if (toStatus !== fromStatus) await refuseItemOnLoan(trx, id);
 
   const errors: FieldWarning[] = [];
   let barcodeKey: string | null = null;
@@ -737,6 +740,7 @@ export async function archiveItem(tx: TxCtx, branchId: string, id: string, versi
   }
   const from = itemStatusOf(before.status);
   checkTransition(from, ARCHIVED_STATUS);
+  await refuseItemOnLoan(trx, id);
   const updated = await trx
     .updateTable('items')
     .set((eb) => ({ status: ARCHIVED_STATUS, archived_at: tx.now, updated_at: tx.now, updated_by: tx.actor.id, version: eb('version', '+', 1) }))

@@ -1,9 +1,10 @@
-import { PolicyBody, PolicyListQuery, PolicyPatchBody } from '@altis/shared/api/circulation';
+import { archivePolicy, createPolicy, listPolicies, updatePolicy } from '@altis/core';
+import type { StoreResponse } from '@altis/shared/api/catalog/common';
+import { PolicyBody, PolicyListQuery, PolicyPatchBody, type PolicyListResponse } from '@altis/shared/api/circulation';
 import { ulidField } from '@altis/shared/api/common';
 import { ArchiveBody } from '@altis/shared/api/members';
 import { z } from 'zod';
 import { route, type RouteDecl } from '../../http/route.js';
-import { notImplemented } from '../not-implemented.js';
 
 // The loan rules (`circulation.policies.manage`, library-wide):
 //
@@ -27,7 +28,10 @@ const policiesList = route({
   idempotency: 'none',
   audit: null,
   query: PolicyListQuery,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: PolicyListResponse = { items: await listPolicies(rc.db.db, rc.query) };
+    return { body };
+  },
 });
 
 const policiesCreate = route({
@@ -38,7 +42,10 @@ const policiesCreate = route({
   idempotency: 'store',
   audit: 'circulation.policy.create',
   body: PolicyBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: StoreResponse = await createPolicy(rc.tx(), rc.body);
+    return { status: 201, body };
+  },
 });
 
 const policiesUpdate = route({
@@ -50,7 +57,10 @@ const policiesUpdate = route({
   audit: 'circulation.policy.update',
   params: IdParams,
   body: PolicyPatchBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: StoreResponse = await updatePolicy(rc.tx(), rc.params.id, rc.body);
+    return { body };
+  },
 });
 
 const policiesArchive = route({
@@ -62,7 +72,10 @@ const policiesArchive = route({
   audit: 'circulation.policy.archive',
   params: IdParams,
   body: ArchiveBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: StoreResponse = await archivePolicy(rc.tx(), rc.params.id, rc.body.version);
+    return { body };
+  },
 });
 
 export const POLICY_ROUTES: RouteDecl[] = [policiesList, policiesCreate, policiesUpdate, policiesArchive];
