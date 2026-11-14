@@ -13,7 +13,7 @@ import type { AppEnv } from './request-id.js';
 
 // 1c Task 15: `altis_ops` (spec §9.4) holds the token of an exclusive operation (http/ops-auth.ts issueOpsCookie), which
 // opens the `opsAuth` routes without a session (a restore past its point of no return has no tables to hold one).
-export type AuthCookie = 'altis_sid' | 'altis_rm' | 'altis_dev' | 'altis_csrf' | 'altis_ops';
+export type AuthCookie = 'altis_sid' | 'altis_rm' | 'altis_dev' | 'altis_csrf' | 'altis_ops' | 'altis_vs';
 
 /** `altis_rm` lives 30 days (spec §7.1). */
 export const REMEMBER_MAX_AGE_S = 2_592_000;
@@ -28,6 +28,9 @@ export const OPS_MAX_AGE_S = 604_800;
 
 /** The longest Max-Age browsers keep (400 days); hono refuses more. */
 const MAX_AGE_LIMIT_S = 34_560_000;
+
+/** `altis_vs` (Komunitas K2: a guestbook station's device token) lives 400 days, `SameSite=Strict`. */
+export const VISIT_STATION_MAX_AGE_S = MAX_AGE_LIMIT_S;
 
 /** Whether `baseUrl` is https (P13: Secure, `__Host-`, HSTS); false for anything that does not parse. */
 export function isSecureBase(baseUrl: string): boolean {
@@ -66,7 +69,7 @@ export function readAuthCookie(c: Context<AppEnv>, base: AuthCookie): string | u
  *
  * @throws TypeError for a `maxAgeS` that is not an integer from 0 to 34 560 000 (400 days)
  */
-export function setAuthCookie(c: Context<AppEnv>, base: AuthCookie, value: string, o: { maxAgeS?: number } = {}): void {
+export function setAuthCookie(c: Context<AppEnv>, base: AuthCookie, value: string, o: { maxAgeS?: number; sameSite?: 'Strict' } = {}): void {
   const secure = secureFor(c);
   if (o.maxAgeS !== undefined && (!Number.isSafeInteger(o.maxAgeS) || o.maxAgeS < 0 || o.maxAgeS > MAX_AGE_LIMIT_S)) {
     throw new TypeError(`setAuthCookie: maxAgeS must be an integer from 0 to ${MAX_AGE_LIMIT_S}`);
@@ -74,7 +77,7 @@ export function setAuthCookie(c: Context<AppEnv>, base: AuthCookie, value: strin
   setCookie(c, cookieName(base, secure), value, {
     path: '/',
     httpOnly: true,
-    sameSite: 'Lax',
+    sameSite: o.sameSite ?? 'Lax',
     secure,
     ...(o.maxAgeS === undefined ? {} : { maxAge: o.maxAgeS }),
   });

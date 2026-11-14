@@ -30,6 +30,8 @@ import { isOverridden } from './method-override.js';
 import { opsCookieOp, opsSessionAllowed, type OpsAuth } from './ops-auth.js';
 import type { AppEnv } from './request-id.js';
 import { validateInput } from './validate.js';
+// ---- Komunitas K2 (visits) ----
+import { checkFormCsrf, readFormBody, resolveVisitStation, type VisitStationAuth } from './visit-station.js';
 
 // The route-declaration contract (spec §4.6) and the per-route part of the middleware chain (§4.7, steps 5-13).
 //
@@ -211,6 +213,19 @@ export interface RouteDecl<B = unknown, Q = unknown, P = unknown> {
    * otherwise). See the top of this file for the checks it runs instead of steps 7-9.
    */
   install?: 'page' | 'claim' | 'claimed';
+  // ---- Komunitas K2 (visits) ----
+  /**
+   * A guestbook station's page (`/kunjungan` and below; `public` without a `session`): step 7 never reads the staff
+   * session (`altis_sid`), only the station's own cookie `altis_vs` (rc.visitStation, null without a live station).
+   */
+  visitStation?: true;
+  /**
+   * An HTML form body (`application/x-www-form-urlencoded`, at most 16 KB, no repeated field), on a POST of a
+   * `visitStation` route only. Step 11's parse runs before step 8, which reads the CSRF token from the `_csrf` field
+   * (or `X-CSRF-Token`): the station's token when the request carries a live station, else the pre-session token of
+   * `altis_csrf`. `_csrf` is removed before the strict `body` schema sees the fields. `idempotency: 'none'`.
+   */
+  form?: true;
   /** Strict Zod objects (`z.strictObject`) whose nested objects are strict too, spec §7.4. */
   body?: z.ZodType<B>;
   query?: z.ZodType<Q>;
@@ -286,6 +301,8 @@ export interface RouteContext<B = unknown, Q = unknown, P = unknown> {
   installSession: InstallSession | null;
   /** What `opsAuth` decided for an `opsAuth` route (1c Task 15, http/ops-auth.ts); null on every other route. */
   opsAuth: OpsAuth | null;
+  /** The guestbook station of a `visitStation` route's `altis_vs` cookie (Komunitas K2); null otherwise. */
+  visitStation: VisitStationAuth | null;
 }
 
 /** What mountRoutes runs the routes with. */
@@ -492,6 +509,18 @@ function declProblem(d: RouteDecl): string | null {
     if (d.public !== true || d.session !== 'none') return 'install_decl_invalid';
     const wizardPath = d.install === 'page' ? d.path === '/install' && d.method === 'GET' : d.path.startsWith('/install/api/');
     if (!wizardPath) return 'install_decl_invalid';
+  }
+  // ---- Komunitas K2 (visits) ----
+  if (raw['visitStation'] !== undefined) {
+    const underStation = d.path === '/kunjungan' || d.path.startsWith('/kunjungan/');
+    if (raw['visitStation'] !== true || d.public !== true || d.session !== undefined || !underStation || (d.auth ?? 'cookie') !== 'cookie') {
+      return 'visit_station_invalid';
+    }
+  }
+  if (raw['form'] !== undefined) {
+    if (raw['form'] !== true || d.method !== 'POST' || d.visitStation !== true || d.body === undefined || raw['rawBody'] !== undefined || d.idempotency !== 'none') {
+      return 'form_invalid';
+    }
   }
   // Phase 2 (catalog): Task 2 — a cookieless read-only route is the one non-GET `session: 'none'` route outside the
   // wizard (isCookielessRead).
@@ -760,7 +789,10 @@ async function runRoute(decl: RouteDecl, c: Context<AppEnv>, o: MountOptions, lo
   // point of no return, in `ops_wait`, or (1d review C16) in `updating` without a database or while an op moves the
   // schema reads no session (S3, B4; http/ops-auth.ts opsSessionAllowed).
   const sessionStep =
-    decl.session !== 'none' && cookieAuth && (opsGate === undefined || opsSessionAllowed({ ...opsGate, db: state.db }));
+    decl.session !== 'none' &&
+    decl.visitStation !== true && // Komunitas K2: a station page never reads the staff session
+    cookieAuth &&
+    (opsGate === undefined || opsSessionAllowed({ ...opsGate, db: state.db }));
   const noSession: ResolvedAuth = { auth: null, csrfSessionId: null };
   const readSession = (): Promise<ResolvedAuth> =>
     resolveAuth(c, {
@@ -793,10 +825,16 @@ async function runRoute(decl: RouteDecl, c: Context<AppEnv>, o: MountOptions, lo
     decl.install === undefined
       ? null
       : await checkInstallRoute(c, decl.install, { install: services.install, now, sideEffects: decl.sideEffects === true });
+  // ---- Komunitas K2 (visits) ----
+  // A station page's own cookie (in place of step 7's session), and a form body read before step 8 (its `_csrf`).
+  const visitStation = decl.visitStation === true ? await resolveVisitStation(c, state.db) : null;
+  const form = decl.form === true ? await readFormBody(c) : null;
   // Step 8; Bearer routes are exempt (§7.4), a wizard route was checked just above, and a cookieless read-only route
   // (Phase 2, Task 2: OAI-PMH's POST) reads no cookie and changes nothing.
   const step8 = cookieAuth && decl.install === undefined && !isCookielessRead(decl);
-  if (step8 && decl.method !== 'GET' && opsGate !== undefined) {
+  if (step8 && form !== null) {
+    checkFormCsrf(c, form.csrf, visitStation);
+  } else if (step8 && decl.method !== 'GET' && opsGate !== undefined) {
     checkOpsCsrfOrigin(c, resolved.csrfSessionId, await opsCookieOp(c, opsGate.ops)); // 1c Task 15
   } else if (step8 && decl.method !== 'GET') {
     checkCsrfOrigin(c, resolved.csrfSessionId);
@@ -933,10 +971,11 @@ async function runRoute(decl: RouteDecl, c: Context<AppEnv>, o: MountOptions, lo
     c,
     installSession,
     opsAuth,
+    visitStation,
   };
 
   await rc.services.editionGate(rc, decl); // step 10 (ruling R2): before anything reads the body
-  const input = await validateInput(c, decl); // step 11
+  const input = await validateInput(c, decl, form === null ? undefined : { body: form.fields }); // step 11
   rc.body = input.body;
   rc.query = input.query;
   rc.params = input.params;

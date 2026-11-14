@@ -4,7 +4,7 @@ import type { TableName } from './registry.js';
 export type { ColumnKind } from './ddl.js';
 
 // The column registry (decision C11): every column of every table, in table-definition order, and every table's
-// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0029; Komunitas K1: 0030–0033; members and circulation: 0040) and the runner's own tables (ddl.ts ensureBootstrap,
+// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0029; Komunitas K1: 0030–0033; members and circulation: 0040; visits: 0041) and the runner's own tables (ddl.ts ensureBootstrap,
 // migrator.ts). Backup and restore read it for the canonical row (registry column order), the per-version checks of
 // an archive's rows (columnsAt) and the length checks against the code's DDL; restore's read-only pre-pass reads the
 // unique keys (S5c) and the load order follows the foreign keys (order.ts).
@@ -119,6 +119,8 @@ const M0032 = '0032_library_registers';
 const M0033 = '0033_catalog_accred_fields';
 // ---- Komunitas (members and circulation) ----
 const M0040 = '0040_members_circulation';
+// ---- Komunitas K2 (visits) ----
+const M0041 = '0041_visits';
 
 /** `archived_at` + `version`, then the trail columns (Phase 2 spec §2.2 "arsip+ver, jejak"). */
 function archivedTrail(since: string): ColumnSpec[] {
@@ -1113,6 +1115,50 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
     ),
     ...trail(M0040),
   ]),
+  // ---- Komunitas K2 (visits) ----
+  visit_stations: frozen([
+    ...added(
+      M0041,
+      t.id(),
+      t.ulid('branch_id'),
+      nul(t.ulid('location_id')),
+      t.varchar('name', 191),
+      nul(t.char('token_hash', 64)),
+      nul(t.char('activation_hash', 64)),
+      nul(t.timestamp('activation_expires_at')),
+      nul(t.timestamp('activated_at')),
+      nul(t.timestamp('last_seen_at')),
+      nul(t.timestamp('revoked_at')),
+      t.int('version'),
+    ),
+    ...trail(M0041),
+  ]),
+  visits: frozen(
+    added(
+      M0041,
+      t.id(),
+      t.ulid('branch_id'),
+      nul(t.ulid('location_id')),
+      t.date('visited_on'),
+      t.timestamp('visited_at'),
+      t.varchar('source', 16),
+      nul(t.ulid('member_id')),
+      nul(t.ulid('member_type_id')),
+      nul(t.varchar('accred_group', 16)),
+      nul(t.varchar('class_name', 64)),
+      nul(t.varchar('guest_name', 191)),
+      nul(t.varchar('guest_institution', 191)),
+      nul(t.varchar('purpose', 16)),
+      t.smallint('headcount'),
+      t.bool('is_repeat'),
+      nul(t.ulid('station_id')),
+      nul(t.key191('day_key')),
+      nul(t.varchar('note', 191)),
+      nul(t.timestamp('voided_at')),
+      nul(t.ulid('voided_by')),
+      nul(t.ulid('created_by')),
+    ),
+  ),
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping (made by the runner, like the two above) ----
   schema_migrations_edition: frozen(added(RUNNER_TABLES_SINCE, t.key191('name'), t.varchar('timestamp', 64))),
   schema_migrations_edition_lock: frozen(added(RUNNER_TABLES_SINCE, t.key191('id'), t.int('is_locked'))),
@@ -1240,6 +1286,9 @@ export const TABLE_KEYS: Readonly<Record<TableName, TableKeySpec>> = Object.free
   member_events: keys(['id'], { fks: [{ column: 'member_id', table: 'members', refColumn: 'id' }] }),
   policies: keys(['id'], { unique: [['code_key'], ['scope_key']] }),
   loans: keys(['id'], { unique: [['open_item_id']] }),
+  // ---- Komunitas K2 (visits): no foreign keys (a station and a visit point at a branch, a room and a member by id) ----
+  visit_stations: keys(['id'], { unique: [['token_hash']] }),
+  visits: keys(['id'], { unique: [['day_key']] }),
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: keys(['name']),
   schema_migrations_edition_lock: keys(['id']),

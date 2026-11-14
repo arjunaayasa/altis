@@ -42,7 +42,12 @@ export type BucketName =
   // ISBN/SRU lookups per staff user (hit by the handler, `tx: 'self'`).
   | 'opac_search'
   | 'oai'
-  | 'catalog_lookup';
+  | 'catalog_lookup'
+  // ---- Komunitas K2 (visits) ----
+  // A guestbook station's activation per client IP (a route's `ipLimits`), and its check-ins per station (hit by
+  // the handler).
+  | 'visit_station_activate:ip'
+  | 'visit_station_checkin';
 
 const MIN = 60_000;
 
@@ -68,6 +73,9 @@ export const BUCKETS: Readonly<Record<BucketName, Readonly<{ limit: number; wind
   opac_search: bucket(120, MIN),
   oai: bucket(60, MIN),
   catalog_lookup: bucket(30, MIN),
+  // ---- Komunitas K2 (visits) ----
+  'visit_station_activate:ip': bucket(10, 15 * MIN),
+  visit_station_checkin: bucket(120, MIN),
 });
 
 /** One counted hit: where it was counted, and the decision. */

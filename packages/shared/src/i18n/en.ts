@@ -11,6 +11,7 @@ import { ANNEX_REGISTERS_EN } from './k1/annex-registers.js';
 import { ANNEX_USAGE_EN } from './k1/annex-usage.js';
 import { COLLECTION_REPORTS_EN } from './k1/collection-reports.js';
 import { MEMBERS_CIRCULATION_EN } from './members-circulation.js';
+import { MEMBERS_VISITS_EN } from './members-visits.js';
 
 const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   // ---- error.<CODE> ---------------------------------------------------------------------------------------
@@ -620,6 +621,7 @@ const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   'vocab.custom_field_type.url': 'Web address (URL)',
   'vocab.custom_field_entity.records': 'Records',
   'vocab.custom_field_entity.items': 'Items',
+  'vocab.custom_field_entity.members': 'Members',
   'vocab.attachment_kind.file': 'File',
   'vocab.attachment_kind.url': 'Link',
   'vocab.attachment_access.public': 'Public',
@@ -1521,6 +1523,8 @@ const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   ...ANNEX_COLLECTION_EN,
   // ---- Komunitas (members and circulation) ----
   ...MEMBERS_CIRCULATION_EN,
+  // ---- Komunitas K2 (members extended and visits) ----
+  ...MEMBERS_VISITS_EN,
 };
 
 /** Spread in only under the test profile, like the Indonesian one (see `id.ts`). */

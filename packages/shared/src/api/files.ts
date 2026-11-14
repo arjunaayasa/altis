@@ -33,6 +33,9 @@ export const UPLOAD_CONTEXT_NAMES = [
   // ---- Komunitas (members and circulation) ----
   // The CSV file of a member import stays staged for the import.
   'members.import',
+  // ---- Komunitas K2 (members extended) ----
+  'members.photo',
+  'members.card_asset',
 ] as const;
 
 export type UploadContextName = (typeof UPLOAD_CONTEXT_NAMES)[number];

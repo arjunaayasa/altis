@@ -12,6 +12,7 @@
 
 import { ACCREDITATION_VOCAB_LISTS } from './accreditation-vocab.js';
 import { CIRCULATION_VOCAB_LISTS } from './circulation-vocab.js';
+import { VISITS_VOCAB_LISTS } from './visits-vocab.js';
 
 const hasOwn = (o: object, key: string): boolean => Object.prototype.hasOwnProperty.call(o, key);
 
@@ -163,7 +164,7 @@ export const CUSTOM_FIELD_TYPES = Object.freeze(['text', 'longtext', 'number', '
 export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];
 
 /** The entities a custom field can extend in Phase 2 (§2.2 `custom_field_defs.entity`). */
-export const CUSTOM_FIELD_ENTITIES = Object.freeze(['records', 'items'] as const);
+export const CUSTOM_FIELD_ENTITIES = Object.freeze(['records', 'items', 'members'] as const);
 
 export type CustomFieldEntity = (typeof CUSTOM_FIELD_ENTITIES)[number];
 
@@ -418,6 +419,8 @@ export const VOCAB_LISTS = Object.freeze({
   ...ACCREDITATION_VOCAB_LISTS,
   // ---- Komunitas (members and circulation) ----
   ...CIRCULATION_VOCAB_LISTS,
+  // ---- Komunitas K2 (members extended and visits) ----
+  ...VISITS_VOCAB_LISTS,
 });
 
 export type VocabList = keyof typeof VOCAB_LISTS;

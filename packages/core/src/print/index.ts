@@ -3,7 +3,7 @@
 // the width tables and the layout helpers stay internal.
 
 export { PdfDocument } from './pdf.js';
-export type { PdfPage } from './pdf.js';
+export type { PdfColor, PdfImage, PdfPage } from './pdf.js';
 export { textWidth } from './afm.js';
 export { toWinAnsi } from './winansi.js';
 export { code128Modules } from './code128.js';

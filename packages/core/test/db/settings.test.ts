@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
 import { openValue, secretAad, type KeyringEntry } from '../../src/crypto/secret-box.js';
 import { SETTINGS, groupKeys, type SettingKey, type SettingsGroup } from '../../src/settings/registry.js';
+import { DEFAULT_CARD_PROFILE } from '@altis/shared/api/member-ops';
 import { createSettingsCache, readSecret, readSettings, writeSettings } from '../../src/settings/service.js';
 import { loadAccredSettings } from '../../src/settings/accreditation.js';
 import { uploadContext } from '../../src/files/contexts.js';
@@ -171,6 +172,17 @@ const SAMPLE: Record<SettingKey, unknown> = {
   'accreditation.visits.dedupeLegacy': false,
   'accreditation.unknownMemberGroup.default': 'teacher',
   'visits.dedupeMinutes': 30,
+  // ---- Komunitas K2 (members extended, visits, privacy) ----
+  'members.card.profile': { ...DEFAULT_CARD_PROFILE, qr: false },
+  'visits.fromDesk': false,
+  'visits.fromOnline': false,
+  'visits.askPurpose': true,
+  'visits.station.showPhoto': true,
+  'visits.station.welcome.id': 'Selamat datang',
+  'visits.station.welcome.en': 'Welcome',
+  'privacy.loans.anonymizeAfterYears': 3,
+  'privacy.visits.anonymizeAfterYears': 1,
+  'privacy.members.anonymizeArchivedAfterYears': 10,
 };
 
 /** Every key of scope `instance` (machine state of this installation, kept by a restore), in registry order; all are in group `system`. */
@@ -205,7 +217,7 @@ const NON_NULL_1D_DEFAULTS: Partial<Record<SettingKey, unknown>> = {
   'update.channel': 'stable',
 };
 
-const GROUPS: SettingsGroup[] = ['library', 'email', 'security', 'opac', 'smtp', 'system', 'catalog', 'accreditation', 'visits'];
+const GROUPS: SettingsGroup[] = ['library', 'email', 'security', 'opac', 'smtp', 'system', 'catalog', 'accreditation', 'visits', 'members', 'privacy'];
 
 /** The accreditation keys, in registry order: the sixteen of group `accreditation`. */
 const ACCREDITATION_KEYS: readonly SettingKey[] = [
@@ -278,7 +290,21 @@ describe('SETTINGS registry', () => {
     ]);
     expect(groupKeys('system')).toEqual(INSTANCE_KEYS);
     expect(groupKeys('accreditation')).toEqual(ACCREDITATION_KEYS);
-    expect(groupKeys('visits')).toEqual(['visits.dedupeMinutes']);
+    expect(groupKeys('visits')).toEqual([
+      'visits.dedupeMinutes',
+      'visits.fromDesk',
+      'visits.fromOnline',
+      'visits.askPurpose',
+      'visits.station.showPhoto',
+      'visits.station.welcome.id',
+      'visits.station.welcome.en',
+    ]);
+    expect(groupKeys('members')).toEqual(['members.card.profile']);
+    expect(groupKeys('privacy')).toEqual([
+      'privacy.loans.anonymizeAfterYears',
+      'privacy.visits.anonymizeAfterYears',
+      'privacy.members.anonymizeArchivedAfterYears',
+    ]);
     expect(GROUPS.flatMap((g) => groupKeys(g)).sort()).toEqual(Object.keys(SETTINGS).sort());
     // The group is the key's first segment, but for the instance keys of 1c that read `audit.*` and `realtime.*`: all system.
     for (const key of Object.keys(SETTINGS) as SettingKey[]) {

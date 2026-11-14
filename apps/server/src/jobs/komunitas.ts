@@ -1,4 +1,13 @@
-import { evaluateJob, importSlimsUsageJob, reportsExportJob, reportsHousekeepingJob, type JobHandler, type ReportJobDeps } from '@altis/core';
+import {
+  evaluateJob,
+  importSlimsUsageJob,
+  localStorageDriver,
+  privacyAnonymizeJob,
+  reportsExportJob,
+  reportsHousekeepingJob,
+  type JobHandler,
+  type ReportJobDeps,
+} from '@altis/core';
 import { catalogJobDeps } from './catalog.js';
 import type { JobRuntimeDeps } from './runtime.js';
 
@@ -9,7 +18,14 @@ import type { JobRuntimeDeps } from './runtime.js';
 /** The community job handlers. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function komunitasJobHandlers(deps: () => ReportJobDeps): JobHandler<any>[] {
-  return [reportsExportJob(deps), reportsHousekeepingJob(deps), evaluateJob(deps), importSlimsUsageJob(deps)];
+  return [
+    reportsExportJob(deps),
+    reportsHousekeepingJob(deps),
+    evaluateJob(deps),
+    importSlimsUsageJob(deps),
+    // ---- Komunitas K2 (privacy) ----
+    privacyAnonymizeJob(() => ({ storage: localStorageDriver(deps().dataDir) })),
+  ];
 }
 
 /**

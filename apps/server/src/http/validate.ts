@@ -185,9 +185,10 @@ export function validationFailed(errors: ProblemFieldError[]): DomainError {
  *   and size, before any schema runs) or `VALIDATION_FAILED` (every schema issue of the three parts in one error; once they all pass, the text
  *   in the parsed values that is not well-formed)
  */
-export async function validateInput(c: Context<AppEnv>, schemas: InputSchemas): Promise<ValidInput> {
+export async function validateInput(c: Context<AppEnv>, schemas: InputSchemas, parsed?: { body: unknown }): Promise<ValidInput> {
   if (schemas.rawBody !== undefined) await checkRawBody(c, schemas.rawBody);
-  const rawBody = schemas.body === undefined ? undefined : await readJsonBody(c);
+  // A form body (Komunitas K2: `form` routes) was read before step 8; its fields go through the same strict schema.
+  const rawBody = schemas.body === undefined ? undefined : parsed !== undefined ? parsed.body : await readJsonBody(c);
   const rawQuery = schemas.query === undefined ? undefined : queryObject(c);
   const errors: ProblemFieldError[] = [];
   const parse = async (schema: z.ZodType | undefined, input: unknown): Promise<unknown> => {
