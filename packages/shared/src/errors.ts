@@ -357,6 +357,11 @@ export const ERROR_CODES = Object.freeze({
   CIRC_ITEM_ON_HOLD: Object.freeze({ status: 409 }),
   /** The hold cannot be placed or changed; `meta {reason}` (HOLD_REFUSALS). */
   CIRC_HOLD_REFUSED: Object.freeze({ status: 409 }),
+  // ---- Komunitas (circulation core) ----
+  /** The last loan cannot be voided; `meta {reason}` (VOID_REFUSALS: too late, another staff member's, renewed, charged). */
+  CIRC_VOID_REFUSED: Object.freeze({ status: 409 }),
+  /** No open day within a year after the due date the rule gives: the library calendar closes every day. */
+  CIRC_CALENDAR_CLOSED: Object.freeze({ status: 422 }),
 });
 
 export type ErrorCode = keyof typeof ERROR_CODES;

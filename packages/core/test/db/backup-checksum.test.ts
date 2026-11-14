@@ -12,6 +12,8 @@ import { k1SampleRows, type K1Table } from '../../../db/test/fixtures/komunitas-
 import { circulationSampleRows, type CirculationTable } from '../../../db/test/fixtures/komunitas-members-circulation-tables.js';
 // ---- Komunitas (holds) ----
 import { holdsSampleRows } from '../../../db/test/fixtures/komunitas-holds-tables.js';
+// ---- Komunitas (circulation core) ----
+import { circCoreSampleRows, type CircCoreTable } from '../../../db/test/fixtures/komunitas-circ-core-tables.js';
 import { backupTables, tableChecksumFromDb } from '../../src/backup/canonical.js';
 import { createExporter, type ExportCheckpoint } from '../../src/backup/exporter.js';
 import { readManifest, type BackupManifest } from '../../src/backup/manifest.js';
@@ -222,6 +224,17 @@ async function seed(db: Kysely<DB>): Promise<void> {
   }
   // ---- Komunitas (holds) ----
   await db.insertInto('holds').values(holdRows().holds).execute();
+  // ---- Komunitas (circulation core): the calendar, items read in place, clearance letters ----
+  const circCore = circCoreRows();
+  for (const t of Object.keys(circCore) as CircCoreTable[]) {
+    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(circCore[t]).execute();
+  }
+}
+
+/** The circulation core sample rows with ids numbered from another fixed prefix. */
+function circCoreRows(): ReturnType<typeof circCoreSampleRows> {
+  let n = 0;
+  return circCoreSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JU${String((n += 1)).padStart(22, '0')}` });
 }
 
 /** Runs a whole export of `h` into `dataDir` and returns its manifest. */

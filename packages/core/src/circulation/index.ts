@@ -45,3 +45,41 @@ export {
 export type { CancelHoldInput, HoldReadyHook, HoldSettings, PlaceHoldInput } from './holds.js';
 export { holdsExpiryJob, holdsJobPayload, runHoldExpiry } from './holds-job.js';
 export type { HoldsJobPayload, HoldsRunCounts } from './holds-job.js';
+// ---- Komunitas (circulation core) ----
+// The full rule matrix and its "which rule applies" tool, the library calendar, the desk's void, lost, due date and
+// read-in-place actions, clearance letters, and the seams the charges and holds modules plug into.
+export { explainPolicy, rankPolicies } from './policies.js';
+export {
+  CALENDAR_RANGE_MAX_DAYS,
+  archiveCalendarRule,
+  calendarClosed,
+  closedBy,
+  closedDatesIn,
+  computeDueDate,
+  countOpenDays,
+  createCalendarRule,
+  lateDays,
+  listCalendar,
+  loadClosedDayRules,
+  ruleCloses,
+  updateCalendarRule,
+} from './calendars.js';
+export type { ClosedDayRule, DueDateRule } from './calendars.js';
+export { BACKDATE_MAX_DAYS } from './desk.js';
+export type { LendInput } from './desk.js';
+export { changeLoanDue, markLoanLost, recordInLibraryUse, voidLoan } from './desk-actions.js';
+export {
+  assertLiveMember,
+  buildClearancePdf,
+  checkClearances,
+  clearanceLetter,
+  clearanceLockName,
+  clearanceNumber,
+  ensureClearanceLockRow,
+  issueClearances,
+  listClearances,
+  voidClearance,
+} from './clearances.js';
+export type { ClearanceIssue, ClearanceLetter, ClearancePdfInput } from './clearances.js';
+export { chargeSeam, chargesInstalled, holdSeam, registerCirculationChargeSeam, registerCirculationHoldSeam } from './seams.js';
+export type { CirculationChargeSeam, CirculationHoldSeam } from './seams.js';

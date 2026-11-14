@@ -646,6 +646,9 @@ export const MATRIX_FIXTURES: Record<string, MatrixFixture> = {
   'catalog.config': none,
   // ---- Komunitas K1 (settings) ----
   'settings.accreditation.put': async () => ({ body: {} }),
+  // ---- Komunitas (circulation core) ----
+  'settings.circulation.put': async () => ({ body: {} }),
+  'settings.members.put': async () => ({ body: {} }),
   'system.config.get': none,
   'system.config.put': async () => ({ body: {} }),
   'system.config.email_test': async () => ({ body: { to: 'uji@example.test' } }),

@@ -16,13 +16,20 @@ import { PdfDocument } from './pdf.js';
 import type { PdfPage } from './pdf.js';
 import { toWinAnsi } from './winansi.js';
 
-export type PaperSize = 'A4' | 'F4';
+export type PaperSize = 'A4' | 'F4' | 'A5' | 'Roll58' | 'Roll80';
 
-/** The paper sizes in millimetres, portrait (F4 is the Indonesian folio). */
+/**
+ * The paper sizes in millimetres, portrait (F4 is the Indonesian folio). `Roll58` and `Roll80` are receipt rolls, 58 and 80
+ * mm wide, cut into pages 210 mm long.
+ */
 export const PAPER_SIZES_MM: Readonly<Record<PaperSize, { readonly width: number; readonly height: number }>> =
   Object.freeze({
     A4: Object.freeze({ width: 210, height: 297 }),
     F4: Object.freeze({ width: 215, height: 330 }),
+    // ---- Komunitas (circulation core): letters on A5 and on receipt rolls ----
+    A5: Object.freeze({ width: 148, height: 210 }),
+    Roll58: Object.freeze({ width: 58, height: 210 }),
+    Roll80: Object.freeze({ width: 80, height: 210 }),
   });
 
 export interface PdfLayoutOptions {

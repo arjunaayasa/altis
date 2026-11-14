@@ -1,5 +1,16 @@
 import { countRows, fullTextFamily, type DB } from '@altis/db';
-import { DomainError, ddcClassOf, diffDays, isDomainError, newId, type MemberStatus, type RenewRefusal } from '@altis/shared';
+import {
+  DomainError,
+  addDays,
+  ddcClassOf,
+  diffDays,
+  isDomainError,
+  newId,
+  type ForceableReason,
+  type MemberStatus,
+  type OverrideReason,
+  type RenewRefusal,
+} from '@altis/shared';
 import type {
   CirculationWarningView,
   DeskLoanView,
@@ -18,10 +29,12 @@ import { barcodeProblem, normalizeBarcode } from '../catalog/lib/barcode.js';
 import type { TxCtx } from '../context.js';
 import { lockLiveMember, memberNotFound, memberStatusOf, memberValidationFailed, openLoanCount, type Db } from '../members/common.js';
 import { findLiveMemberByNo, memberQueryWhere } from '../members/members.js';
+import { writeItemEvents } from '../catalog/items/events.js';
 import { indexRecords } from '../search/index-records.js';
 import { branchToday, dueDateFor } from './dates.js';
 import { checkKeptCopy, fulfilHoldOnLoan, memberHolds, renewalHeldBack, trapOnReturn } from './holds.js';
 import { resolvePolicy } from './policies.js';
+import { chargeSeam } from './seams.js';
 
 // The circulation desk: lend, return and renew, and the member panel.
 //
@@ -50,6 +63,11 @@ import { resolvePolicy } from './policies.js';
 // (CIRC_ITEM_ON_HOLD, checked after "no open loan"); a loan fulfils the borrower's own hold on the title; a copy
 // returned at its own branch is kept for the first hold in its queue and the return says for whom; a renewal is refused
 // (`hold`) while the title has a waiting hold at the loan's branch.
+// Forcing and backdating a loan (the route checks `circulation.desk.override` at the branch): `override.reasons` names
+// the refusals the desk accepts (the collection type, the rule's `loanable = 0`, the limits); each refusal that occurs
+// and is named is passed and recorded in `loans.overrides` with the note. `loanedOn` before today enters a loan after
+// the fact (at most 30 days back, a note required): the due date counts from that day, the membership is still checked
+// for today, and `backdated` is recorded.
 
 type LoanRow = Selectable<DB['loans']>;
 type MemberRow = Selectable<DB['members']>;
@@ -57,9 +75,23 @@ type MemberRow = Selectable<DB['members']>;
 /** A member whose membership ends within this many days is warned at the desk. */
 export const EXPIRY_WARNING_DAYS = 30;
 
+/** The most days before today a loan may be entered with `loanedOn`. */
+export const BACKDATE_MAX_DAYS = 30;
+
+/** What the desk sends to lend an item. */
+export interface LendInput {
+  branchId: string;
+  memberId: string;
+  barcode: string;
+  /** A loan entered after the fact: the day it was lent (at most {@link BACKDATE_MAX_DAYS} before today). */
+  loanedOn?: string;
+  /** The refusals the desk forces, and why. */
+  override?: { reasons: readonly ForceableReason[]; note: string };
+}
+
 // ---- errors ----------------------------------------------------------------------------------------------------------
 
-function itemNotFound(hint: 'member_no' | null): DomainError {
+export function itemNotFound(hint: 'member_no' | null): DomainError {
   return new DomainError('NOT_FOUND', {
     detail:
       hint === 'member_no'
@@ -78,7 +110,7 @@ function notLoanable(reason: 'status' | 'collection_type' | 'policy', status?: s
   return new DomainError('CIRC_NOT_LOANABLE', { detail: text, meta: { reason, ...(status === undefined ? {} : { status }) } });
 }
 
-function loanNotOpen(): DomainError {
+export function loanNotOpen(): DomainError {
   return new DomainError('CIRC_LOAN_NOT_OPEN', { detail: 'Pinjaman ini sudah tidak terbuka / This loan is no longer open' });
 }
 
@@ -115,17 +147,17 @@ function expired(expiresOn: string): DomainError {
 // ---- locks -----------------------------------------------------------------------------------------------------------
 
 /** Whether the connection supports `FOR UPDATE` (SQLite has one writer and none). */
-function locking(trx: Transaction<DB>): boolean {
+export function locking(trx: Transaction<DB>): boolean {
   return fullTextFamily(trx) !== 'fts5';
 }
 
 /** A locking read of the live item holding the normalised barcode `key`. */
-async function lockItemByBarcode(trx: Transaction<DB>, key: string): Promise<{ id: string; record_id: string; branch_id: string } | null> {
+export async function lockItemByBarcode(trx: Transaction<DB>, key: string): Promise<{ id: string; record_id: string; branch_id: string } | null> {
   const q = trx.selectFrom('items').select(['id', 'record_id', 'branch_id']).where('barcode_key', '=', key).where('archived_at', 'is', null);
   return (await (locking(trx) ? q.forUpdate() : q).executeTakeFirst()) ?? null;
 }
 
-async function lockRecord(trx: Transaction<DB>, id: string): Promise<void> {
+export async function lockRecord(trx: Transaction<DB>, id: string): Promise<void> {
   await trx
     .updateTable('records')
     .set((eb) => ({ version: eb.ref('version') }))
@@ -133,7 +165,7 @@ async function lockRecord(trx: Transaction<DB>, id: string): Promise<void> {
     .execute();
 }
 
-async function lockItem(trx: Transaction<DB>, id: string): Promise<void> {
+export async function lockItem(trx: Transaction<DB>, id: string): Promise<void> {
   await trx
     .updateTable('items')
     .set((eb) => ({ version: eb.ref('version') }))
@@ -142,7 +174,7 @@ async function lockItem(trx: Transaction<DB>, id: string): Promise<void> {
 }
 
 /** Locks the member `id` whatever its state (a loan's member, which is never archived while the loan is open). */
-async function lockMemberRow(trx: Transaction<DB>, id: string): Promise<void> {
+export async function lockMemberRow(trx: Transaction<DB>, id: string): Promise<void> {
   await trx
     .updateTable('members')
     .set((eb) => ({ version: eb.ref('version') }))
@@ -151,7 +183,7 @@ async function lockMemberRow(trx: Transaction<DB>, id: string): Promise<void> {
 }
 
 /** A locking read of one loan by `where`. */
-async function lockLoan(trx: Transaction<DB>, by: { id: string } | { openItemId: string }): Promise<{ id: string; item_id: string | null; record_id: string | null; member_id: string | null } | null> {
+export async function lockLoan(trx: Transaction<DB>, by: { id: string } | { openItemId: string }): Promise<{ id: string; item_id: string | null; record_id: string | null; member_id: string | null } | null> {
   let q = trx.selectFrom('loans').select(['id', 'item_id', 'record_id', 'member_id']);
   q = 'id' in by ? q.where('id', '=', by.id) : q.where('open_item_id', '=', by.openItemId);
   return (await (locking(trx) ? q.forUpdate() : q).executeTakeFirst()) ?? null;
@@ -163,7 +195,7 @@ async function lockLoan(trx: Transaction<DB>, by: { id: string } | { openItemId:
  * A scanned barcode normalised: its key, or VALIDATION_FAILED `isbn_not_barcode` for an ISBN, or null when the text
  * cannot be any barcode (it is then simply not found).
  */
-function scannedBarcode(raw: string): string | null {
+export function scannedBarcode(raw: string): string | null {
   const key = normalizeBarcode(raw);
   const problem = barcodeProblem(key);
   if (problem === 'isbn_not_barcode') throw memberValidationFailed([{ path: 'barcode', code: 'isbn_not_barcode' }]);
@@ -171,13 +203,13 @@ function scannedBarcode(raw: string): string | null {
 }
 
 /** The warnings of a member at `today`: `member_expires_soon` within {@link EXPIRY_WARNING_DAYS} days. */
-function memberWarnings(expiresOn: string | null, today: string): CirculationWarningView[] {
+export function memberWarnings(expiresOn: string | null, today: string): CirculationWarningView[] {
   if (expiresOn === null || expiresOn < today) return [];
   return diffDays(today, expiresOn) <= EXPIRY_WARNING_DAYS ? [{ code: 'member_expires_soon', expiresOn }] : [];
 }
 
 /** The item and record refs of an item. */
-async function itemRefs(db: Db, itemId: string): Promise<{ item: LoanItemRef; record: LoanRecordRef; row: Selectable<DB['items']>; recordRow: Selectable<DB['records']> }> {
+export async function itemRefs(db: Db, itemId: string): Promise<{ item: LoanItemRef; record: LoanRecordRef; row: Selectable<DB['items']>; recordRow: Selectable<DB['records']> }> {
   const row = await db.selectFrom('items').selectAll().where('id', '=', itemId).executeTakeFirstOrThrow();
   const recordRow = await db.selectFrom('records').selectAll().where('id', '=', row.record_id).executeTakeFirstOrThrow();
   return {
@@ -190,18 +222,33 @@ async function itemRefs(db: Db, itemId: string): Promise<{ item: LoanItemRef; re
 
 const ok = (n: number | string | bigint): number => Number(n);
 
+/** The warnings of a computed due date: cut at the membership's end, or moved past closed days. */
+export function dueWarnings(due: { capped: boolean; moved: boolean }): CirculationWarningView[] {
+  if (due.capped) return [{ code: 'due_capped_by_expiry' }];
+  if (due.moved) return [{ code: 'due_moved_closed' }];
+  return [];
+}
+
 // ---- lend ------------------------------------------------------------------------------------------------------------
 
 /**
  * Lends the item `barcode` to the member `memberId` at the desk of `branchId` (see the top of this file) and audits
  * `circulation.loan.create`.
  *
- * @throws DomainError NOT_FOUND (member; item, `meta.hint` `member_no`); VALIDATION_FAILED `isbn_not_barcode`;
+ * @throws DomainError NOT_FOUND (member; item, `meta.hint` `member_no`); VALIDATION_FAILED `isbn_not_barcode`,
+ *   `{path: 'loanedOn', code: 'backdate_out_of_range'}`, `{path: 'override.note', code: 'required'}`;
  *   MEMBER_SUSPENDED; MEMBER_EXPIRED; CIRC_OTHER_BRANCH; CIRC_NOT_LOANABLE; CIRC_ITEM_ON_LOAN; CIRC_NO_POLICY;
- *   CIRC_LIMIT_REACHED
+ *   CIRC_LIMIT_REACHED; CIRC_CALENDAR_CLOSED
  */
-export async function lendItem(tx: TxCtx, input: { branchId: string; memberId: string; barcode: string }): Promise<LoanResponse> {
+export async function lendItem(tx: TxCtx, input: LendInput): Promise<LoanResponse> {
   const { trx } = tx;
+  const forcing = new Set<ForceableReason>(input.override?.reasons ?? []);
+  const forced: OverrideReason[] = [];
+  /** Throws `error` unless the desk forces `reason`, which is then recorded. */
+  const unlessForced = (reason: ForceableReason, error: DomainError): void => {
+    if (!forcing.has(reason)) throw error;
+    if (!forced.includes(reason)) forced.push(reason);
+  };
   const key = scannedBarcode(input.barcode);
   // The locks: the item, its record, the member (the first statements).
   const locked = key === null ? null : await lockItemByBarcode(trx, key);
@@ -213,6 +260,15 @@ export async function lendItem(tx: TxCtx, input: { branchId: string; memberId: s
   const itemBranch = locked?.branch_id ?? input.branchId;
   const today = await branchToday(trx, itemBranch, tx.now);
   if (member.expires_on !== null && member.expires_on < today) throw expired(member.expires_on);
+  // A loan entered after the fact: its own day, within the last 30 days, with the note of the override.
+  let loanedOn = today;
+  if (input.loanedOn !== undefined && input.loanedOn !== today) {
+    if (input.loanedOn > today || input.loanedOn < addDays(today, -BACKDATE_MAX_DAYS)) {
+      throw memberValidationFailed([{ path: 'loanedOn', code: 'backdate_out_of_range' }]);
+    }
+    if (input.override === undefined) throw memberValidationFailed([{ path: 'override.note', code: 'required' }]);
+    loanedOn = input.loanedOn;
+  }
 
   if (locked === null) {
     const asMember = await findLiveMemberByNo(trx, input.barcode);
@@ -236,9 +292,16 @@ export async function lendItem(tx: TxCtx, input: { branchId: string; memberId: s
       meta: { sameMember, reason: sameMember ? 'same_member' : 'other_member' },
     });
   }
-  await checkKeptCopy(tx, { itemId: itemRow.id, memberId: member.id });
+  // A copy kept on the hold shelf for another member is refused unless the desk forces `hold` (the copy then goes back to the queue).
+  try {
+    await checkKeptCopy(tx, { itemId: itemRow.id, memberId: member.id });
+  } catch (e) {
+    if (!(e instanceof DomainError) || e.code !== 'CIRC_ITEM_ON_HOLD') throw e;
+    unlessForced('hold', e);
+    await checkKeptCopy(tx, { itemId: itemRow.id, memberId: member.id, force: true });
+  }
   const ct = await trx.selectFrom('collection_types').select('loanable').where('id', '=', itemRow.collection_type_id).executeTakeFirst();
-  if (ct !== undefined && Number(ct.loanable) !== 1) throw notLoanable('collection_type');
+  if (ct !== undefined && Number(ct.loanable) !== 1) unlessForced('collection_type', notLoanable('collection_type'));
 
   const policy = await resolvePolicy(trx, {
     memberTypeId: member.member_type_id,
@@ -247,19 +310,23 @@ export async function lendItem(tx: TxCtx, input: { branchId: string; memberId: s
     branchId: itemRow.branch_id,
   });
   if (policy === null) throw new DomainError('CIRC_NO_POLICY', { detail: 'Tidak ada aturan peminjaman yang berlaku / No loan rule applies' });
-  if (Number(policy.loanable) !== 1) throw notLoanable('policy');
+  if (Number(policy.loanable) !== 1) unlessForced('policy', notLoanable('policy'));
 
   const type = await trx.selectFrom('member_types').select(['loan_limit', 'accred_group']).where('id', '=', member.member_type_id).executeTakeFirst();
   const openLoans = await openLoanCount(trx, member.id);
-  if (type?.loan_limit !== null && type?.loan_limit !== undefined && openLoans >= ok(type.loan_limit)) throw limitReached('member_type', ok(type.loan_limit));
+  if (type?.loan_limit !== null && type?.loan_limit !== undefined && openLoans >= ok(type.loan_limit)) {
+    unlessForced('limit', limitReached('member_type', ok(type.loan_limit)));
+  }
   if (policy.loan_limit !== null) {
     const underRule = await countRows(
       trx.selectFrom('loans').select('id').where('member_id', '=', member.id).where('policy_id', '=', policy.id).where('open_item_id', 'is not', null),
     );
-    if (underRule >= ok(policy.loan_limit)) throw limitReached('policy', ok(policy.loan_limit));
+    if (underRule >= ok(policy.loan_limit)) unlessForced('limit', limitReached('policy', ok(policy.loan_limit)));
   }
 
-  const due = await dueDateFor(trx, { loanedOn: today, days: ok(policy.loan_days), expiresOn: member.expires_on, branchId: itemRow.branch_id });
+  const due = await dueDateFor(trx, { loanedOn, days: ok(policy.loan_days), expiresOn: member.expires_on, branchId: itemRow.branch_id });
+  const overrides: OverrideReason[] = loanedOn === today ? forced : [...forced, 'backdated'];
+  const note = overrides.length === 0 ? null : (input.override?.note ?? null);
   const ddc = ddcClassOf(recordRow.classification, itemRow.call_number ?? recordRow.call_number);
   const id = newId(tx.now);
   try {
@@ -273,7 +340,7 @@ export async function lendItem(tx: TxCtx, input: { branchId: string; memberId: s
         member_id: member.id,
         branch_id: itemRow.branch_id,
         policy_id: policy.id,
-        loaned_on: today,
+        loaned_on: loanedOn,
         loaned_at: tx.now,
         due_on: due.dueOn,
         renewals: 0,
@@ -288,8 +355,8 @@ export async function lendItem(tx: TxCtx, input: { branchId: string; memberId: s
         fine_per_day_minor: ok(policy.fine_per_day_minor),
         fine_cap_minor: policy.fine_cap_minor === null ? null : ok(policy.fine_cap_minor),
         currency: policy.currency,
-        overrides: null,
-        override_note: null,
+        overrides: overrides.length === 0 ? null : overrides.join(','),
+        override_note: note,
         loaned_by: tx.actor.id,
         returned_by: null,
         source: 'desk',
@@ -315,13 +382,18 @@ export async function lendItem(tx: TxCtx, input: { branchId: string; memberId: s
   }
   const holdFulfilledId = await fulfilHoldOnLoan(tx, { memberId: member.id, recordId: recordRow.id, itemId: itemRow.id, loanId: id });
   await indexRecords(trx, [recordRow.id], tx.now);
-  const warnings: CirculationWarningView[] = [...memberWarnings(member.expires_on, today), ...(due.capped ? [{ code: 'due_capped_by_expiry' as const }] : [])];
+  const warnings: CirculationWarningView[] = [...memberWarnings(member.expires_on, today), ...dueWarnings(due)];
   await tx.audit({
     action: 'circulation.loan.create',
     entity: 'loans',
     entityId: id,
     branchId: itemRow.branch_id,
-    meta: { warnings: warnings.map((w) => w.code), ...(holdFulfilledId === null ? {} : { holdFulfilled: true }) },
+    meta: {
+      warnings: warnings.map((w) => w.code),
+      ...(overrides.length === 0 ? {} : { overrides }),
+      ...(loanedOn === today ? {} : { backdated: true }),
+      ...(holdFulfilledId === null ? {} : { holdFulfilled: true }),
+    },
   });
   return {
     id,
@@ -331,6 +403,7 @@ export async function lendItem(tx: TxCtx, input: { branchId: string; memberId: s
     record,
     ...(holdFulfilledId === null ? {} : { holdFulfilledId }),
     ...(warnings.length === 0 ? {} : { warnings }),
+    ...(overrides.length === 0 ? {} : { overrides }),
   };
 }
 
@@ -338,18 +411,39 @@ export async function lendItem(tx: TxCtx, input: { branchId: string; memberId: s
 
 /**
  * Closes the open loan of the item `barcode` (`returned`) at the desk of `branchId`, any branch (another branch's item
- * warns `return_to_branch`), and audits `circulation.loan.return`.
+ * warns `return_to_branch`), and audits `circulation.loan.return`. An item recorded lost (its last loan closed `lost`)
+ * has no open loan: it answers CIRC_LOAN_NOT_OPEN `{lostItem: true}`, and with `foundLost` it becomes `available` again
+ * and the unpaid part of its lost charge is cancelled (the audit names its last loan, `meta.foundLost`).
  *
  * @throws DomainError NOT_FOUND (the item); VALIDATION_FAILED `isbn_not_barcode`; CIRC_LOAN_NOT_OPEN
  */
-export async function returnItem(tx: TxCtx, input: { branchId: string; barcode: string }): Promise<ReturnResponse> {
+export async function returnItem(tx: TxCtx, input: { branchId: string; barcode: string; foundLost?: boolean }): Promise<ReturnResponse> {
   const { trx } = tx;
   const key = scannedBarcode(input.barcode);
   const locked = key === null ? null : await lockItemByBarcode(trx, key);
   if (locked === null) throw itemNotFound(null);
   await lockRecord(trx, locked.record_id);
   const loanLock = await lockLoan(trx, { openItemId: locked.id });
-  if (loanLock === null) throw loanNotOpen();
+  if (loanLock === null) {
+    const status = (await trx.selectFrom('items').select('status').where('id', '=', locked.id).executeTakeFirstOrThrow()).status;
+    const last = await trx
+      .selectFrom('loans')
+      .selectAll()
+      .where('item_id', '=', locked.id)
+      .orderBy('loaned_at', 'desc')
+      .orderBy('id', 'desc')
+      .limit(1)
+      .executeTakeFirst();
+    const lostItem = status === 'lost' && last?.outcome === 'lost';
+    if (!lostItem) throw loanNotOpen();
+    if (input.foundLost !== true) {
+      throw new DomainError('CIRC_LOAN_NOT_OPEN', {
+        detail: 'Eksemplar ini tercatat hilang; terima kembali? / This item is recorded as lost; take it back?',
+        meta: { lostItem: true, reason: 'lost_item' },
+      });
+    }
+    return foundLost(tx, { branchId: input.branchId, itemId: locked.id, recordId: locked.record_id, loan: last });
+  }
   if (loanLock.member_id !== null) await lockMemberRow(trx, loanLock.member_id);
 
   const loan = await trx.selectFrom('loans').selectAll().where('id', '=', loanLock.id).executeTakeFirstOrThrow();
@@ -374,6 +468,8 @@ export async function returnItem(tx: TxCtx, input: { branchId: string; barcode: 
 
   const { item, record, row: itemRow } = await itemRefs(trx, locked.id);
   const daysLate = Math.max(0, diffDays(loan.due_on, today));
+  // Only once the loan is closed: its overdue fine (the charges module counts the days in the loan branch's calendar).
+  if (daysLate > 0) await chargeSeam().bookOverdue(tx, { loanId: loan.id, until: today });
   const warnings: CirculationWarningView[] = [];
   if (itemRow.branch_id !== input.branchId) {
     const b = await trx.selectFrom('branches').select('code_display').where('id', '=', itemRow.branch_id).executeTakeFirst();
@@ -401,6 +497,44 @@ export async function returnItem(tx: TxCtx, input: { branchId: string; barcode: 
     returnedOn: today,
     daysLate,
     ...(hold === null ? {} : { hold }),
+    ...(warnings.length === 0 ? {} : { warnings }),
+  };
+}
+
+/** A lost item back at the desk (see returnItem): `lost → available`, the lost charge's unpaid part cancelled. */
+async function foundLost(tx: TxCtx, i: { branchId: string; itemId: string; recordId: string; loan: LoanRow }): Promise<ReturnResponse> {
+  const { trx } = tx;
+  if (i.loan.member_id !== null) await lockMemberRow(trx, i.loan.member_id);
+  const today = await branchToday(trx, i.loan.branch_id, tx.now);
+  await trx
+    .updateTable('items')
+    .set((eb) => ({ status: 'available', updated_at: tx.now, updated_by: tx.actor.id, version: eb('version', '+', 1) }))
+    .where('id', '=', i.itemId)
+    .where('status', '=', 'lost')
+    .execute();
+  await writeItemEvents(tx, [{ itemId: i.itemId, type: 'status', fromStatus: 'lost', toStatus: 'available', fields: ['status'], via: 'return' }]);
+  await chargeSeam().cancelLost(tx, { loanId: i.loan.id, reason: 'item_returned' });
+  const { item, record, row: itemRow } = await itemRefs(trx, i.itemId);
+  const warnings: CirculationWarningView[] = [];
+  if (itemRow.branch_id !== i.branchId) {
+    const b = await trx.selectFrom('branches').select('code_display').where('id', '=', itemRow.branch_id).executeTakeFirst();
+    warnings.push({ code: 'return_to_branch', branchCode: b?.code_display ?? '?' });
+  }
+  const member = i.loan.member_id === null ? undefined : await trx.selectFrom('members').select('member_no_display').where('id', '=', i.loan.member_id).executeTakeFirst();
+  await indexRecords(trx, [i.recordId], tx.now);
+  await tx.audit({ action: 'circulation.loan.return', entity: 'loans', entityId: i.loan.id, branchId: i.branchId, meta: { daysLate: 0, foundLost: true } });
+  return {
+    id: i.loan.id,
+    version: ok(i.loan.version),
+    memberId: i.loan.member_id,
+    memberNo: member?.member_no_display ?? null,
+    item,
+    record,
+    loanedOn: i.loan.loaned_on,
+    dueOn: i.loan.due_on,
+    returnedOn: i.loan.returned_on ?? today,
+    daysLate: 0,
+    foundLost: true,
     ...(warnings.length === 0 ? {} : { warnings }),
   };
 }
@@ -445,7 +579,9 @@ async function renewOne(tx: TxCtx, loanId: string, branchId: string): Promise<Re
     .where('renewals', '=', renewals)
     .executeTakeFirst();
   if (Number(updated.numUpdatedRows) !== 1) throw renewRefused('changed');
-  const warnings: CirculationWarningView[] = [...memberWarnings(member?.expires_on ?? null, today), ...(due.capped ? [{ code: 'due_capped_by_expiry' as const }] : [])];
+  // A late renewal books the overdue fine up to today; the loan goes on under its new due date.
+  if (loan.due_on < today) await chargeSeam().bookOverdue(tx, { loanId, until: today });
+  const warnings: CirculationWarningView[] = [...memberWarnings(member?.expires_on ?? null, today), ...dueWarnings(due)];
   await tx.audit({ action: 'circulation.loan.renew', entity: 'loans', entityId: loanId, branchId, meta: { renewals: renewals + 1 } });
   return { id: loanId, version: ok(loan.version) + 1, dueOn: due.dueOn, renewals: renewals + 1, renewLimit: ok(loan.renew_limit), ...(warnings.length === 0 ? {} : { warnings }) };
 }

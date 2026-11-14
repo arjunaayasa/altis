@@ -161,6 +161,9 @@ const CATALOG: Readonly<Record<string, string>> = {
   // ---- Komunitas K1 (settings) ----
   'settings.accreditation.put':
     'PUT /api/v1/settings/accreditation | P:system.settings.manage | - | - | write | deny | store | settings.update | handler | -',
+  // ---- Komunitas (circulation core) ----
+  'settings.circulation.put': 'PUT /api/v1/settings/circulation | P:system.settings.manage | - | - | write | deny | store | settings.update | handler | -',
+  'settings.members.put': 'PUT /api/v1/settings/members | P:system.settings.manage | - | - | write | deny | store | settings.update | handler | -',
   'system.config.get': 'GET /api/v1/system/config | P:system.config.manage | - | - | read | deny | none | null | - | -',
   'system.config.put': 'PUT /api/v1/system/config | P:system.config.manage | - | reauth | write | deny | none | system.config.update | self | -',
   'system.config.email_test':

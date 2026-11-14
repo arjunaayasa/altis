@@ -44,10 +44,10 @@ describe('the members and circulation vocabularies', () => {
 describe('the members and circulation texts', () => {
   it('a message in both languages for each new permission, module, audit action and error code, without placeholders', () => {
     const perms = permissionCatalog('production').filter((d) => d.module === 'members' || d.module === 'circulation');
-    expect(perms).toHaveLength(7);
-    // Members and circulation 15 actions and 12 codes, holds 5 actions and 2 codes.
+    expect(perms).toHaveLength(8);
+    // Members and circulation 15 actions and 12 codes, holds 5 actions and 2 codes, the circulation core 8 actions.
     const audits = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('members.member.create'));
-    expect(audits).toHaveLength(20);
+    expect(audits).toHaveLength(28);
     const codes = Object.keys(ERROR_CODES).slice(Object.keys(ERROR_CODES).indexOf('MEMBER_IN_USE'));
     expect(codes).toHaveLength(14);
     const keys = [

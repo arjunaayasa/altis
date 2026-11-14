@@ -90,7 +90,7 @@ export const LOAN_STATES = Object.freeze(['open', 'closed', 'overdue'] as const)
 
 export type LoanState = (typeof LOAN_STATES)[number];
 
-/** `loans.outcome` of a closed loan. This milestone writes `returned` only. */
+/** `loans.outcome` of a closed loan: returned, declared lost, voided at the desk, or closed by a migration. */
 export const LOAN_OUTCOMES = Object.freeze(['returned', 'lost', 'voided', 'closed_migration'] as const);
 
 export type LoanOutcome = (typeof LOAN_OUTCOMES)[number];
@@ -115,7 +115,18 @@ export const RENEW_REFUSALS = Object.freeze(['changed', 'suspended', 'expired', 
 export type RenewRefusal = (typeof RENEW_REFUSALS)[number];
 
 /** Warnings a loan, a renewal or a return answers with (the action itself succeeded). */
-export const CIRCULATION_WARNINGS = Object.freeze(['member_expires_soon', 'due_capped_by_expiry', 'return_to_branch'] as const);
+export const CIRCULATION_WARNINGS = Object.freeze([
+  'member_expires_soon',
+  'due_capped_by_expiry',
+  'return_to_branch',
+  // ---- Komunitas (circulation core) ----
+  // The due date was moved past closed days of the library calendar; a due date set by hand falls on a closed day; an
+  // item read in place is out on loan, or has a status that says it is not on the shelf.
+  'due_moved_closed',
+  'due_on_closed_day',
+  'item_on_loan',
+  'item_status',
+] as const);
 
 export type CirculationWarning = (typeof CIRCULATION_WARNINGS)[number];
 
@@ -172,6 +183,51 @@ export const HOLD_REFUSALS = Object.freeze([
 ] as const);
 
 export type HoldRefusal = (typeof HOLD_REFUSALS)[number];
+// ---- Komunitas (circulation core) -------------------------------------------------------------------------------------
+
+/**
+ * Why a loan was made although a check refused it (`loans.overrides`, comma-separated): the member type's or the rule's
+ * limit, a hold on the item for another member, an optional block of the member, a collection type that may not be
+ * lent, a rule that forbids the loan; and `backdated`, a loan entered with an earlier day than today (not a check that
+ * refused, recorded so that it shows).
+ */
+export const OVERRIDE_REASONS = Object.freeze(['limit', 'hold', 'blocked', 'collection_type', 'policy', 'backdated'] as const);
+
+export type OverrideReason = (typeof OVERRIDE_REASONS)[number];
+
+/** The override reasons a desk may name when it forces a loan (`backdated` follows from the date itself). */
+export const FORCEABLE_REASONS = Object.freeze(['limit', 'hold', 'blocked', 'collection_type', 'policy'] as const);
+
+export type ForceableReason = (typeof FORCEABLE_REASONS)[number];
+
+/** `calendars.kind`: a closed weekday, a closed date range, or a closed range of days every year (`MM-DD`). */
+export const CALENDAR_KINDS = Object.freeze(['weekly', 'dates', 'yearly'] as const);
+
+export type CalendarKind = (typeof CALENDAR_KINDS)[number];
+
+/** `CIRC_VOID_REFUSED.meta.reason`: past the void window, lent by another staff member, already renewed, or charged. */
+export const VOID_REFUSALS = Object.freeze(['too_late', 'other_staff', 'renewed', 'charged'] as const);
+
+export type VoidRefusal = (typeof VOID_REFUSALS)[number];
+
+/** `member_clearances.purpose`: the reason a clearance letter is issued. */
+export const CLEARANCE_PURPOSES = Object.freeze(['graduation', 'transfer', 'other'] as const);
+
+export type ClearancePurpose = (typeof CLEARANCE_PURPOSES)[number];
+
+/** Why a member gets no clearance letter: open loans, an unpaid balance, or a hold waiting on the hold shelf. */
+export const CLEARANCE_REFUSALS = Object.freeze(['open_loans', 'balance', 'ready_hold'] as const);
+
+export type ClearanceRefusal = (typeof CLEARANCE_REFUSALS)[number];
+
+/**
+ * Why a rule wins or loses for a combination of dimensions (the "which rule applies" tool): the only candidate, more
+ * dimensions filled than the next, the same number but an earlier filled dimension; or, for the others, fewer
+ * dimensions filled, or a later first filled dimension.
+ */
+export const POLICY_RANK_REASONS = Object.freeze(['only', 'more_specific', 'earlier_dimension', 'less_specific', 'later_dimension'] as const);
+
+export type PolicyRankReason = (typeof POLICY_RANK_REASONS)[number];
 
 // ---- labels ----------------------------------------------------------------------------------------------------------
 
@@ -197,4 +253,11 @@ export const CIRCULATION_VOCAB_LISTS = Object.freeze({
   hold_close_reason: HOLD_CLOSE_REASONS,
   hold_source: HOLD_SOURCES,
   hold_refusal: HOLD_REFUSALS,
+  // ---- Komunitas (circulation core) ----
+  override_reason: OVERRIDE_REASONS,
+  calendar_kind: CALENDAR_KINDS,
+  void_refusal: VOID_REFUSALS,
+  clearance_purpose: CLEARANCE_PURPOSES,
+  clearance_refusal: CLEARANCE_REFUSALS,
+  policy_rank_reason: POLICY_RANK_REASONS,
 });

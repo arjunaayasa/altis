@@ -89,6 +89,9 @@ function settingsStore() {
     opac: structuredClone(OPAC),
     catalog: structuredClone(CATALOG),
     accreditation: structuredClone(ACCREDITATION),
+    // ---- Komunitas (circulation core) ----
+    circulation: { loanVoidMinutes: 10, lost: { useItemPrice: true, processingFeeMinor: 0 } },
+    members: { clearance: { prefix: 'BP', profile: { paper: 'A4', city: '', signerTitle: 'Kepala Perpustakaan', signerName: '', signerId: '', bodyText: '' } } },
   };
   const puts: { group: string; body: unknown }[] = [];
   const routes: Record<string, FakeHandler> = {

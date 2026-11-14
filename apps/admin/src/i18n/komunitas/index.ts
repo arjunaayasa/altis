@@ -4,6 +4,7 @@ import { ACCREDITATION_REGISTERS_EN, ACCREDITATION_REGISTERS_ID } from '../accre
 import { ACCREDITATION_USAGE_EN, ACCREDITATION_USAGE_ID } from '../accreditation/usage';
 import { ACCREDITATION_WORKSPACE_EN, ACCREDITATION_WORKSPACE_ID } from '../accreditation/workspace';
 import { REPORTS_EN, REPORTS_ID } from '../reports';
+import { CIRC_CORE_EN, CIRC_CORE_ID } from './circ-core';
 import { CIRCULATION_EN, CIRCULATION_ID } from './circulation';
 // ---- Komunitas (holds) ----
 import { HOLDS_EN, HOLDS_ID } from './holds';
@@ -69,6 +70,8 @@ export const KOMUNITAS_AREAS_ID = Object.freeze({
   circulation: CIRCULATION_ID,
   // ---- Komunitas (holds) ----
   holds: HOLDS_ID,
+  // ---- Komunitas (circulation core) ----
+  circCore: CIRC_CORE_ID,
   placeholder: PLACEHOLDER_ID,
 });
 
@@ -84,6 +87,8 @@ export const KOMUNITAS_AREAS_EN: { readonly [A in keyof typeof KOMUNITAS_AREAS_I
   members: MEMBERS_EN,
   circulation: CIRCULATION_EN,
   holds: HOLDS_EN,
+  // ---- Komunitas (circulation core) ----
+  circCore: CIRC_CORE_EN,
   placeholder: PLACEHOLDER_EN,
 });
 
@@ -99,6 +104,7 @@ export const KOMUNITAS_ID = {
   ...MEMBERS_ID,
   ...CIRCULATION_ID,
   ...HOLDS_ID,
+  ...CIRC_CORE_ID,
   ...PLACEHOLDER_ID,
 } as const;
 
@@ -114,5 +120,6 @@ export const KOMUNITAS_EN: Record<keyof typeof KOMUNITAS_ID, string> = {
   ...MEMBERS_EN,
   ...CIRCULATION_EN,
   ...HOLDS_EN,
+  ...CIRC_CORE_EN,
   ...PLACEHOLDER_EN,
 };

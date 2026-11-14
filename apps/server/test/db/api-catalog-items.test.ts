@@ -174,9 +174,10 @@ describe.skipIf(!ctx.available)(`items API [${engineLabel()}]`, () => {
 
   it('PATCH and DELETE answer {id, version}; an illegal status change → 409 ITEM_STATUS_TRANSITION', async () => {
     const id = ((await createItem(manager, branchA, 'API-0002')).json as { id: string }).id;
-    const lost = await manager.send('patch', `${API}/branches/${branchA}/items/${id}`, { version: 0, status: 'lost' });
-    expect(lost.status).toBe(409);
-    expect(code(lost)).toBe('ITEM_STATUS_TRANSITION');
+    // available → on_order is not a transition (available → lost is: an item its borrower declares lost).
+    const refused = await manager.send('patch', `${API}/branches/${branchA}/items/${id}`, { version: 0, status: 'on_order' });
+    expect(refused.status).toBe(409);
+    expect(code(refused)).toBe('ITEM_STATUS_TRANSITION');
     const patched = await manager.send('patch', `${API}/branches/${branchA}/items/${id}`, { version: 0, status: 'repair' });
     expect(patched.status, patched.text).toBe(200);
     expect(patched.json).toEqual({ id, version: 1 });
