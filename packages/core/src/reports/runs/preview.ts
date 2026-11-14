@@ -10,7 +10,7 @@ import {
 import type { Kysely } from 'kysely';
 import type { AccredSettings } from '../../settings/accreditation.js';
 import { columnsOf } from '../personal.js';
-import type { ReportDefinition, TableReport } from '../types.js';
+import type { ReportCtx, ReportDefinition, TableReport } from '../types.js';
 import { parseDefParams, reportCtx, reportFieldErrors } from './service.js';
 
 // The paged preview of a table report (spec §4.15): one keyset page of rows answered at once, without an audit entry.
@@ -20,7 +20,9 @@ import { parseDefParams, reportCtx, reportFieldErrors } from './service.js';
 // most REPORT_SCAN_PREVIEW_MAX_RECORDS live records; above that the request is refused at once with `export_only`
 // (the screen offers the export), before any scan starts. Below it, the definition may answer pages without rows while
 // its scan runs (`{rows: [], nextCursor}`): the preview calls it again with that cursor until rows come, and refuses
-// with `export_only` too when its own budget of 10 seconds runs out first.
+// with `export_only` too when its own budget of 10 seconds runs out first. A report whose rows reach the scan only part
+// way through (the data-quality list's last problem) asks `ctx.mayScanStock()` before it starts the scan: above the
+// limit it answers the rows found before the scan, or refuses with `export_only` itself when it has none.
 
 /** The rows of a page when the body names no limit. */
 const DEFAULT_LIMIT = 50;
@@ -74,8 +76,11 @@ export async function previewReport(
   if (def.kind !== 'table') throw reportFieldErrors([{ path: 'reportId', code: 'not_previewable' }]);
   const table: TableReport = def;
   const params = parseDefParams(table, body.params);
-  const ctx = reportCtx(db, { ...o, params, budgetMs: PREVIEW_BUDGET_MS });
-  if (table.scanBased?.(scanQuestion(params, ctx.today)) === true && (await tooManyRecordsToScan(db))) throw exportOnly();
+  let small: Promise<boolean> | null = null;
+  // Counted once per request, and only when asked.
+  const mayScanStock = (): Promise<boolean> => (small ??= tooManyRecordsToScan(db).then((many) => !many));
+  const ctx: ReportCtx = { ...reportCtx(db, { ...o, params, budgetMs: PREVIEW_BUDGET_MS }), mayScanStock };
+  if (table.scanBased?.(scanQuestion(params, ctx.today)) === true && !(await mayScanStock())) throw exportOnly();
 
   const limit = body.limit ?? DEFAULT_LIMIT;
   let page = await table.rows(ctx, body.cursor ?? null, limit);
