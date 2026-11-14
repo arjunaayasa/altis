@@ -1,10 +1,17 @@
 import { vocabKey } from '@altis/shared';
-import type { IndicatorEvidenceView, IndicatorResultView } from '@altis/shared/api/accreditation';
-import type { JSX } from 'react';
+import type { EvidenceListResponse, IndicatorEvidenceView, IndicatorResultView } from '@altis/shared/api/accreditation';
+import type { StoreResponse } from '@altis/shared/api/catalog/common';
+import { useQueryClient } from '@tanstack/react-query';
+import { useState, type JSX } from 'react';
 import { EvidenceUpload } from '@/components/accreditation/evidence-upload';
+import { accredKeys, accredPaths } from '@/components/accreditation/usage/queries';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Badge } from '@/components/form-field';
+import { Button } from '@/components/ui/button';
 import { useT, type TKey, type Translate } from '@/i18n';
-import { keyText } from '@/screens/accreditation/data';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/lib/me';
+import { accreditationKeys, keyText } from '@/screens/accreditation/data';
 
 /** The ALTIS screens a screenshot item names, by the key the instrument gives them. */
 const SCREENS: Readonly<Record<string, TKey>> = {
@@ -26,6 +33,10 @@ export function screenName(t: Translate, screen: string): string {
  * ("belum"), the ALTIS report that makes a generated item, the ALTIS screen to capture for a screenshot, the files
  * linked to it, and, for an item filled by uploading, the upload (`canUpload`: a manager on an open period). Whether an
  * item is there comes from the period's results (`status`); before the first evaluation it is not shown.
+ *
+ * The same manager removes a file after a confirmation (`DELETE accreditation/evidence/:id`): a wrong upload must not
+ * stay in the evidence file and its ZIPs, nor keep the item "ada". The results name a file only; its evidence row comes
+ * from the period's evidence list, read once for every checklist of the page.
  */
 export function EvidenceChecklist({
   periodId,
@@ -43,6 +54,17 @@ export function EvidenceChecklist({
   onUploaded(): void;
 }): JSX.Element {
   const t = useT();
+  const queryClient = useQueryClient();
+  const evidence = useApiQuery<EvidenceListResponse>({ queryKey: accredKeys.evidence(periodId), path: accredPaths.evidence(periodId), enabled: canUpload });
+  const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
+  const evidenceOf = (fileId: string): string | undefined => evidence.data?.evidence.find((e) => e.fileId === fileId)?.id;
+
+  const remove = async (id: string): Promise<void> => {
+    await api<StoreResponse>('DELETE', `accreditation/evidence/${encodeURIComponent(id)}`);
+    // The results, the period (its last change), the evidence lists and the component sizes all moved.
+    await queryClient.invalidateQueries({ queryKey: accreditationKeys.all() });
+  };
+
   if (items.length === 0) return <p className="text-sm text-muted-foreground">{t('accreditation.workspace.evidence.empty')}</p>;
   return (
     <ul aria-label={t('accreditation.workspace.evidence.title')} className="grid gap-2">
@@ -67,15 +89,41 @@ export function EvidenceChecklist({
               <p className="text-muted-foreground">{t('accreditation.workspace.evidence.screen', { screen: screenName(t, item.screen) })}</p>
             )}
             {state !== undefined && state.files.length > 0 && (
-              <ul className="grid gap-0.5">
-                {state.files.map((file) => (
-                  <li key={file.id}>
-                    <a href={`/files/${encodeURIComponent(file.id)}`} className="text-primary underline-offset-4 hover:underline">
-                      {file.name}
-                    </a>
-                    {file.caption !== '' && <span className="text-muted-foreground"> · {file.caption}</span>}
-                  </li>
-                ))}
+              <ul className="grid gap-1">
+                {state.files.map((file) => {
+                  const id = canUpload ? evidenceOf(file.id) : undefined;
+                  return (
+                    <li key={file.id} className="flex flex-wrap items-center gap-2">
+                      <span>
+                        <a href={`/files/${encodeURIComponent(file.id)}`} className="text-primary underline-offset-4 hover:underline">
+                          {file.name}
+                        </a>
+                        {file.caption !== '' && <span className="text-muted-foreground"> · {file.caption}</span>}
+                      </span>
+                      {id !== undefined && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          aria-label={t('accreditation.workspace.evidence.remove_named', { name: file.name })}
+                          onClick={() => setRemoving({ id, name: file.name })}>
+                          {t('accreditation.workspace.evidence.remove')}
+                        </Button>
+                      )}
+                      {removing !== null && removing.id === id && (
+                        <ConfirmDialog
+                          open
+                          destructive
+                          title={t('accreditation.workspace.evidence.confirm.title', { name: removing.name })}
+                          description={t('accreditation.workspace.evidence.confirm.body')}
+                          confirmLabel={t('accreditation.workspace.evidence.remove')}
+                          onConfirm={() => remove(removing.id)}
+                          onClose={() => setRemoving(null)}
+                        />
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
             {canUpload && item.kind !== 'generated' && (

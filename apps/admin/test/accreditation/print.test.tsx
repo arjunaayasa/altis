@@ -4,7 +4,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PrintTab } from '@/screens/accreditation/tabs/print';
 import { page } from '@/lib/page';
-import type { FakeHandler } from '../fake-api';
+import { adminMe, type FakeHandler } from '../fake-api';
 import {
   ADMIN_ID,
   FIRST,
@@ -97,6 +97,9 @@ describe('Cetak', () => {
     await waitFor(() => expect(api.to(`POST accreditation/periods/${PERIOD_ID}/self-assessment`)).toHaveLength(1));
     expect(api.to(`POST accreditation/periods/${PERIOD_ID}/self-assessment`)[0]!.body).toEqual({});
 
+    // A confirmation made on this page counts for four minutes; the request letter is asked for after that.
+    const pageClock = performance.now.bind(performance);
+    vi.spyOn(performance, 'now').mockImplementation(() => pageClock() + 300_000);
     const dossier = await card(ID['report.accreditation.dossier.title']);
     fireEvent.click(within(dossier).getByRole('button', { name: ADMIN_ID['accreditation.print.request_letter'] }));
     await confirmPassword();
@@ -151,6 +154,40 @@ describe('Cetak', () => {
     fireEvent.click(within(runs).getByRole('button', { name: new RegExp(`^${ADMIN_ID['accreditation.print.runs.download']} ${ID['report.accreditation.dossier.title']}`) }));
     await confirmPassword();
     await waitFor(() => expect(assign).toHaveBeenCalledWith(`/api/v1/reports/runs/${RUN_ID}/download`));
+  });
+
+  it('a personal download asks for the password even when the session says a confirmation still counts', async () => {
+    // The time the server gives is its own; read against a PC clock running behind it, it would skip the dialog and
+    // leave the user on the server's refusal instead of the file.
+    const assign = vi.spyOn(page, 'assign').mockImplementation(() => undefined);
+    const me = { ...adminMe(), reauthUntil: Date.now() + 3_600_000 };
+    renderTab(PrintTab, routes({ runs: [reportRun()] }), { me });
+    const runs = await card(ADMIN_ID['accreditation.print.runs.title']);
+    fireEvent.click(
+      await within(runs).findByRole('button', { name: new RegExp(`^${ADMIN_ID['accreditation.print.runs.download']} ${ID['report.accreditation.dossier.title']}`) }, FIRST),
+    );
+    await screen.findByRole('dialog', { name: ADMIN_ID['reauth.title'] }, FIRST);
+    expect(assign).not.toHaveBeenCalled();
+    await confirmPassword();
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(`/api/v1/reports/runs/${RUN_ID}/download`));
+  });
+
+  it('a personal document started after the password downloads without asking again', async () => {
+    const assign = vi.spyOn(page, 'assign').mockImplementation(() => undefined);
+    const api = renderTab(
+      PrintTab,
+      routes({ extra: { 'GET reports/runs': (): ReportRunListResponse => ({ runs: api.to(DOSSIER).length > 0 ? [reportRun()] : [], nextCursor: null }) } }),
+    );
+    const dossier = await card(ID['report.accreditation.dossier.title']);
+    fireEvent.click(within(dossier).getByRole('button', { name: ADMIN_ID['accreditation.print.dossier.zip'] }));
+    await confirmPassword();
+    await waitFor(() => expect(api.to(DOSSIER)).toHaveLength(1));
+    const runs = await card(ADMIN_ID['accreditation.print.runs.title']);
+    fireEvent.click(
+      await within(runs).findByRole('button', { name: new RegExp(`^${ADMIN_ID['accreditation.print.runs.download']} ${ID['report.accreditation.dossier.title']}`) }, FIRST),
+    );
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(`/api/v1/reports/runs/${RUN_ID}/download`));
+    expect(api.to('POST auth/reauth')).toHaveLength(1);
   });
 
   it('a generated list too large for the ZIP is said in words', async () => {
