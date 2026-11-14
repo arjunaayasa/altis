@@ -160,6 +160,34 @@ describe('Meja Layanan', () => {
     expect(app.requests.find((r) => r.path.endsWith('/circulation/returns'))?.body).toEqual({ barcode: 'B0009' });
   });
 
+  it('Enter in the name search acts on the text in the box, not on the suggestions of a shorter text still on screen', async () => {
+    const people = [
+      { id: '01JZ0000000000000000000A02', memberNo: 'A002', name: 'Siti Aminah', className: null, status: 'active' as const },
+      { id: MEMBER_ID, memberNo: 'A001', name: 'Siti Badriah', className: null, status: 'active' as const },
+    ];
+    const app = start({
+      'POST branches/:branchId/circulation/members/search': (req) => {
+        const q = (req.body as { q: string }).q.toLowerCase();
+        return { items: people.filter((p) => p.name.toLowerCase().startsWith(q)) };
+      },
+      'GET branches/:branchId/circulation/members/:memberId': (req) => {
+        const p = people.find((x) => x.id === req.params.memberId)!;
+        return deskMember({ id: p.id, memberNo: p.memberNo, name: p.name });
+      },
+    });
+    await screen.findByRole('combobox', { name: 'Pindai kartu atau ketik nomor/nama anggota' });
+    fireEvent.keyDown(window, { key: 'F6' });
+    const box = await screen.findByRole('combobox', { name: 'Cari anggota per nama' });
+    fireEvent.change(box, { target: { value: 'Siti' } });
+    expect(await screen.findByRole('option', { name: /Siti Aminah/ })).toBeTruthy();
+    // More text, and Enter before the pause that would refresh the suggestions.
+    fireEvent.change(box, { target: { value: 'Siti B' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Proses' }));
+    expect(await screen.findByText('Anggota dimuat: Siti Badriah')).toBeTruthy();
+    expect(screen.queryByText('Anggota dimuat: Siti Aminah')).toBeNull();
+    expect(app.requests.filter((r) => r.path.endsWith('/members/search')).map((r) => r.body)).toContainEqual({ q: 'Siti B' });
+  });
+
   it('F3 switches to returns by barcode alone; a late return says how late', async () => {
     const app = start({
       'POST branches/:branchId/circulation/returns': (): ReturnResponse => ({
