@@ -9,6 +9,7 @@ export type { SlimsUsageRunSettings } from './settings.js';
 export { testSlimsUsageConnection } from './test-connection.js';
 export { SLIMS_USAGE_JOB, SLIMS_USAGE_UNIQUE_KEY, closeAbandonedUsageRun, startSlimsUsageImport } from './start.js';
 export type { SlimsUsageStarted, UsageSourceRef } from './start.js';
+export { releaseCancelledUsageImport } from './cancel.js';
 export { guessGroup } from './guess.js';
 export { __setSlimsUsageConnect, slimsUsageConnect } from './source.js';
 export type { SlimsUsageConnect } from './source.js';

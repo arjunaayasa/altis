@@ -13,6 +13,10 @@ import type { AreaMatrix } from './catalog.js';
 //
 // The fixtures seed what a call needs straight into the tables and DATA_DIR (a run, its report, an export's file), each
 // call its own, so that a super admin's call succeeds (audit once) whatever the personas before it did.
+//
+// GET of one run and of its report take any signed-in staff member (`pub+s`) and check the permission themselves: a
+// catalogue reader, or an accreditation manager for a SLiMS usage import run only (the import wizard reads them). The
+// per-persona rules are in db/api-catalog-runs.test.ts and db/api-slims-usage.test.ts.
 
 const DAY = 86_400_000;
 
@@ -71,8 +75,8 @@ const withExportFile: MatrixFixture = async (s) => {
 export const MATRIX: AreaMatrix = {
   rows: {
     'catalog.runs.list': 'GET /api/v1/catalog/runs | P:catalog.records.read | - | - | read | deny | none | null | - | -',
-    'catalog.runs.get': 'GET /api/v1/catalog/runs/:id | P:catalog.records.read | - | - | read | deny | none | null | - | -',
-    'catalog.runs.report': 'GET /api/v1/catalog/runs/:id/report | P:catalog.records.read | - | - | system | deny | none | null | - | -',
+    'catalog.runs.get': 'GET /api/v1/catalog/runs/:id | pub+s | - | - | read | deny | none | null | - | -',
+    'catalog.runs.report': 'GET /api/v1/catalog/runs/:id/report | pub+s | - | - | system | deny | none | null | - | -',
     'catalog.runs.download':
       'GET /api/v1/catalog/runs/:id/download | P:catalog.export.run | - | - | system | deny | none | catalog.export.download | - | -',
     'catalog.dedupe_scans.create':
