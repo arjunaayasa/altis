@@ -32,6 +32,7 @@ export const DETAIL_MESSAGES = defineOpacMessages(
     'detail.col.location': 'Letak',
     'detail.col.barcode': 'Barkod',
     'detail.col.status': 'Status eksemplar',
+    'detail.on_loan': 'Dipinjam, kembali {date}',
     // The shelf map.
     'detail.shelf_map.summary': 'Lihat letaknya di denah: {place}',
     // The citations.
@@ -80,6 +81,7 @@ export const DETAIL_MESSAGES = defineOpacMessages(
     'detail.col.location': 'Location',
     'detail.col.barcode': 'Barcode',
     'detail.col.status': 'Item status',
+    'detail.on_loan': 'On loan, due {date}',
     'detail.shelf_map.summary': 'See it on the floor plan: {place}',
     'detail.cite': 'Cite this title',
     'detail.cite.apa': 'APA (7th edition)',

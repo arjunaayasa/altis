@@ -21,6 +21,9 @@
   --color-destructive: var(--destructive);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-foreground: var(--success-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -49,6 +52,10 @@
   --destructive: oklch(0.55 0.2 27);
   --warning: oklch(0.95 0.06 85);
   --warning-foreground: oklch(0.35 0.08 70);
+  /* The service desk's scan feedback only: green reads as "done" from across the desk. */
+  --success: oklch(0.55 0.14 150);
+  --success-soft: oklch(0.95 0.05 150);
+  --success-foreground: oklch(0.32 0.08 150);
   --border: oklch(0.9 0.01 240);
   --input: oklch(0.88 0.01 240);
   --ring: oklch(0.55 0.12 250);
@@ -73,6 +80,9 @@
     --destructive: oklch(0.65 0.19 25);
     --warning: oklch(0.32 0.06 80);
     --warning-foreground: oklch(0.92 0.06 90);
+    --success: oklch(0.68 0.14 150);
+    --success-soft: oklch(0.3 0.06 150);
+    --success-foreground: oklch(0.9 0.07 150);
     --border: oklch(0.32 0.015 250);
     --input: oklch(0.36 0.015 250);
     --ring: oklch(0.65 0.11 250);

@@ -22,7 +22,7 @@ import { writeZip } from '../src/zip.js';
 // MySQL, the stop before the next migration, and what N−1's doctor must make of the database afterwards. The runs
 // themselves need the release zips and an engine (`pnpm n-1`, nightly).
 
-/** The release's own migrations (fixture level 1), in name order: Komunitas K1's 0030–0033 follow Phase 2's 0020–0029 and 1c's 0001–0009. */
+/** The release's own migrations (fixture level 1), in name order: members and circulation's 0040 follows Komunitas K1's 0030–0033, Phase 2's 0020–0029 and 1c's 0001–0009. */
 const RELEASE_MIGRATIONS = Object.keys(PHASE1_MIGRATIONS).sort();
 const LEVEL1: ReleaseFacts = { version: '0.1.0-test', schemaLatest: RELEASE_MIGRATIONS.at(-1)!.slice(0, 4), minCodeVersionAfter: '0.0.0' };
 const LEVEL2: ReleaseFacts = { version: '0.2.0-test', schemaLatest: '9001', minCodeVersionAfter: '0.0.0' };
@@ -81,7 +81,7 @@ describe('planN1', { timeout: 60_000 }, () => {
   it('0.1.0-test → 0.2.0-test on mysql80: the prefix 9001_test_expand, its DDL statement faulted, doctor ok expected', async () => {
     const plan = await planN1(LEVEL1, LEVEL2, 'mysql80');
     expect(plan.base).toEqual(RELEASE_MIGRATIONS);
-    expect(plan.base.at(-1)).toBe('0033_catalog_accred_fields');
+    expect(plan.base.at(-1)).toBe('0040_members_circulation');
     expect(plan.prefixes).toEqual([
       { migration: '9001_test_expand', migrations: ['9001_test_expand'], ddl: 1, contract: null, runs: [null, 'migrate-ddl:1'], stop: null, expect: 'ok' },
     ]);

@@ -40,6 +40,7 @@ import {
 } from '@/screens/catalog/items/item-form';
 import { isUlid } from '@/screens/catalog/items/search';
 import { CustomFieldInputs } from '@/screens/catalog/records/custom-fields';
+import { ItemStatusBadge } from '@/screens/circulation/common';
 
 /**
  * The items tab of the record editor (Phase 2 spec §13 "tab eksemplar"; plan Task 25):
@@ -138,7 +139,7 @@ export function RecordItemsTab({ recordId, defaultCollectionTypeId = null }: Rec
             const row = info.row.original;
             return (
               <span className="flex flex-wrap gap-1">
-                <Badge tone={row.status === 'available' ? 'info' : 'neutral'}>{t(`vocab.item_status.${row.status}`)}</Badge>
+                <ItemStatusBadge status={row.status} circulation={row.circulation} />
                 {row.archived && <Badge tone="danger">{t('catalog.items.archived')}</Badge>}
               </span>
             );

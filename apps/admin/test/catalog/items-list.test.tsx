@@ -37,6 +37,21 @@ function listRoutes(rows: ItemListItem[], extra: Record<string, FakeHandler> = {
 /** The URLs the SPA asked, as sent (before any decoding). */
 const askedUrls = (fetchMock: { mock: { calls: unknown[][] } }): string[] => fetchMock.mock.calls.map((c) => String(c[0]));
 
+describe('ItemsListScreen: an item out on loan', () => {
+  it('shows "Dipinjam, kembali <date>" instead of its status, which stays available', async () => {
+    const rows = [
+      listItem({ id: ulid('01JZEKS', 1), barcode: 'B0000001', circulation: { state: 'on_loan', dueOn: '2026-11-20', loanId: ulid('01JZEKL', 1) } }),
+      listItem({ id: ulid('01JZEKS', 2), barcode: 'B0000002' }),
+    ];
+    startApp({ me: adminMe(), path: LIST_PATH, routes: listRoutes(rows) });
+    const lent = (await screen.findByText('B0000001', undefined, FIRST)).closest('tr')!;
+    expect(within(lent).getByText(/^Dipinjam, kembali .*20 Nov.* 2026$/)).toBeTruthy();
+    expect(within(lent).queryByText('Tersedia')).toBeNull();
+    const shelved = screen.getByText('B0000002').closest('tr')!;
+    expect(within(shelved).getByText('Tersedia')).toBeTruthy();
+  });
+});
+
 describe('ItemsListScreen: the barcode scan', () => {
   it('typing a barcode with “/” and Enter opens its item; the barcode is sent as ?barcode=B%2F01', async () => {
     const { router, fetchMock } = startApp({ me: adminMe(), path: LIST_PATH, routes: listRoutes(ROWS) });

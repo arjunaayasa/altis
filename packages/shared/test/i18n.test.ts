@@ -706,7 +706,7 @@ const PLANNING_ID = /\b(DK|P|Q|U|R)-?\d{1,3}\b|\b[rR][1-5] §|\bK\d-C\d{2}\b|K1P
 describe('reports and accreditation texts', () => {
   it('a message in both languages for each new permission, module, audit action and error code', () => {
     const perms = ['reports.statistics.read', 'accreditation.workspace.read', 'accreditation.workspace.manage'];
-    const audits = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('reports.run.start'));
+    const audits = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('reports.run.start'), AUDIT_ACTIONS.indexOf('members.member.create'));
     expect(audits).toHaveLength(18);
     const codes = [
       'REPORT_TOO_LARGE',

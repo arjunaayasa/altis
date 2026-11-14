@@ -118,6 +118,10 @@ export const UPLOAD_CONTEXTS: Readonly<Partial<Record<UploadContextName, UploadC
     magic: ['text', 'gzip'],
     kind: 'staged',
   }),
+
+  // ---- Komunitas (members and circulation) ----
+  // The CSV file of a member import (UTF-8 or cp1252 text), staged until `POST members/imports` takes it.
+  'members.import': context({ name: 'members.import', permission: 'members.import.run', maxBytes: 50 * MIB, magic: ['text'], kind: 'staged' }),
 });
 
 /** The context `name` of this build, or null (an unknown name, or `test` outside the test profile). */

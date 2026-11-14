@@ -18,14 +18,19 @@ import type { StorageDriver } from '../../files/serve.js';
 //   protectedRunWorkIds before removing an old `tmp/<ulid>/` (S2): a queued or running run keeps its folder, and so
 //   does a finished one for 7 days, since a real run adopts its dry run's input (S3).
 
-/** What a catalog run does; `slims_usage` is the read-only import of SLiMS usage statistics into an accreditation period. */
+/**
+ * What a catalog run does; `slims_usage` is the read-only import of SLiMS usage statistics into an accreditation period,
+ * `member_import` the CSV import of members.
+ */
 export type RunKind =
   | 'import'
   | 'export'
   | 'migration'
   | 'dedupe_scan'
   // ---- Komunitas K1 (runs) ----
-  | 'slims_usage';
+  | 'slims_usage'
+  // ---- Komunitas (members and circulation) ----
+  | 'member_import';
 
 /** A run's terminal status. */
 export type RunEnd = 'succeeded' | 'failed' | 'cancelled';
@@ -47,6 +52,8 @@ const RUN_KINDS: readonly RunKind[] = [
   'dedupe_scan',
   // ---- Komunitas K1 (runs) ----
   'slims_usage',
+  // ---- Komunitas (members and circulation) ----
+  'member_import',
 ];
 const RUN_ENDS: readonly RunEnd[] = ['succeeded', 'failed', 'cancelled'];
 const ID_BATCH = 500;

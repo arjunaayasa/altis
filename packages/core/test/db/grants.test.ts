@@ -169,7 +169,8 @@ describe.skipIf(!ctx.available)(`grants and system roles [${engineLabel()}]`, ()
       const branchScoped = permissionCatalog()
         .filter((d) => d.scope === 'branch')
         .map((d) => d.key);
-      expect(branchScoped).toEqual(['catalog.locations.manage', 'catalog.items.manage', 'test.branch.manage']);
+      // Members and circulation add the desk, circulation.desk.use.
+      expect(branchScoped).toEqual(['catalog.locations.manage', 'catalog.items.manage', 'circulation.desk.use', 'test.branch.manage']);
       expect(sorted(g.branches.get(B)!)).toEqual([...branchScoped].sort());
       expect(can(g, 'system.users.read', B)).toBe(false);
       expect(g.superAdmin).toBe(false);

@@ -18,6 +18,7 @@ import { writeItemEvents, type ItemEventInput } from '../../../catalog/items/eve
 import { ARCHIVED_STATUS, archivedAtAfter, canChangeStatus, itemStatusOf } from '../../../catalog/items/lifecycle.js';
 import { againOnBarcodeRace } from '../../../catalog/items/service.js';
 import { titleKey } from '../../../catalog/lib/title-key.js';
+import { openLoanDueDates } from '../../../circulation/availability.js';
 import { txCtx, type Actor } from '../../../context.js';
 import { indexRecords, stampChanged } from '../../../search/index-records.js';
 import { readSettings } from '../../../settings/service.js';
@@ -101,11 +102,13 @@ import {
 // The catalogue re-sync (`catalogMode = sync`): an `item` row an earlier run mapped is not skipped `already_migrated`
 // but worked out again as a first run would (its repairs and problems not counted again) and compared with the stored
 // copy, source-derived values only (resyncItems): a copy no one edited in ALTIS (`updated_by` null) is rewritten where
-// it differs, the status through the item lifecycle (a refused change keeps the status: `status_guard`), with one
-// `migrated` history row `{via: 'sync', fields}` for a status or location change; a copy edited in ALTIS is left as it
-// is (`edited_in_altis`, the differing fields). It is locked first, then the rows it goes to, with the fresh items'.
-// Two phases follow: the mapped items whose source row is gone, archived (`source_missing`), and then the mapped records
-// whose source row is gone, archived once they have no live item (`source_missing`, else `source_missing_kept`). A dry
+// it differs, the status through the item lifecycle (a refused change keeps the status: `status_guard`; a copy out on
+// loan keeps its status until it is returned: `status_on_loan`), with one `migrated` history row `{via: 'sync', fields}`
+// for a status or location change; a copy edited in ALTIS is left as it is (`edited_in_altis`, the differing fields). It
+// is locked first, then the rows it goes to, with the fresh items'. Two phases follow: the mapped items whose source row
+// is gone, archived (`source_missing`; a copy out on loan stays live until it is returned, `source_missing_on_loan`, and
+// a later re-sync archives it then), and then the mapped records whose source row is gone, archived once they have no
+// live item (`source_missing`, else `source_missing_kept`). A dry
 // run counts what the sync would write (`changed`, a sync dry run's `catalogChanges`) and lists the rows it would change
 // (`sync_change`).
 
@@ -1052,7 +1055,8 @@ async function resyncedBarcode(db: BatchIo['db'], itemId: string, stored: string
  * against what is stored. Per item, on its own ledger:
  * - no difference → migrated (unchanged);
  * - edited in ALTIS (`updated_by` set) → skipped `edited_in_altis`, reported with the differing fields, left as it is;
- * - a status change the lifecycle refuses (`checkTransition`) keeps the stored status, reported `status_guard`;
+ * - a status change the lifecycle refuses (`checkTransition`) keeps the stored status, reported `status_guard`; so does
+ *   one of a copy out on loan (an open loan keeps the item as it is until it is returned), reported `status_on_loan`;
  * - otherwise the differing columns are written (`version + 1`, `updated_at = now`, `updated_by` stays null; a change
  *   to `withdrawn` archives the item, one from it clears `archived_at`), and a status or location change writes one
  *   `migrated` history row `{via: 'sync', fields}`: migrated and changed.
@@ -1069,6 +1073,12 @@ async function resyncItems(
 ): Promise<{ events: ItemEventInput[]; records: string[] }> {
   const events: ItemEventInput[] = [];
   const records: string[] = [];
+  // The open loans of the copies whose status the sync would change (locked: see openLoanDueDates).
+  const statusChanges = present.flatMap((p) => {
+    const s = o.stored.get(p.targetId!)!;
+    return s.updated_by === null && itemStatusOf(s.status) !== p.columns.status ? [s.id] : [];
+  });
+  const onLoan = statusChanges.length === 0 ? new Map<string, string>() : await openLoanDueDates(io.db, statusChanges, { lock: io.trx !== null });
   for (const p of present) {
     const log = p.log;
     const before = o.stored.get(p.targetId!)!;
@@ -1107,10 +1117,11 @@ async function resyncItems(
     }
     let status = from;
     if (to !== from) {
-      if (canChangeStatus(from, to)) status = to;
+      const refusal = !canChangeStatus(from, to) ? 'status_guard' : onLoan.has(before.id) ? 'status_on_loan' : null;
+      if (refusal === null) status = to;
       else {
         fields.splice(fields.indexOf('status'), 1);
-        log.report(T, p.key, 'status_guard', `${from} -> ${to}`);
+        log.report(T, p.key, refusal, `${from} -> ${to}`);
       }
     }
     log.migrated(T);
@@ -1199,11 +1210,16 @@ async function markGone(c: SlimsStageContext, trx: Transaction<DB>, entity: stri
  * archived (`withdrawn`, `archived_at`, `version + 1`, a `migrated` history row `{via: 'sync', fields: ['status']}`),
  * reported `source_missing` and counted under `archived` (vanished); one edited in ALTIS is kept, reported
  * `source_missing_kept`; one whose status cannot become `withdrawn` keeps it, reported `status_guard`. Each is handled
- * once (its mark); an item already archived, or gone from ALTIS too, needs nothing.
+ * once (its mark); an item already archived, or gone from ALTIS too, needs nothing. An item no one edited that is out on
+ * loan stays live, since its loan could not be returned once it is archived: reported `source_missing_on_loan` (its due
+ * date) on each re-sync while the loan is open, neither marked nor counted as a change, and archived by the first
+ * re-sync after its return.
  */
 async function goneItems(c: SlimsStageContext, io: BatchIo, l: Ledger, gone: readonly Gone[]): Promise<void> {
   const marks = await mappedRows(c, io.db, `${T}${GONE}`, gone.map((g) => g.key));
   const stored = await storedItems(io, gone.map((g) => g.targetId));
+  const candidates = [...stored.values()].filter((i) => i.archived_at === null && i.updated_by === null).map((i) => i.id);
+  const onLoan = candidates.length === 0 ? new Map<string, string>() : await openLoanDueDates(io.db, candidates, { lock: io.trx !== null });
   const handled: Gone[] = [];
   const events: ItemEventInput[] = [];
   const records: string[] = [];
@@ -1223,6 +1239,11 @@ async function goneItems(c: SlimsStageContext, io: BatchIo, l: Ledger, gone: rea
       continue;
     }
     if (item.archived_at !== null) continue;
+    const dueOn = item.updated_by === null ? onLoan.get(item.id) : undefined;
+    if (dueOn !== undefined) {
+      l.report(T, g.key, 'source_missing_on_loan', `due_on=${dueOn}`);
+      continue;
+    }
     l.changed(T);
     handled.push(g);
     if (item.updated_by !== null) {
@@ -1258,7 +1279,7 @@ async function goneItems(c: SlimsStageContext, io: BatchIo, l: Ledger, gone: rea
 /**
  * The live items of the records `ids`, per record. A dry run (which archived nothing) leaves out the items the real
  * run's previous phase would archive: mapped items whose source row is gone, no one edited in ALTIS, whose status may
- * become `withdrawn`.
+ * become `withdrawn`, and that are not out on loan.
  */
 async function liveItemsOf(c: SlimsStageContext, io: BatchIo, ids: readonly string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
@@ -1269,19 +1290,23 @@ async function liveItemsOf(c: SlimsStageContext, io: BatchIo, ids: readonly stri
       .leftJoin('migration_map as mm', (join) =>
         join.onRef('mm.target_id', '=', 'i.id').on('mm.source', '=', c.options.sourceName).on('mm.entity', '=', T),
       )
-      .select(['i.record_id', 'i.status', 'i.updated_by', 'mm.legacy_key'])
+      .select(['i.id', 'i.record_id', 'i.status', 'i.updated_by', 'mm.legacy_key'])
       .where('i.record_id', 'in', ids.slice(i, i + ID_BATCH))
       .where('i.archived_at', 'is', null)
       .execute();
-    for (const r of rows) {
-      const goes =
-        sourceItems !== null &&
-        r.legacy_key !== null &&
-        !sourceItems.has(r.legacy_key) &&
-        r.updated_by === null &&
-        canChangeStatus(itemStatusOf(r.status), ARCHIVED_STATUS);
-      if (!goes) out.set(r.record_id, (out.get(r.record_id) ?? 0) + 1);
-    }
+    const going =
+      sourceItems === null
+        ? []
+        : rows.filter(
+            (r) =>
+              r.legacy_key !== null &&
+              !sourceItems.has(r.legacy_key) &&
+              r.updated_by === null &&
+              canChangeStatus(itemStatusOf(r.status), ARCHIVED_STATUS),
+          );
+    const lent = going.length === 0 ? new Map<string, string>() : await openLoanDueDates(io.db, going.map((r) => r.id));
+    const goes = new Set(going.filter((r) => !lent.has(r.id)).map((r) => r.id));
+    for (const r of rows) if (!goes.has(r.id)) out.set(r.record_id, (out.get(r.record_id) ?? 0) + 1);
   }
   return out;
 }

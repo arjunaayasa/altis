@@ -101,6 +101,12 @@ export const TABLE_CLASSES: Readonly<Record<TableName, TableClass>> = Object.fre
   library_partnerships: 'data',
   library_budgets: 'data',
   library_documents: 'data',
+  // ---- Komunitas (members and circulation): all data ----
+  member_types: 'data',
+  members: 'data',
+  member_events: 'data',
+  policies: 'data',
+  loans: 'data',
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping, made by the runner on every run ----
   schema_migrations_edition: 'migrator',
   schema_migrations_edition_lock: 'migrator',
@@ -202,6 +208,26 @@ export const PERSONAL_COLUMNS: Readonly<Partial<Record<TableName, readonly Perso
   ],
   accred_answers: [{ column: 'note', category: 'free_text' }],
   accred_periods: [{ column: 'profile', category: 'identity', jsonPaths: ['schoolHead', 'libraryHead', 'libraryHeadId', 'phone', 'email'] }],
+  // ---- Komunitas (members and circulation) ----
+  members: [
+    { column: 'status_note', category: 'free_text' },
+    { column: 'name', category: 'identity' },
+    { column: 'name_key', category: 'identity' },
+    { column: 'gender', category: 'identity' },
+    { column: 'birth_date', category: 'identity' },
+    { column: 'identity_no', category: 'identity' },
+    { column: 'institution', category: 'identity' },
+    { column: 'class_name', category: 'identity' },
+    { column: 'email', category: 'contact' },
+    { column: 'phone', category: 'contact' },
+    { column: 'address', category: 'contact' },
+    { column: 'postal_code', category: 'contact' },
+    { column: 'mailing_address', category: 'contact' },
+    { column: 'notes', category: 'free_text' },
+    { column: 'photo_file_id', category: 'photo' },
+    { column: 'password_hash', category: 'credential' },
+  ],
+  loans: [{ column: 'override_note', category: 'free_text' }],
 } satisfies PersonalEntries);
 
 /** `value` with every nested object and array frozen. */

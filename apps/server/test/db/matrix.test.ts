@@ -41,7 +41,7 @@ import {
   type UserSnapshot,
 } from '../matrix-fixtures.js';
 import { CATALOG_MATRIX } from '../matrix/catalog.js';
-import { KOMUNITAS_MATRIX } from '../matrix/komunitas.js';
+import { KOMUNITAS_MATRIX, KOMUNITAS_PENDING_ROUTES } from '../matrix/komunitas.js';
 import { removeOp } from '../ops-support.js';
 import { recordingLogger, sampleConfig } from '../support.js';
 import { devPackageKeys } from '../update-support.js';
@@ -502,6 +502,11 @@ describe.skipIf(!ctx.available)(`permission matrix, escalation, audit once [${en
     // The wizard's `install.finish` is gone in this installed app; audit-coverage.test.ts checks its one
     // `install.complete` entry in a wizard run of its own.
     for (const decl of ALL_ROUTES.filter((d) => d.audit !== null && d.install === undefined)) {
+      // A community route whose handler is not written yet (matrix/komunitas.ts KOMUNITAS_PENDING_ROUTES).
+      if (KOMUNITAS_PENDING_ROUTES.includes(decl.id)) {
+        it.todo(`${decl.id} → one ${decl.audit} (its handler is not written yet)`);
+        continue;
+      }
       it(`${decl.id} → one ${decl.audit}`, async () => {
         const fixture = MATRIX_FIXTURES[decl.id];
         if (fixture === undefined) throw new Error(`MATRIX_FIXTURES has no fixture for ${decl.id}`);
@@ -519,7 +524,9 @@ describe.skipIf(!ctx.available)(`permission matrix, escalation, audit once [${en
         const rows = await h.db.selectFrom('audit_log').select('action').where('seq', '>', before).orderBy('seq').execute();
         const added = rows.map((r) => r.action);
         expect(added.filter((a) => a === decl.audit)).toHaveLength(1);
-        expect(added.filter((a) => a !== decl.audit && !SECURITY_AUDIT_ACTIONS.has(a as AuditAction))).toEqual([]);
+        // Besides it, only the security set and the route's own `alsoAudits` (as the route layer allows).
+        const allowed = (a: string): boolean => a === decl.audit || SECURITY_AUDIT_ACTIONS.has(a as AuditAction) || decl.alsoAudits?.includes(a as AuditAction) === true;
+        expect(added.filter((a) => !allowed(a))).toEqual([]);
       });
     }
   });
