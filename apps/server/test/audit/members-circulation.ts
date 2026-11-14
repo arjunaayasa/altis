@@ -6,6 +6,8 @@ import { AUDIT as HOLDS } from './komunitas-holds.js';
 import { AUDIT as MEMBERS } from './komunitas-members.js';
 // ---- Komunitas (member area) ----
 import { AUDIT as MEMBER_AREA } from './komunitas-member-area.js';
+// ---- Komunitas (notices) ----
+import { AUDIT as NOTICES } from './komunitas-notices.js';
 
 // The audit scripts of the members and circulation actions: one script per area, each in a file of its own that only
 // its owning change fills. db/audit-coverage.test.ts runs them after the community's, on the same installation and in
@@ -25,6 +27,8 @@ export const MEMBERS_CIRCULATION_AUDIT_SCRIPTS: Readonly<Record<string, AreaAudi
   'member-area': MEMBER_AREA,
   // ---- Komunitas (charges and payments) ----
   charges: CHARGES,
+  // ---- Komunitas (notices) ----
+  notices: NOTICES,
 });
 
 /** While true, a script that is still null lists its actions as pending; both scripts are written, so every action is covered. */

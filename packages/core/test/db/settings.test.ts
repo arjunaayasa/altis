@@ -207,6 +207,23 @@ const SAMPLE: Record<SettingKey, unknown> = {
   'circulation.receipt.paperMm': 58,
   'circulation.receipt.footer.id': 'Terima kasih',
   'circulation.receipt.footer.en': 'Thank you',
+  // ---- Komunitas (notices) ----
+  'circulation.notices.dueSoonDays': 3,
+  'circulation.notices.overdueEveryDays': 5,
+  'circulation.notices.overdueMax': 2,
+  'circulation.notices.holdReady': false,
+  'email.template.circulation_due_soon.id.subject': 'Segera jatuh tempo',
+  'email.template.circulation_due_soon.id.body': 'Halo {name}\n{loans}',
+  'email.template.circulation_due_soon.en.subject': 'Due soon',
+  'email.template.circulation_due_soon.en.body': 'Hello {name}\n{loans}',
+  'email.template.circulation_overdue.id.subject': 'Terlambat',
+  'email.template.circulation_overdue.id.body': 'Halo {name}\n{loans}',
+  'email.template.circulation_overdue.en.subject': 'Overdue',
+  'email.template.circulation_overdue.en.body': 'Hello {name}\n{loans}',
+  'email.template.circulation_hold_ready.id.subject': 'Reservasi siap',
+  'email.template.circulation_hold_ready.id.body': 'Halo {name}\n{title}',
+  'email.template.circulation_hold_ready.en.subject': 'Hold ready',
+  'email.template.circulation_hold_ready.en.body': 'Hello {name}\n{title}',
 };
 
 /** Every key of scope `instance` (machine state of this installation, kept by a restore), in registry order; all are in group `system`. */
@@ -300,7 +317,7 @@ describe('SETTINGS registry', () => {
       'library.timezone',
       'library.locale',
     ]);
-    expect(groupKeys('email')).toHaveLength(5);
+    expect(groupKeys('email')).toHaveLength(17); // the sender name, the password reset (4) and the three member notices (12)
     expect(groupKeys('security')).toEqual(['security.password_min_length', 'security.session_idle_minutes']);
     expect(groupKeys('opac')).toEqual(['opac.welcome.id', 'opac.welcome.en', 'opac.accent', ...PHASE2_OPAC_KEYS]);
     expect(groupKeys('catalog')).toEqual(CATALOG_KEYS);
@@ -341,6 +358,11 @@ describe('SETTINGS registry', () => {
       'circulation.receipt.paperMm',
       'circulation.receipt.footer.id',
       'circulation.receipt.footer.en',
+      // ---- Komunitas (notices) ----
+      'circulation.notices.dueSoonDays',
+      'circulation.notices.overdueEveryDays',
+      'circulation.notices.overdueMax',
+      'circulation.notices.holdReady',
     ]);
     expect(groupKeys('members')).toEqual([
       'members.clearance.prefix',

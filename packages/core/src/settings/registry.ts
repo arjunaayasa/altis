@@ -31,6 +31,8 @@ import {
   anonymizeYearsField,
   receiptFooterField,
   receiptPaperField,
+  // ---- Komunitas (notices) ----
+  noticeTemplateBodyField,
 } from '@altis/shared/api/settings';
 import { z } from 'zod';
 import { CardProfile, DEFAULT_CARD_PROFILE } from '@altis/shared/api/member-ops';
@@ -132,7 +134,10 @@ export type SettingKey =
   // ---- Komunitas (charges and payments) ----
   | `circulation.block.${'unpaidOverMinor' | 'overdue'}`
   | 'circulation.fines.skipClosedDays'
-  | `circulation.receipt.${'paperMm' | 'footer.id' | 'footer.en'}`;
+  | `circulation.receipt.${'paperMm' | 'footer.id' | 'footer.en'}`
+  // ---- Komunitas (notices) ----
+  | `circulation.notices.${'dueSoonDays' | 'overdueEveryDays' | 'overdueMax' | 'holdReady'}`
+  | `email.template.${'circulation_due_soon' | 'circulation_overdue' | 'circulation_hold_ready'}.${'id' | 'en'}.${'subject' | 'body'}`;
 
 export interface SettingDef {
   group: SettingsGroup;
@@ -610,6 +615,26 @@ export const SETTINGS: Readonly<Record<SettingKey, SettingDef>> = Object.freeze(
   'circulation.receipt.paperMm': def({ group: 'circulation', schema: receiptPaperField, default: 80 }),
   'circulation.receipt.footer.id': def({ group: 'circulation', schema: receiptFooterField, default: null }),
   'circulation.receipt.footer.en': def({ group: 'circulation', schema: receiptFooterField, default: null }),
+  // ---- Komunitas (notices) ----
+  // E-mail reminders to members: a loan due in this many days (0: off), an overdue loan on its first day late and then
+  // every `overdueEveryDays` days, at most `overdueMax` times (0: off), and a hold ready for pickup. Then, in group
+  // `email`, the library's own subject and body of each of the three mails per language (null: the built-in text).
+  'circulation.notices.dueSoonDays': def({ group: 'circulation', schema: z.int().min(0).max(14), default: 2 }),
+  'circulation.notices.overdueEveryDays': def({ group: 'circulation', schema: z.int().min(1).max(60), default: 7 }),
+  'circulation.notices.overdueMax': def({ group: 'circulation', schema: z.int().min(0).max(10), default: 3 }),
+  'circulation.notices.holdReady': def({ group: 'circulation', schema: z.boolean(), default: true }),
+  'email.template.circulation_due_soon.id.subject': def({ group: 'email', schema: textOrNull(200), default: null }),
+  'email.template.circulation_due_soon.id.body': def({ group: 'email', schema: noticeTemplateBodyField, default: null }),
+  'email.template.circulation_due_soon.en.subject': def({ group: 'email', schema: textOrNull(200), default: null }),
+  'email.template.circulation_due_soon.en.body': def({ group: 'email', schema: noticeTemplateBodyField, default: null }),
+  'email.template.circulation_overdue.id.subject': def({ group: 'email', schema: textOrNull(200), default: null }),
+  'email.template.circulation_overdue.id.body': def({ group: 'email', schema: noticeTemplateBodyField, default: null }),
+  'email.template.circulation_overdue.en.subject': def({ group: 'email', schema: textOrNull(200), default: null }),
+  'email.template.circulation_overdue.en.body': def({ group: 'email', schema: noticeTemplateBodyField, default: null }),
+  'email.template.circulation_hold_ready.id.subject': def({ group: 'email', schema: textOrNull(200), default: null }),
+  'email.template.circulation_hold_ready.id.body': def({ group: 'email', schema: noticeTemplateBodyField, default: null }),
+  'email.template.circulation_hold_ready.en.subject': def({ group: 'email', schema: textOrNull(200), default: null }),
+  'email.template.circulation_hold_ready.en.body': def({ group: 'email', schema: noticeTemplateBodyField, default: null }),
 });
 
 /** The registered keys in registry order. */

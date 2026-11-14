@@ -257,4 +257,7 @@ export type {
   MemberBlockReason,
   PaymentMethod,
 } from './circulation-vocab.js';
+// ---- Komunitas (notices) ----
+export { MANUAL_NOTICE_KINDS, NOTICE_KINDS, NOTICE_REASONS, NOTICE_STATUSES } from './circulation-vocab.js';
+export type { ManualNoticeKind, NoticeKind, NoticeReason, NoticeStatus } from './circulation-vocab.js';
 export type { ReportCell, ReportColumnType, ReportColumnView, ReportParamKind, ReportParamSpec } from './api/reports.js';
