@@ -524,7 +524,9 @@ describe.skipIf(!ctx.available)(`permission matrix, escalation, audit once [${en
         const rows = await h.db.selectFrom('audit_log').select('action').where('seq', '>', before).orderBy('seq').execute();
         const added = rows.map((r) => r.action);
         expect(added.filter((a) => a === decl.audit)).toHaveLength(1);
-        expect(added.filter((a) => a !== decl.audit && !SECURITY_AUDIT_ACTIONS.has(a as AuditAction))).toEqual([]);
+        // Besides it, only the security set and the route's own `alsoAudits` (as the route layer allows).
+        const allowed = (a: string): boolean => a === decl.audit || SECURITY_AUDIT_ACTIONS.has(a as AuditAction) || decl.alsoAudits?.includes(a as AuditAction) === true;
+        expect(added.filter((a) => !allowed(a))).toEqual([]);
       });
     }
   });

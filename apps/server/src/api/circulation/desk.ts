@@ -1,8 +1,19 @@
-import { DeskMemberLookupBody, DeskMemberSearchBody, LoanBody, ReturnBody } from '@altis/shared/api/circulation';
+import { deskMemberLookup, deskMemberSearch, deskMemberView, lendItem, renewAllLoans, renewLoan, returnItem } from '@altis/core';
+import {
+  DeskMemberLookupBody,
+  DeskMemberSearchBody,
+  LoanBody,
+  ReturnBody,
+  type DeskMemberSearchResponse,
+  type DeskMemberView,
+  type LoanResponse,
+  type RenewAllResponse,
+  type RenewResponse,
+  type ReturnResponse,
+} from '@altis/shared/api/circulation';
 import { ulidField } from '@altis/shared/api/common';
 import { z } from 'zod';
 import { route, type RouteDecl } from '../../http/route.js';
-import { notImplemented } from '../not-implemented.js';
 
 // The circulation desk, at a branch (`circulation.desk.use` at `:branchId`):
 //
@@ -37,7 +48,10 @@ const membersLookup = route({
   tx: 'self',
   params: BranchParams,
   body: DeskMemberLookupBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: DeskMemberView = await deskMemberLookup(rc.db.db, { branchId: rc.params.branchId, no: rc.body.no }, rc.now);
+    return { body };
+  },
 });
 
 const membersSearch = route({
@@ -52,7 +66,10 @@ const membersSearch = route({
   tx: 'self',
   params: BranchParams,
   body: DeskMemberSearchBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: DeskMemberSearchResponse = await deskMemberSearch(rc.db.db, { branchId: rc.params.branchId, q: rc.body.q }, rc.now);
+    return { body };
+  },
 });
 
 const memberPanel = route({
@@ -64,7 +81,10 @@ const memberPanel = route({
   idempotency: 'none',
   audit: null,
   params: MemberParams,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: DeskMemberView = await deskMemberView(rc.db.db, { branchId: rc.params.branchId, memberId: rc.params.memberId }, rc.now);
+    return { body };
+  },
 });
 
 const renewAll = route({
@@ -77,7 +97,10 @@ const renewAll = route({
   audit: null,
   alsoAudits: ['circulation.loan.renew'],
   params: MemberParams,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: RenewAllResponse = await renewAllLoans(rc.tx(), { branchId: rc.params.branchId, memberId: rc.params.memberId });
+    return { body };
+  },
 });
 
 const loansCreate = route({
@@ -90,7 +113,10 @@ const loansCreate = route({
   audit: 'circulation.loan.create',
   params: BranchParams,
   body: LoanBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: LoanResponse = await lendItem(rc.tx(), { branchId: rc.params.branchId, memberId: rc.body.memberId, barcode: rc.body.barcode });
+    return { status: 201, body };
+  },
 });
 
 const returnsCreate = route({
@@ -103,7 +129,10 @@ const returnsCreate = route({
   audit: 'circulation.loan.return',
   params: BranchParams,
   body: ReturnBody,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: ReturnResponse = await returnItem(rc.tx(), { branchId: rc.params.branchId, barcode: rc.body.barcode });
+    return { body };
+  },
 });
 
 const loansRenew = route({
@@ -115,7 +144,10 @@ const loansRenew = route({
   idempotency: 'store',
   audit: 'circulation.loan.renew',
   params: LoanParams,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: RenewResponse = await renewLoan(rc.tx(), { branchId: rc.params.branchId, loanId: rc.params.id });
+    return { body };
+  },
 });
 
 export const DESK_ROUTES: RouteDecl[] = [membersLookup, membersSearch, memberPanel, renewAll, loansCreate, returnsCreate, loansRenew];

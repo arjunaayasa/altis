@@ -643,3 +643,7 @@ export * from './opac-pages/index.js';
 // filled by the change that owns it, so no later change edits this file.
 export * from './reports/index.js';
 export * from './accreditation/index.js';
+// ---- Komunitas (members and circulation) ----
+// Members (member types, members, the CSV member import) and circulation (loan rules, the desk, the loan list).
+export * from './members/index.js';
+export * from './circulation/index.js';

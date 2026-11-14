@@ -8,8 +8,7 @@ import { seedMember, seedMemberType } from './komunitas-members.js';
 // order. Every route is `deny` in maintenance and none is a `system` route. The desk is branch-scoped (`@branchId`).
 //
 // Each call gets rows of its own (a branch, a member, an item, a loan, a rule) seeded straight into the tables, so that
-// a super admin's call succeeds (audit once) whatever the personas before it did. The routes whose handlers are not
-// written yet are `pending`: the gate outcomes are checked, the audit-once call is listed as to do.
+// a super admin's call succeeds (audit once) whatever the personas before it did.
 
 /** The trail columns of a seeded row. */
 const trail = (s: MatrixSeed) => ({ created_at: s.now, created_by: null, updated_at: s.now, updated_by: null });
@@ -245,6 +244,4 @@ export const MATRIX: AreaMatrix = {
   rows,
   fixtures,
   maintenance: {},
-  // Every handler of this area is still to be written.
-  pending: Object.keys(rows),
 };

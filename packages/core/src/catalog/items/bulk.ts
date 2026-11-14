@@ -1,5 +1,6 @@
 import type { FieldWarning } from '@altis/shared/api/catalog/common';
 import { ItemBulkBody, type ItemBulkResponse } from '@altis/shared/api/catalog/items';
+import { openLoanDueDates } from '../../circulation/availability.js';
 import type { TxCtx } from '../../context.js';
 import { writeItemEvents } from './events.js';
 import { ARCHIVED_STATUS, archivedAtAfter, canChangeStatus, itemStatusOf } from './lifecycle.js';
@@ -79,6 +80,7 @@ export async function bulkUpdateItems(tx: TxCtx, branchId: string, body: ItemBul
   const receivedDate = b.set.receivedDate;
   const fillEmpty = (b.receivedDateMode ?? 'fill_empty') === 'fill_empty';
 
+  const onLoan = b.set.status === undefined ? new Map<string, string>() : await openLoanDueDates(trx, ids);
   const refused: ItemBulkResponse['refused'] = [];
   const written: { id: string; recordId: string; public: boolean }[] = [];
   let updated = 0;
@@ -94,7 +96,8 @@ export async function bulkUpdateItems(tx: TxCtx, branchId: string, body: ItemBul
     }
     const from = itemStatusOf(row.status);
     const to = b.set.status ?? from;
-    if (!canChangeStatus(from, to)) {
+    // An item with an open loan keeps its status until it is returned.
+    if (!canChangeStatus(from, to) || (to !== from && onLoan.has(id))) {
       refused.push({ id, code: 'invalid_transition' });
       continue;
     }
