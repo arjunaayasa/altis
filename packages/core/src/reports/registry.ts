@@ -20,6 +20,20 @@ import { collectionItemListReport } from './collection/item-list.js';
 import { collectionSummaryReport } from './collection/summary.js';
 import { collectionTitleListReport } from './collection/title-list.js';
 import { membersListReport } from './members/list.js';
+// ---- Komunitas (member, visit and circulation reports) ----
+import { circulationInLibraryReport, circulationLoansByClassReport } from './circulation/class-matrix.js';
+import { circulationItemUsageReport } from './circulation/item-usage.js';
+import { circulationLoanHistoryReport } from './circulation/loan-history.js';
+import { circulationChargesReport, circulationPaymentsDailyReport } from './circulation/money.js';
+import { circulationHoldsReport } from './circulation/holds.js';
+import { circulationDueSoonReport, circulationOpenLoansReport, circulationOverdueReport } from './circulation/open-loans.js';
+import { circulationSummaryReport } from './circulation/summary.js';
+import { circulationTopBorrowersReport, circulationTopTitlesReport } from './circulation/top.js';
+import { membersExpiringReport } from './members/expiring.js';
+import { membersReprintListReport } from './members/reprint-list.js';
+import { membersSummaryReport } from './members/summary.js';
+import { visitsListReport } from './visits/list.js';
+import { visitsDailyReport, visitsMonthlyReport } from './visits/statistics.js';
 import { TEST_REPORTS } from './test-reports.js';
 import type { ReportDefinition } from './types.js';
 
@@ -55,6 +69,26 @@ export const REPORTS: readonly ReportDefinition[] = Object.freeze([
   statement1000Report,
   // ---- Komunitas K2 (members) ----
   membersListReport,
+  // ---- Komunitas (member, visit and circulation reports) ----
+  membersSummaryReport,
+  membersExpiringReport,
+  membersReprintListReport,
+  visitsMonthlyReport,
+  visitsDailyReport,
+  visitsListReport,
+  circulationSummaryReport,
+  circulationLoansByClassReport,
+  circulationItemUsageReport,
+  circulationTopTitlesReport,
+  circulationInLibraryReport,
+  circulationLoanHistoryReport,
+  circulationOpenLoansReport,
+  circulationOverdueReport,
+  circulationDueSoonReport,
+  circulationHoldsReport,
+  circulationChargesReport,
+  circulationPaymentsDailyReport,
+  circulationTopBorrowersReport,
   // The test build profile only; the condition stays inline, so a production build drops the spread.
   ...(typeof __BUILD_PROFILE__ !== 'undefined' && __BUILD_PROFILE__ === 'test' ? TEST_REPORTS : []),
 ]);
