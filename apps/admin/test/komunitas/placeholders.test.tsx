@@ -27,8 +27,16 @@ afterEach(() => {
 
 const ULID = '01JZ0000000000000000000ABC';
 
-/** The screens an owning task has replaced with the real one (none yet). */
-const REPLACED: ReadonlySet<KomunitasPlaceholderScreen> = new Set<KomunitasPlaceholderScreen>([]);
+/** The screens and tabs an owning task has replaced with the real one. */
+const REPLACED: ReadonlySet<KomunitasPlaceholderScreen> = new Set<KomunitasPlaceholderScreen>([
+  'accreditation',
+  'period_create',
+  'tab_summary',
+  'tab_indicators',
+  'tab_profile',
+  'tab_population',
+  'tab_history',
+]);
 
 /** Each path (a parameter filled in), and the placeholder its screen shows. */
 const ROUTES: readonly [path: string, screen: KomunitasPlaceholderScreen][] = [
@@ -101,7 +109,7 @@ describe('the reports and accreditation routes and their placeholder screens', (
     expect(validateAccreditationSearch({})).toEqual({});
   });
 
-  it.each(TABS)('a workspace tab shows its placeholder (%#)', (Tab, key) => {
+  it.each(TABS.filter(([, key]) => !REPLACED.has(key)))('a workspace tab shows its placeholder (%#)', (Tab, key) => {
     render(
       <I18nProvider locale="id">
         <Tab periodId={ULID} />
