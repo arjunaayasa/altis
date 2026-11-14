@@ -10,8 +10,7 @@ import type { AreaMatrix } from './catalog.js';
 // `deny` in maintenance, so there is no maintenance entry; the import report is a download (`mode: system`).
 //
 // Each call gets rows of its own, seeded straight into the tables at version 0, so that a super admin's call succeeds
-// (audit once) whatever the personas before it did. The routes whose handlers are not written yet are `pending`: the
-// gate outcomes are checked, the audit-once call is listed as to do.
+// (audit once) whatever the personas before it did.
 
 /** The trail and archive columns of a seeded row. */
 const trail = (s: MatrixSeed) => ({ archived_at: null, version: 0, created_at: s.now, created_by: null, updated_at: s.now, updated_by: null });
@@ -205,6 +204,4 @@ export const MATRIX: AreaMatrix = {
   fixtures,
   maintenance: {},
   systemRoutes: ['members.imports.report'],
-  // Every handler of this area is still to be written.
-  pending: Object.keys(rows),
 };

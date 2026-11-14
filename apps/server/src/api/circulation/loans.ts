@@ -1,6 +1,6 @@
-import { LoanListQuery } from '@altis/shared/api/circulation';
+import { listLoans } from '@altis/core';
+import { LoanListQuery, type LoanListResponse } from '@altis/shared/api/circulation';
 import { route, type RouteDecl } from '../../http/route.js';
-import { notImplemented } from '../not-implemented.js';
 
 // The loan records of every member (`circulation.records.read`, library-wide):
 //
@@ -17,7 +17,10 @@ const loansList = route({
   idempotency: 'none',
   audit: null,
   query: LoanListQuery,
-  handler: notImplemented,
+  handler: async (rc) => {
+    const body: LoanListResponse = await listLoans(rc.db.db, rc.query, rc.now);
+    return { body };
+  },
 });
 
 export const LOAN_LIST_ROUTES: RouteDecl[] = [loansList];
