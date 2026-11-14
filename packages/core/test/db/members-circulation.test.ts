@@ -1,5 +1,6 @@
 import { addDays } from '@altis/shared';
 import type { MemberBody } from '@altis/shared/api/members';
+import type { KyselyPlugin } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDbContext } from '../../../../tools/test/test-db.js';
 import { getItem, listItems, updateItem } from '../../src/catalog/items/index.js';
@@ -251,5 +252,20 @@ describe.skipIf(!ctx.available)(`members and circulation [${engineLabel()}]`, ()
       code: 'MEMBER_IMPORT_FORMAT',
       meta: { reason: 'header' },
     });
+  });
+
+  it('the CSV import refuses a row whose number another writer took after the import read it, and writes the rows after it', async () => {
+    const winner = await member({ memberNo: 'RACE-1', name: 'Pemenang' });
+    // The import's reads do not see the winner, as when its insert commits between those reads and the import's insert.
+    const hideWinner: KyselyPlugin = {
+      transformQuery: (args) => args.node,
+      transformResult: async ({ result }) => ({ ...result, rows: result.rows.filter((r) => (r as { id?: unknown }).id !== winner) }),
+    };
+    const csv = Buffer.from('member_no,name,member_type\nRACE-1,Eka,SISWA\nRACE-2,Fajar,SISWA\n', 'utf8');
+    const result = await db.run((tx) => runMemberImport({ ...tx, trx: tx.trx.withPlugin(hideWinner) }, { bytes: csv, mode: 'create_only', dryRun: false }));
+    expect([result.counts.inserted, result.counts.refused, result.counts.refusedBy]).toEqual([1, 1, { exists: 1 }]);
+    expect(result.refused).toEqual([{ line: 2, memberNo: 'RACE-1', reason: 'exists' }]);
+    expect((await lookupMember(db.h.db, 'RACE-1', NOW)).id).toBe(winner);
+    expect((await lookupMember(db.h.db, 'RACE-2', NOW)).name).toBe('Fajar');
   });
 });

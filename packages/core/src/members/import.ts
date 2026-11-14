@@ -16,7 +16,7 @@ import {
   type MemberImportSampleRow,
   type MemberImportView,
 } from '@altis/shared/api/members';
-import type { Selectable } from 'kysely';
+import { sql, type Selectable } from 'kysely';
 import { createCsvReader, type CsvRow } from '../catalog/csv/reader.js';
 import { createRun, finishRun, getRun } from '../catalog/data/runs.js';
 import type { TxCtx } from '../context.js';
@@ -38,6 +38,9 @@ import { createMember, updateMember } from './members.js';
 //   member with the cells that are not empty. A value the member rules refuse (a date, an e-mail, a length) is
 //   `invalid_value`. A gender other than L/P, M/F, male/female, laki-laki/perempuan is left empty with the warning
 //   `gender_unknown`.
+// - Each row is written inside a savepoint. A row that another writer beats to its member number after the plan (the
+//   unique index refuses the insert) is rolled back to it and refused `exists`, and the import goes on: without the
+//   savepoint that failed statement would abort the whole transaction on PostgreSQL.
 // - Dates are `YYYY-MM-DD`, or `DD/MM/YYYY` (also with `-` or `.`), the day first as Indonesian spreadsheets write it.
 // - Counts: rows, inserted, updated, unchanged (an upsert row whose cells change nothing), refused (per reason) and
 //   warnings. The refused rows (line, member number, reason) are handed back for the run's report file.
@@ -336,6 +339,8 @@ export async function runMemberImport(tx: TxCtx, input: { bytes: Uint8Array; mod
   if (!input.dryRun) {
     const source = `import:${runId}`;
     for (const p of plan) {
+      if (p.action !== 'insert' && p.action !== 'update') continue;
+      await sql`savepoint altis_member_row`.execute(tx.trx);
       try {
         if (p.action === 'insert' && p.create !== undefined) {
           await createMember(tx, p.create, { mode: 'bulk', source, eventType: 'imported', today });
@@ -343,11 +348,14 @@ export async function runMemberImport(tx: TxCtx, input: { bytes: Uint8Array; mod
           await updateMember(tx, p.update.id, { version: p.update.version, ...p.update.patch }, { mode: 'bulk', eventType: 'imported', today });
         }
       } catch (error) {
-        // A value only the database can refuse (a home branch or a type archived meanwhile): the row is refused.
+        // A value only the database can refuse (a number taken meanwhile, a home branch or a type archived meanwhile):
+        // the row's writes are undone and the row is refused.
         if (!isDomainError(error) || (error.code !== 'VALIDATION_FAILED' && error.code !== 'NOT_FOUND')) throw error;
+        await sql`rollback to savepoint altis_member_row`.execute(tx.trx);
         p.action = 'refused';
-        p.refusal = 'invalid_value';
+        p.refusal = numberTaken(error) ? 'exists' : 'invalid_value';
       }
+      await sql`release savepoint altis_member_row`.execute(tx.trx);
     }
   }
   const counts = countPlan(plan);
@@ -355,6 +363,12 @@ export async function runMemberImport(tx: TxCtx, input: { bytes: Uint8Array; mod
   await tx.audit({ action: 'members.import.finish', entity: 'catalog_runs', entityId: runId, meta: { dryRun: input.dryRun, ...counts } });
   const refused = plan.flatMap((p) => (p.action === 'refused' && p.refusal !== null ? [{ line: p.line, memberNo: p.memberNo, reason: p.refusal }] : []));
   return { runId, counts, refused };
+}
+
+/** Whether a refused write says the member number is taken. */
+function numberTaken(error: DomainError): boolean {
+  const errors = error.meta?.errors;
+  return Array.isArray(errors) && errors.some((e: { path?: unknown; code?: unknown }) => e.path === 'memberNo' && e.code === 'taken');
 }
 
 /** The view of the member import run `id`; `sample` holds the first rows of a dry run's file when `file` is given. */
