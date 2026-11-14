@@ -25,4 +25,4 @@ export const KOMUNITAS_AUDIT_SCRIPTS: Readonly<Record<string, AreaAuditScript>> 
 });
 
 /** While true, a script that is still null lists its actions as pending. */
-export const K1_PENDING_ALLOWED: boolean = true;
+export const K1_PENDING_ALLOWED: boolean = false;
