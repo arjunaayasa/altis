@@ -369,6 +369,38 @@ describe.skipIf(!ctx.available)(`accreditation monthly usage [${engineLabel()}]`
       expect((await listPeriods(h.db)).periods.find((p) => p.id === next)).toMatchObject({ stale: true });
     });
 
+    it('a cell removed through a period with free dates that shares a month with another makes that one stale: both read the whole month', async () => {
+      // P reads 2026-03 whole (its last month), and Q starts inside that month.
+      const p = await period({ startsOn: '2025-03-10', endsOn: '2026-03-09' });
+      const q = await period({ startsOn: '2026-03-10', endsOn: '2027-03-09' });
+      await put(q, [{ metric: 'visits', month: '2026-03', groupKey: '', value: 30 }], NOW - 100);
+      const meta = { status: 'ready', startedAt: NOW - 50, jobId: newId(NOW), computedAt: NOW - 50, durationMs: 1 };
+      await h.db.insertInto('accred_results').values({ period_id: p, indicator_code: '_meta', payload: JSON.stringify(meta), computed_at: NOW - 50 }).execute();
+      expect((await getPeriod(h.db, p, NOW)).stale).toBe(false);
+      expect((await resolved({ from: '2025-03-10', to: '2026-03-09' })).cell('visits', '2026-03', 'total').value).toBe(30);
+
+      await put(q, [{ metric: 'visits', month: '2026-03', groupKey: '', value: null }], NOW);
+      expect(await manualRows()).toEqual([]);
+      expect(await lastChangeOf(h.db, p)).toBe(NOW);
+      expect((await getPeriod(h.db, p, NOW)).stale).toBe(true);
+      expect((await listPeriods(h.db)).periods.find((x) => x.id === p)).toMatchObject({ stale: true });
+    });
+
+    it('a cell removed through a period that ends inside the first month of the twelve months read before another makes that one stale', async () => {
+      // The reading interest of P compares it with the twelve months from 2024-03-10, read from 2024-03-01.
+      const p = await period({ startsOn: '2025-03-10', endsOn: '2026-03-09' });
+      const before = await period({ startsOn: '2023-03-05', endsOn: '2024-03-04' });
+      await put(before, [{ metric: 'visits', month: '2024-03', groupKey: '', value: 12 }], NOW - 100);
+      const meta = { status: 'ready', startedAt: NOW - 50, jobId: newId(NOW), computedAt: NOW - 50, durationMs: 1 };
+      await h.db.insertInto('accred_results').values({ period_id: p, indicator_code: '_meta', payload: JSON.stringify(meta), computed_at: NOW - 50 }).execute();
+      expect((await getPeriod(h.db, p, NOW)).stale).toBe(false);
+
+      await put(before, [{ metric: 'visits', month: '2024-03', groupKey: '', value: null }], NOW);
+      expect(await lastChangeOf(h.db, p)).toBe(NOW);
+      expect((await getPeriod(h.db, p, NOW)).stale).toBe(true);
+      expect((await listPeriods(h.db)).periods.find((x) => x.id === p)).toMatchObject({ stale: true });
+    });
+
     it('removing the only cell still moves the last change of the period forward', async () => {
       const id = await period();
       await put(id, [{ metric: 'visits', month: '2025-08', groupKey: '', value: 3 }], NOW - 100);
