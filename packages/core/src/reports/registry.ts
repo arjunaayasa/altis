@@ -19,6 +19,7 @@ import { collectionDdcRecapReport } from './collection/ddc-recap.js';
 import { collectionItemListReport } from './collection/item-list.js';
 import { collectionSummaryReport } from './collection/summary.js';
 import { collectionTitleListReport } from './collection/title-list.js';
+import { membersListReport } from './members/list.js';
 import { TEST_REPORTS } from './test-reports.js';
 import type { ReportDefinition } from './types.js';
 
@@ -52,6 +53,8 @@ export const REPORTS: readonly ReportDefinition[] = Object.freeze([
   dossierReport,
   selfAssessmentReport,
   statement1000Report,
+  // ---- Komunitas K2 (members) ----
+  membersListReport,
   // The test build profile only; the condition stays inline, so a production build drops the spread.
   ...(typeof __BUILD_PROFILE__ !== 'undefined' && __BUILD_PROFILE__ === 'test' ? TEST_REPORTS : []),
 ]);

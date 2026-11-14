@@ -21,6 +21,8 @@ import { findLiveMemberByNo, memberQueryWhere } from '../members/members.js';
 import { indexRecords } from '../search/index-records.js';
 import { branchToday, dueDateFor } from './dates.js';
 import { resolvePolicy } from './policies.js';
+// ---- Komunitas K2 (visits) ----
+import { recordMemberDayVisit } from '../visits/visits.js';
 
 // The circulation desk: lend, return and renew, and the member panel.
 //
@@ -306,6 +308,8 @@ export async function lendItem(tx: TxCtx, input: { branchId: string; memberId: s
     throw error;
   }
   await indexRecords(trx, [recordRow.id], tx.now);
+  // ---- Komunitas K2 (visits): the member's first desk action of the day at this branch is a visit ----
+  await recordMemberDayVisit(tx, { source: 'desk', memberId: input.memberId, branchId: input.branchId });
   const warnings: CirculationWarningView[] = [...memberWarnings(member.expires_on, today), ...(due.capped ? [{ code: 'due_capped_by_expiry' as const }] : [])];
   await tx.audit({
     action: 'circulation.loan.create',
@@ -364,6 +368,8 @@ export async function returnItem(tx: TxCtx, input: { branchId: string; barcode: 
   }
   const member = loan.member_id === null ? undefined : await trx.selectFrom('members').select('member_no_display').where('id', '=', loan.member_id).executeTakeFirst();
   await indexRecords(trx, [locked.record_id], tx.now);
+  // ---- Komunitas K2 (visits) ----
+  if (loan.member_id !== null) await recordMemberDayVisit(tx, { source: 'desk', memberId: loan.member_id, branchId: input.branchId });
   await tx.audit({ action: 'circulation.loan.return', entity: 'loans', entityId: loan.id, branchId: input.branchId, meta: { daysLate } });
   return {
     id: loan.id,
@@ -419,6 +425,8 @@ async function renewOne(tx: TxCtx, loanId: string, branchId: string): Promise<Re
     .where('renewals', '=', renewals)
     .executeTakeFirst();
   if (Number(updated.numUpdatedRows) !== 1) throw renewRefused('changed');
+  // ---- Komunitas K2 (visits) ----
+  if (loan.member_id !== null) await recordMemberDayVisit(tx, { source: 'desk', memberId: loan.member_id, branchId });
   const warnings: CirculationWarningView[] = [...memberWarnings(member?.expires_on ?? null, today), ...(due.capped ? [{ code: 'due_capped_by_expiry' as const }] : [])];
   await tx.audit({ action: 'circulation.loan.renew', entity: 'loans', entityId: loanId, branchId, meta: { renewals: renewals + 1 } });
   return { id: loanId, version: ok(loan.version) + 1, dueOn: due.dueOn, renewals: renewals + 1, renewLimit: ok(loan.renew_limit), ...(warnings.length === 0 ? {} : { warnings }) };

@@ -16,7 +16,7 @@ import { z } from 'zod';
 const CUSTOM_VALUE_TYPES = Object.freeze(['text', 'longtext', 'number', 'date', 'select', 'multiselect', 'boolean', 'url'] as const);
 
 /** The entities that have custom fields in Phase 2. */
-export type CustomEntity = 'records' | 'items';
+export type CustomEntity = 'records' | 'items' | 'members';
 
 /** The value types of a custom field. */
 export type CustomFieldType = (typeof CUSTOM_VALUE_TYPES)[number];
@@ -52,7 +52,8 @@ const ID_BATCH = 500;
 type Db = Kysely<DB> | Transaction<DB>;
 
 function isCustomEntity(entity: unknown): entity is CustomEntity {
-  return entity === 'records' || entity === 'items';
+  // Komunitas K2: members have custom fields too (never public, never searchable: the masters API refuses both).
+  return entity === 'records' || entity === 'items' || entity === 'members';
 }
 
 function isCustomFieldType(type: string): type is CustomFieldType {

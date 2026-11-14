@@ -10,8 +10,10 @@ import {
   checkIn,
   createManualVisit,
   createMember,
+  createCustomField,
   createStation,
   exportMemberData,
+  getMember,
   lendItem,
   newStationCode,
   recordMemberDayVisit,
@@ -133,11 +135,25 @@ describe.skipIf(!ctx.available)(`member tools and visits [${engineLabel()}]`, ()
     const recordId = await seedRecord(db, { title: 'Buku Massal' });
     await seedItem(db, recordId, { barcode: 'MASSAL-1' });
     await db.run((tx) => lendItem(tx, { branchId: db.branchId, memberId: borrower.id, barcode: 'MASSAL-1' }));
+    // The loan was the member's first desk action of the day: one desk visit.
+    expect(await db.h.db.selectFrom('visits').select('source').where('member_id', '=', borrower.id).execute()).toEqual([{ source: 'desk' }]);
     const archived = await db.run((tx) => bulkMembers(tx, { action: 'archive', ids: [borrower.id, free.id] }));
     expect(archived).toEqual({ done: 1, refused: [{ id: borrower.id, reason: 'in_use' }] });
     const restored = await db.run((tx) => restoreMember(tx, free.id, 1));
     expect(restored.version).toBe(2);
     expect(await failure(db.run((tx) => restoreMember(tx, free.id, 2)))).toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('custom fields of members: never public; a member keeps its values, shows and exports them; anonymisation deletes them', async () => {
+    const base = { entity: 'members' as const, type: 'text' as const, labelId: 'Nama wali', required: false, sortOrder: 0, isSearchable: false };
+    expect(await fieldErrors(db.run((tx) => createCustomField(tx, { ...base, code: 'wali', isPublic: true })))).toEqual([{ path: 'isPublic', code: 'not_allowed_for_members' }]);
+    await db.run((tx) => createCustomField(tx, { ...base, code: 'wali', isPublic: false }));
+    const m = await member({ custom: { wali: 'Ibu Sri' } });
+    expect((await getMember(db.h.db, m.id, NOW)).custom).toEqual({ wali: 'Ibu Sri' });
+    expect((await exportMemberData(db.h.db, m.id, NOW)).custom).toEqual({ wali: 'Ibu Sri' });
+    expect(await fieldErrors(member({ custom: { nope: 'x' } }))).toEqual([{ path: 'custom', code: 'unknown_field' }]);
+    await db.run((tx) => anonymizeMember(tx, m.id));
+    expect(await db.h.db.selectFrom('custom_values').select('value').where('entity_id', '=', m.id).execute()).toEqual([]);
   });
 
   it('anonymisation: refused with an open loan; empties every personal column, visit notes and day keys; the counts stay; the export first holds everything', async () => {

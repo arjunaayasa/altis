@@ -1,4 +1,5 @@
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
+import type { CustomFieldView, MasterListResponse } from '@altis/shared/api/catalog/masters';
 import { MEMBER_PHOTO_HEIGHT, MEMBER_PHOTO_MAX_BYTES, MEMBER_PHOTO_WIDTH } from '@altis/shared/api/member-ops';
 import type { MemberView } from '@altis/shared/api/members';
 import { useQueryClient } from '@tanstack/react-query';
@@ -14,7 +15,9 @@ import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
-import { useMe } from '@/lib/me';
+import { useApiQuery, useMe } from '@/lib/me';
+import { CustomFieldInputs } from '@/screens/catalog/records/custom-fields';
+import { customBodyValue, customFormValue, type CustomFormValue } from '@/screens/catalog/records/draft-to-form';
 import { uploadFile } from '@/lib/upload';
 import { refreshMembers } from './common';
 import { saveBlob } from './tools';
@@ -390,5 +393,56 @@ export function MemberPrivacyPanel({ member, onDone }: { member: MemberView; onD
         </Dialog>
       )}
     </section>
+  );
+}
+
+/**
+ * The member's custom fields (the live `entity=members` definitions; read with `catalog.records.read`), saved with
+ * `PATCH members/:id {version, custom}` apart from the member form. Nothing shows without definitions.
+ */
+export function MemberCustomPanel({ member, canManage, onDone }: { member: MemberView; canManage: boolean; onDone(text: string): void }) {
+  const t = useT();
+  const me = useMe();
+  const queryClient = useQueryClient();
+  const defsQuery = useApiQuery<MasterListResponse<CustomFieldView>>({
+    queryKey: ['catalog', 'custom-fields', { entity: 'members' }],
+    path: 'catalog/custom-fields?entity=members',
+    staleTime: 60_000,
+    enabled: holds(me, 'catalog.records.read'),
+  });
+  const defs = (defsQuery.data?.items ?? []).filter((d) => d.entity === 'members' && !d.archived);
+  const [values, setValues] = useState<Record<string, CustomFormValue>>(() =>
+    Object.fromEntries(Object.entries(member.custom ?? {}).map(([code, v]) => [code, customFormValue(v)])),
+  );
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<unknown>(null);
+  if (defs.length === 0) return null;
+
+  const save = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    setBusy(true);
+    setProblem(null);
+    try {
+      const custom = Object.fromEntries(defs.map((d) => [d.code, customBodyValue(d, values[d.code])]));
+      await api<StoreResponse>('PATCH', `members/${encodeURIComponent(member.id)}`, { version: member.version, custom });
+      await refreshMembers(queryClient);
+      onDone(t('members.saved'));
+    } catch (e) {
+      setProblem(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form noValidate onSubmit={(e) => void save(e)} className="grid gap-3 rounded-lg border bg-card p-4">
+      <CustomFieldInputs defs={defs} values={values} disabled={!canManage} onChange={(code, value) => setValues((prev) => ({ ...prev, [code]: value }))} />
+      <ProblemAlert error={problem} />
+      {canManage && (
+        <Button type="submit" className="w-fit" disabled={busy}>
+          {t(busy ? 'form.saving' : 'form.save')}
+        </Button>
+      )}
+    </form>
   );
 }

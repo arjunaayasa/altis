@@ -95,6 +95,8 @@ export function CustomFieldForm({ row, canManage, onSaved, onCancel }: MasterFor
   const form = useForm<CustomFieldValues>({ defaultValues: valuesOf(row) });
   const { fields: options, append, remove } = useFieldArray({ control: form.control, name: 'options' });
   const type = useWatch({ control: form.control, name: 'type' });
+  // ---- Komunitas K2 (members): a member's custom field is never public nor searchable ----
+  const forMembers = useWatch({ control: form.control, name: 'entity' }) === 'members';
   const { errors, isDirty, isSubmitting } = form.formState;
   useDirtyGuard(isDirty);
   const base = valuesOf(row);
@@ -208,13 +210,17 @@ export function CustomFieldForm({ row, canManage, onSaved, onCancel }: MasterFor
       )}
       <div className="grid gap-3">
         <CheckField label={t('catalog.masters.field.required')} hint={t('catalog.masters.field.required_hint')} disabled={disabled} {...form.register('required')} />
-        <CheckField label={t('catalog.masters.field.is_public')} hint={t('catalog.masters.field.is_public_hint')} disabled={disabled} {...form.register('isPublic')} />
-        <CheckField
-          label={t('catalog.masters.field.is_searchable')}
-          hint={t('catalog.masters.field.is_searchable_hint')}
-          disabled={disabled}
-          {...form.register('isSearchable')}
-        />
+        {!forMembers && (
+          <>
+            <CheckField label={t('catalog.masters.field.is_public')} hint={t('catalog.masters.field.is_public_hint')} disabled={disabled} {...form.register('isPublic')} />
+            <CheckField
+              label={t('catalog.masters.field.is_searchable')}
+              hint={t('catalog.masters.field.is_searchable_hint')}
+              disabled={disabled}
+              {...form.register('isSearchable')}
+            />
+          </>
+        )}
       </div>
       <Field label={t('catalog.masters.field.sort_order')} hint={t('catalog.masters.field.sort_order_hint')} error={errors.sortOrder} className="max-w-40">
         {(c) => <Input {...c} type="number" inputMode="numeric" min={0} step={1} disabled={disabled} {...form.register('sortOrder')} />}

@@ -11,7 +11,7 @@ import { seedSmaContoh, type GoldenFixture } from '../support/accreditation-gold
 import { checkPdf } from '../support/pdf-check.js';
 import { csvCells, csvLines, drive, exportPath, openExportDb, runRow, sheetRows, startRun, xlsxParts, type ExportDb } from './reports-export-support.js';
 
-// Every table report of this edition (the eight collection reports and the ten accreditation annexes) exported to CSV,
+// Every table report of this edition (the eight collection reports, the ten accreditation annexes and the member list) exported to CSV,
 // XLSX and PDF on the golden school dataset, each run started as the run routes start it and written by the real export
 // job, on the engine picked by ALTIS_TEST_DB:
 // - every CSV starts with the UTF-8 byte order mark, and a title that starts with `=` is written with a quote before it;
@@ -143,13 +143,60 @@ describe.skipIf(!ctx.available)(`every report in every format on the golden data
         .values({ id: newId(at), record_id: recordId, kind: 'url', file_id: null, url: 'https://perpus.sma-contoh.sch.id/baca', title: 'Baca daring', description: null, access: 'public', legacy_access_limit: null, read_count: reads, archived_at: null, created_at: at, created_by: null, updated_at: at, updated_by: null })
         .execute();
     }
+    // ---- Komunitas K2 (members) ----
+    // Two members for the member list: one with the formula name a spreadsheet must not run.
+    const type = (await db.h.db.selectFrom('member_types').select('id').where('code_key', '=', 'SISWA').executeTakeFirstOrThrow()).id;
+    for (const [n, name] of [[1, 'Siti Aminah'], [2, FORMULA]] as const) {
+      await db.h.db
+        .insertInto('members')
+        .values({
+          id: newId(at + n),
+          member_no_display: `S-00${n}`,
+          member_no_key: `S-00${n}`,
+          member_type_id: type,
+          home_branch_id: null,
+          status: 'active',
+          status_note: null,
+          name,
+          name_key: name.toLowerCase(),
+          gender: n === 1 ? 'female' : null,
+          birth_date: null,
+          identity_no: null,
+          institution: null,
+          class_name: 'X-1',
+          email: null,
+          phone: null,
+          address: null,
+          postal_code: null,
+          mailing_address: null,
+          notes: null,
+          photo_file_id: null,
+          locale: 'id',
+          joined_on: '2025-07-14',
+          valid_from: '2025-07-14',
+          expires_on: '2099-07-14',
+          password_hash: null,
+          must_reset_password: 0,
+          session_version: 0,
+          last_login_at: null,
+          anonymized_at: null,
+          source: 'manual',
+          archived_at: null,
+          version: 0,
+          created_at: at,
+          created_by: null,
+          updated_at: at,
+          updated_by: null,
+        })
+        .execute();
+    }
   }, 120_000);
 
   afterAll(async () => {
     await db?.close();
   });
 
-  it('covers the eight collection reports and the ten accreditation annexes', () => {
+  it('covers the eight collection reports, the ten accreditation annexes and the member list', () => {
     expect(TABLES.map((d) => d.id)).toEqual([
       'collection.summary',
       'collection.ddc_recap',
@@ -169,6 +216,7 @@ describe.skipIf(!ctx.available)(`every report in every format on the golden data
       'accreditation.annex.activities',
       'accreditation.annex.partnerships',
       'accreditation.annex.documents',
+      'members.list',
     ]);
     for (const def of TABLES) expect([def.id, [...def.formats].sort()]).toEqual([def.id, ['csv', 'pdf', 'xlsx']]);
   });

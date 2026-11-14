@@ -83,7 +83,7 @@ function wrap(text: string, size: number, maxW: number, maxLines: number): strin
 }
 
 /** The barcode modules of `memberNo`: the profile's symbology, Code 128 when Code 39 cannot hold the number. */
-function barcodeModules(memberNo: string, symbology: CardProfile['symbology']): boolean[] {
+export function cardBarcodeModules(memberNo: string, symbology: CardProfile['symbology']): boolean[] {
   if (symbology === 'code39') {
     try {
       return code39Modules(memberNo);
@@ -306,7 +306,7 @@ function drawFront(
   const barsY = y + 4.5 * PT_PER_MM;
   const barsX = fieldsLeft;
   const barsW = x + w - pad - barsX;
-  drawBars(page, barsX, barsY, barsW, barsH, barcodeModules(m.memberNo, o.profile.symbology));
+  drawBars(page, barsX, barsY, barsW, barsH, cardBarcodeModules(m.memberNo, o.profile.symbology));
   const no = fit(m.memberNo, 'Courier', 6.5, barsW);
   page.text(barsX + (barsW - textWidth(no, 'Courier', 6.5)) / 2, y + 1.8 * PT_PER_MM, no, { font: 'Courier', size: 6.5 });
 }
