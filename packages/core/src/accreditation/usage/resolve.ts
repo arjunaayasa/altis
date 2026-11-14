@@ -1,5 +1,6 @@
 import type { DB } from '@altis/db';
 import { ACCRED_GROUPS, addMonths, endOfMonth, monthOf, type AccredGroup, type UsageMetric } from '@altis/shared';
+import { USAGE_IMPORT_ONLY_METRICS } from '@altis/shared/api/accreditation';
 import type { Kysely } from 'kysely';
 import type { AccredSettings } from '../../settings/accreditation.js';
 import type { ResolvedCell, ResolvedUsage } from './index.js';
@@ -19,7 +20,9 @@ import type { ResolvedCell, ResolvedUsage } from './index.js';
 // The total of a month is its `''` row; without one in any source, the sum of every group's cell.
 //
 // The visits a source counts: a manual cell its `visits`; a SLiMS row its visits without repeats (`visits_deduped`)
-// while the setting that removes repeats from imported visits is on, its raw `visits` otherwise.
+// while the setting that removes repeats from imported visits is on, its raw `visits` otherwise. The visits without
+// repeats are the import's own figure (USAGE_IMPORT_ONLY_METRICS): the manual cells refuse that metric, and a manual
+// row of it (one written before that rule) is never read, so the grid shows and the results count the same figure.
 
 /** A source of a stored cell, in the order a cell is resolved. */
 export type UsageRowSource = 'manual' | 'slims';
@@ -118,17 +121,20 @@ export class UsageTable implements ResolvedUsage {
     return this.data.hasUnmapped;
   }
 
-  /** The metric of the rows `source` counts for `metric`. */
-  private metricOf(source: UsageRowSource, metric: UsageMetric): string {
+  /** The metric of the rows `source` counts for `metric`; null when `source` has none of it (an import-only metric). */
+  private metricOf(source: UsageRowSource, metric: UsageMetric): string | null {
+    if (source === 'manual' && USAGE_IMPORT_ONLY_METRICS.includes(metric)) return null;
     return source === 'slims' && metric === 'visits' && this.dedupe ? 'visits_deduped' : metric;
   }
 
   private monthRows(source: UsageRowSource, metric: UsageMetric, month: string): readonly UsageRow[] {
-    return this.data.month.get(monthKey(source, this.metricOf(source, metric), month)) ?? NO_ROWS;
+    const stored = this.metricOf(source, metric);
+    return stored === null ? NO_ROWS : (this.data.month.get(monthKey(source, stored, month)) ?? NO_ROWS);
   }
 
   private spanRows(source: UsageRowSource, metric: UsageMetric, span: { from: string; to: string }): readonly UsageRow[] {
-    return this.data.span.get(spanKey(source, this.metricOf(source, metric), span.from, span.to)) ?? NO_ROWS;
+    const stored = this.metricOf(source, metric);
+    return stored === null ? NO_ROWS : (this.data.span.get(spanKey(source, stored, span.from, span.to)) ?? NO_ROWS);
   }
 
   /** The rows of the first source that has rows matching `keep`. */

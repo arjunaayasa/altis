@@ -19,8 +19,10 @@ import { monthsOfSpan } from './resolve.js';
  * period's `updated_at` becomes `now` (its version stays). Audited `accreditation.usage.update` with `{cells: n}`.
  *
  * @throws DomainError `NOT_FOUND`, `ACCRED_PERIOD_FROZEN` (from the lock); `VALIDATION_FAILED` with one error per
- *   refused cell: `cells.<i>.month` `out_of_period` (a month outside the period), `required` (a monthly metric without
- *   a month), `invalid` (a metric of the whole period with a month); `cells.<i>` `duplicate` (the same cell again)
+ *   refused cell: `cells.<i>.metric` `import_only` (the visits without repeats, which only an import counts; the
+ *   contract refuses it before the lock), `cells.<i>.month` `out_of_period` (a month outside the period), `required` (a
+ *   monthly metric without a month), `invalid` (a metric of the whole period with a month); `cells.<i>` `duplicate`
+ *   (the same cell again)
  */
 export async function putUsageCells(tx: TxCtx, periodId: string, body: UsagePutBody, now: number): Promise<void> {
   const input = parsePeriodBody(UsagePutBody, body);
