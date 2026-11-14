@@ -1,16 +1,19 @@
-import { groupKeys, readSettings, writeSettings, type SettingKey } from '@altis/core';
+import { claimSettingsFiles, groupKeys, readSettings, writeSettings, type SettingKey, type TxCtx } from '@altis/core';
 import { DomainError, isDomainError } from '@altis/shared';
 import {
   AccreditationSettingsBody,
   CatalogSettingsBody,
   CirculationSettingsBody,
-  MembersSettingsBody,
   EmailSettingsBody,
   LibrarySettingsBody,
+  MembersSettingsBody,
   OpacSettingsBody,
+  PrivacySettingsBody,
   SETTINGS_GROUPS,
+  VisitsSettingsBody,
   SecuritySettingsBody,
   type BarcodePattern,
+  type CardProfileForSettings as CardProfile,
   type BarcodeSymbology,
   type CatalogConfigView,
   type LabelProfile,
@@ -121,6 +124,23 @@ const FIELDS: Readonly<Record<SettingsGroupName, FieldMap>> = Object.freeze({
   members: [
     [['clearance', 'prefix'], 'members.clearance.prefix'],
     [['clearance', 'profile'], 'members.clearance.profile'],
+    // ---- Komunitas K2 (members extended) ----
+    [['card', 'profile'], 'members.card.profile'],
+  ],
+  // ---- Komunitas K2 (members extended, visits, privacy) ----
+  visits: [
+    [['dedupeMinutes'], 'visits.dedupeMinutes'],
+    [['fromDesk'], 'visits.fromDesk'],
+    [['fromOnline'], 'visits.fromOnline'],
+    [['askPurpose'], 'visits.askPurpose'],
+    [['station', 'showPhoto'], 'visits.station.showPhoto'],
+    [['station', 'welcome', 'id'], 'visits.station.welcome.id'],
+    [['station', 'welcome', 'en'], 'visits.station.welcome.en'],
+  ],
+  privacy: [
+    [['loans', 'anonymizeAfterYears'], 'privacy.loans.anonymizeAfterYears'],
+    [['visits', 'anonymizeAfterYears'], 'privacy.visits.anonymizeAfterYears'],
+    [['members', 'anonymizeArchivedAfterYears'], 'privacy.members.anonymizeArchivedAfterYears'],
   ],
 });
 
@@ -224,7 +244,11 @@ async function changesAny(rc: RouteContext<unknown, unknown, unknown>, patch: Pa
  * handler never writes those keys for such a caller, so a super admin's change committed between `prepare` and the
  * handler is never undone by it.
  */
-function settingsPut<B>(group: SettingsGroupName, body: z.ZodType<B>, o: { reauth?: true; superAdminOnly?: SuperAdminOnly } = {}): RouteDecl {
+function settingsPut<B>(
+  group: SettingsGroupName,
+  body: z.ZodType<B>,
+  o: { reauth?: true; superAdminOnly?: SuperAdminOnly; afterWrite?: (tx: TxCtx, patch: Partial<Record<SettingKey, unknown>>) => Promise<void> } = {},
+): RouteDecl {
   const fields = FIELDS[group];
   const guarded = o.superAdminOnly ?? [];
   return route({
@@ -260,6 +284,7 @@ function settingsPut<B>(group: SettingsGroupName, body: z.ZodType<B>, o: { reaut
       } catch (error) {
         throw inBodyTerms(error, fields);
       }
+      if (o.afterWrite !== undefined) await o.afterWrite(tx, patch);
       await tx.audit({ action: 'settings.update', entity: 'settings', entityId: null, meta: { group, keys } });
       rc.afterCommit(() => rc.services.settings.invalidate());
       const response: SettingsPutResponse = { changed: keys };
@@ -314,6 +339,18 @@ const catalogConfig = route({
   },
 });
 
+// ---- Komunitas K2 (members extended) ----
+/**
+ * Claims the card pictures (logo, signature, stamp) the saved card profile names, as files of the setting; the ones it
+ * no longer names lose their owner and are swept as orphan uploads a day later.
+ */
+async function claimCardAssets(tx: TxCtx, patch: Partial<Record<SettingKey, unknown>>): Promise<void> {
+  const profile = patch['members.card.profile'] as CardProfile | undefined;
+  if (profile === undefined) return;
+  const ids = [profile.logoFileId, profile.back.signatureFileId, profile.back.stampFileId].filter((id): id is string => id !== null);
+  await claimSettingsFiles(tx.trx, 'members.card.profile', 'members.card_asset', ids);
+}
+
 /** The settings routes, then the system configuration's (route catalog order). */
 export const SETTINGS_ROUTES: RouteDecl[] = [
   settingsGet,
@@ -330,6 +367,10 @@ export const SETTINGS_ROUTES: RouteDecl[] = [
   settingsPut('accreditation', AccreditationSettingsBody),
   // ---- Komunitas (circulation core) ----
   settingsPut('circulation', CirculationSettingsBody),
-  settingsPut('members', MembersSettingsBody),
+  // ---- Komunitas K2 (members extended): the card pictures are claimed as files of the setting ----
+  settingsPut('members', MembersSettingsBody, { afterWrite: claimCardAssets }),
+  // ---- Komunitas K2 (visits, privacy): the retention periods need a fresh password confirmation ----
+  settingsPut('visits', VisitsSettingsBody),
+  settingsPut('privacy', PrivacySettingsBody, { reauth: true }),
   ...SYSTEM_CONFIG_ROUTES,
 ];

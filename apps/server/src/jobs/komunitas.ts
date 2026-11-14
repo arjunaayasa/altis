@@ -1,4 +1,14 @@
-import { evaluateJob, holdsExpiryJob, importSlimsUsageJob, reportsExportJob, reportsHousekeepingJob, type JobHandler, type ReportJobDeps } from '@altis/core';
+import {
+  evaluateJob,
+  holdsExpiryJob,
+  importSlimsUsageJob,
+  localStorageDriver,
+  privacyAnonymizeJob,
+  reportsExportJob,
+  reportsHousekeepingJob,
+  type JobHandler,
+  type ReportJobDeps,
+} from '@altis/core';
 import { catalogJobDeps } from './catalog.js';
 import type { JobRuntimeDeps } from './runtime.js';
 
@@ -16,6 +26,8 @@ export function komunitasJobHandlers(deps: () => ReportJobDeps): JobHandler<any>
     importSlimsUsageJob(deps),
     // ---- Komunitas (holds) ----
     holdsExpiryJob(),
+    // ---- Komunitas K2 (privacy) ----
+    privacyAnonymizeJob(() => ({ storage: localStorageDriver(deps().dataDir) })),
   ];
 }
 

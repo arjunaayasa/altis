@@ -223,7 +223,7 @@ export function useMasterSave<F extends FieldValues>(o: {
 /** One column of a master table. */
 export interface MasterColumn<T> {
   id: string;
-  header: string;
+  header: ReactNode;
   cell(row: T): ReactNode;
   className?: string;
 }

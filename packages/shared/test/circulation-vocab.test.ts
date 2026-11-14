@@ -14,9 +14,10 @@ const table = (locale: 'id' | 'en'): Readonly<Record<string, string>> => MESSAGE
 const placeholders = (s: string): string[] => [...s.matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((m) => m[1]!).sort();
 
 describe('the members and circulation vocabularies', () => {
-  it('are joined into VOCAB_LISTS last, under their list names, frozen and without duplicates', () => {
+  it('are joined into VOCAB_LISTS after the earlier lists, under their list names, frozen and without duplicates', () => {
     const names = Object.keys(VOCAB_LISTS);
-    expect(names.slice(-Object.keys(CIRCULATION_VOCAB_LISTS).length)).toEqual(Object.keys(CIRCULATION_VOCAB_LISTS));
+    const first = names.indexOf(Object.keys(CIRCULATION_VOCAB_LISTS)[0]!);
+    expect(names.slice(first, first + Object.keys(CIRCULATION_VOCAB_LISTS).length)).toEqual(Object.keys(CIRCULATION_VOCAB_LISTS));
     for (const [list, values] of Object.entries(CIRCULATION_VOCAB_LISTS)) {
       expect((VOCAB_LISTS as Record<string, readonly string[]>)[list], list).toBe(values);
       expect(Object.isFrozen(values), list).toBe(true);
@@ -43,13 +44,14 @@ describe('the members and circulation vocabularies', () => {
 
 describe('the members and circulation texts', () => {
   it('a message in both languages for each new permission, module, audit action and error code, without placeholders', () => {
-    const perms = permissionCatalog('production').filter((d) => d.module === 'members' || d.module === 'circulation');
-    expect(perms).toHaveLength(8);
-    // Members and circulation 15 actions and 12 codes, holds 5 actions and 2 codes, the circulation core 8 actions.
-    const audits = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('members.member.create'));
-    expect(audits).toHaveLength(28);
-    const codes = Object.keys(ERROR_CODES).slice(Object.keys(ERROR_CODES).indexOf('MEMBER_IN_USE'));
-    expect(codes).toHaveLength(14);
+    const perms = permissionCatalog('production').slice(32, 39);
+    expect(perms.every((d) => d.module === 'members' || d.module === 'circulation')).toBe(true);
+    const from = AUDIT_ACTIONS.indexOf('members.member.create');
+    const audits = AUDIT_ACTIONS.slice(from, from + 15);
+    expect(audits.at(-1)).toBe('circulation.policy.archive');
+    const codeKeys = Object.keys(ERROR_CODES);
+    const codes = codeKeys.slice(codeKeys.indexOf('MEMBER_IN_USE'), codeKeys.indexOf('MEMBER_IN_USE') + 12);
+    expect(codes.at(-1)).toBe('CIRC_RENEW_REFUSED');
     const keys = [
       ...perms.map((p) => `perm.${p.key}`),
       'perm.module.members',

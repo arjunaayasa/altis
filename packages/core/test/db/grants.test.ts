@@ -170,8 +170,16 @@ describe.skipIf(!ctx.available)(`grants and system roles [${engineLabel()}]`, ()
         .filter((d) => d.scope === 'branch')
         .map((d) => d.key);
       // Members and circulation add the desk, circulation.desk.use.
-      // The circulation core adds the desk's override, circulation.desk.override.
-      expect(branchScoped).toEqual(['catalog.locations.manage', 'catalog.items.manage', 'circulation.desk.use', 'circulation.desk.override', 'test.branch.manage']);
+      // The circulation core adds the desk's override, circulation.desk.override; visits add visit records and guestbook stations.
+      expect(branchScoped).toEqual([
+        'catalog.locations.manage',
+        'catalog.items.manage',
+        'circulation.desk.use',
+        'circulation.desk.override',
+        'visits.records.manage',
+        'visits.stations.manage',
+        'test.branch.manage',
+      ]);
       expect(sorted(g.branches.get(B)!)).toEqual([...branchScoped].sort());
       expect(can(g, 'system.users.read', B)).toBe(false);
       expect(g.superAdmin).toBe(false);

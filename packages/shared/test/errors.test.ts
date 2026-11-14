@@ -213,6 +213,14 @@ describe('ERROR_CODES', () => {
     CIRC_CALENDAR_CLOSED: 422,
   };
 
+  // ---- Komunitas K2 (members extended and visits) ----
+  const membersVisits: Record<string, number> = {
+    MEMBER_ANONYMIZED: 409,
+    MEMBER_CARD_LIMIT: 422,
+    VISIT_STATION_UNPAIRED: 401,
+    VISIT_ACTIVATION_INVALID: 422,
+  };
+
   const expected: Record<ErrorCode, number> = {
     ...phase1a,
     ...phase1b,
@@ -224,6 +232,7 @@ describe('ERROR_CODES', () => {
     ...membersCirculation,
     ...holds,
     ...circulationCore,
+    ...membersVisits,
   } as Record<ErrorCode, number>;
 
   it('registers exactly the Phase 1a, 1b, 1c, 1d, 2 and Komunitas codes (edition lane, reports and accreditation, members and circulation) with their HTTP status', () => {
@@ -242,6 +251,7 @@ describe('ERROR_CODES', () => {
     expect(Object.keys(komunitasK1)).toHaveLength(7);
     expect(Object.keys(membersCirculation)).toHaveLength(12);
     expect(Object.keys(circulationCore)).toHaveLength(2);
+    expect(Object.keys(membersVisits)).toHaveLength(4);
     expect(Object.keys(ERROR_CODES)).toEqual([
       ...Object.keys(phase1a),
       ...Object.keys(phase1b),
@@ -253,6 +263,7 @@ describe('ERROR_CODES', () => {
       ...Object.keys(membersCirculation),
       ...Object.keys(holds),
       ...Object.keys(circulationCore),
+      ...Object.keys(membersVisits),
     ]);
     for (const [code, status] of Object.entries(phase1a)) {
       expect(ERROR_CODES[code as ErrorCode].status, code).toBe(status);

@@ -75,6 +75,8 @@ const CIRCULATION_SECTIONS: [string, string][] = [
   ['/admin/layanan/terlambat', 'circulation.records.read'],
   ['/admin/layanan/aturan', 'circulation.policies.manage'],
   ['/admin/layanan/kalender', 'circulation.policies.manage'],
+  ['/admin/layanan/kunjungan', 'visits.records.read'],
+  ['/admin/layanan/buku-tamu', 'visits.stations.manage'],
 ];
 
 /** Anggota: the member list, the member types, the CSV import and the clearance letters. */
@@ -83,6 +85,7 @@ const MEMBERS_SECTIONS: [string, string][] = [
   ['/admin/anggota/tipe', 'members.types.manage'],
   ['/admin/anggota/impor', 'members.import.run'],
   ['/admin/anggota/bebas-pustaka', 'members.records.manage'],
+  ['/admin/anggota/kartu', 'members.records.read'],
 ];
 
 const sectionsOf = (m: FullMe) => visibleNavSections(m).map((s) => [s.group, paths(s.items)]);
@@ -175,7 +178,7 @@ describe('visibleNav', () => {
     expect(sectionsOf(me({ permissions: ['members.records.read', 'circulation.records.read'] }))).toEqual([
       [null, ['/admin']],
       ['circulation', ['/admin/layanan/terlambat']],
-      ['members', ['/admin/anggota']],
+      ['members', ['/admin/anggota', '/admin/anggota/kartu']],
       ['system', ['/admin/about']],
     ]);
   });

@@ -34,6 +34,12 @@ export function membersRoutes(shell: typeof shellRoute) {
       path: 'anggota/bebas-pustaka',
       component: lazyScreen(() => import('@/screens/members/clearances'), 'ClearancesScreen'),
     }),
+    // ---- Komunitas K2 (members extended): the card sheet ----
+    createRoute({
+      getParentRoute: () => shell,
+      path: 'anggota/kartu',
+      component: lazyScreen(() => import('@/screens/members/cards'), 'MemberCardsScreen'),
+    }),
     createRoute({
       getParentRoute: () => shell,
       path: 'anggota/$memberId',

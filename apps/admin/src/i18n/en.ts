@@ -1175,5 +1175,9 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'nav.circulation.calendar': 'Calendar',
   'nav.members.clearances': 'Clearance Letters',
   'settings.tab.circulation': 'Circulation',
+  // ---- Komunitas K2 (members extended and visits) ----
+  'nav.circulation.visits': 'Visits',
+  'nav.circulation.stations': 'Guestbook Stations',
+  'nav.members.cards': 'Print Cards',
   ...KOMUNITAS_EN,
 };

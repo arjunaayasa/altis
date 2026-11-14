@@ -49,6 +49,8 @@ import { createAgent, type Agent, type AgentReply } from '../agent.js';
 import { PHASE2_AUDIT_SCRIPTS, PHASE2_PENDING_ALLOWED, type AuditBrowser, type AuditScriptContext } from '../audit/catalog.js';
 import { K1_PENDING_ALLOWED, KOMUNITAS_AUDIT_SCRIPTS } from '../audit/komunitas.js';
 import { MEMBERS_CIRCULATION_AUDIT_SCRIPTS, MEMBERS_CIRCULATION_PENDING_ALLOWED } from '../audit/members-circulation.js';
+// ---- Komunitas K2 (members extended and visits) ----
+import { MEMBERS_VISITS_AUDIT_SCRIPTS } from '../audit/members-visits.js';
 import { captureIo } from '../cli-support.js';
 import { NEW_PASSWORD, PERSONA_PASSWORD, seedJob, seedUser, stagedArchive, totpCode, type SeedContext } from '../matrix-fixtures.js';
 import { seedStaff, sessionCookieFor, sessionCsrfFor } from '../support-auth.js';
@@ -1004,14 +1006,19 @@ describe('audit coverage: the Phase 2 scripts own every Phase 2 action, once', (
 const K1_ACTIONS: readonly AuditAction[] = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('reports.run.start'), AUDIT_ACTIONS.indexOf('members.member.create'));
 
 // ---- Komunitas (members and circulation) ----
-/** The members and circulation actions: AUDIT_ACTIONS from the first member action to the end. */
-const MEMBERS_CIRCULATION_ACTIONS: readonly AuditAction[] = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('members.member.create'));
+/** The members and circulation actions: AUDIT_ACTIONS from the first member action to the member tools' first. */
+const MEMBERS_CIRCULATION_ACTIONS: readonly AuditAction[] = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('members.member.create'), AUDIT_ACTIONS.indexOf('members.member.restore'));
+
+// ---- Komunitas K2 (members extended and visits) ----
+/** The member tools, visits and privacy actions: AUDIT_ACTIONS from the member tools' first action to the end. */
+const MEMBERS_VISITS_ACTIONS: readonly AuditAction[] = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('members.member.restore'));
 
 /** Every script the installation runs: the catalogue's, the community's, then the members and circulation scripts. */
-const AUDIT_SCRIPTS = { ...PHASE2_AUDIT_SCRIPTS, ...KOMUNITAS_AUDIT_SCRIPTS, ...MEMBERS_CIRCULATION_AUDIT_SCRIPTS };
+const AUDIT_SCRIPTS = { ...PHASE2_AUDIT_SCRIPTS, ...KOMUNITAS_AUDIT_SCRIPTS, ...MEMBERS_CIRCULATION_AUDIT_SCRIPTS, ...MEMBERS_VISITS_AUDIT_SCRIPTS };
 
 /** Whether the null script of `area` may list its actions as pending. */
 const pendingAllowed = (area: string): boolean => {
+  if (Object.hasOwn(MEMBERS_VISITS_AUDIT_SCRIPTS, area)) return false;
   if (Object.hasOwn(MEMBERS_CIRCULATION_AUDIT_SCRIPTS, area)) return MEMBERS_CIRCULATION_PENDING_ALLOWED;
   return Object.hasOwn(KOMUNITAS_AUDIT_SCRIPTS, area) ? K1_PENDING_ALLOWED : PHASE2_PENDING_ALLOWED;
 };
@@ -1037,6 +1044,17 @@ describe('audit coverage: the members and circulation scripts own every members 
     const owned = Object.values(MEMBERS_CIRCULATION_AUDIT_SCRIPTS).flatMap((s) => [...s.actions]);
     expect(new Set(owned).size).toBe(owned.length);
     expect([...owned].sort()).toEqual([...MEMBERS_CIRCULATION_ACTIONS].sort());
+  });
+});
+
+describe('audit coverage: the member tools and visits script owns every member tools, visits and privacy action, once', () => {
+  it('the area lists the 13 actions, each once, under a name of its own', () => {
+    expect(MEMBERS_VISITS_ACTIONS).toHaveLength(13);
+    const others = { ...PHASE2_AUDIT_SCRIPTS, ...KOMUNITAS_AUDIT_SCRIPTS, ...MEMBERS_CIRCULATION_AUDIT_SCRIPTS };
+    expect(Object.keys(MEMBERS_VISITS_AUDIT_SCRIPTS).filter((area) => Object.hasOwn(others, area))).toEqual([]);
+    const owned = Object.values(MEMBERS_VISITS_AUDIT_SCRIPTS).flatMap((s) => [...s.actions]);
+    expect(new Set(owned).size).toBe(owned.length);
+    expect([...owned].sort()).toEqual([...MEMBERS_VISITS_ACTIONS].sort());
   });
 });
 

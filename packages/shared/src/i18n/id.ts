@@ -26,6 +26,7 @@ import { MEMBERS_CIRCULATION_ID } from './members-circulation.js';
 // ---- Komunitas (holds) ----
 import { HOLDS_ID } from './holds.js';
 import { CIRCULATION_CORE_ID } from './circulation-core.js';
+import { MEMBERS_VISITS_ID } from './members-visits.js';
 
 /**
  * The keys that exist only in the test profile (spec §12.5, ruling S28), next to `permissionCatalog`'s test entry and the
@@ -667,6 +668,7 @@ const BASE = {
   'vocab.custom_field_type.url': 'Alamat web (URL)',
   'vocab.custom_field_entity.records': 'Cantuman',
   'vocab.custom_field_entity.items': 'Eksemplar',
+  'vocab.custom_field_entity.members': 'Anggota',
   'vocab.attachment_kind.file': 'Berkas',
   'vocab.attachment_kind.url': 'Tautan',
   'vocab.attachment_access.public': 'Publik',
@@ -1580,6 +1582,8 @@ const BASE = {
   ...HOLDS_ID,
   // ---- Komunitas (circulation core) ----
   ...CIRCULATION_CORE_ID,
+  // ---- Komunitas K2 (members extended and visits) ----
+  ...MEMBERS_VISITS_ID,
 } satisfies Record<string, string>;
 
 /**

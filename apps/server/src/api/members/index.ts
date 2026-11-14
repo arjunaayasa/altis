@@ -2,6 +2,7 @@ import type { RouteDecl } from '../../http/route.js';
 import { MEMBER_CLEARANCE_ROUTES } from './clearances.js';
 import { MEMBER_IMPORT_ROUTES } from './imports.js';
 import { MEMBER_ROUTES } from './members.js';
+import { MEMBER_OPS_ID_ROUTES, MEMBER_OPS_ROUTES } from './ops.js';
 import { MEMBER_TYPE_ROUTES } from './types.js';
 
 // The members API (one list per area), in this order: the literal paths `members/types/...`, `members/imports/...` and
@@ -12,5 +13,8 @@ export const MEMBERS_ROUTES: RouteDecl[] = [
   ...MEMBER_IMPORT_ROUTES,
   // ---- Komunitas (circulation core) ----
   ...MEMBER_CLEARANCE_ROUTES,
+  // ---- Komunitas K2 (members extended): the literal paths first, the `members/:id/...` ones after the member routes ----
+  ...MEMBER_OPS_ROUTES,
   ...MEMBER_ROUTES,
+  ...MEMBER_OPS_ID_ROUTES,
 ];

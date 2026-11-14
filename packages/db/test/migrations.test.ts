@@ -39,6 +39,8 @@ const CIRCULATION_MIGRATIONS = ['0040_members_circulation'];
 const HOLDS_MIGRATIONS = ['0041_holds'];
 // ---- Komunitas (circulation core) ----
 const CIRC_CORE_MIGRATIONS = ['0042_circulation_core'];
+// ---- Komunitas K2 (visits) ----
+const VISITS_MIGRATIONS = ['0043_visits'];
 
 describe('the Phase 2 migrations in the migration map (P2-06)', () => {
   it('appends 0020–0029 in order to the same frozen map; 0029_search_token_version is the last key', () => {
@@ -54,12 +56,12 @@ describe('the Phase 2 migrations in the migration map (P2-06)', () => {
     for (const name of K1_MIGRATIONS) expect(typeof PHASE1_MIGRATIONS[name]?.up).toBe('function');
   });
 
-  it('members and circulation append 0040, holds 0041, then the circulation core 0042; 0042_circulation_core is the last key', () => {
+  it('members and circulation append 0040, holds 0041, the circulation core 0042, then visits 0043; 0043_visits is the last key', () => {
     const names = Object.keys(PHASE1_MIGRATIONS).sort();
-    expect(names.filter((n) => n >= '0040' && n < '0050')).toEqual([...CIRCULATION_MIGRATIONS, ...HOLDS_MIGRATIONS, ...CIRC_CORE_MIGRATIONS]);
+    expect(names.filter((n) => n >= '0040' && n < '0050')).toEqual([...CIRCULATION_MIGRATIONS, ...HOLDS_MIGRATIONS, ...CIRC_CORE_MIGRATIONS, ...VISITS_MIGRATIONS]);
     // The newest range on this branch (every earlier range sorts before it).
-    expect(names.at(-1)).toBe('0042_circulation_core');
-    for (const name of [...CIRCULATION_MIGRATIONS, ...HOLDS_MIGRATIONS, ...CIRC_CORE_MIGRATIONS]) expect(typeof PHASE1_MIGRATIONS[name]?.up).toBe('function');
+    expect(names.at(-1)).toBe('0043_visits');
+    for (const name of [...CIRCULATION_MIGRATIONS, ...HOLDS_MIGRATIONS, ...CIRC_CORE_MIGRATIONS, ...VISITS_MIGRATIONS]) expect(typeof PHASE1_MIGRATIONS[name]?.up).toBe('function');
   });
 });
 
@@ -98,15 +100,15 @@ describe.skipIf(!ctx.available)(`the Phase 2 migrations [${engineLabel()}]`, () 
     return rows.map((r) => String(r.col));
   }
 
-  it('migrates an empty database to 0042, and a second run reports it up to date', async () => {
+  it('migrates an empty database to 0043, and a second run reports it up to date', async () => {
     const first = await runMigrations(h, { appVersion: '0.1.0', dataDir, migrations: PHASE1_MIGRATIONS });
     expect(first.mode).toBe('migrated');
-    const newest = [...CATALOG_MIGRATIONS, ...K1_MIGRATIONS, ...CIRCULATION_MIGRATIONS, ...HOLDS_MIGRATIONS, ...CIRC_CORE_MIGRATIONS];
+    const newest = [...CATALOG_MIGRATIONS, ...K1_MIGRATIONS, ...CIRCULATION_MIGRATIONS, ...HOLDS_MIGRATIONS, ...CIRC_CORE_MIGRATIONS, ...VISITS_MIGRATIONS];
     expect(first.applied.slice(-newest.length)).toEqual(newest);
-    expect(first.schemaVersion).toBe('0042');
+    expect(first.schemaVersion).toBe('0043');
     const second = await runMigrations(h, { appVersion: '0.1.0', dataDir, migrations: PHASE1_MIGRATIONS });
-    expect(second).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0042', minCodeVersion: '0.0.0', edition: { mode: 'empty', applied: [] } });
-    expect(await h.db.selectFrom('schema_meta').select('schema_version').execute()).toEqual([{ schema_version: '0042' }]);
+    expect(second).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0043', minCodeVersion: '0.0.0', edition: { mode: 'empty', applied: [] } });
+    expect(await h.db.selectFrom('schema_meta').select('schema_version').execute()).toEqual([{ schema_version: '0043' }]);
   });
 
   it('S14: search_doc has the newest-first indexes (is_public, created_at) and (created_at)', async () => {

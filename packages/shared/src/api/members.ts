@@ -37,7 +37,7 @@ import {
 } from '../circulation-vocab.js';
 import type { RunStatus } from '../catalog-vocab.js';
 import { emailField, localeField, ulidField, versionField } from './common.js';
-import { codeField, cursorQuery, dateField, longText, shortText, sortOrderField, type Paged } from './catalog/common.js';
+import { codeField, cursorQuery, customValuesField, dateField, longText, shortText, sortOrderField, type Paged } from './catalog/common.js';
 
 // ---- fields ----------------------------------------------------------------------------------------------------------
 
@@ -172,6 +172,9 @@ export const MemberBody = z.strictObject({
   locale: memberFields.locale.default('id'),
   joinedOn: dateField.optional(),
   expiresOn: dateField.nullable().optional(),
+  // ---- Komunitas K2 (members extended) ----
+  /** The member's custom fields (`{<code>: value}`, null clears one), checked against the live `members` definitions. */
+  custom: customValuesField.optional(),
 });
 
 export type MemberBody = z.infer<typeof MemberBody>;
@@ -187,6 +190,8 @@ export const MemberPatchBody = z.strictObject({
   status: z.enum(MEMBER_STORED_STATUSES).optional(),
   statusNote: shortText(191).min(1).nullable().optional(),
   expiresOn: dateField.nullable().optional(),
+  // ---- Komunitas K2 (members extended) ----
+  custom: customValuesField.optional(),
 });
 
 export type MemberPatchBody = z.infer<typeof MemberPatchBody>;
@@ -293,6 +298,9 @@ export interface MemberView {
   createdAt: number;
   updatedAt: number;
   version: number;
+  // ---- Komunitas K2 (members extended) ----
+  /** The values of the member's custom fields by code (live definitions only). */
+  custom?: Record<string, unknown>;
 }
 
 /** One entry of a member's history. `meta` holds field names, and for `extended` `{from, to}`: never a personal value. */

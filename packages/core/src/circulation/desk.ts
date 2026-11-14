@@ -35,6 +35,8 @@ import { branchToday, dueDateFor } from './dates.js';
 import { checkKeptCopy, fulfilHoldOnLoan, memberHolds, renewalHeldBack, trapOnReturn } from './holds.js';
 import { resolvePolicy } from './policies.js';
 import { chargeSeam } from './seams.js';
+// ---- Komunitas K2 (visits) ----
+import { recordMemberDayVisit } from '../visits/visits.js';
 
 // The circulation desk: lend, return and renew, and the member panel.
 //
@@ -382,6 +384,8 @@ export async function lendItem(tx: TxCtx, input: LendInput): Promise<LoanRespons
   }
   const holdFulfilledId = await fulfilHoldOnLoan(tx, { memberId: member.id, recordId: recordRow.id, itemId: itemRow.id, loanId: id });
   await indexRecords(trx, [recordRow.id], tx.now);
+  // ---- Komunitas K2 (visits): the member's first desk action of the day at this branch is a visit ----
+  await recordMemberDayVisit(tx, { source: 'desk', memberId: input.memberId, branchId: input.branchId });
   const warnings: CirculationWarningView[] = [...memberWarnings(member.expires_on, today), ...dueWarnings(due)];
   await tx.audit({
     action: 'circulation.loan.create',
@@ -478,6 +482,8 @@ export async function returnItem(tx: TxCtx, input: { branchId: string; barcode: 
   const member = loan.member_id === null ? undefined : await trx.selectFrom('members').select('member_no_display').where('id', '=', loan.member_id).executeTakeFirst();
   const hold = await trapOnReturn(tx, { itemId: locked.id, returnBranchId: input.branchId });
   await indexRecords(trx, [locked.record_id], tx.now);
+  // ---- Komunitas K2 (visits) ----
+  if (loan.member_id !== null) await recordMemberDayVisit(tx, { source: 'desk', memberId: loan.member_id, branchId: input.branchId });
   await tx.audit({
     action: 'circulation.loan.return',
     entity: 'loans',
@@ -581,6 +587,8 @@ async function renewOne(tx: TxCtx, loanId: string, branchId: string): Promise<Re
   if (Number(updated.numUpdatedRows) !== 1) throw renewRefused('changed');
   // A late renewal books the overdue fine up to today; the loan goes on under its new due date.
   if (loan.due_on < today) await chargeSeam().bookOverdue(tx, { loanId, until: today });
+  // ---- Komunitas K2 (visits) ----
+  if (loan.member_id !== null) await recordMemberDayVisit(tx, { source: 'desk', memberId: loan.member_id, branchId });
   const warnings: CirculationWarningView[] = [...memberWarnings(member?.expires_on ?? null, today), ...dueWarnings(due)];
   await tx.audit({ action: 'circulation.loan.renew', entity: 'loans', entityId: loanId, branchId, meta: { renewals: renewals + 1 } });
   return { id: loanId, version: ok(loan.version) + 1, dueOn: due.dueOn, renewals: renewals + 1, renewLimit: ok(loan.renew_limit), ...(warnings.length === 0 ? {} : { warnings }) };

@@ -14,6 +14,8 @@ import { circulationSampleRows, type CirculationTable } from '../../../db/test/f
 import { holdsSampleRows } from '../../../db/test/fixtures/komunitas-holds-tables.js';
 // ---- Komunitas (circulation core) ----
 import { circCoreSampleRows, type CircCoreTable } from '../../../db/test/fixtures/komunitas-circ-core-tables.js';
+// ---- Komunitas K2 (visits) ----
+import { visitsSampleRows, type VisitsTableName } from '../../../db/test/fixtures/komunitas-visits-tables.js';
 import { backupTables, tableChecksumFromDb } from '../../src/backup/canonical.js';
 import { createExporter, type ExportCheckpoint } from '../../src/backup/exporter.js';
 import { readManifest, type BackupManifest } from '../../src/backup/manifest.js';
@@ -80,6 +82,12 @@ function circulationRows(): ReturnType<typeof circulationSampleRows> {
 function holdRows(): ReturnType<typeof holdsSampleRows> {
   let n = 0;
   return holdsSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JT${String((n += 1)).padStart(22, '0')}` });
+}
+
+/** The visits sample rows with ids numbered from another fixed prefix. */
+function visitsRows(): ReturnType<typeof visitsSampleRows> {
+  let n = 0;
+  return visitsSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JV${String((n += 1)).padStart(22, '0')}` });
 }
 
 /** The same rows, written through Kysely, on any dialect. */
@@ -228,6 +236,11 @@ async function seed(db: Kysely<DB>): Promise<void> {
   const circCore = circCoreRows();
   for (const t of Object.keys(circCore) as CircCoreTable[]) {
     await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(circCore[t]).execute();
+  }
+  // ---- Komunitas K2 (visits) ----
+  const visits = visitsRows();
+  for (const t of Object.keys(visits) as VisitsTableName[]) {
+    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(visits[t]).execute();
   }
 }
 

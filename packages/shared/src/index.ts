@@ -223,4 +223,17 @@ export {
   VOID_REFUSALS,
 } from './circulation-vocab.js';
 export type { CalendarKind, ClearancePurpose, ClearanceRefusal, ForceableReason, OverrideReason, PolicyRankReason, VoidRefusal } from './circulation-vocab.js';
+// ---- Komunitas K2 (members extended and visits) ----
+export {
+  CARD_FIELDS,
+  CARD_SHEETS,
+  MEMBER_BULK_ACTIONS,
+  MEMBER_BULK_REFUSALS,
+  VISIT_GROUP_EXTRA,
+  VISIT_PURPOSES,
+  VISIT_SOURCES,
+} from './visits-vocab.js';
+export type { CardField, CardSheet, MemberBulkAction, MemberBulkRefusal, VisitPurpose, VisitSource } from './visits-vocab.js';
+export { QR_MAX_VERSION, qrMatrix } from './qr.js';
+export type { QrMatrix } from './qr.js';
 export type { ReportCell, ReportColumnType, ReportColumnView, ReportParamKind, ReportParamSpec } from './api/reports.js';
