@@ -1170,5 +1170,10 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'nav.members.list': 'Members',
   'nav.members.types': 'Member Types',
   'nav.members.import': 'Import Members',
+  // ---- Komunitas (circulation core) (nav) ----
+  'nav.circulation.in_library': 'Read in Place',
+  'nav.circulation.calendar': 'Calendar',
+  'nav.members.clearances': 'Clearance Letters',
+  'settings.tab.circulation': 'Circulation',
   ...KOMUNITAS_EN,
 };

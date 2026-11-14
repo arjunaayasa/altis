@@ -137,6 +137,9 @@ describe('reason (PROBLEM_REASONS, S30)', () => {
       CIRC_RENEW_REFUSED: ['changed', 'suspended', 'expired', 'same_day', 'limit', 'hold', 'blocked', 'not_online'],
       // Komunitas (holds)
       CIRC_HOLD_REFUSED: ['disabled', 'member', 'not_allowed', 'limit', 'duplicate', 'own_loan', 'no_copies', 'available', 'closed', 'not_on_shelf'],
+      // Komunitas (circulation core)
+      CIRC_LOAN_NOT_OPEN: ['lost_item'],
+      CIRC_VOID_REFUSED: ['too_late', 'other_staff', 'renewed', 'charged'],
     });
   });
 

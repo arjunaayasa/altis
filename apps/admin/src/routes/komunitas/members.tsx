@@ -28,6 +28,12 @@ export function membersRoutes(shell: typeof shellRoute) {
       path: 'anggota/impor',
       component: lazyScreen(() => import('@/screens/members/import'), 'MemberImportScreen'),
     }),
+    // ---- Komunitas (circulation core): clearance letters ----
+    createRoute({
+      getParentRoute: () => shell,
+      path: 'anggota/bebas-pustaka',
+      component: lazyScreen(() => import('@/screens/members/clearances'), 'ClearancesScreen'),
+    }),
     createRoute({
       getParentRoute: () => shell,
       path: 'anggota/$memberId',

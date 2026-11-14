@@ -1327,6 +1327,72 @@ export interface LoansTable {
   updated_by: string | null;
 }
 
+// ---- Komunitas (circulation core) ----
+// Migration 0041: the library calendar, items read in place and numbered clearance letters.
+
+/** Class data. Closed days of the library; `kind` (CALENDAR_KINDS) says which fields count. */
+export interface CalendarsTable {
+  id: string;
+  /** null: every branch (always null in this edition). */
+  branch_id: string | null;
+  /** `weekly` | `dates` | `yearly`. */
+  kind: string;
+  /** ISO weekday 1 (Monday) … 7 (Sunday), for `weekly`. */
+  weekday: number | null;
+  /** `YYYY-MM-DD`, both included, for `dates`. */
+  date_from: string | null;
+  date_to: string | null;
+  /** `MM-DD`, both included and within one year, for `yearly`. */
+  month_day_from: string | null;
+  month_day_to: string | null;
+  name: string;
+  archived_at: EpochMs | null;
+  /** Default 0. */
+  version: Generated<number>;
+  created_at: EpochMs;
+  created_by: string | null;
+  updated_at: EpochMs;
+  updated_by: string | null;
+}
+
+/** Class data. One item read in place, anonymous, with the statistics dimensions of that moment. */
+export interface ItemUsesTable {
+  id: string;
+  item_id: string | null;
+  record_id: string | null;
+  /** The branch where the item was read. */
+  branch_id: string;
+  used_on: string;
+  used_at: EpochMs;
+  member_id: string | null;
+  stat_ddc: string | null;
+  stat_material_type_id: string | null;
+  stat_collection_type_id: string | null;
+  /** `desk` | `migrated`. */
+  source: string;
+  created_by: string | null;
+}
+
+/** Class data. UNIQUE (year, seq): one numbered clearance letter, its number never reused. */
+export interface MemberClearancesTable {
+  id: string;
+  member_id: string;
+  /** The library's year of `issued_on`. */
+  year: number;
+  seq: number;
+  /** `<prefix>/<yyyy>/<seq, 4 digits>`. */
+  number_display: string;
+  issued_on: string;
+  issued_at: EpochMs;
+  issued_by: string;
+  /** `graduation` | `transfer` | `other`. */
+  purpose: string;
+  voided_at: EpochMs | null;
+  voided_by: string | null;
+  /** Personal data (free text). */
+  void_reason: string | null;
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // The runner's tables (class migrator): made by ensureBootstrap (ddl.ts) and migrator.ts, never by a migration.
 
@@ -1497,6 +1563,10 @@ export interface DB {
   loans: LoansTable;
   // ---- Komunitas (holds) ----
   holds: HoldsTable;
+  // ---- Komunitas (circulation core) ----
+  calendars: CalendarsTable;
+  item_uses: ItemUsesTable;
+  member_clearances: MemberClearancesTable;
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: SchemaMigrationsEditionTable;
   schema_migrations_edition_lock: SchemaMigrationsEditionLockTable;

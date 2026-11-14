@@ -31,6 +31,8 @@ import { catalogAccredFields } from './0033_catalog_accred_fields.js';
 import { membersCirculation } from './0040_members_circulation.js';
 // ---- Komunitas (holds) ----
 import { holds } from './0041_holds.js';
+// ---- Komunitas (circulation core) ----
+import { circulationCore } from './0042_circulation_core.js';
 
 /**
  * The Phase 1 tables (spec §6.5), their indexes and the columns added since, keyed by migration name (= file stem). All of them are expand-only
@@ -78,6 +80,8 @@ export const PHASE1_MIGRATIONS: Readonly<Record<string, AltisMigration>> = Objec
   '0040_members_circulation': membersCirculation,
   // ---- Komunitas (holds) ----
   '0041_holds': holds,
+  // ---- Komunitas (circulation core) ----
+  '0042_circulation_core': circulationCore,
 });
 
 // ---------------------------------------------------------------------------------------------------------------

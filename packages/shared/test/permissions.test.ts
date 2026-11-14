@@ -61,8 +61,11 @@ const MEMBERS_CIRCULATION = [
   'circulation.records.read',
 ];
 
+/** The circulation core's key, appended after members and circulation: forcing loans at a branch. */
+const CIRCULATION_CORE = ['circulation.desk.override'];
+
 /** Every production key, in catalog order. */
-const ALL = [...SPEC_13_4, ...PHASE_2, ...KOMUNITAS_K1, ...MEMBERS_CIRCULATION];
+const ALL = [...SPEC_13_4, ...PHASE_2, ...KOMUNITAS_K1, ...MEMBERS_CIRCULATION, ...CIRCULATION_CORE];
 
 /** The two branch-scoped keys of Phase 2 (§12.1: "cabang"). */
 const PHASE_2_BRANCH = ['catalog.locations.manage', 'catalog.items.manage'];
@@ -81,10 +84,10 @@ describe('PERMISSIONS', () => {
     expect(PERMISSIONS.slice(0, 32)).toEqual([...SPEC_13_4, ...PHASE_2, ...KOMUNITAS_K1]);
   });
 
-  it('ends with the 7 keys of members and circulation: 39 in all', () => {
+  it('ends with the 7 keys of members and circulation and the circulation core\'s override: 40 in all', () => {
     expect(MEMBERS_CIRCULATION).toHaveLength(7);
     expect([...PERMISSIONS]).toEqual(ALL);
-    expect(PERMISSIONS).toHaveLength(39);
+    expect(PERMISSIONS).toHaveLength(40);
   });
 
   it('has no licence permission (the community edition)', () => {
@@ -132,7 +135,7 @@ describe('permissionCatalog', () => {
 
   it('members and circulation: seven keys whose module is their prefix; only the desk is branch-scoped', () => {
     const production = permissionCatalog('production');
-    expect(production.slice(32).map((d) => [d.key, d.scope, d.module])).toEqual([
+    expect(production.slice(32, 39).map((d) => [d.key, d.scope, d.module])).toEqual([
       ['members.records.read', 'global', 'members'],
       ['members.records.manage', 'global', 'members'],
       ['members.types.manage', 'global', 'members'],
@@ -141,14 +144,20 @@ describe('permissionCatalog', () => {
       ['circulation.policies.manage', 'global', 'circulation'],
       ['circulation.records.read', 'global', 'circulation'],
     ]);
-    expect(production.filter((d) => d.scope === 'branch').map((d) => d.key)).toEqual(['catalog.locations.manage', 'catalog.items.manage', 'circulation.desk.use']);
+    expect(production.filter((d) => d.scope === 'branch').map((d) => d.key)).toEqual([
+      'catalog.locations.manage',
+      'catalog.items.manage',
+      'circulation.desk.use',
+      'circulation.desk.override',
+    ]);
+    expect(production.slice(39).map((d) => [d.key, d.scope, d.module])).toEqual([['circulation.desk.override', 'branch', 'circulation']]);
   });
 
-  it("the 'test' profile ends with the branch-scoped test permission: 40", () => {
+  it("the 'test' profile ends with the branch-scoped test permission: 41", () => {
     const test = permissionCatalog('test');
-    expect(test).toHaveLength(40);
-    expect(test.slice(0, 39).map((d) => d.key)).toEqual(ALL);
-    expect(test[39]).toEqual({ key: TEST_PERMISSION, scope: 'branch', module: 'test' });
+    expect(test).toHaveLength(41);
+    expect(test.slice(0, 40).map((d) => d.key)).toEqual(ALL);
+    expect(test[40]).toEqual({ key: TEST_PERMISSION, scope: 'branch', module: 'test' });
   });
 
   it('under the Vitest test profile the default catalog holds the test permission', () => {
@@ -239,10 +248,10 @@ describe('systemRolePermissions', () => {
     expect(systemRolePermissions('super_admin', 'production')).toEqual([...ALL]);
   });
 
-  it('admin holds the production keys minus exactly the four of ADMIN_EXCLUDED: 35, without catalog.migration.run', () => {
+  it('admin holds the production keys minus exactly the four of ADMIN_EXCLUDED: 36, without catalog.migration.run', () => {
     const admin = systemRolePermissions('admin', 'production');
     expect(admin).toEqual(ALL.filter((k) => !(ADMIN_EXCLUDED as readonly string[]).includes(k)));
-    expect(admin).toHaveLength(35);
+    expect(admin).toHaveLength(36);
     for (const key of ADMIN_EXCLUDED) expect(admin).not.toContain(key);
     expect(admin).not.toContain('catalog.migration.run');
     expect(admin).toContain('system.roles.manage');
@@ -270,7 +279,7 @@ describe('systemRolePermissions', () => {
   it('is computed from the catalog, so the production bundle has no test permission', () => {
     vi.stubGlobal('__BUILD_PROFILE__', 'production');
     expect(systemRolePermissions('super_admin', 'test')).toEqual([...ALL]);
-    expect(systemRolePermissions('admin')).toHaveLength(35);
+    expect(systemRolePermissions('admin')).toHaveLength(36);
   });
 
   it('returns frozen lists', () => {

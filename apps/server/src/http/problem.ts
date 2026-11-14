@@ -150,6 +150,10 @@ export const PROBLEM_REASONS: Readonly<Partial<Record<ErrorCode, readonly string
   // ---- Komunitas (holds) ----
   // Why a hold was refused (HOLD_REFUSALS): the desk and the member area say it in words.
   CIRC_HOLD_REFUSED: Object.freeze(['disabled', 'member', 'not_allowed', 'limit', 'duplicate', 'own_loan', 'no_copies', 'available', 'closed', 'not_on_shelf']),
+  // ---- Komunitas (circulation core) ----
+  // An item recorded lost that is scanned back (the desk offers to take it back), and why a loan cannot be voided.
+  CIRC_LOAN_NOT_OPEN: Object.freeze(['lost_item']),
+  CIRC_VOID_REFUSED: Object.freeze(['too_late', 'other_staff', 'renewed', 'charged']),
 });
 
 /** The 5xx codes whose `reason` is sent (S7): all the others keep it out, as R53 says. */
