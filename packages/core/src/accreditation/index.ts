@@ -63,6 +63,7 @@ export type { EvidenceChecklistItem, EvidenceListQuery } from './evidence/index.
 export { getUsageGrid, getUsageGroups, putUsageCells, putUsageGroups, resolveUsage } from './usage/index.js';
 export type { ResolvedCell, ResolvedUsage } from './usage/index.js';
 export {
+  copySnapshotDossier,
   enqueueEvaluate,
   evaluateJob,
   evaluatePayload,
