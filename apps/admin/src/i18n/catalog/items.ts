@@ -74,6 +74,13 @@ export const ITEMS_ID = {
   'catalog.items.bulk.refused.archived_reference': 'Tipe koleksi, lokasi, atau pemasoknya sudah diarsipkan. Ganti dulu di halaman eksemplar.',
   // ---- Komunitas K1 (receiving date) ----
   'catalog.items.bulk.refused.received_date_set': 'Tanggal terimanya sudah terisi; pilih timpa untuk mengubahnya.',
+  'catalog.items.bulk.received_date': 'Tanggal terima',
+  'catalog.items.bulk.received_date_hint': 'Kosongkan bila tanggal terima tidak diubah.',
+  'catalog.items.bulk.received_mode': 'Isi tanggal terima pada',
+  'catalog.items.bulk.received_mode.fill_empty': 'Isi yang kosong',
+  'catalog.items.bulk.received_mode.overwrite': 'Timpa semua',
+  'catalog.items.bulk.received_sync_note':
+    'Eksemplar yang tanggal terimanya diisi di sini dihitung sebagai disunting di ALTIS dan tidak lagi mengikuti penyelarasan ulang dari SLiMS. Penyiangan atau kehilangan yang kemudian dicatat di SLiMS harus dicatat juga di ALTIS.',
   'catalog.items.bulk.close': 'Tutup',
   'catalog.items.bulk.done': 'Selesai',
 
@@ -256,6 +263,13 @@ export const ITEMS_EN: Record<keyof typeof ITEMS_ID, string> = {
   'catalog.items.bulk.refused.archived_reference': 'Its collection type, location or supplier is archived. Change it on the item’s page first.',
   // ---- Komunitas K1 (receiving date) ----
   'catalog.items.bulk.refused.received_date_set': 'Its date received is already set; choose overwrite to change it.',
+  'catalog.items.bulk.received_date': 'Date received',
+  'catalog.items.bulk.received_date_hint': 'Leave empty to keep the dates received.',
+  'catalog.items.bulk.received_mode': 'Set the date received on',
+  'catalog.items.bulk.received_mode.fill_empty': 'Copies without one',
+  'catalog.items.bulk.received_mode.overwrite': 'Every copy (overwrite)',
+  'catalog.items.bulk.received_sync_note':
+    'Copies whose date received is set here count as edited in ALTIS and no longer follow a re-sync from SLiMS. Weeding or losses recorded in SLiMS afterwards must be recorded in ALTIS too.',
   'catalog.items.bulk.close': 'Close',
   'catalog.items.bulk.done': 'Done',
 

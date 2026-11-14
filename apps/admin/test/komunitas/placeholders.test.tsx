@@ -41,6 +41,7 @@ const REPLACED: ReadonlySet<KomunitasPlaceholderScreen> = new Set<KomunitasPlace
   'tab_snp',
   'tab_print',
   'tab_history',
+  'accreditation_settings',
 ]);
 
 /** Each path (a parameter filled in), and the placeholder its screen shows. */
