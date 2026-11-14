@@ -144,6 +144,12 @@ export function MembersListScreen() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold">{t('members.title')}</h1>
         <div className="flex flex-wrap gap-2">
+          {/* ---- Komunitas K2 (members extended): the member list report, which exports it (personal data) ---- */}
+          {holds(me, 'members.export.run') && (
+            <Button asChild variant="outline">
+              <Link to={`/admin/reports/${encodeURIComponent('members.list')}`}>{t('members.tools.export')}</Link>
+            </Button>
+          )}
           {canImport && (
             <Button asChild variant="outline">
               <Link to="/admin/anggota/impor">

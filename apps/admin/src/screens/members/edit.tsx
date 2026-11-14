@@ -23,7 +23,7 @@ import { useApiQuery, useMe } from '@/lib/me';
 import { changedFields, isFieldProblem, isStale, optionalText, putFieldErrors, serverIssues, zodIssues } from '@/screens/catalog/masters/master-table';
 import { DueBadge, MemberStatusBadge, limitText, useCalendarDate, useMemberTypes, useTypeName } from '@/screens/circulation/common';
 import { ExtendDialog, SuspendDialog, refreshMembers, useMember } from './common';
-import { MemberPhotoPanel, MemberPrivacyPanel, RestoreButton } from './member-extras';
+import { MemberCustomPanel, MemberPhotoPanel, MemberPrivacyPanel, RestoreButton } from './member-extras';
 
 /**
  * A member: Anggota baru (`/admin/anggota/baru`) and the member's page (`/admin/anggota/$memberId`).
@@ -479,6 +479,8 @@ export function MemberDetailScreen() {
           </TabsList>
           <TabsContent value="data">
             <MemberFormView key={m.id} member={m} canManage={canManage && live} onSaved={async () => setNotice(t('members.saved'))} />
+            {/* ---- Komunitas K2 (members extended): custom fields ---- */}
+            <MemberCustomPanel key={`custom-${m.id}-${m.version}`} member={m} canManage={canManage && live} onDone={setNotice} />
           </TabsContent>
           {canLoans && (
             <TabsContent value="loans">

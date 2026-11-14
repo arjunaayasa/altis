@@ -650,6 +650,7 @@ const REPORT_IDS = [
   'accreditation.dossier',
   'accreditation.self_assessment',
   'accreditation.statement_1000',
+  'members.list',
   'test.rows',
   'test.personal',
   'test.document',
@@ -670,6 +671,7 @@ const REPORT_COLUMNS = [
   ...['library', 'parent', 'parent_nonpersonnel', 'collection', 'community', 'participants', 'partner', 'scope'],
   ...['reference', 'issued_on', 'issued_by', 'aspects', 'valid_until'],
   ...['n', 'text', 'amount'],
+  ...['member_no', 'member_type', 'gender', 'member_status', 'joined_on', 'expires_on', 'email', 'phone', 'address'],
 ];
 
 /** Every parameter name of the report definitions. */
@@ -679,6 +681,7 @@ const REPORT_PARAMS = [
   ...['fictionOnly', 'localWorkOnly', 'audience', 'status', 'received', 'created', 'access'],
   ...['section', 'window', 'kinds', 'learning', 'externalLiteracy', 'part', 'zipMode'],
   ...['rows', 'texts', 'countless'],
+  ...['memberTypeId', 'className', 'memberStatus', 'homeBranchId', 'joined', 'expires', 'contact'],
 ];
 
 /** The options of every `status` parameter that has no vocabulary list of its own. */
