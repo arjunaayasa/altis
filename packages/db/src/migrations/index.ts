@@ -22,6 +22,11 @@ import { catalogSeed } from './0027_catalog_seed.js';
 import { catalogPerfIndexes } from './0028_catalog_perf_indexes.js';
 // Phase 2 (catalog), big review: the token format of the search index.
 import { searchTokenVersion } from './0029_search_token_version.js';
+// ---- Komunitas K1 (tables) ----
+import { reportsCore } from './0030_reports_core.js';
+import { accreditation } from './0031_accreditation.js';
+import { libraryRegisters } from './0032_library_registers.js';
+import { catalogAccredFields } from './0033_catalog_accred_fields.js';
 
 /**
  * The Phase 1 tables (spec §6.5), their indexes and the columns added since, keyed by migration name (= file stem). All of them are expand-only
@@ -32,8 +37,9 @@ import { searchTokenVersion } from './0029_search_token_version.js';
  * live TABLE_CLASSES or `DB`, which describe the current schema (a test checks they agree after all migrations).
  *
  * Phase 2 (decision P2-06) appends its migrations 0020–0029 (range 0020–0039) to this same frozen map, keeping its
- * name so that its consumers stay unchanged; 0010–0019 are Phase 1d's. Tests that need the latest migration take the
- * last key of the map rather than naming one.
+ * name so that its consumers stay unchanged; 0010–0019 are Phase 1d's. Komunitas K1 appends 0030–0033 (range 0030–0039:
+ * reports and accreditation) the same way. Tests that need the latest migration take the last key of the map rather
+ * than naming one.
  */
 export const PHASE1_MIGRATIONS: Readonly<Record<string, AltisMigration>> = Object.freeze({
   '0001_meta_and_locks': metaAndLocks,
@@ -58,6 +64,11 @@ export const PHASE1_MIGRATIONS: Readonly<Record<string, AltisMigration>> = Objec
   '0028_catalog_perf_indexes': catalogPerfIndexes,
   // Phase 2 (catalog), big review.
   '0029_search_token_version': searchTokenVersion,
+  // ---- Komunitas K1 (tables) ----
+  '0030_reports_core': reportsCore,
+  '0031_accreditation': accreditation,
+  '0032_library_registers': libraryRegisters,
+  '0033_catalog_accred_fields': catalogAccredFields,
 });
 
 // ---------------------------------------------------------------------------------------------------------------

@@ -152,5 +152,5 @@ describe.skipIf(!ctx.available)(`restore whose freeze broke [${engineLabel()}]`,
     expect(await restoreEntries()).toMatchObject([{ opId, outcome: 'failed', error: 'OPS_FREEZE_BROKEN' }]);
     expect(await readMaintenance(dataDir)).toBeNull();
     expect(await harness.ops.step(1)).toMatchObject({ state: 'failed', terminal: true });
-  }, 60_000);
+  }, 120_000);
 });

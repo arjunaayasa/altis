@@ -21,6 +21,7 @@ import {
 } from '../../../tools/test/test-db.js';
 import { connect, type DbHandle } from '../src/connect.js';
 import { markInDoubt, normalizeDbError } from '../src/db-errors.js';
+import { personalLogKeys } from '../src/registry.js';
 import {
   MIGRATOR_TABLES,
   MigrationError,
@@ -236,7 +237,7 @@ describe('safe failure chains: what is safe stays as it is; AggregateError.error
       expect(error.driverError).toMatchObject({ code: 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD' });
       const safe = cause === aggregate ? error.cause : (error.cause as { cause: unknown }).cause;
       expect(safe).toEqual({
-        name: 'AggregateError',
+        errorName: 'AggregateError',
         message: 'backfill failed',
         errors: [
           { code: 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD', errno: 1366, sqlState: 'HY000' },
@@ -253,7 +254,7 @@ describe('safe failure chains: what is safe stays as it is; AggregateError.error
     const repeating = new AggregateError([new Error('ok'), raw], `backfill failed: ${raw.message}`);
     const error = new MigrationError(repeating, failure);
     expectNothingUnsafe(error, [raw.message]);
-    expect(error.cause).toEqual({ name: 'AggregateError', errors: [new Error('ok'), { code: '23502' }] });
+    expect(error.cause).toEqual({ errorName: 'AggregateError', errors: [new Error('ok'), { code: '23502' }] });
     const harmless = new AggregateError([new Error('a'), new Error('b')], 'two batches failed');
     expect(new MigrationError(harmless, failure).cause).toBe(harmless);
   });
@@ -313,7 +314,7 @@ describe('safe failure chains: what is safe stays as it is; AggregateError.error
         expectNothingUnsafe(error, [mysqlWrongValue().message, pgNotNull().message]);
         const safe = cause === suppressed ? error.cause : (error.cause as { cause: unknown }).cause;
         expect(safe).toEqual({
-          name: 'SuppressedError',
+          errorName: 'SuppressedError',
           message: 'disposal failed',
           error: { code: 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD', errno: 1366, sqlState: 'HY000' },
           suppressed: { code: '23502' },
@@ -325,6 +326,34 @@ describe('safe failure chains: what is safe stays as it is; AggregateError.error
       const harmless = make(new Error('a'), new Error('b'), 'disposal failed');
       expect(new MigrationError(harmless, failure).cause).toBe(harmless);
     });
+  });
+
+  it('names the class of every link it rebuilds `errorName`, a key the log keeps (the log redacts every `name` as personal)', () => {
+    const personal = personalLogKeys();
+    // Why the class cannot be called `name`: the log redacts that key as a person's name.
+    expect(personal.has('name')).toBe(true);
+    const aggregate = (): AggregateError => new AggregateError([mysqlWrongValue(), new RangeError('batch 2')], 'backfill failed');
+    const wrapper = new TypeError('0007 backfill failed', { cause: aggregate() });
+    const helper = Object.assign(new Error('disposal failed'), { name: 'SuppressedError', error: pgNotNull(), suppressed: new Error('close failed') });
+    const safe = [safeChain(wrapper), safeChain(helper), new MigrationError(wrapper, failure).cause, safeChain(new Error('x', { cause: pgDuplicate() }))];
+    const rebuiltAggregate = {
+      errorName: 'AggregateError',
+      message: 'backfill failed',
+      errors: [{ code: 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD', errno: 1366, sqlState: 'HY000' }, expect.any(RangeError)],
+    };
+    expect(safe).toEqual([
+      { errorName: 'TypeError', message: '0007 backfill failed', cause: rebuiltAggregate },
+      { errorName: 'SuppressedError', message: 'disposal failed', error: { code: '23502' }, suppressed: expect.any(Error) },
+      { errorName: 'TypeError', message: '0007 backfill failed', cause: rebuiltAggregate },
+      { errorName: 'Error', message: 'x', cause: { code: '23505', constraint: 'uq_members_nik' } },
+    ]);
+    // No key of a rebuilt link is one the log redacts as personal (an Error kept as it is shows its class through the
+    // log's own error writer).
+    const keys = (value: unknown): string[] =>
+      value === null || typeof value !== 'object' || value instanceof Error
+        ? []
+        : Object.entries(value).flatMap(([k, v]) => [k, ...(Array.isArray(v) ? v.flatMap(keys) : keys(v))]);
+    expect(safe.flatMap(keys).filter((k) => personal.has(k.toLowerCase().replace(/_/g, '')))).toEqual([]);
   });
 });
 
@@ -406,7 +435,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
   it('fresh DB: applies all three, records schema_meta and mirrors it to releases/schema-meta.json', async () => {
     const [migrateToLatest] = spyMigrator();
     const outcome = await runMigrations(h, options());
-    expect(outcome).toEqual({ mode: 'migrated', applied: ALL, schemaVersion: '0003', minCodeVersion: '0.2.0' });
+    expect(outcome).toEqual({ mode: 'migrated', applied: ALL, schemaVersion: '0003', minCodeVersion: '0.2.0', edition: { mode: 'empty', applied: [] } });
     // Positive control for the "never called" assertions elsewhere: the spies do see the runner's Migrator.
     expect(migrateToLatest).toHaveBeenCalledTimes(1);
     expect(await schemaMeta()).toEqual([{ id: 1, schema_version: '0003', min_code_version: '0.2.0' }]);
@@ -417,7 +446,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
     expect(await readSchemaMetaMirror(dataDir)).toEqual({ schemaVersion: '0003', minCodeVersion: '0.2.0' });
   });
 
-  it("registers Kysely's two tables in schema_tables as class migrator (R4)", async () => {
+  it("registers the Kysely Migrators' tables in schema_tables as class migrator, the other lane's two included", async () => {
     await runMigrations(h, options());
     const rows = await meta(h)
       .selectFrom('schema_tables')
@@ -425,9 +454,11 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       .where('name', 'in', [...MIGRATOR_TABLES])
       .orderBy('name')
       .execute();
-    expect(MIGRATOR_TABLES).toEqual(['schema_migrations', 'schema_migrations_lock']);
+    expect(MIGRATOR_TABLES).toEqual(['schema_migrations', 'schema_migrations_lock', 'schema_migrations_edition', 'schema_migrations_edition_lock']);
     expect(rows).toEqual([
       { name: 'schema_migrations', class: 'migrator', created_by: 'migrator' },
+      { name: 'schema_migrations_edition', class: 'migrator', created_by: 'migrator' },
+      { name: 'schema_migrations_edition_lock', class: 'migrator', created_by: 'migrator' },
       { name: 'schema_migrations_lock', class: 'migrator', created_by: 'migrator' },
     ]);
   });
@@ -490,13 +521,13 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
   it('second run: up-to-date, nothing executed again', async () => {
     await runMigrations(h, options());
     const outcome = await runMigrations(h, options());
-    expect(outcome).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0003', minCodeVersion: '0.2.0' });
+    expect(outcome).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0003', minCodeVersion: '0.2.0', edition: { mode: 'empty', applied: [] } });
     expect(await runsPerName(h.db)).toEqual({ '0001_a': 1, '0002_b': 1, '0003_c': 1 });
   });
 
   it('an empty set of migrations on a fresh DB: up-to-date at 0000 / 0.0.0', async () => {
     const outcome = await runMigrations(h, options({ migrations: {} }));
-    expect(outcome).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0000', minCodeVersion: '0.0.0' });
+    expect(outcome).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0000', minCodeVersion: '0.0.0', edition: { mode: 'empty', applied: [] } });
     expect(await readSchemaMetaMirror(dataDir)).toEqual({ schemaVersion: '0000', minCodeVersion: '0.0.0' });
   });
 
@@ -513,6 +544,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       applied: ['0003_c'],
       schemaVersion: '0003',
       minCodeVersion: '0.2.0',
+      edition: { mode: 'empty', applied: [] },
     });
   });
 
@@ -527,7 +559,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       await migratedByNewerCode('0.2.0');
       const spies = spyMigrator();
       const outcome = await runMigrations(h, options({ appVersion: '0.3.0' }));
-      expect(outcome).toEqual({ mode: 'schema-ahead', applied: [], schemaVersion: '9999', minCodeVersion: '0.2.0' });
+      expect(outcome).toEqual({ mode: 'schema-ahead', applied: [], schemaVersion: '9999', minCodeVersion: '0.2.0', edition: { mode: 'empty', applied: [] } });
       for (const spy of spies) expect(spy).not.toHaveBeenCalled();
       expect(await runsPerName(h.db)).toEqual({ '0001_a': 1, '0002_b': 1, '0003_c': 1 });
       // The mirror follows the database, so the bootloader sees what the newer code wrote.
@@ -538,7 +570,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       await migratedByNewerCode('9.0.0');
       const spies = spyMigrator();
       const outcome = await runMigrations(h, options({ appVersion: '0.3.0' }));
-      expect(outcome).toEqual({ mode: 'too-old', applied: [], schemaVersion: '9999', minCodeVersion: '9.0.0' });
+      expect(outcome).toEqual({ mode: 'too-old', applied: [], schemaVersion: '9999', minCodeVersion: '9.0.0', edition: { mode: 'empty', applied: [] } });
       for (const spy of spies) expect(spy).not.toHaveBeenCalled();
       expect(await readSchemaMetaMirror(dataDir)).toEqual({ schemaVersion: '9999', minCodeVersion: '9.0.0' });
     });
@@ -576,6 +608,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       applied: [],
       schemaVersion: '0003',
       minCodeVersion: '0.4.0',
+      edition: { mode: 'empty', applied: [] },
     });
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   });
@@ -617,6 +650,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       applied: ['0001_x', '0002_y'],
       schemaVersion: '0002',
       minCodeVersion: '0.3.0',
+      edition: { mode: 'empty', applied: [] },
     });
     expect(seen).toEqual(['0.3.0']);
   });
@@ -648,6 +682,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       applied: [],
       schemaVersion: '0003',
       minCodeVersion: '0.2.0',
+      edition: { mode: 'empty', applied: [] },
     });
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
     expect(await schemaMeta()).toEqual([{ id: 1, schema_version: '0003', min_code_version: '0.2.0' }]);
@@ -683,6 +718,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
       applied: h.dialect === 'postgres' ? ALL : ['0002_b', '0003_c'],
       schemaVersion: '0003',
       minCodeVersion: '0.2.0',
+      edition: { mode: 'empty', applied: [] },
     });
     expect(await appliedNames()).toEqual(ALL);
     expect(await runsPerName(h.db)).toEqual({ '0001_a': 1, '0002_b': 1, '0003_c': 1 });
@@ -863,7 +899,7 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
         ).catch((e: unknown) => e);
         expect(error).toBeInstanceOf(MigrationError);
         expect((error as Error).message).toContain('backfill failed');
-        expect((error as Error).cause).toMatchObject({ name: 'Error', message: 'backfill failed', cause: { code: expect.any(String) } });
+        expect((error as Error).cause).toMatchObject({ errorName: 'Error', message: 'backfill failed', cause: { code: expect.any(String) } });
         expectNoDriverText(error);
       });
 
@@ -909,8 +945,8 @@ describe.skipIf(!ctx.available)(`runMigrations [${engineLabel()}]`, () => {
         ).catch((e: unknown) => e);
         expect(error).toBeInstanceOf(MigrationError);
         expect((error as Error).message).toContain('backfill failed');
-        const cause = (error as Error).cause as { name: string; message: string; errors: unknown[] };
-        expect(cause).toMatchObject({ name: 'AggregateError', message: 'backfill failed' });
+        const cause = (error as Error).cause as { errorName: string; message: string; errors: unknown[] };
+        expect(cause).toMatchObject({ errorName: 'AggregateError', message: 'backfill failed' });
         expect(cause.errors.length).toBe(ctx.engine.startsWith('pg') ? 1 : 2);
         for (const e of cause.errors) {
           expect(Object.keys(e as object).every((k) => ['code', 'errno', 'sqlState', 'constraint'].includes(k))).toBe(true);

@@ -280,7 +280,7 @@ describe.skipIf(!ctx.available)(`SLiMS migration framework [${engineLabel()}]`, 
     expect(ok).toEqual({
       ok: true,
       tables: [
-        { table: 'loan', source: 99, migrated: 0, merged: 0, skipped: 0, archived: 0, unread: true, diff: 0 },
+        { table: 'loan', source: 99, migrated: 0, merged: 0, skipped: 0, archived: 0, unread: true, diff: 0, unreadKind: 'phase3' },
         { table: 'mst_author', source: 10, migrated: 6, merged: 2, skipped: 1, archived: 1, unread: false, diff: 0 },
       ],
     });

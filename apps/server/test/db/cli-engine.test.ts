@@ -234,7 +234,16 @@ describe.skipIf(!engine.available)(`CLI against the database [${engineLabel()}]`
     expect(code).toBe(0);
     // The schema version of the last migration (by name; Phase 1d and Phase 2 add theirs).
     const latest = (Object.keys(PHASE1_MIGRATIONS).sort().at(-1) ?? '').slice(0, 4);
-    expect(JSON.parse(io.out)).toEqual({ ok: true, command: 'migrate', mode: 'up-to-date', applied: [], schemaVersion: latest, minCodeVersion: '0.0.0' });
+    // A community install ships no migration of the other lane: `edition` says so, without that lane's table being read.
+    expect(JSON.parse(io.out)).toEqual({
+      ok: true,
+      command: 'migrate',
+      mode: 'up-to-date',
+      applied: [],
+      schemaVersion: latest,
+      minCodeVersion: '0.0.0',
+      edition: { mode: 'empty', applied: [] },
+    });
     expect(await readOpFile(dirs.dataDir)).toMatchObject({ kind: 'migrate', state: 'done', actor: { type: 'cli', id: null }, error: null });
     expect(await readMaintenance(dirs.dataDir)).toBeNull();
   }, 60_000);

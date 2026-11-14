@@ -1,7 +1,7 @@
 import type { BranchListResponse } from '@altis/shared/api/branches';
-import { PRICE_MODES, sourceNameField, type PriceMode } from '@altis/shared/api/catalog/migration';
+import { PRICE_MODES, sourceNameField, type PriceMode, type SlimsStartBody } from '@altis/shared/api/catalog/migration';
 import { useEffect, useId, useMemo, type ReactNode } from 'react';
-import { CheckField, Field, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { CheckField, Field, NoticeAlert, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
 import { Input } from '@/components/ui/input';
 import { useT, type TKey } from '@/i18n';
 import { isWritableBranch } from '@/lib/branches';
@@ -18,7 +18,18 @@ import { useApiQuery } from '@/lib/me';
  * - **Izinkan katalog tujuan yang tidak kosong** (`allowNonEmpty`, §11.2): a real run into a catalogue that holds
  *   records, only with the library's name typed out (compared as the server does: NFKC, then trimmed). The dry run
  *   ignores it, and the real run asks for it again (index.tsx).
+ * - **Mode katalog** (`catalogMode`): "Tambah baris baru saja" (`append`, the default and the earlier behaviour: a
+ *   re-run only adds new rows, as its sentence says) or "Selaraskan dengan SLiMS" (`sync`: the mapped records and
+ *   copies no one edited in ALTIS are written again as SLiMS has them, those edited in ALTIS are skipped and reported),
+ *   with the sentence of the mode chosen. The start sends `catalogMode` only for `sync`.
+ * - **Lewati tahap katalog** (`skipCatalog`, {@link SkipCatalogField}) belongs to the real run under a dry run
+ *   (index.tsx): it can be ticked only when that dry run was a sync that found no catalogue change.
  */
+
+/** How a run treats the catalogue rows it mapped before: `append` (new rows only) or `sync`. */
+export type CatalogMode = NonNullable<SlimsStartBody['catalogMode']>;
+
+export const CATALOG_MODES: readonly CatalogMode[] = ['append', 'sync'];
 
 export interface OptionsDraft {
   /** '' until the branches are known (then the default branch). */
@@ -27,9 +38,11 @@ export interface OptionsDraft {
   sourceName: string;
   allowNonEmpty: boolean;
   confirmLibraryName: string;
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  catalogMode: CatalogMode;
 }
 
-export const EMPTY_OPTIONS: OptionsDraft = { branchId: '', priceMode: 'major', sourceName: 'slims', allowNonEmpty: false, confirmLibraryName: '' };
+export const EMPTY_OPTIONS: OptionsDraft = { branchId: '', priceMode: 'major', sourceName: 'slims', allowNonEmpty: false, confirmLibraryName: '', catalogMode: 'append' };
 
 export type OptionsErrors = Partial<Record<'branchId' | 'sourceName' | 'confirmLibraryName', TKey>>;
 
@@ -64,6 +77,39 @@ const PRICE_LABEL: Readonly<Record<PriceMode, TKey>> = {
 
 /** The label of a price mode. */
 export const priceModeLabel = (mode: PriceMode): TKey => PRICE_LABEL[mode];
+
+// ---- Komunitas K1 (catalogue re-sync) ----
+
+/** What a run in `mode` does with the rows it mapped before. */
+export function CatalogModeNote({ mode }: { mode: CatalogMode }) {
+  const t = useT();
+  return <NoticeAlert>{t(mode === 'sync' ? 'catalog.migration.options.sync_note' : 'catalog.migration.rerun_note')}</NoticeAlert>;
+}
+
+/** The label of a catalogue mode. */
+export const catalogModeLabel = (mode: CatalogMode): TKey => (mode === 'sync' ? 'catalog.migration.options.catalog_mode.sync' : 'catalog.migration.options.catalog_mode.append');
+
+/**
+ * Whether the real run under a dry run may skip the catalogue stages: the dry run was a sync (that ran them, so it did
+ * not skip them itself) whose summary counted no source record or copy new, changed or gone.
+ */
+export function canSkipCatalog(dryRun: { catalogMode?: CatalogMode; skipCatalog?: boolean }, catalogChanges: number | undefined): boolean {
+  return dryRun.catalogMode === 'sync' && dryRun.skipCatalog !== true && catalogChanges === 0;
+}
+
+/** "Lewati tahap katalog": enabled only when `allowed` ({@link canSkipCatalog}), with the reason either way. */
+export function SkipCatalogField({ allowed, checked, disabled, onChange }: { allowed: boolean; checked: boolean; disabled: boolean; onChange(next: boolean): void }) {
+  const t = useT();
+  return (
+    <CheckField
+      label={t('catalog.migration.options.skip_catalog')}
+      hint={t(allowed ? 'catalog.migration.options.skip_catalog_ready' : 'catalog.migration.options.skip_catalog_hint')}
+      checked={allowed && checked}
+      disabled={!allowed || disabled}
+      onChange={(e) => onChange(e.target.checked)}
+    />
+  );
+}
 
 /** "Izinkan katalog tujuan yang tidak kosong" and, when ticked, the library's name typed out. */
 export function NonEmptyConfirm({
@@ -123,6 +169,7 @@ export function OptionsStep({
   const t = useT();
   const titleId = useId();
   const priceName = useId();
+  const modeName = useId();
   const branches = useApiQuery<BranchListResponse>({ queryKey: ACTIVE_BRANCHES_KEY, path: 'branches' });
   // The writable branches (live and active, L13): a migration writes the items of its target branch.
   const active = useMemo(() => branches.data?.items.filter(isWritableBranch) ?? [], [branches.data]);
@@ -189,6 +236,29 @@ export function OptionsStep({
             </div>
           );
         })}
+      </fieldset>
+      <fieldset className="grid gap-2">
+        <legend className="mb-1 text-sm font-medium">{t('catalog.migration.options.catalog_mode')}</legend>
+        {CATALOG_MODES.map((mode) => {
+          const id = `${modeName}-${mode}`;
+          return (
+            <div key={mode} className="flex items-center gap-2">
+              <input
+                id={id}
+                type="radio"
+                name={modeName}
+                value={mode}
+                checked={value.catalogMode === mode}
+                onChange={() => onChange({ ...value, catalogMode: mode })}
+                className="size-4 accent-primary"
+              />
+              <label htmlFor={id} className="text-sm">
+                {t(catalogModeLabel(mode))}
+              </label>
+            </div>
+          );
+        })}
+        <CatalogModeNote mode={value.catalogMode} />
       </fieldset>
       <NonEmptyConfirm
         allowNonEmpty={value.allowNonEmpty}

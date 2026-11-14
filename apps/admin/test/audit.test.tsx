@@ -2,10 +2,12 @@ import type { AuditItem, AuditListResponse, AuditVerifyResponse } from '@altis/s
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { page } from '@/lib/page';
 import { adminMe, signedIn, startApp, type FakeHandler, type FakeRequest } from './fake-api';
 
 // Spec §13.3 "Log audit", §7.8 (Task 30): filters, cursor paging ("Muat lagi"), the chain status of
-// `GET audit/verify`, and the CSV export link. The server is faked (fake-api.tsx).
+// `GET audit/verify`, and the CSV export link, which asks for the password before the file loads (it holds staff
+// names). The server is faked (fake-api.tsx).
 
 afterEach(() => {
   focusManager.setFocused(undefined);
@@ -124,6 +126,30 @@ describe('audit log', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Terapkan' }));
     expect(await screen.findByText('Tanggal akhir tidak boleh sebelum tanggal awal.')).toBeTruthy();
     expect(requests.filter((r) => r.path === 'audit')).toHaveLength(before);
+  });
+
+  it('the export asks for the password first, then loads the file with the applied filters; a cancelled dialog loads nothing', async () => {
+    const assign = vi.spyOn(page, 'assign').mockImplementation(() => undefined);
+    const { writes } = startApp({
+      me: adminMe(),
+      path: '/admin/audit',
+      routes: { ...auditRoutes(), 'POST auth/reauth': () => ({ reauthUntil: Date.now() + 300_000 }) },
+    });
+    await screen.findByText('#3');
+    fireEvent.change(screen.getByLabelText('Pemisah kolom'), { target: { value: 'semicolon' } });
+    fireEvent.click(screen.getByRole('link', { name: /Ekspor CSV/ }));
+    const cancelled = await screen.findByRole('dialog', { name: 'Konfirmasi kata sandi' });
+    fireEvent.click(within(cancelled).getByRole('button', { name: 'Batal' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(assign).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('link', { name: /Ekspor CSV/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Konfirmasi kata sandi' });
+    expect(assign).not.toHaveBeenCalled();
+    fireEvent.change(within(dialog).getByLabelText('Kata sandi'), { target: { value: 'kata-sandi-ani' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Konfirmasi' }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/api/v1/audit/export?delimiter=semicolon'));
+    expect(writes()).toEqual(['POST auth/reauth']);
   });
 
   it('without system.audit.export there is no export link', async () => {

@@ -41,6 +41,7 @@ import {
   type UserSnapshot,
 } from '../matrix-fixtures.js';
 import { CATALOG_MATRIX } from '../matrix/catalog.js';
+import { KOMUNITAS_MATRIX } from '../matrix/komunitas.js';
 import { removeOp } from '../ops-support.js';
 import { recordingLogger, sampleConfig } from '../support.js';
 import { devPackageKeys } from '../update-support.js';
@@ -157,6 +158,9 @@ const CATALOG: Readonly<Record<string, string>> = {
   'settings.catalog.put':
     'PUT /api/v1/settings/catalog | P:system.settings.manage | - | - | write | deny | store | settings.update | handler | -',
   'catalog.config': 'GET /api/v1/catalog/config | P:catalog.records.read | - | - | read | deny | none | null | - | -',
+  // ---- Komunitas K1 (settings) ----
+  'settings.accreditation.put':
+    'PUT /api/v1/settings/accreditation | P:system.settings.manage | - | - | write | deny | store | settings.update | handler | -',
   'system.config.get': 'GET /api/v1/system/config | P:system.config.manage | - | - | read | deny | none | null | - | -',
   'system.config.put': 'PUT /api/v1/system/config | P:system.config.manage | - | reauth | write | deny | none | system.config.update | self | -',
   'system.config.email_test':
@@ -166,7 +170,7 @@ const CATALOG: Readonly<Record<string, string>> = {
   // ---- 1b: audit ----
   'audit.list': 'GET /api/v1/audit | P:system.audit.read | - | - | read | deny | none | null | - | -',
   'audit.verify': 'GET /api/v1/audit/verify | P:system.audit.read | - | - | read | deny | none | null | - | -',
-  'audit.export': 'GET /api/v1/audit/export | P:system.audit.export | - | - | system | deny | none | audit.export | - | -',
+  'audit.export': 'GET /api/v1/audit/export | P:system.audit.export | - | reauth | system | deny | none | audit.export | - | -',
   // ---- 1c: the cron call ----
   'cron.run': 'POST /_cron | pub | - | - | system | restore-allow | none | null | self | bearer',
   // ---- 1c: jobs and schedules ----
@@ -271,6 +275,9 @@ const CATALOG: Readonly<Record<string, string>> = {
   // The catalog routes' rows, one file per area (matrix/catalog-<area>.ts); matrix-fixtures.ts spreads their fixtures
   // at the same place, so the order of the two maps stays the same.
   ...CATALOG_MATRIX.rows,
+  // ---- Komunitas K1 (reports and accreditation) ----
+  // The community rows, one file per area (matrix/komunitas-<area>.ts), merged in matrix/komunitas.ts.
+  ...KOMUNITAS_MATRIX.rows,
 };
 
 /** `d` as a row of {@link CATALOG}. */
@@ -681,6 +688,31 @@ describe.skipIf(!ctx.available)(`permission matrix, escalation, audit once [${en
       expect([mixed.status, codeOf(mixed)]).toEqual([403, 'AUTHZ_DENIED']);
       const reader = await personaUser('perm:system.backup.read');
       const ok = await callAs(reader, 'events.poll', { query: { channels: 'system.backup' } });
+      expect(ok.status, ok.text).toBe(200);
+    });
+
+    // ---- Komunitas K1 (personas) ----
+    it('the reports and accreditation permissions each have a persona, holding that permission only; admin holds all three', () => {
+      for (const key of ['reports.statistics.read', 'accreditation.workspace.read', 'accreditation.workspace.manage'] as const) {
+        expect(allPersonas(), key).toContain(`perm:${key}`);
+        expect(holds(`perm:${key}`, key), key).toBe(true);
+        expect(holds(`perm:${key}`, 'system.settings.manage'), key).toBe(false);
+        expect(holds('admin', key), key).toBe(true);
+      }
+      // PUT settings/accreditation is a settings route: the accreditation managers do not hold it.
+      expect(expected(routeOf('settings.accreditation.put'), 'perm:accreditation.workspace.manage')).toBe('denied');
+      expect(expected(routeOf('settings.accreditation.put'), 'perm:system.settings.manage')).toBe('allowed');
+    });
+
+    it('staff without accreditation.workspace.read: GET events?channels=accreditation → 403 AUTHZ_DENIED; with it → 200', async () => {
+      const manager = await personaUser('perm:accreditation.workspace.manage');
+      const res = await callAs(manager, 'events.poll', { query: { channels: 'accreditation' } });
+      expect([res.status, codeOf(res)]).toEqual([403, 'AUTHZ_DENIED']);
+      const reporter = await personaUser('perm:reports.statistics.read');
+      const other = await callAs(reporter, 'events.poll', { query: { channels: 'accreditation' } });
+      expect([other.status, codeOf(other)]).toEqual([403, 'AUTHZ_DENIED']);
+      const reader = await personaUser('perm:accreditation.workspace.read');
+      const ok = await callAs(reader, 'events.poll', { query: { channels: 'accreditation' } });
       expect(ok.status, ok.text).toBe(200);
     });
 

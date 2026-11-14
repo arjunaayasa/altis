@@ -57,21 +57,32 @@ const CATALOG_SECTIONS: [string, string][] = [
   ['/admin/catalog/migration', 'catalog.migration.run'],
 ];
 
+/** The Laporan group: the report catalogue and the accreditation workspace, each behind its own permission. */
+const REPORTS_SECTIONS: [string, string][] = [
+  ['/admin/reports', 'reports.statistics.read'],
+  ['/admin/accreditation', 'accreditation.workspace.read'],
+];
+
 const sectionsOf = (m: FullMe) => visibleNavSections(m).map((s) => [s.group, paths(s.items)]);
 
 describe('NAV', () => {
-  it('lists the shell sections in order, with their permissions: Beranda, then Katalog, OPAC and Sistem', () => {
+  it('lists the shell sections with their permissions: Beranda, Katalog, OPAC and Sistem, then the Laporan block at the end', () => {
     expect(NAV.map((item) => [item.to, item.permission ?? null])).toEqual([
       ['/admin', null],
       ...CATALOG_SECTIONS,
       ['/admin/opac/pages', 'opac.pages.manage'],
       ...SYSTEM_SECTIONS,
+      ...REPORTS_SECTIONS,
     ]);
     for (const item of NAV) expect(item.labelKey).toMatch(/^nav\./);
   });
 
-  it('Phase 2: NAV_GROUPS orders catalog, opac, system; Beranda alone is ungrouped, every Phase 1 section is system', () => {
-    expect([...NAV_GROUPS]).toEqual(['catalog', 'opac', 'system']);
+  it('NAV_GROUPS orders catalog, reports, opac, system; Beranda alone is ungrouped, every Phase 1 section is system', () => {
+    expect([...NAV_GROUPS]).toEqual(['catalog', 'reports', 'opac', 'system']);
+    expect(NAV.filter((item) => item.group === 'reports').map((item) => [item.to, item.labelKey])).toEqual([
+      ['/admin/reports', 'nav.reports.reports'],
+      ['/admin/accreditation', 'nav.reports.accreditation'],
+    ]);
     expect(NAV.filter((item) => item.group === undefined).map((item) => item.to)).toEqual(['/admin']);
     expect(NAV.filter((item) => item.group === 'system').map((item) => item.to)).toEqual(SYSTEM_SECTIONS.map(([to]) => to));
     expect(NAV.filter((item) => item.group === 'catalog').map((item) => item.to)).toEqual(CATALOG_SECTIONS.map(([to]) => to));
@@ -117,6 +128,29 @@ describe('visibleNav', () => {
       '/admin/backups',
       '/admin/diagnostics',
       '/admin/about',
+      '/admin/reports',
+      '/admin/accreditation',
+    ]);
+  });
+
+  it('reports.statistics.read alone shows the Laporan group with Laporan only', () => {
+    expect(sectionsOf(me({ permissions: ['reports.statistics.read'] }))).toEqual([
+      [null, ['/admin']],
+      ['reports', ['/admin/reports']],
+      ['system', ['/admin/about']],
+    ]);
+  });
+
+  it('accreditation.workspace.read alone shows the Laporan group with Akreditasi only', () => {
+    expect(sectionsOf(me({ permissions: ['accreditation.workspace.read'] }))).toEqual([
+      [null, ['/admin']],
+      ['reports', ['/admin/accreditation']],
+      ['system', ['/admin/about']],
+    ]);
+    // Managing the workspace alone opens no menu item: reading it is what the item needs.
+    expect(sectionsOf(me({ permissions: ['accreditation.workspace.manage'] }))).toEqual([
+      [null, ['/admin']],
+      ['system', ['/admin/about']],
     ]);
   });
 
@@ -139,10 +173,17 @@ describe('visibleNav', () => {
     ]);
   });
 
-  it('a super admin sees all three groups, in order, with every item', () => {
+  it('a super admin sees the four groups catalog, reports, opac, system in that order, with every item', () => {
     const sections = visibleNavSections(me({ permissions: systemRolePermissions('super_admin'), superAdmin: true }));
-    expect(sections.map((s) => s.group)).toEqual([null, 'catalog', 'opac', 'system']);
-    expect(sections.flatMap((s) => paths(s.items))).toEqual(paths(NAV));
+    expect(sections.map((s) => s.group)).toEqual([null, 'catalog', 'reports', 'opac', 'system']);
+    expect(sections.flatMap((s) => paths(s.items))).toEqual([
+      '/admin',
+      ...CATALOG_SECTIONS.map(([to]) => to),
+      ...REPORTS_SECTIONS.map(([to]) => to),
+      '/admin/opac/pages',
+      ...SYSTEM_SECTIONS.map(([to]) => to),
+    ]);
+    expect([...sections.flatMap((s) => paths(s.items))].sort()).toEqual([...paths(NAV)].sort());
   });
 
   it('opac.pages.manage alone shows the OPAC group with Halaman & Berita', () => {

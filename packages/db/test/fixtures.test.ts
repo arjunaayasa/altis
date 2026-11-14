@@ -117,7 +117,13 @@ describe.skipIf(!ctx.available)(`release fixtures against the database [${engine
     await migrate('0.2.0-test', 2);
     await fx(h).insertInto('test_fixture').values({ id: '01JA0000000000000000000001', note: 'kept', created_at: 1 }).execute();
     const outcome = await migrate('0.3.0-test', 3);
-    expect(outcome).toEqual({ mode: 'migrated', applied: ['9002_test_contract'], schemaVersion: '9002', minCodeVersion: '0.3.0-test' });
+    expect(outcome).toEqual({
+      mode: 'migrated',
+      applied: ['9002_test_contract'],
+      schemaVersion: '9002',
+      minCodeVersion: '0.3.0-test',
+      edition: { mode: 'empty', applied: [] },
+    });
     expect(await schemaMeta()).toEqual({ schema_version: '9002', min_code_version: '0.3.0-test' });
     expect(await fx(h).selectFrom('test_fixture').selectAll().execute()).toEqual([
       { id: '01JA0000000000000000000001', note: 'kept', created_at: 1, extra: '' },
@@ -126,12 +132,12 @@ describe.skipIf(!ctx.available)(`release fixtures against the database [${engine
 
   it('level-2 code (0.2.0-test) on a level-3 database: too-old', async () => {
     await migrate('0.3.0-test', 3);
-    expect(await migrate('0.2.0-test', 2)).toEqual({ mode: 'too-old', applied: [], schemaVersion: '9002', minCodeVersion: '0.3.0-test' });
+    expect(await migrate('0.2.0-test', 2)).toEqual({ mode: 'too-old', applied: [], schemaVersion: '9002', minCodeVersion: '0.3.0-test', edition: { mode: 'empty', applied: [] } });
   });
 
   it('level-1 code (0.1.0-test) on a level-2 database: schema-ahead', async () => {
     await migrate('0.2.0-test', 2);
-    expect(await migrate('0.1.0-test', 1)).toEqual({ mode: 'schema-ahead', applied: [], schemaVersion: '9001', minCodeVersion: '0.0.0' });
+    expect(await migrate('0.1.0-test', 1)).toEqual({ mode: 'schema-ahead', applied: [], schemaVersion: '9001', minCodeVersion: '0.0.0', edition: { mode: 'empty', applied: [] } });
   });
 
   it('level 1 creates no test table', async () => {

@@ -10,6 +10,7 @@ import {
   BRANCH_NORTH,
   ROLES,
   USERS,
+  USER_BUDI,
   adminMe,
   permissionsAnswer,
   problem,
@@ -58,6 +59,22 @@ const SETTINGS: SettingsView = {
     isbn: { arsyaEnabled: false },
     attachment: { maxMb: 200 },
     dedupe: { threshold: 80 },
+  },
+  // Reports and accreditation: the accreditation group (its screen has its own tests).
+  accreditation: {
+    schoolYearStartMonth: 7,
+    fiction: { collectionTypeCodes: ['FIKSI'], callNumberPrefixes: [], ddcPrefixes: [] },
+    referenceCollectionTypeCodes: ['REF'],
+    electronicMaterialTypeCodes: ['EBOOK'],
+    usedUnit: 'titles',
+    websiteFeatures: {},
+    liveFrom: null,
+    evidence: { maxMb: 5, componentLimitMb: 9 },
+    textbookCollectionTypeCodes: [],
+    k7: { processedThresholdPct: 100 },
+    undatedShareMaxPct: 10,
+    visits: { dedupeLegacy: true },
+    unknownMemberGroup: { default: 'auto' },
   },
 };
 
@@ -132,7 +149,7 @@ const CASES: Case[] = [
   {
     name: 'Ubah pengguna',
     me: adminMe(),
-    path: '/admin/users/U2',
+    path: `/admin/users/${USER_BUDI.id}`,
     routes: {
       'GET users/:id': (req) => USERS.find((u) => u.id === req.params['id']) ?? problem(404, 'NOT_FOUND'),
       'GET roles': () => ({ items: ROLES }),
@@ -141,7 +158,7 @@ const CASES: Case[] = [
     },
     label: 'Nama lengkap',
     typed: 'Budi S.',
-    key: ['users', 'detail', 'U2'],
+    key: ['users', 'detail', USER_BUDI.id],
   },
   {
     name: 'Ubah peran',
@@ -200,7 +217,7 @@ describe('a failed background refetch keeps a loaded edit form', () => {
   }
 
   it('a read that fails before any data came still shows its problem in place of the form', async () => {
-    startApp({ me: adminMe(), path: '/admin/users/U2', routes: { 'GET users/:id': () => problem(503, 'DB_UNAVAILABLE') } });
+    startApp({ me: adminMe(), path: `/admin/users/${USER_BUDI.id}`, routes: { 'GET users/:id': () => problem(503, 'DB_UNAVAILABLE') } });
     expect(await screen.findByText('Database tidak dapat dijangkau saat ini. Silakan coba lagi sebentar lagi.')).toBeTruthy();
     expect(screen.queryByLabelText('Nama lengkap')).toBeNull();
     expect(screen.queryByText(REFETCH_FAILED)).toBeNull();

@@ -10,6 +10,8 @@
  * No Node built-ins here: the browser bundles this package.
  */
 
+import { ACCREDITATION_VOCAB_LISTS } from './accreditation-vocab.js';
+
 const hasOwn = (o: object, key: string): boolean => Object.prototype.hasOwnProperty.call(o, key);
 
 // ---- items (§2.5) --------------------------------------------------------------------------------------------------
@@ -336,7 +338,15 @@ export const EXPORT_FORMATS = Object.freeze(['marc21', 'marcxml', 'marcjson', 'c
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /** The kinds of `catalog_runs`. */
-export const RUN_KINDS = Object.freeze(['import', 'export', 'migration', 'dedupe_scan'] as const);
+export const RUN_KINDS = Object.freeze([
+  'import',
+  'export',
+  'migration',
+  'dedupe_scan',
+  // ---- Komunitas K1 (runs) ----
+  // The read-only import of SLiMS usage statistics into an accreditation period.
+  'slims_usage',
+] as const);
 
 export type RunKind = (typeof RUN_KINDS)[number];
 
@@ -400,6 +410,8 @@ export const VOCAB_LISTS = Object.freeze({
   page_status: PAGE_STATUSES,
   page_locale: PAGE_LOCALES,
   body_format: BODY_FORMATS,
+  // ---- Komunitas K1 (vocabularies) ----
+  ...ACCREDITATION_VOCAB_LISTS,
 });
 
 export type VocabList = keyof typeof VOCAB_LISTS;

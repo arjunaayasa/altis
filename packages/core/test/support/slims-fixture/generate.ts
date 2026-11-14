@@ -6,8 +6,12 @@ import { BIBLIO_CUSTOM_COLUMNS, FIXTURE_TABLES, ITEM_CUSTOM_COLUMNS, type Fixtur
 // seeds give two catalogues with the same shape (Task 37 migrates a second seed under another source name).
 
 /** A cell of the dump: NULL, a number, text, raw bytes inside a string literal (not UTF-8), or a 0x… hex literal. */
-type Cell = null | number | string | { raw: Uint8Array } | Uint8Array;
-type Row = Record<string, Cell>;
+/** A cell of a fixture row: NULL, a number, a text, raw bytes in a literal, or a binary literal. */
+export type FixtureCell = null | number | string | { raw: Uint8Array } | Uint8Array;
+/** A fixture row: column → cell (a column left out is NULL). */
+export type FixtureRow = Record<string, FixtureCell>;
+type Cell = FixtureCell;
+type Row = FixtureRow;
 
 /** A text trap: the value stored in SLiMS and what the §11.5 clean-up must make of it. */
 export interface TextTrap {
@@ -167,14 +171,19 @@ const LINKS = ['dan', 'di', 'untuk', 'dalam', 'pada', 'bagi'];
 const GIVEN = ['Andi', 'Budi', 'Citra', 'Dewi', 'Eko', 'Fajar', 'Gita', 'Hendra', 'Indah', 'Joko', 'Kartika', 'Lukman', 'Maya', 'Nanda', 'Oki', 'Putri', 'Rina', 'Sari', 'Taufik', 'Wulan'];
 const FAMILY = ['Saputra', 'Wijaya', 'Siregar', 'Nasution', 'Lubis', 'Hasibuan', 'Pratama', 'Kusuma', 'Halim', 'Santoso', 'Gunawan', 'Hidayat', 'Rahman', 'Purba', 'Tanjung'];
 
-interface Data {
+/**
+ * The fixture before it is rendered: the rows of every table, the traps' expectations and the files zip's entries. A
+ * hook may change it before the dump is written (`generateSlimsFixture`'s `transform`).
+ */
+export interface FixtureData {
   rows: Map<string, Row[]>;
   traps: SlimsFixtureTraps;
   zip: RawEntry[];
 }
 
+
 /** The rows of every table and the traps' expectations. */
-function buildData(seed: number): Data {
+export function buildData(seed: number): FixtureData {
   const rand = generator(seed);
   const pick = <T>(list: readonly T[]): T => list[Math.floor(rand() * list.length)]!;
   const rows = new Map<string, Row[]>();
@@ -890,10 +899,25 @@ function buildData(seed: number): Data {
     ['M0003', 'Anggota Tiga', 'tiga@example.test', null],
   ].forEach(([id, name, email, since]) => add('member', { member_id: id!, member_name: name!, member_email: email ?? null, member_since_date: since ?? null }));
   for (let id = 1; id <= 4; id += 1) {
-    add('loan', { loan_id: id, item_code: `B${pad(id + 40, 5)}`, member_id: `M000${(id % 3) + 1}`, loan_date: '2023-03-01', due_date: '2023-03-08' });
+    add('loan', {
+      loan_id: id,
+      item_code: `B${pad(id + 40, 5)}`,
+      member_id: `M000${(id % 3) + 1}`,
+      loan_date: '2023-03-01',
+      due_date: '2023-03-08',
+      is_lent: 1,
+      is_return: 0,
+    });
   }
   for (let id = 1; id <= 2; id += 1) {
-    add('loan_history', { loan_id: id, item_code: `B${pad(id + 40, 5)}`, biblio_id: id + 40, title: `Judul ${id + 40}`, member_id: `M000${id}` });
+    add('loan_history', {
+      loan_id: id,
+      item_code: `B${pad(id + 40, 5)}`,
+      biblio_id: id + 40,
+      title: `Judul ${id + 40}`,
+      member_id: `M000${id}`,
+      loan_date: '2023-02-01',
+    });
   }
   for (let id = 1; id <= 5; id += 1) add('search_biblio', { biblio_id: id, title: biblio(id)['title'] as string, author: null, topic: null });
   for (let id = 1; id <= 2; id += 1) add('read_counter', { id, item_code: `B${pad(id, 5)}`, title: null, created_at: '2023-04-01 09:00:00' });
@@ -931,7 +955,8 @@ function literal(cell: Cell): Buffer {
 
 const ROWS_PER_INSERT = 50;
 
-function renderDump(data: Data): Buffer {
+/** The mysqldump-style dump of `data`, every table of FIXTURE_TABLES in order. */
+export function renderDump(data: FixtureData): Buffer {
   const out: Buffer[] = [];
   const text = (s: string): void => {
     out.push(Buffer.from(s, 'utf8'));
@@ -1047,15 +1072,24 @@ function renderDump(data: Data): Buffer {
   return Buffer.concat(out);
 }
 
-/** The fixture's dump, files zip and expectations for `seed`. */
-export function generateSlimsFixture(seed: number): { dump: Buffer; filesZip: Buffer; expected: SlimsFixtureExpected } {
-  const data = buildData(seed);
+/**
+ * The fixture's dump, files zip and expectations for `seed`. `o.transform` changes the data before it is rendered (the
+ * usage rows of the aggregate import, the catalogue changes a re-sync finds); the counts of `expected.tables` are the
+ * rendered ones.
+ */
+export function generateSlimsFixture(
+  seed: number,
+  o: { transform?(data: FixtureData): FixtureData } = {},
+): { dump: Buffer; filesZip: Buffer; expected: SlimsFixtureExpected } {
+  const built = buildData(seed);
+  const data = o.transform === undefined ? built : o.transform(built);
   const dump = renderDump(data);
   const filesZip = rawZip(data.zip);
   const tables: Record<string, { source: number }> = {};
   for (const table of FIXTURE_TABLES) tables[table.name] = { source: data.rows.get(table.name)?.length ?? 0 };
   const archived = ['serial', 'kardex', 'mst_frequency', 'stock_take', 'stock_take_item', 'mst_label', 'biblio_log', 'mst_item_status'];
-  const phase3 = ['member', 'loan', 'loan_history'];
+  // The usage tables (`visitor_count`, `mst_member_type`) are not read by the catalogue migration either.
+  const phase3 = ['member', 'loan', 'loan_history', 'visitor_count', 'mst_member_type'];
   const derived = ['search_biblio'];
   const other = ['read_counter'];
   const read = FIXTURE_TABLES.map((t) => t.name).filter((t) => !phase3.includes(t) && !derived.includes(t) && !other.includes(t));

@@ -22,7 +22,21 @@ import { useApiQuery, useMe } from '@/lib/me';
 import { uploadFile } from '@/lib/upload';
 import { useBytes } from '@/screens/backups/upload';
 import { ProgressBar } from '@/screens/jobs/list';
-import { ACTIVE_BRANCHES_KEY, EMPTY_OPTIONS, NonEmptyConfirm, OptionsStep, checkOptions, confirmError, priceModeLabel, type OptionsDraft, type OptionsErrors } from './options-step';
+import {
+  ACTIVE_BRANCHES_KEY,
+  CatalogModeNote,
+  EMPTY_OPTIONS,
+  NonEmptyConfirm,
+  OptionsStep,
+  SkipCatalogField,
+  canSkipCatalog,
+  catalogModeLabel,
+  checkOptions,
+  confirmError,
+  priceModeLabel,
+  type OptionsDraft,
+  type OptionsErrors,
+} from './options-step';
 import { ReportView, readReport, stageText } from './report-view';
 import { EMPTY_SOURCE, SourceStep, checkDb, checkSource, hasSourceErrors, type SourceDraft, type SourceErrors } from './source-step';
 
@@ -32,7 +46,7 @@ import { EMPTY_SOURCE, SourceStep, checkDb, checkSource, hasSourceErrors, type S
  *
  * 1. **Sumber** (source-step.tsx): a SLiMS database with "Uji koneksi", or a dump; the files zip.
  * 2. **Opsi** (options-step.tsx): target branch, `priceMode`, source name (S13), "izinkan target tidak kosong" with
- *    the library's name typed out.
+ *    the library's name typed out, and the catalogue mode (`catalogMode`: add new rows only, or re-sync with SLiMS).
  * 3. **Uji kering:** the dump and the zip go up (`slims.dump`, `slims.files`; an upload that went up already is not
  *    sent again when only the start failed), then `POST catalog/migrations/slims {…, dryRun: true}`. The password is
  *    emptied from the page once the start is sent.
@@ -43,7 +57,10 @@ import { EMPTY_SOURCE, SourceStep, checkDb, checkSource, hasSourceErrors, type S
  *    branch, price mode and source name. A dump source sends no `source` and no `filesUploadId` (the dry run's staging
  *    and archive are adopted, nothing goes up again); a database source sends `source` again with the password asked
  *    again (it is never kept past a run). "Izinkan target tidak kosong" is confirmed again here, where the guard
- *    applies. The panel says that a re-run only adds new rows (D2-26).
+ *    applies. The panel says what the dry run's catalogue mode does with the rows mapped before, and the real run keeps
+ *    that mode. After a re-sync dry run that found no catalogue change, "Lewati tahap katalog" sends `skipCatalog`; the
+ *    server checks it again (422 MIGRATION_PRECHECK_FAILED `catalog_changed` otherwise, answered with the advice to
+ *    run a re-sync).
  *
  * The start answers 201 for a new run, or 200 `{joined: true}` when a migration is live already (one at a time): the
  * screen then shows that one. A migration still running when the screen opens (no `?run=`) is followed at once, so a
@@ -200,6 +217,7 @@ function Wizard({
         allowNonEmpty: options.allowNonEmpty,
         ...(options.allowNonEmpty ? { confirmLibraryName: options.confirmLibraryName } : {}),
         dryRun: true,
+        ...(options.catalogMode === 'sync' ? { catalogMode: 'sync' as const } : {}),
       };
       const started = await api<StartAnswer>('POST', 'catalog/migrations/slims', body, { signal });
       // A new run took the uploads; a joined one took nothing, and they stay usable for a later start.
@@ -294,6 +312,10 @@ const DryRunOptions = z.object({
   allowNonEmpty: z.boolean(),
   files: z.enum(['zip', 'dir']).nullable().catch(null),
   adoptedBy: z.string().optional(),
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  // Absent in the runs of an earlier release: `append`, without a skip.
+  catalogMode: z.enum(['append', 'sync']).optional().catch(undefined),
+  skipCatalog: z.boolean().optional().catch(undefined),
 });
 
 type DryRunOptions = z.infer<typeof DryRunOptions>;
@@ -332,7 +354,11 @@ function RealRunPanel({
   /** The start is under way (set at once: a second click before the next render sends nothing). */
   const sending = useRef(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const reconciled = readReport(dryRun.summary)?.reconciliation;
+  const report = readReport(dryRun.summary);
+  const reconciled = report?.reconciliation;
+  const catalogMode = options.catalogMode ?? 'append';
+  const skipAllowed = canSkipCatalog(options, report?.catalogChanges);
+  const [skipCatalog, setSkipCatalog] = useState(false);
 
   const submit = async (): Promise<void> => {
     if (sending.current) return;
@@ -358,6 +384,8 @@ function RealRunPanel({
       allowNonEmpty,
       ...(allowNonEmpty ? { confirmLibraryName: typed } : {}),
       dryRun: false,
+      ...(catalogMode === 'sync' ? { catalogMode: 'sync' as const } : {}),
+      ...(skipAllowed && skipCatalog ? { skipCatalog: true } : {}),
     };
     sending.current = true;
     setBusy(true);
@@ -375,6 +403,10 @@ function RealRunPanel({
         setFailure(t('catalog.migration.branch_gone'));
       } else if (e instanceof ApiError && e.code === 'MIGRATION_TARGET_NOT_EMPTY') {
         setFailure(t('catalog.migration.real.not_empty'));
+      } else if (e instanceof ApiError && e.code === 'MIGRATION_PRECHECK_FAILED' && e.reason === 'catalog_changed') {
+        setFailure(t('catalog.migration.real.catalog_changed'));
+      } else if (fieldError(e, 'skipCatalog') !== null) {
+        setFailure(t('catalog.migration.real.skip_needs_sync'));
       } else {
         setFailure(problemText(t, e));
       }
@@ -390,7 +422,7 @@ function RealRunPanel({
         {t('catalog.migration.real.title')}
       </h2>
       <p className="text-sm text-muted-foreground">{t('catalog.migration.real.description')}</p>
-      <NoticeAlert>{t('catalog.migration.rerun_note')}</NoticeAlert>
+      <CatalogModeNote mode={catalogMode} />
       {reconciled !== undefined && reconciled !== null && !reconciled.ok && <Notice kind="error">{t('catalog.migration.real.reconcile_warning')}</Notice>}
       <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
         <dt className="text-muted-foreground">{t('catalog.migration.real.source')}</dt>
@@ -407,7 +439,10 @@ function RealRunPanel({
         <dd>{t(priceModeLabel(options.priceMode))}</dd>
         <dt className="text-muted-foreground">{t('catalog.migration.real.source_name')}</dt>
         <dd className="font-mono">{options.sourceName}</dd>
+        <dt className="text-muted-foreground">{t('catalog.migration.options.catalog_mode')}</dt>
+        <dd>{t(catalogModeLabel(catalogMode))}</dd>
       </dl>
+      <SkipCatalogField allowed={skipAllowed} checked={skipCatalog} disabled={busy} onChange={setSkipCatalog} />
       {db !== null && (
         <div className="grid gap-3 md:max-w-md">
           <Field label={t('catalog.migration.db.password')} hint={t('catalog.migration.db.password_hint')} error={errors.password}>
@@ -629,11 +664,13 @@ function Migration({ libraryName }: { libraryName: string }) {
   const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const chosen = runOf(useSearch({ strict: false }));
+  const search = useSearch({ strict: false });
+  const chosen = runOf(search);
   const history = useApiQuery<RunListResponse>({ queryKey: RUNS_KEY, path: `catalog/runs?kind=migration&limit=${HISTORY_LIMIT}` });
   const live = history.data?.items.find(isLive) ?? null;
   const [source, setSource] = useState<SourceDraft>(EMPTY_SOURCE);
-  const [options, setOptions] = useState<OptionsDraft>(EMPTY_OPTIONS);
+  // `?catalogMode=sync` (a link from the accreditation workspace) opens the wizard with the re-sync chosen.
+  const [options, setOptions] = useState<OptionsDraft>(() => (search['catalogMode'] === 'sync' ? { ...EMPTY_OPTIONS, catalogMode: 'sync' } : EMPTY_OPTIONS));
   /** The run a start joined instead of starting one: its page says so. */
   const [joined, setJoined] = useState<string | null>(null);
 

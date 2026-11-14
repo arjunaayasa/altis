@@ -141,6 +141,44 @@ describe('backupTables', () => {
     before('custom_field_defs', 'custom_values');
   });
 
+  // ---- Komunitas K1 (tables) ----
+  it('Komunitas K1: the 12 data tables are backed up in load order; report runs and computed results are not', () => {
+    const names = backupTables().map((t) => t.table);
+    const k1Data: TableName[] = [
+      'accred_periods',
+      'accred_answers',
+      'accred_snapshots',
+      'accred_evidence',
+      'usage_stats',
+      'usage_group_map',
+      'library_activities',
+      'library_staff',
+      'staff_trainings',
+      'library_partnerships',
+      'library_budgets',
+      'library_documents',
+    ];
+    expect(k1Data).toHaveLength(12);
+    for (const t of k1Data) {
+      expect({ t, backedUp: names.includes(t), cls: TABLE_CLASSES[t] }).toEqual({ t, backedUp: true, cls: 'data' });
+    }
+    for (const t of ['report_runs', 'accred_results'] as TableName[]) {
+      expect({ t, backedUp: names.includes(t), cls: TABLE_CLASSES[t] }).toEqual({ t, backedUp: false, cls: 'volatile' });
+    }
+    // The K1 tables keep the load order of the whole list: a period before its answers and snapshots, a staff member
+    // before their trainings.
+    const k1Order = names.filter((n) => k1Data.includes(n));
+    expect(k1Order).toEqual(tableLoadOrder(k1Data).order);
+    const before = (a: TableName, b: TableName) => expect({ a, b, first: names.indexOf(a) < names.indexOf(b) }).toEqual({ a, b, first: true });
+    before('accred_periods', 'accred_answers');
+    before('accred_periods', 'accred_snapshots');
+    before('library_staff', 'staff_trainings');
+    // A backup at a Phase 2 schema holds none of them.
+    const phase2 = backupTablesAt('0029').map((t) => t.table);
+    for (const t of k1Data) expect({ t, atPhase2: phase2.includes(t) }).toEqual({ t, atPhase2: false });
+    expect(backupTablesAt('0033_catalog_accred_fields').map((t) => t.table)).toEqual(expect.arrayContaining(k1Data));
+  });
+
   it('backupTablesAt: the tables a backup at an older schema version holds (a Phase 1 schema has no catalog table)', () => {
     const latest = Object.keys(PHASE1_MIGRATIONS).sort().at(-1)!;
     // Every backup table but the test builds' test_fixture (decision D1d-26), which 9001_test_expand makes.

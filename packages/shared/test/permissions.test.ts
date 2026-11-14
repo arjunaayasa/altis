@@ -10,7 +10,7 @@ import {
   systemRolePermissions,
 } from '../src/permissions.js';
 
-// Spec §13.4, in spec order, without the two licence permissions (the community edition has none, ruling R12).
+// Spec §13.4, in spec order, without the two licence permissions (the community edition has no licence at all).
 const SPEC_13_4 = [
   'system.settings.read',
   'system.settings.manage',
@@ -47,8 +47,11 @@ const PHASE_2 = [
   'opac.pages.manage',
 ];
 
+/** The reports and accreditation keys of the community edition, appended in this order after Phase 2's; all global. */
+const KOMUNITAS_K1 = ['reports.statistics.read', 'accreditation.workspace.read', 'accreditation.workspace.manage'];
+
 /** Every production key, in catalog order. */
-const ALL = [...SPEC_13_4, ...PHASE_2];
+const ALL = [...SPEC_13_4, ...PHASE_2, ...KOMUNITAS_K1];
 
 /** The two branch-scoped keys of Phase 2 (§12.1: "cabang"). */
 const PHASE_2_BRANCH = ['catalog.locations.manage', 'catalog.items.manage'];
@@ -60,11 +63,12 @@ afterEach(() => {
 });
 
 describe('PERMISSIONS', () => {
-  it('is the 19 keys of spec §13.4 in spec order, then the 10 of Phase 2 (§12.1) in theirs: 29', () => {
+  it('is the 19 keys of spec §13.4 in spec order, then the 10 of Phase 2 (§12.1) in theirs, then the 3 of reports and accreditation: 32', () => {
     expect(SPEC_13_4).toHaveLength(19);
     expect(PHASE_2).toHaveLength(10);
+    expect(KOMUNITAS_K1).toHaveLength(3);
     expect([...PERMISSIONS]).toEqual(ALL);
-    expect(PERMISSIONS).toHaveLength(29);
+    expect(PERMISSIONS).toHaveLength(32);
   });
 
   it('has no licence permission (the community edition)', () => {
@@ -89,8 +93,8 @@ describe('permissionCatalog', () => {
 
   it('Phase 2: the module is the key prefix (catalog, opac); only locations and items are branch-scoped', () => {
     const production = permissionCatalog('production');
-    expect(production.slice(19).map((d) => d.key)).toEqual(PHASE_2);
-    for (const def of production.slice(19)) {
+    expect(production.slice(19, 29).map((d) => d.key)).toEqual(PHASE_2);
+    for (const def of production.slice(19, 29)) {
       expect(def.module, def.key).toBe(def.key.split('.')[0]);
       expect(def.scope, def.key).toBe(PHASE_2_BRANCH.includes(def.key) ? 'branch' : 'global');
     }
@@ -101,11 +105,20 @@ describe('permissionCatalog', () => {
     ]);
   });
 
-  it("the 'test' profile ends with the branch-scoped test permission: 30", () => {
+  it('reports and accreditation: three global keys whose module is their prefix, read and manage apart', () => {
+    const production = permissionCatalog('production');
+    expect(production.slice(29).map((d) => [d.key, d.scope, d.module])).toEqual([
+      ['reports.statistics.read', 'global', 'reports'],
+      ['accreditation.workspace.read', 'global', 'accreditation'],
+      ['accreditation.workspace.manage', 'global', 'accreditation'],
+    ]);
+  });
+
+  it("the 'test' profile ends with the branch-scoped test permission: 33", () => {
     const test = permissionCatalog('test');
-    expect(test).toHaveLength(30);
-    expect(test.slice(0, 29).map((d) => d.key)).toEqual(ALL);
-    expect(test[29]).toEqual({ key: TEST_PERMISSION, scope: 'branch', module: 'test' });
+    expect(test).toHaveLength(33);
+    expect(test.slice(0, 32).map((d) => d.key)).toEqual(ALL);
+    expect(test[32]).toEqual({ key: TEST_PERMISSION, scope: 'branch', module: 'test' });
   });
 
   it('under the Vitest test profile the default catalog holds the test permission', () => {
@@ -196,14 +209,20 @@ describe('systemRolePermissions', () => {
     expect(systemRolePermissions('super_admin', 'production')).toEqual([...ALL]);
   });
 
-  it('admin holds the production keys minus exactly the four of ADMIN_EXCLUDED: 25, without catalog.migration.run', () => {
+  it('admin holds the production keys minus exactly the four of ADMIN_EXCLUDED: 28, without catalog.migration.run', () => {
     const admin = systemRolePermissions('admin', 'production');
     expect(admin).toEqual(ALL.filter((k) => !(ADMIN_EXCLUDED as readonly string[]).includes(k)));
-    expect(admin).toHaveLength(25);
+    expect(admin).toHaveLength(28);
     for (const key of ADMIN_EXCLUDED) expect(admin).not.toContain(key);
     expect(admin).not.toContain('catalog.migration.run');
     expect(admin).toContain('system.roles.manage');
     for (const key of PHASE_2.filter((k) => k !== 'catalog.migration.run')) expect(admin).toContain(key);
+  });
+
+  it('admin holds the reports and accreditation keys: none of them is reserved to a super admin', () => {
+    const admin = systemRolePermissions('admin', 'production');
+    for (const key of KOMUNITAS_K1) expect(admin, key).toContain(key);
+    for (const key of KOMUNITAS_K1) expect(SUPER_ADMIN_ONLY_GRANTS as readonly string[], key).not.toContain(key);
   });
 
   it('admin has the test permission under the test profile', () => {
@@ -215,7 +234,7 @@ describe('systemRolePermissions', () => {
   it('is computed from the catalog, so the production bundle has no test permission', () => {
     vi.stubGlobal('__BUILD_PROFILE__', 'production');
     expect(systemRolePermissions('super_admin', 'test')).toEqual([...ALL]);
-    expect(systemRolePermissions('admin')).toHaveLength(25);
+    expect(systemRolePermissions('admin')).toHaveLength(28);
   });
 
   it('returns frozen lists', () => {

@@ -183,6 +183,8 @@ describe('SCHEDULES (the schedules this release defines)', () => {
       ['update.check', '0 4 * * *', 'update.check', 'system.update.read'],
       // ---- Phase 2 (catalog): Task 3 (§12.6: daily at 03:40) ----
       ['catalog.housekeeping', '40 3 * * *', 'catalog.housekeeping', 'system.jobs.manage'],
+      // ---- Komunitas K1 (reports) ----
+      ['reports.housekeeping', '50 3 * * *', 'reports.housekeeping', 'system.jobs.manage'],
     ]);
     expect(SCHEDULES.filter((d) => d.exprEditable === true).map((d) => d.name)).toEqual(['backup.daily']);
     for (const d of SCHEDULES) {

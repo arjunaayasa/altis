@@ -1,6 +1,7 @@
 import {
   SCHEDULES,
   SLICE_BUDGET_MS,
+  SLIMS_USAGE_JOB,
   can,
   createJobRegistry,
   getJob,
@@ -8,6 +9,7 @@ import {
   nextRun,
   parseCronExpr,
   readSettings,
+  releaseCancelledUsageImport,
   requestCancel,
   retryJob,
   type Grants,
@@ -67,6 +69,9 @@ import { jobHandlers } from '../jobs/runtime.js';
 //   on again (Task 14 controller note): its stale next run would otherwise start an immediate catch-up run, or look
 //   like a clock anomaly. An enabled schedule switched on again keeps its next run (a due run stays due).
 // - GET answers carry `Cache-Control: no-store`; the `store` routes carry no headers (they are not replayed).
+// - A SLiMS usage import cancelled while queued never runs a slice again, and its run's folder holds the raw dump the
+//   start moved there (member names and addresses): after the COMMIT the folder and the dump's upload leftovers are
+//   removed and the run is ended (releaseCancelledUsageImport). The housekeeping still ends what a crash left.
 
 const JOBS = '/api/v1/jobs';
 const SCHEDULES_PATH = '/api/v1/schedules';
@@ -264,6 +269,10 @@ const jobsCancel = route({
     await rc.audit({ entity: 'jobs', entityId: job.id, meta: { type: job.type } });
     // Its event (a cancelled queued job) is the transaction's last statement (§10.6): nothing is written or read after.
     const result = await requestCancel(trx, job.id, rc.now);
+    if (result === 'cancelled' && job.type === SLIMS_USAGE_JOB) {
+      const { dataDir } = rc.services;
+      rc.afterCommit(() => releaseCancelledUsageImport(rc.db, { jobId: job.id, dataDir, now: rc.now, log: rc.log }));
+    }
     const after: JobRow =
       result === 'cancelled'
         ? { ...job, status: 'cancelled', uniqueKey: null, hasSecret: false, finishedAt: rc.now, updatedAt: rc.now }

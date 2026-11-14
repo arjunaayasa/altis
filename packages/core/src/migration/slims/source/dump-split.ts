@@ -17,9 +17,9 @@ import {
 } from '@altis/platform';
 import { DomainError, isDomainError } from '@altis/shared';
 import { SLIMS9_MARKER_TABLES, SLIMS_COLUMNS } from './detect.js';
-import { encodeStagedRow } from './dump-source.js';
+import { encodeStagedRow, projectRow } from './dump-source.js';
 import { DumpParseError, createSqlDumpParser, type DumpEvent } from './sql-dump.js';
-import type { SlimsTableInfo, SplitCheckpoint } from './types.js';
+import type { SlimsRow, SlimsTableInfo, SplitCheckpoint } from './types.js';
 
 // The first pass over a SQL dump (spec §11.1, S10): the dump (gunzipped when `gz`) is read as a stream and every row
 // of a table the migration reads is appended to `<table>.ndjson` in the run's work folder (dump-source.ts reads them
@@ -53,6 +53,12 @@ import type { SlimsTableInfo, SplitCheckpoint } from './types.js';
 // (`{fresh: true}`): the platform's 10-minute cache would otherwise answer each re-check from the first one while the
 // split writes gigabytes. Too little room is the probe's DomainError `DISK_QUOTA` (and a write that fails with
 // ENOSPC/EDQUOT becomes one too); nothing more is written.
+//
+// The usage import (spec §11.2) splits the same way with its own list (`tables`: the tables and columns its counts
+// read) and a row transform (the member id replaced by its keyed hash): a staged row then holds only those columns, as
+// the transform returned them, so no other column of the dump (a name, an address) ever reaches the disk, and the
+// answered table list holds only those tables and columns. Without these options the split is the catalogue
+// migration's, as above.
 
 /** The staging bytes written between two headroom checks (S10). */
 export const SPLIT_HEADROOM_STEP = 64 * 1024 * 1024;
@@ -96,6 +102,14 @@ export interface SplitDumpOptions {
   heartbeat?: () => Promise<void>;
   /** The skipped bytes between two heartbeats (default {@link SPLIT_SKIP_HEARTBEAT_BYTES}); a test seam. */
   heartbeatStepBytes?: number;
+  /**
+   * Stage only these tables, each row with only these columns (those it has, in this order), instead of the tables of
+   * SLIMS_COLUMNS whole; the answered table list then holds only these tables, with these columns. The rows of every
+   * other table are still counted in the checkpoint.
+   */
+  tables?: Readonly<Record<string, readonly string[]>>;
+  /** Applied to each staged row (after `tables`' projection) before it is written: the usage import hashes here. */
+  transform?: (table: string, row: SlimsRow) => SlimsRow;
 }
 
 interface TableState {
@@ -389,6 +403,9 @@ export async function splitDump(o: SplitDumpOptions): Promise<{ done: boolean; c
   let kept = o.keep?.reader ?? null;
   if (o.keep !== undefined) o.keep.reader = null;
   const dataDir = dataDirOf(o.stagingDir);
+  const staged = o.tables ?? SLIMS_COLUMNS;
+  const projection = o.tables;
+  const transform = o.transform;
   const headroom = o.ensureHeadroom ?? ((dir: string, bytes: number) => probeHeadroom(dir, bytes, { fresh: true }));
   const step = o.headroomStepBytes ?? SPLIT_HEADROOM_STEP;
 
@@ -453,7 +470,7 @@ export async function splitDump(o: SplitDumpOptions): Promise<{ done: boolean; c
     }
     rows.set(e.table, rows.get(e.table)! + e.rows.length);
     if (e.columns !== null) await see(e.table, e.columns);
-    if (!Object.hasOwn(SLIMS_COLUMNS, e.table)) return; // counted only (§11.4: not read, derived, or unknown)
+    if (!Object.hasOwn(staged, e.table)) return; // counted only (§11.4: not read, derived, or unknown)
     if (e.columns === null && (tables.get(e.table)?.columns.length ?? 0) === 0) throw new DumpParseError('columns_unknown', { table: e.table });
     if (staging.written - headroomAt >= step) {
       await staging.flushAll();
@@ -462,7 +479,11 @@ export async function splitDump(o: SplitDumpOptions): Promise<{ done: boolean; c
     }
     const file = `${e.table}.ndjson`;
     let text = '';
-    for (const row of e.rows) text += `${encodeStagedRow(row)}\n`;
+    const columns = projection === undefined ? null : projection[e.table]!;
+    for (const row of e.rows) {
+      const projected = columns === null ? row : projectRow(row, columns);
+      text += `${encodeStagedRow(transform === undefined ? projected : transform(e.table, projected))}\n`;
+    }
     await staging.append(file, text);
   };
 
@@ -531,13 +552,15 @@ export async function splitDump(o: SplitDumpOptions): Promise<{ done: boolean; c
   const names = new Set([...rows.keys(), ...tables.keys()]);
   // L12: a data-only dump's empty tables (see the top of this file).
   if (done && rows.has('biblio') && ![...tables.values()].some((t) => t.columns.length > 0)) {
-    for (const name of Object.keys(SLIMS_COLUMNS)) if (!SLIMS9_MARKER_TABLES.includes(name)) names.add(name);
+    for (const name of Object.keys(staged)) if (!SLIMS9_MARKER_TABLES.includes(name)) names.add(name);
   }
   const list: SlimsTableInfo[] = [...names]
+    .filter((name) => projection === undefined || Object.hasOwn(projection, name))
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
     .map((name) => {
       const t = tables.get(name);
-      const columns = t === undefined ? [] : t.columns.length > 0 ? t.columns : (t.seen ?? []);
+      const known = t === undefined ? [] : t.columns.length > 0 ? t.columns : (t.seen ?? []);
+      const columns = projection === undefined ? known : projection[name]!.filter((c) => known.includes(c));
       return { name, columns: [...columns], primaryKey: [...(t?.primaryKey ?? [])], rows: rows.get(name) ?? 0 };
     });
   return { done, checkpoint, tables: list };

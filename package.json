@@ -26,6 +26,7 @@
     "smoke": "tsx tools/release/smoke/run.ts",
     "n-1": "tsx tools/release/n-minus-1/run.ts",
     "perf": "tsx tools/release/perf/measure.ts",
+    "perf:komunitas": "tsx tools/test/perf-komunitas/run.ts",
     "feed-dev": "tsx tools/release/feed/serve.ts",
     "e2e": "pnpm --filter @altis/e2e exec playwright test"
   },

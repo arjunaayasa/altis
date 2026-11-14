@@ -27,11 +27,16 @@ import { MATRIX as Oai } from './catalog-oai.js';
 // seedUser, ...): that import is circular, so an area uses them inside its fixture functions only, never at its
 // module's top level.
 
-/** One area of the matrix: route id → catalog row, route id → fixture, route id → its maintenance when not `deny`. */
+/**
+ * One area of the matrix: route id → catalog row, route id → fixture, route id → its maintenance when not `deny`, and
+ * the ids of its routes declared `mode: 'system'` (each listed in matrix-fixtures.ts's EXPECTED_SYSTEM_ROUTES).
+ */
 export interface AreaMatrix {
   rows: Record<string, string>;
   fixtures: Record<string, MatrixFixture>;
   maintenance: Record<string, 'allow' | 'restore-allow'>;
+  // ---- Komunitas K1 (system routes) ----
+  systemRoutes?: readonly string[];
 }
 
 /**

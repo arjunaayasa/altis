@@ -2,7 +2,7 @@ import { AUDIT_ACTIONS } from '@altis/shared';
 import { AUDIT_FILTER_KEYS, type AuditFilters, type AuditItem, type AuditListResponse, type AuditVerifyResponse } from '@altis/shared/api/audit';
 import type { UserListResponse } from '@altis/shared/api/users';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
 import { DownloadIcon, FilterIcon, ShieldAlertIcon, ShieldCheckIcon } from 'lucide-react';
 import { useId, useMemo, useRef, useState } from 'react';
@@ -17,6 +17,8 @@ import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
 import { FORM_PARSE, isMessageKey } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
+import { page } from '@/lib/page';
+import { confirmReauth } from '@/screens/reports/run-history';
 
 /**
  * Log audit (spec §13.3, §7.8; `system.audit.read`): the log, newest first, with
@@ -28,7 +30,9 @@ import { useApiQuery, useMe } from '@/lib/me';
  *   again, never on window focus);
  * - with `system.audit.export`, a link to `GET audit/export` with the applied filters and the chosen delimiter
  *   (`semicolon` for Excel on Indonesian Windows, D28). It is a plain download: the browser sends the session cookie,
- *   and a GET needs no CSRF token.
+ *   and a GET needs no CSRF token. The file holds staff names and IP addresses, so the server wants a password
+ *   confirmation from the last 5 minutes; a link cannot open the dialog, so a click asks first ({@link confirmReauth},
+ *   the rule of every personal download) and then loads the file.
  *
  * The actors offered are the staff users (`GET users`, with `system.users.read`) and the actors of the entries shown.
  */
@@ -177,6 +181,7 @@ const NO_ITEMS: AuditItem[] = [];
 export function AuditLogScreen() {
   const t = useT();
   const me = useMe();
+  const queryClient = useQueryClient();
   const dateTime = useDateTime();
   const entitiesId = useId();
   const canExport = holds(me, 'system.audit.export');
@@ -388,7 +393,17 @@ export function AuditLogScreen() {
             )}
           </Field>
           <Button asChild variant="outline">
-            <a href={exportHref(applied, delimiter)} download>
+            <a
+              href={exportHref(applied, delimiter)}
+              download
+              onClick={(e) => {
+                e.preventDefault();
+                const href = exportHref(applied, delimiter);
+                void confirmReauth(queryClient).then((confirmed) => {
+                  if (confirmed) page.assign(href);
+                });
+              }}
+            >
               <DownloadIcon aria-hidden="true" />
               {t('auditlog.export')}
             </a>

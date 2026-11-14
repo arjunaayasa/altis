@@ -165,6 +165,10 @@ const start = route({
         allowNonEmpty: b.allowNonEmpty,
         confirmLibraryName: b.confirmLibraryName ?? null,
         fromRunId: b.fromRunId ?? null,
+        // ---- Komunitas K1 (catalogue re-sync): startSlimsMigration's precheck refuses a skip without a qualifying
+        // sync dry run (`skipCatalog` `dry_run_required`, or MIGRATION_PRECHECK_FAILED `catalog_changed`).
+        ...(b.catalogMode === undefined ? {} : { catalogMode: b.catalogMode }),
+        ...(b.skipCatalog === undefined ? {} : { skipCatalog: b.skipCatalog }),
       },
       { keyring: rc.config.keyring },
     );

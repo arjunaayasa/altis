@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,9 +9,12 @@ import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../
 import { openValue, secretAad, type KeyringEntry } from '../../src/crypto/secret-box.js';
 import { SETTINGS, groupKeys, type SettingKey, type SettingsGroup } from '../../src/settings/registry.js';
 import { createSettingsCache, readSecret, readSettings, writeSettings } from '../../src/settings/service.js';
+import { loadAccredSettings } from '../../src/settings/accreditation.js';
+import { uploadContext } from '../../src/files/contexts.js';
+import { acceptChunk, completeUpload, createUpload, uploadOwner } from '../../src/files/uploads.js';
 
 // The settings registry and service (spec §7.6, §7.8; D26, D41): typed keys with defaults, JSON text in
-// `settings.value` (R54), write-only secrets sealed with AAD `settings.value.<key>`, a purpose-bound secret
+// `settings.value` (JSON text), write-only secrets sealed with AAD `settings.value.<key>`, a purpose-bound secret
 // (the SMTP password) cleared when its host, port or username change without a new one, and a cache that other
 // processes may serve stale for at most 30 s (P6) while the writer's own process sees its write at once (M17).
 // On the engine picked by ALTIS_TEST_DB.
@@ -150,6 +153,24 @@ const SAMPLE: Record<SettingKey, unknown> = {
   'update.dashboard_check_at': 1_800_000_900_000,
   'update.bundled_blocked': { version: '0.2.0-test', at: 1_800_001_000_000, failures: ['min_node', 'min_db'] },
   'system.keyset_full': { at: 1_800_001_600_000, refused: 3 },
+  // ---- Komunitas K1 (settings) ----
+  'accreditation.schoolYearStartMonth': 1,
+  'accreditation.fiction.collectionTypeCodes': ['FIKSI', 'NOVEL'],
+  'accreditation.fiction.callNumberPrefixes': ['F'],
+  'accreditation.fiction.ddcPrefixes': ['899.2'],
+  'accreditation.referenceCollectionTypeCodes': ['REF', 'RUJUKAN'],
+  'accreditation.electronicMaterialTypeCodes': ['EBOOK', 'EJURNAL'],
+  'accreditation.usedUnit': 'items',
+  'accreditation.websiteFeatures': { profilePageId: '01J0000000000000000000000C', socialUrls: ['https://instagram.com/perpus'] },
+  'accreditation.liveFrom': '2025-07-01',
+  'accreditation.evidence.maxMb': 8,
+  'accreditation.evidence.componentLimitMb': 20,
+  'accreditation.textbookCollectionTypeCodes': ['TEKS'],
+  'accreditation.k7.processedThresholdPct': 90,
+  'accreditation.undatedShareMaxPct': 5,
+  'accreditation.visits.dedupeLegacy': false,
+  'accreditation.unknownMemberGroup.default': 'teacher',
+  'visits.dedupeMinutes': 30,
 };
 
 /** Every key of scope `instance` (machine state of this installation, kept by a restore), in registry order; all are in group `system`. */
@@ -170,7 +191,7 @@ const INSTANCE_KEYS: readonly SettingKey[] = [
   'system.events_floor',
   'realtime.sse',
   // 1d (Task 1): update checks and bundled releases, and the keyset writer's refusals (a restore never undoes them).
-  // The community edition has no licence key (ruling R12).
+  // The community edition has no licence key.
   'update.channel',
   'update.check',
   'update.notified',
@@ -184,7 +205,27 @@ const NON_NULL_1D_DEFAULTS: Partial<Record<SettingKey, unknown>> = {
   'update.channel': 'stable',
 };
 
-const GROUPS: SettingsGroup[] = ['library', 'email', 'security', 'opac', 'smtp', 'system', 'catalog'];
+const GROUPS: SettingsGroup[] = ['library', 'email', 'security', 'opac', 'smtp', 'system', 'catalog', 'accreditation', 'visits'];
+
+/** The accreditation keys, in registry order: the sixteen of group `accreditation`. */
+const ACCREDITATION_KEYS: readonly SettingKey[] = [
+  'accreditation.schoolYearStartMonth',
+  'accreditation.fiction.collectionTypeCodes',
+  'accreditation.fiction.callNumberPrefixes',
+  'accreditation.fiction.ddcPrefixes',
+  'accreditation.referenceCollectionTypeCodes',
+  'accreditation.electronicMaterialTypeCodes',
+  'accreditation.usedUnit',
+  'accreditation.websiteFeatures',
+  'accreditation.liveFrom',
+  'accreditation.evidence.maxMb',
+  'accreditation.evidence.componentLimitMb',
+  'accreditation.textbookCollectionTypeCodes',
+  'accreditation.k7.processedThresholdPct',
+  'accreditation.undatedShareMaxPct',
+  'accreditation.visits.dedupeLegacy',
+  'accreditation.unknownMemberGroup.default',
+];
 
 /** Phase 2's keys (its spec §12.6), in registry order: six of group `opac`, then the twelve of group `catalog`. */
 const PHASE2_OPAC_KEYS: readonly SettingKey[] = [
@@ -236,6 +277,8 @@ describe('SETTINGS registry', () => {
       'smtp.from',
     ]);
     expect(groupKeys('system')).toEqual(INSTANCE_KEYS);
+    expect(groupKeys('accreditation')).toEqual(ACCREDITATION_KEYS);
+    expect(groupKeys('visits')).toEqual(['visits.dedupeMinutes']);
     expect(GROUPS.flatMap((g) => groupKeys(g)).sort()).toEqual(Object.keys(SETTINGS).sort());
     // The group is the key's first segment, but for the instance keys of 1c that read `audit.*` and `realtime.*`: all system.
     for (const key of Object.keys(SETTINGS) as SettingKey[]) {
@@ -690,11 +733,72 @@ describe('SETTINGS registry', () => {
       expect(accepts('system.keyset_full', { at: 1 })).toBe(false);
     });
 
-    it('the community edition registers no licence or active-set key (ruling R12)', () => {
+    it('the community edition registers no licence or active-set key', () => {
       const keys = Object.keys(SETTINGS);
       expect(keys.filter((k) => k.startsWith('license.') || k.startsWith('active_set.'))).toEqual([]);
-      // Reserved and ignored, kept for settings and API compatibility (ruling R23).
+      // Reserved and ignored, kept for settings and API compatibility.
       expect(keys).toContain('catalog.isbn.arsyaEnabled');
+    });
+  });
+
+  // ---- Komunitas K1 (settings) ----
+  describe('the accreditation group and the visit repeat window', () => {
+    it('the defaults, all of scope data and none a secret', () => {
+      expect(Object.fromEntries(ACCREDITATION_KEYS.map((k) => [k, SETTINGS[k].default]))).toEqual({
+        'accreditation.schoolYearStartMonth': 7,
+        'accreditation.fiction.collectionTypeCodes': ['FIKSI'],
+        'accreditation.fiction.callNumberPrefixes': [],
+        'accreditation.fiction.ddcPrefixes': [],
+        'accreditation.referenceCollectionTypeCodes': ['REF'],
+        'accreditation.electronicMaterialTypeCodes': ['EBOOK'],
+        'accreditation.usedUnit': 'titles',
+        'accreditation.websiteFeatures': {},
+        'accreditation.liveFrom': null,
+        'accreditation.evidence.maxMb': 5,
+        'accreditation.evidence.componentLimitMb': 9,
+        'accreditation.textbookCollectionTypeCodes': [],
+        'accreditation.k7.processedThresholdPct': 100,
+        'accreditation.undatedShareMaxPct': 10,
+        'accreditation.visits.dedupeLegacy': true,
+        'accreditation.unknownMemberGroup.default': 'auto',
+      });
+      expect(SETTINGS['visits.dedupeMinutes'].default).toBe(60);
+      for (const key of [...ACCREDITATION_KEYS, 'visits.dedupeMinutes' as const]) {
+        expect([SETTINGS[key].scope, SETTINGS[key].secret], key).toEqual(['data', false]);
+      }
+    });
+
+    it('the limits of each schema', () => {
+      expect(accepts('accreditation.schoolYearStartMonth', 1)).toBe(true);
+      expect(accepts('accreditation.schoolYearStartMonth', 12)).toBe(true);
+      expect(accepts('accreditation.schoolYearStartMonth', 13)).toBe(false);
+      expect(accepts('accreditation.k7.processedThresholdPct', 50)).toBe(true);
+      expect(accepts('accreditation.k7.processedThresholdPct', 40)).toBe(false);
+      expect(accepts('accreditation.k7.processedThresholdPct', 101)).toBe(false);
+      expect(accepts('accreditation.undatedShareMaxPct', 0)).toBe(true);
+      expect(accepts('accreditation.evidence.maxMb', 0)).toBe(false);
+      expect(accepts('accreditation.evidence.componentLimitMb', 100)).toBe(true);
+      expect(accepts('accreditation.fiction.collectionTypeCodes', Array.from({ length: 21 }, (_, i) => `K${i}`))).toBe(false);
+      expect(accepts('accreditation.fiction.ddcPrefixes', Array.from({ length: 50 }, (_, i) => `${i}`))).toBe(true);
+      expect(accepts('accreditation.liveFrom', '2025-02-29')).toBe(false);
+      expect(accepts('accreditation.liveFrom', null)).toBe(true);
+      for (const v of ['auto', null, 'student', 'teacher', 'edu_staff', 'public', 'other']) {
+        expect(accepts('accreditation.unknownMemberGroup.default', v), String(v)).toBe(true);
+      }
+      expect(accepts('accreditation.unknownMemberGroup.default', 'guest')).toBe(false);
+      expect(accepts('accreditation.websiteFeatures', { socialUrls: ['https://a.example', 'https://b.example'] })).toBe(true);
+      expect(accepts('accreditation.websiteFeatures', { blogPageId: '01J0000000000000000000000C' })).toBe(false);
+      // The repeat window of member visits: 0 turns the rule off; at most half a day.
+      expect(accepts('visits.dedupeMinutes', 0)).toBe(true);
+      expect(accepts('visits.dedupeMinutes', 720)).toBe(true);
+      expect(accepts('visits.dedupeMinutes', 721)).toBe(false);
+      expect(accepts('visits.dedupeMinutes', -1)).toBe(false);
+    });
+
+    it('the codes are stored upper case, so a default written back changes nothing', () => {
+      expect(SETTINGS['accreditation.fiction.collectionTypeCodes'].schema.parse(['fiksi'])).toEqual(['FIKSI']);
+      expect(Object.isFrozen(SETTINGS['accreditation.fiction.collectionTypeCodes'].default)).toBe(true);
+      expect(Object.isFrozen(SETTINGS['accreditation.websiteFeatures'].default)).toBe(true);
     });
   });
 
@@ -725,7 +829,7 @@ describe.skipIf(!ctx.available)(`settings service [${engineLabel()}]`, () => {
     await h.db.deleteFrom('settings').execute();
   });
 
-  /** The three rows install seeds (R54: JSON text, scope data); the default values are not the ones install writes. */
+  /** The three rows install seeds (JSON text, scope data); the default values are not the ones install writes. */
   async function seedInstall(
     values: { name: string; timezone: string; locale: string } = { name: 'Perpustakaan Pelita', timezone: 'Asia/Makassar', locale: 'en' },
   ): Promise<void> {
@@ -1070,7 +1174,7 @@ describe.skipIf(!ctx.available)(`settings service [${engineLabel()}]`, () => {
       expect(await rows()).toEqual([]);
     });
 
-    it('is re-runnable: the same call twice in a row gives the same rows (R37)', async () => {
+    it('is re-runnable: the same call twice in a row gives the same rows (withTx may run it again)', async () => {
       const first = await write({ 'library.name': 'Perpus A', 'smtp.host': 'smtp.example.org' });
       const second = await write({ 'library.name': 'Perpus A', 'smtp.host': 'smtp.example.org' });
       expect(first).toEqual(['library.name', 'smtp.host']);
@@ -1373,6 +1477,122 @@ describe.skipIf(!ctx.available)(`settings service [${engineLabel()}]`, () => {
       expect(await cache.get<string>(h.db, 'library.locale')).toBe('en');
       cache.invalidate();
       expect(await cache.get<string>(h.db, 'library.locale')).toBe('id');
+    });
+  });
+
+  // ---- Komunitas K1 (settings) ----
+  describe('the accreditation settings', () => {
+    it('every key reads its default on an empty table', async () => {
+      const keys = [...groupKeys('accreditation'), 'visits.dedupeMinutes' as const];
+      expect(await readSettings(h.db, keys, keyring)).toEqual(Object.fromEntries(keys.map((k) => [k, SETTINGS[k].default])));
+    });
+
+    it('a processed-copies threshold under 50 is refused with VALIDATION_FAILED and nothing is written', async () => {
+      expect(await validationErrors(() => write({ 'accreditation.k7.processedThresholdPct': 40 }))).toEqual([
+        { path: 'accreditation.k7.processedThresholdPct', code: 'too_small' },
+      ]);
+      expect(await row('accreditation.k7.processedThresholdPct')).toBeUndefined();
+    });
+
+    it('the visit repeat window takes 0 and 720 minutes and refuses 721', async () => {
+      await write({ 'visits.dedupeMinutes': 0 });
+      expect((await readSettings(h.db, ['visits.dedupeMinutes'], keyring))['visits.dedupeMinutes']).toBe(0);
+      await write({ 'visits.dedupeMinutes': 720 });
+      expect((await readSettings(h.db, ['visits.dedupeMinutes'], keyring))['visits.dedupeMinutes']).toBe(720);
+      expect(await validationErrors(() => write({ 'visits.dedupeMinutes': 721 }))).toEqual([{ path: 'visits.dedupeMinutes', code: 'too_big' }]);
+    });
+
+    it('loadAccredSettings: the defaults, the library type and time zone, and no group for unknown members outside a school', async () => {
+      expect(await loadAccredSettings(h.db)).toEqual({
+        schoolYearStartMonth: 7,
+        fiction: { collectionTypeCodes: ['FIKSI'], callNumberPrefixes: [], ddcPrefixes: [] },
+        referenceCollectionTypeCodes: ['REF'],
+        electronicMaterialTypeCodes: ['EBOOK'],
+        usedUnit: 'titles',
+        websiteFeatures: {},
+        liveFrom: null,
+        evidenceMaxMb: 5,
+        componentLimitMb: 9,
+        textbookCollectionTypeCodes: [],
+        k7ThresholdPct: 100,
+        undatedShareMaxPct: 10,
+        dedupeLegacy: true,
+        unknownMemberGroupDefault: null,
+        dedupeMinutes: 60,
+        libraryType: null,
+        timezone: 'Asia/Jakarta',
+      });
+    });
+
+    it("loadAccredSettings: 'auto' is students for a school library, none for a public one; an explicit choice stays", async () => {
+      await write({ 'library.type': 'sekolah', 'library.timezone': 'Asia/Makassar' });
+      expect(await loadAccredSettings(h.db)).toMatchObject({ unknownMemberGroupDefault: 'student', libraryType: 'sekolah', timezone: 'Asia/Makassar' });
+      await write({ 'library.type': 'umum' });
+      expect((await loadAccredSettings(h.db)).unknownMemberGroupDefault).toBeNull();
+      await write({ 'library.type': 'sekolah', 'accreditation.unknownMemberGroup.default': null });
+      expect((await loadAccredSettings(h.db)).unknownMemberGroupDefault).toBeNull();
+      await write({ 'accreditation.unknownMemberGroup.default': 'teacher', 'accreditation.k7.processedThresholdPct': 90, 'visits.dedupeMinutes': 0 });
+      expect(await loadAccredSettings(h.db)).toMatchObject({ unknownMemberGroupDefault: 'teacher', k7ThresholdPct: 90, dedupeMinutes: 0 });
+    });
+
+    describe('evidence uploads', () => {
+      const STAFF = newId(NOW);
+      const MIB = 1024 * 1024;
+      const owner = uploadOwner(STAFF);
+      const sha = (data: Uint8Array): string => createHash('sha256').update(data).digest('hex');
+
+      beforeAll(async () => {
+        await h.db
+          .insertInto('staff_users')
+          .values({ id: STAFF, username_key: 'bukti', username_display: 'bukti', name: 'Petugas Bukti', password_hash: 'x', status: 'active', created_at: NOW, updated_at: NOW })
+          .execute();
+      });
+
+      /** What `fn` throws, which must be a DomainError. */
+      async function failure(fn: () => Promise<unknown>): Promise<{ code: string; meta?: Record<string, unknown> }> {
+        try {
+          await fn();
+        } catch (error) {
+          if (!isDomainError(error)) throw error;
+          return { code: error.code, ...(error.meta === undefined ? {} : { meta: error.meta }) };
+        }
+        return expect.fail('did not throw');
+      }
+
+      /** Declares, sends and completes an evidence upload of `data`; the file id. */
+      async function upload(data: Uint8Array, name: string): Promise<string> {
+        const context = uploadContext('accreditation.evidence')!;
+        const session = await withTx(h, (trx) => createUpload(trx, { owner, context, size: data.byteLength, sha256: sha(data), now: NOW, dataDir }));
+        try {
+          for (let n = 0; n * session.chunkSize < data.byteLength; n += 1) {
+            await acceptChunk(h, { id: session.id, owner, n, data: data.subarray(n * session.chunkSize, (n + 1) * session.chunkSize), now: NOW, dataDir });
+          }
+          const done = await completeUpload(h, { id: session.id, owner, originalName: name, now: NOW, dataDir });
+          return (done as { fileId: string }).fileId;
+        } finally {
+          await h.db.deleteFrom('upload_sessions').where('id', '=', session.id).execute();
+        }
+      }
+
+      it('takes a PDF as a staff file of its context and refuses a PNG (only PDF and JPEG)', async () => {
+        const pdf = new Uint8Array(Buffer.from('%PDF-1.4\n1 0 obj << >> endobj\ntrailer << >>\n%%EOF\n', 'latin1'));
+        const fileId = await upload(pdf, 'kebijakan.pdf');
+        expect(await h.db.selectFrom('files').select(['context', 'mime']).where('id', '=', fileId).executeTakeFirstOrThrow()).toEqual({
+          context: 'accreditation.evidence',
+          mime: 'application/pdf',
+        });
+        const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...new Uint8Array(56)]);
+        expect(await failure(() => upload(png, 'foto.png'))).toMatchObject({ code: 'UPLOAD_TYPE_REFUSED' });
+      });
+
+      it('accreditation.evidence.maxMb = 5: a 6 MiB PDF is refused when it is declared', async () => {
+        await write({ 'accreditation.evidence.maxMb': 5 });
+        const context = uploadContext('accreditation.evidence')!;
+        const declare = (size: number) => withTx(h, (trx) => createUpload(trx, { owner, context, size, sha256: '0'.repeat(64), now: NOW, dataDir }));
+        expect(await failure(() => declare(6 * MIB))).toEqual({ code: 'UPLOAD_TOO_LARGE', meta: expect.objectContaining({ maxBytes: 5 * MIB }) });
+        const ok = await declare(5 * MIB);
+        await h.db.deleteFrom('upload_sessions').where('id', '=', ok.id).execute();
+      });
     });
   });
 });

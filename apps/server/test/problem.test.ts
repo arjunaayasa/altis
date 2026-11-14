@@ -126,6 +126,8 @@ describe('reason (PROBLEM_REASONS, S30)', () => {
       FEED_UNREACHABLE: ['no_feed_url', 'network', 'status', 'timeout', 'too_large', 'insecure'],
       ROLLBACK_UNAVAILABLE: ['no_previous', 'incompatible', 'missing', 'pending'],
       UPDATE_HIDDEN: ['image'],
+      // Komunitas K1 (catalogue re-sync)
+      MIGRATION_PRECHECK_FAILED: ['catalog_changed'],
     });
   });
 
