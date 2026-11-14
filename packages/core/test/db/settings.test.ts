@@ -176,6 +176,12 @@ const SAMPLE: Record<SettingKey, unknown> = {
   'circulation.holds.opac': false,
   'circulation.holds.onlyWhenNoneAvailable': false,
   'circulation.holds.pickupDays': 5,
+  // ---- Komunitas (member area) ----
+  'members.password.minLength': 10,
+  'members.opac.enabled': false,
+  'members.session.idleMinutes': 30,
+  'members.session.absoluteHours': 4,
+  'circulation.renew.opac': false,
 };
 
 /** Every key of scope `instance` (machine state of this installation, kept by a restore), in registry order; all are in group `system`. */
@@ -210,7 +216,7 @@ const NON_NULL_1D_DEFAULTS: Partial<Record<SettingKey, unknown>> = {
   'update.channel': 'stable',
 };
 
-const GROUPS: SettingsGroup[] = ['library', 'email', 'security', 'opac', 'smtp', 'system', 'catalog', 'accreditation', 'visits', 'circulation'];
+const GROUPS: SettingsGroup[] = ['library', 'email', 'security', 'opac', 'smtp', 'system', 'catalog', 'accreditation', 'visits', 'circulation', 'members'];
 
 /** The accreditation keys, in registry order: the sixteen of group `accreditation`. */
 const ACCREDITATION_KEYS: readonly SettingKey[] = [
@@ -284,7 +290,16 @@ describe('SETTINGS registry', () => {
     expect(groupKeys('system')).toEqual(INSTANCE_KEYS);
     expect(groupKeys('accreditation')).toEqual(ACCREDITATION_KEYS);
     expect(groupKeys('visits')).toEqual(['visits.dedupeMinutes']);
-    expect(groupKeys('circulation')).toEqual(['circulation.holds.enabled', 'circulation.holds.opac', 'circulation.holds.onlyWhenNoneAvailable', 'circulation.holds.pickupDays']);
+    expect(groupKeys('circulation')).toEqual([
+      'circulation.holds.enabled',
+      'circulation.holds.opac',
+      'circulation.holds.onlyWhenNoneAvailable',
+      'circulation.holds.pickupDays',
+      // ---- Komunitas (member area) ----
+      'circulation.renew.opac',
+    ]);
+    // ---- Komunitas (member area) ----
+    expect(groupKeys('members')).toEqual(['members.password.minLength', 'members.opac.enabled', 'members.session.idleMinutes', 'members.session.absoluteHours']);
     expect(GROUPS.flatMap((g) => groupKeys(g)).sort()).toEqual(Object.keys(SETTINGS).sort());
     // The group is the key's first segment, but for the instance keys of 1c that read `audit.*` and `realtime.*`: all system.
     for (const key of Object.keys(SETTINGS) as SettingKey[]) {

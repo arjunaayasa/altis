@@ -16,7 +16,7 @@ import { route, type RouteContext, type RouteDecl } from '../../http/route.js';
 import { AttachmentViewer, viewerAttachment } from './attachment-viewer.js';
 import { loadAvailability } from './availability.js';
 import { downloadPath, slugIsDownload, type DownloadKind } from './citations-view.js';
-import { cutDescription, displayTitle, recordPageOptions, renderOptions, viewerPath } from './detail-view.js';
+import { ATTACHMENTS_MAX, cutDescription, displayTitle, recordPageOptions, renderOptions, viewerPath, type DetailExtras } from './detail-view.js';
 import { opacContext, opacPage, requestLang } from './page.js';
 import { redirect301 } from './respond.js';
 import { withLang } from './urls.js';
@@ -126,6 +126,38 @@ async function publicCover(rc: Rc, fileId: string | null): Promise<string | null
   return f === undefined ? null : f.id;
 }
 
+// ---- Komunitas (member area) ----
+/**
+ * The member links of the record `d` (detail-view.tsx DetailExtras.member), from the settings and the record alone:
+ * "Pesan" when holds are open to members online and the record has a copy, "Tandai" while members may sign in, and its
+ * attachments of access `members`.
+ */
+async function memberLinks(rc: Rc, d: { id: string; items?: readonly unknown[] }): Promise<NonNullable<DetailExtras['member']>> {
+  const handle = rc.db.db;
+  const [enabled, holdsOn, holdsOpac] = await Promise.all([
+    rc.services.settings.get<boolean>(handle, 'members.opac.enabled'),
+    rc.services.settings.get<boolean>(handle, 'circulation.holds.enabled'),
+    rc.services.settings.get<boolean>(handle, 'circulation.holds.opac'),
+  ]);
+  const rows = await handle
+    .selectFrom('attachments as a')
+    .leftJoin('files as f', 'f.id', 'a.file_id')
+    .select(['a.id', 'a.title', 'a.kind', 'f.mime'])
+    .where('a.record_id', '=', d.id)
+    .where('a.access', '=', 'members')
+    .where('a.archived_at', 'is', null)
+    .orderBy('a.sort_order')
+    .orderBy('a.id')
+    .limit(ATTACHMENTS_MAX)
+    .execute();
+  const hasCopies = (d.items ?? []).length > 0;
+  return {
+    hold: enabled === true && holdsOn === true && holdsOpac === true && hasCopies,
+    bookmark: enabled === true,
+    attachments: enabled === true ? rows.map((r) => ({ id: r.id, title: r.title, kind: r.kind, mime: r.mime })) : [],
+  };
+}
+
 // ---- the detail page ---------------------------------------------------------------------------------------------------
 
 /** `/katalog/:id` (`slug` null) and `/katalog/:id/:slug`. */
@@ -139,12 +171,13 @@ async function recordPage(rc: Rc, slug: string | null): Promise<Response> {
   const ctx = await opacContext(rc);
   const handle = rc.db.db;
   const showShelfMap = await rc.services.settings.get<boolean>(handle, 'opac.showShelfMap');
-  const [coverFileId, availability, customDefs] = await Promise.all([
+  const [coverFileId, availability, customDefs, member] = await Promise.all([
     publicCover(rc, d.coverFileId),
     loadAvailability(handle, d, { showShelfMap: showShelfMap !== false, dataDir: () => rc.services.dataDir }),
     d.customPublic.length === 0 ? Promise.resolve([]) : loadCustomDefs(handle, 'records'),
+    memberLinks(rc, d), // Komunitas (member area)
   ]);
-  return opacPage(rc, ctx, recordPageOptions(ctx, d, { coverFileId, availability, customDefs }, requestLang(rc.c)));
+  return opacPage(rc, ctx, recordPageOptions(ctx, d, { coverFileId, availability, customDefs, member }, requestLang(rc.c)));
 }
 
 const record = route<unknown, unknown, Record<string, string>>({

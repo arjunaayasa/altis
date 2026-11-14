@@ -13,7 +13,8 @@ import type { Transaction } from 'kysely';
 
 /** Who performs an action. `id` is the staff user's ULID (null for system, CLI and anonymous actors). */
 export interface Actor {
-  type: 'staff' | 'system' | 'cli' | 'anonymous';
+  // ---- Komunitas (member area): a member signed in to the OPAC, `id` the member's ULID ----
+  type: 'staff' | 'system' | 'cli' | 'anonymous' | 'member';
   id: string | null;
   /** The client IP (P15), or null when there is no request. */
   ip: string | null;

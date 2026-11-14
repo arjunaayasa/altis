@@ -81,7 +81,7 @@ describe('planN1', { timeout: 60_000 }, () => {
   it('0.1.0-test → 0.2.0-test on mysql80: the prefix 9001_test_expand, its DDL statement faulted, doctor ok expected', async () => {
     const plan = await planN1(LEVEL1, LEVEL2, 'mysql80');
     expect(plan.base).toEqual(RELEASE_MIGRATIONS);
-    expect(plan.base.at(-1)).toBe('0041_holds');
+    expect(plan.base.at(-1)).toBe('0042_member_area');
     expect(plan.prefixes).toEqual([
       { migration: '9001_test_expand', migrations: ['9001_test_expand'], ddl: 1, contract: null, runs: [null, 'migrate-ddl:1'], stop: null, expect: 'ok' },
     ]);

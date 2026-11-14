@@ -20,7 +20,7 @@ import { securityHeaders } from './http/security-headers.js';
 import { isInstallPath } from './install/gate.js';
 import type { JobRuntime } from './jobs/runtime.js';
 import type { Logger } from './logger.js';
-import { opacStatusResponse, type OpacStatus } from './opac/catalog/respond.js';
+import { isAkunRefusal, opacStatusResponse, type OpacStatus } from './opac/catalog/respond.js';
 import { errorPageResponse, notFoundResponse, wantsHtml } from './opac/routes.js';
 import { ALL_ROUTES } from './routes.js';
 import { loggableError } from './safe-error.js';
@@ -287,6 +287,8 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
       const retryAfter = problem.headers.get('Retry-After');
       return opacStatusResponse(c, problem.status, retryAfter === null ? {} : { retryAfter });
     }
+    // ---- Komunitas (member area): a refused member-area form (CSRF, Origin, a broken form) is a page too ----
+    if (isAkunRefusal(c.req.path, problem.status)) return opacStatusResponse(c, problem.status);
     return problem;
   };
 

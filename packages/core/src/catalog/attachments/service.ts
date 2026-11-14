@@ -8,6 +8,8 @@ import type { Kysely, Selectable, Transaction } from 'kysely';
 import type { z } from 'zod';
 import type { TxCtx } from '../../context.js';
 import { afterRecordWrite, lockRecordRows, mergedRecord, readRecordRow } from '../records/service.js';
+// ---- Komunitas (member area) ----
+import { setAttachmentMemberTypes } from '../../members/area/account.js';
 
 // The attachments of bibliographic records (Phase 2 spec §8, §12.2; plan Task 18): a stored file (a completed upload
 // of the context `catalog.attachment`) or a link, with a title, a description and who may open it.
@@ -35,7 +37,7 @@ type Db = Kysely<DB> | Transaction<DB>;
 type AttachmentRow = Selectable<DB['attachments']>;
 
 /** The fields a patch may change, in the order an audit entry names them. */
-const PATCH_FIELDS = ['title', 'description', 'access', 'sortOrder'] as const;
+const PATCH_FIELDS = ['title', 'description', 'access', 'sortOrder', 'memberTypeIds'] as const;
 
 // ---- errors ----------------------------------------------------------------------------------------------------------
 
@@ -106,11 +108,21 @@ function viewOf(r: ViewRow): AttachmentView {
     readCount: Number(r.read_count),
     sortOrder: Number(r.sort_order),
     version: Number(r.version),
+    memberTypeIds: [],
   };
 }
 
+// ---- Komunitas (member area): the member types of the attachments of access `members` ----
+async function withMemberTypes(db: Db, views: AttachmentView[]): Promise<AttachmentView[]> {
+  const ids = views.filter((v) => v.access === 'members').map((v) => v.id);
+  if (ids.length === 0) return views;
+  const rows = await db.selectFrom('attachment_member_types').select(['attachment_id', 'member_type_id']).where('attachment_id', 'in', ids).orderBy('member_type_id').execute();
+  for (const v of views) v.memberTypeIds = rows.filter((r) => r.attachment_id === v.id).map((r) => r.member_type_id);
+  return views;
+}
+
 async function readView(db: Db, id: string): Promise<AttachmentView> {
-  return viewOf(await viewQuery(db).where('a.id', '=', id).executeTakeFirstOrThrow());
+  return (await withMemberTypes(db, [viewOf(await viewQuery(db).where('a.id', '=', id).executeTakeFirstOrThrow())]))[0]!;
 }
 
 /**
@@ -125,7 +137,7 @@ export async function listAttachments(db: Db, recordId: string, o: { publicOnly:
   }
   let q = viewQuery(db).where('a.record_id', '=', recordId).where('a.archived_at', 'is', null);
   if (o.publicOnly) q = q.where('a.access', '=', 'public');
-  return (await q.orderBy('a.sort_order').orderBy('a.id').execute()).map(viewOf);
+  return withMemberTypes(db, (await q.orderBy('a.sort_order').orderBy('a.id').execute()).map(viewOf));
 }
 
 // ---- writing ---------------------------------------------------------------------------------------------------------
@@ -225,6 +237,8 @@ export async function createAttachment(tx: TxCtx, recordId: string, body: Attach
       updated_by: tx.actor.id,
     })
     .execute();
+  // ---- Komunitas (member area) ----
+  if (input.access === 'members') await setAttachmentMemberTypes(trx, id, input.memberTypeIds ?? []);
   await touchRecord(trx, recordId, tx.now);
   const view = await readView(trx, id);
   await afterRecordWrite(tx, [recordId], {
@@ -268,6 +282,9 @@ export async function updateAttachment(tx: TxCtx, id: string, patch: AttachmentP
     .executeTakeFirst();
   if (Number(updated.numUpdatedRows) !== 1) throw attachmentStale();
   if (row.file_id !== null) await syncFileAccess(trx, row.file_id, id, access);
+  // ---- Komunitas (member area): the member types follow the access ----
+  if (access !== 'members') await setAttachmentMemberTypes(trx, id, []);
+  else if (input.memberTypeIds !== undefined) await setAttachmentMemberTypes(trx, id, input.memberTypeIds);
   await touchRecord(trx, row.record_id, tx.now);
   const view = await readView(trx, id);
   await afterRecordWrite(tx, [row.record_id], {

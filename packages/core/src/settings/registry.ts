@@ -58,7 +58,9 @@ export type SettingsGroup =
   | 'accreditation'
   | 'visits'
   // ---- Komunitas (holds) ----
-  | 'circulation';
+  | 'circulation'
+  // ---- Komunitas (member area) ----
+  | 'members';
 
 /** Every registered key. The compiler checks {@link SETTINGS} against it both ways (no missing key, no extra one). */
 export type SettingKey =
@@ -101,7 +103,12 @@ export type SettingKey =
   | 'accreditation.unknownMemberGroup.default'
   | 'visits.dedupeMinutes'
   // ---- Komunitas (holds) ----
-  | `circulation.holds.${'enabled' | 'opac' | 'onlyWhenNoneAvailable' | 'pickupDays'}`;
+  | `circulation.holds.${'enabled' | 'opac' | 'onlyWhenNoneAvailable' | 'pickupDays'}`
+  // ---- Komunitas (member area) ----
+  | 'members.password.minLength'
+  | 'members.opac.enabled'
+  | `members.session.${'idleMinutes' | 'absoluteHours'}`
+  | 'circulation.renew.opac';
 
 export interface SettingDef {
   group: SettingsGroup;
@@ -532,6 +539,16 @@ export const SETTINGS: Readonly<Record<SettingKey, SettingDef>> = Object.freeze(
   'circulation.holds.opac': def({ group: 'circulation', schema: z.boolean(), default: true }),
   'circulation.holds.onlyWhenNoneAvailable': def({ group: 'circulation', schema: z.boolean(), default: true }),
   'circulation.holds.pickupDays': def({ group: 'circulation', schema: z.int().min(1).max(30), default: 3 }),
+
+  // ---- Komunitas (member area) ----
+  // The OPAC member area: the shortest member password (6-64), whether members may sign in at all, how long a member
+  // session lasts without activity (5-120 minutes) and at most (1-24 hours), and whether members may renew their loans
+  // online (their type must allow it too).
+  'members.password.minLength': def({ group: 'members', schema: z.int().min(6).max(64), default: 8 }),
+  'members.opac.enabled': def({ group: 'members', schema: z.boolean(), default: true }),
+  'members.session.idleMinutes': def({ group: 'members', schema: z.int().min(5).max(120), default: 20 }),
+  'members.session.absoluteHours': def({ group: 'members', schema: z.int().min(1).max(24), default: 8 }),
+  'circulation.renew.opac': def({ group: 'circulation', schema: z.boolean(), default: true }),
 });
 
 /** The registered keys in registry order. */
