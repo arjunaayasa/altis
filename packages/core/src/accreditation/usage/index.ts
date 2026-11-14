@@ -1,15 +1,19 @@
-// Stub: replaced by a later change in this milestone.
-// The monthly usage table: its grid, the manual cells, the member-type mapping and the resolution of a cell from its
-// sources. The signatures and the resolved types are final; every body throws until the table is written.
-/* eslint-disable @typescript-eslint/no-unused-vars -- the parameters of the final signatures are not read yet */
+// The monthly usage table (spec §10.7): its grid, the manual cells, the member-type mapping and the resolution of a
+// cell from its sources (resolve.ts). The usage metrics and the two usage annexes read it through `resolveUsage`.
 import type { DB } from '@altis/db';
 import type { AccredGroup, UsageMetric } from '@altis/shared';
-import type { UsageGridView, UsageGroupsPutBody, UsageGroupsView, UsagePutBody } from '@altis/shared/api/accreditation';
 import type { Kysely } from 'kysely';
-import type { TxCtx } from '../../context.js';
 import type { AccredSettings } from '../../settings/accreditation.js';
+import { loadUsageTable } from './resolve.js';
 
-/** One resolved cell: its value (null: no data), where it comes from, and the end of its span for a span metric. */
+export { putUsageCells } from './cells.js';
+export { getUsageGrid } from './grid.js';
+export { getUsageGroups, putUsageGroups } from './groups.js';
+
+/**
+ * One resolved cell: its value (null: no data), where it comes from, and the end of its span: the period's end for a
+ * span metric, the last day of a month cell that stops before the month ends (a cut-over month), else null.
+ */
 export interface ResolvedCell {
   value: number | null;
   source: 'manual' | 'slims' | 'none';
@@ -28,31 +32,10 @@ export interface ResolvedUsage {
   memberUnknown(metric: UsageMetric): number;
 }
 
-function notImplemented(): never {
-  throw new Error('not implemented yet');
-}
-
-/** The grid of a period: its months, metrics, groups and cells. */
-export async function getUsageGrid(db: Kysely<DB>, periodId: string, settings: AccredSettings): Promise<UsageGridView> {
-  return notImplemented();
-}
-
-/** Writes manual cells of a period (the period lock first). */
-export async function putUsageCells(tx: TxCtx, periodId: string, body: UsagePutBody, now: number): Promise<void> {
-  return notImplemented();
-}
-
-/** The member-type mapping. */
-export async function getUsageGroups(db: Kysely<DB>): Promise<UsageGroupsView> {
-  return notImplemented();
-}
-
-/** Writes the member-type mapping. */
-export async function putUsageGroups(tx: TxCtx, body: UsageGroupsPutBody, now: number): Promise<void> {
-  return notImplemented();
-}
-
-/** The usage of `span`, resolved. */
+/**
+ * The usage of `span` (its months, and the span rows inside it), resolved with the member-type mapping as it is now;
+ * the visits of a SLiMS row are its visits without repeats while `settings.dedupeLegacy` is on.
+ */
 export async function resolveUsage(db: Kysely<DB>, span: { from: string; to: string }, settings: AccredSettings): Promise<ResolvedUsage> {
-  return notImplemented();
+  return loadUsageTable(db, span, settings);
 }
