@@ -1,4 +1,14 @@
-import { RDA_CARRIER_TYPES, RDA_CONTENT_TYPES, RDA_MEDIA_TYPES, type RdaTerm, type RecordFieldName } from '@altis/shared';
+import {
+  AUDIENCES,
+  LOCAL_WORKS,
+  LOCAL_WORK_KINDS,
+  RDA_CARRIER_TYPES,
+  RDA_CONTENT_TYPES,
+  RDA_MEDIA_TYPES,
+  REFERENCE_KINDS,
+  type RdaTerm,
+  type RecordFieldName,
+} from '@altis/shared';
 import type { CustomFieldView, LanguageView, MaterialTypeTemplate, MaterialTypeView } from '@altis/shared/api/catalog/masters';
 import type { RecordDetail } from '@altis/shared/api/catalog/records';
 import { useId, type ReactNode } from 'react';
@@ -23,6 +33,11 @@ import { SubjectPicker } from './subject-picker';
  *
  * On a new record, choosing another material type also takes its RDA codes and default language, unless the
  * librarian already chose them.
+ *
+ * The section "Akreditasi" holds the four fields the accreditation report reads (Sasaran pembaca, Karya lokal and its
+ * Jenis karya, Jenis referensi), each a value of its shared vocabulary or none. No template hides them. Changing only
+ * them does not count a migrated record as edited in ALTIS (the server keeps it in the SLiMS re-sync), and the section
+ * says so.
  */
 
 /** The masters the sections offer. */
@@ -277,11 +292,59 @@ export function RecordFormSections({
 
       <CustomSection form={form} template={template} defs={masters.customFields} />
 
+      <AccreditationSection form={form} />
+
       <Section title={t('catalog.records.section.opac')}>
         <CheckField label={t('catalog.records.field.opac_visible')} {...register('opacVisible')} />
         <CheckField label={t('catalog.records.field.promoted')} {...register('promoted')} />
       </Section>
     </>
+  );
+}
+
+// ---- Komunitas K1 (catalogue accreditation fields) ----
+
+/** The accreditation fields: the label of each and the vocabulary its values come from (Bibliografi's bulk change too). */
+export const ACCRED_FIELDS = [
+  { name: 'audience', labelKey: 'catalog.records.field.audience', list: 'audience', values: AUDIENCES },
+  { name: 'localWork', labelKey: 'catalog.records.field.local_work', list: 'local_work', values: LOCAL_WORKS, hintKey: 'catalog.records.field.local_work_hint' },
+  {
+    name: 'localWorkKind',
+    labelKey: 'catalog.records.field.local_work_kind',
+    list: 'local_work_kind',
+    values: LOCAL_WORK_KINDS,
+    hintKey: 'catalog.records.field.local_work_kind_hint',
+  },
+  { name: 'referenceKind', labelKey: 'catalog.records.field.reference_kind', list: 'reference_kind', values: REFERENCE_KINDS },
+] as const satisfies readonly {
+  name: 'audience' | 'localWork' | 'localWorkKind' | 'referenceKind';
+  labelKey: TKey;
+  list: string;
+  values: readonly string[];
+  hintKey?: TKey;
+}[];
+
+/** The section of the accreditation fields: one select per field, `''` for none. */
+function AccreditationSection({ form }: { form: UseFormReturn<RecordFormValues> }) {
+  const t = useT();
+  return (
+    <Section title={t('catalog.records.section.accreditation')}>
+      <p className="text-sm text-muted-foreground sm:col-span-2">{t('catalog.records.section.accreditation_hint')}</p>
+      {ACCRED_FIELDS.map((f) => (
+        <Field key={f.name} label={t(f.labelKey)} error={errorAt(form.formState.errors, f.name)} {...('hintKey' in f ? { hint: t(f.hintKey) } : {})}>
+          {(c) => (
+            <select {...c} className={SELECT_CLASS} {...form.register(f.name)}>
+              <option value="">{t('catalog.records.field.none')}</option>
+              {f.values.map((value) => (
+                <option key={value} value={value}>
+                  {t(`vocab.${f.list}.${value}` as TKey)}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+      ))}
+    </Section>
   );
 }
 

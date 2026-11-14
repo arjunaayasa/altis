@@ -32,7 +32,9 @@ import { BrowserTests } from './browser-tests';
  *   its keys, so a section the server adds fails the build until it has its block): the release, runtime and runner,
  *   the job queue, the last backup, the edition, the database, the data folder, memory, the network and its proxy
  *   hops, WebAssembly, the HTTP methods and the chunk size, the audit chain, the clock, the exposure test and the disk;
- *   Phase 2 adds the catalogue's search index (with "Bangun ulang indeks") and OAI-PMH (plan Task 28).
+ *   Phase 2 adds the catalogue's search index (with "Bangun ulang indeks") and OAI-PMH (plan Task 28). While a clock
+ *   anomaly is set, the clock block also says that the date-based jobs are postponed ("Tugas berbasis tanggal ditunda:
+ *   jam sistem melompat", the text the report housekeeping's job writes when it skips its age-based steps).
  * - **The exposure test** that failed is a red banner on top (§11 "banner merah bila gagal").
  * - **The suggested proxy hops** of the browser test, when they differ from the configured ones, with a link to
  *   Konfigurasi Sistem for whoever may open it (`system.config.manage`).
@@ -446,6 +448,8 @@ function ClockBlock({ report }: BlockProps) {
         <div className="flex flex-col gap-2">
           <p className="text-sm text-destructive">{t('diagnostics.clock.anomaly', { time: dateTime(anomaly.detectedAt) })}</p>
           <p className="text-sm text-muted-foreground">{t('diagnostics.clock.max_seen', { time: dateTime(anomaly.maxSeen) })}</p>
+          {/* Komunitas K1: the scheduled steps that count days (the report housekeeping's) wait for the clock too. */}
+          <p className="text-sm">{t('jobs.message.reports.housekeeping.date_jobs_postponed')}</p>
           {holds(me, 'system.diagnostics.manage') && (
             <div>
               <Button variant="outline" onClick={() => setConfirming(true)}>
