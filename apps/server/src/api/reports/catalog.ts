@@ -1,6 +1,6 @@
 import { can, loadAccredSettings, previewReport, readSettings, reportById, reportCatalogEntry, visibleReports, type ReportDefinition } from '@altis/core';
 import { DomainError, resolveLocale, type Locale, type Permission } from '@altis/shared';
-import { ReportPreviewBody, type ReportCatalogResponse, type ReportPreviewResponse } from '@altis/shared/api/reports';
+import { ReportPreviewBody, reportOutputLocale, type ReportCatalogResponse, type ReportPreviewResponse } from '@altis/shared/api/reports';
 import { z } from 'zod';
 import { route, type RouteContext, type RouteDecl } from '../../http/route.js';
 
@@ -43,10 +43,11 @@ export async function uiLocaleOf(rc: RouteContext<unknown, unknown, unknown>): P
 /**
  * The language a definition's output is written in, in a preview as in an export: an accreditation definition (an
  * annex or a document) always in Indonesian, whatever the requester reads, since that is the language of the files
- * handed to the assessors; any other in the requester's UI language.
+ * handed to the assessors; any other in the requester's UI language. The rule is the shared one the admin screen
+ * also labels and prints a preview by (`reportOutputLocale`).
  */
 export async function outputLocaleOf(rc: RouteContext<unknown, unknown, unknown>, def: ReportDefinition): Promise<Locale> {
-  return def.module === 'accreditation' ? 'id' : uiLocaleOf(rc);
+  return reportOutputLocale(def.module, await uiLocaleOf(rc));
 }
 
 const reportsCatalog = route({

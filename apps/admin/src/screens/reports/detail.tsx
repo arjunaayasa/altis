@@ -150,7 +150,7 @@ function ReportPage({ entry, search }: { entry: ReportCatalogEntry; search: Read
           ) : (
             <NoticeAlert>{t('reports.export.no_permission')}</NoticeAlert>
           )}
-          <PreviewSection entry={entry} title={title} query={preview} applied={applied !== null} filters={describe(applied?.params ?? null)} />
+          <PreviewSection entry={entry} query={preview} params={applied?.params ?? null} />
         </>
       ) : (
         <NoticeAlert>
