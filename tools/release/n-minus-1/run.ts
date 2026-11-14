@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import { connect, migrationsForLevel, runMigrations, type AltisMigration, type DbConfig, type DbHandle, type TestFixtureLevel } from '@altis/db';
+import { MIGRATOR_TABLES, connect, migrationsForLevel, runMigrations, type AltisMigration, type DbConfig, type DbHandle, type TestFixtureLevel } from '@altis/db';
 import { updateCurrentState } from '@altis/platform';
 import { compareSemver, isSemver } from '@altis/shared';
 import { ENGINE_SPECS, TEST_DB_PASSWORD, TEST_DB_ROOT_PASSWORD, TEST_DB_USER, TEST_ENGINES, testDbHost, type TestEngine } from '@altis/test-tools';
@@ -41,6 +41,10 @@ import { extractZip, readZip } from '../src/zip.js';
 //     count holds on MySQL/MariaDB: each ensureTable/ensureIndex/ensureColumn is one statement on every dialect, and
 //     the only dialect-specific DDL (ensureByteOrder) runs on PostgreSQL alone. A count above what N runs on the engine
 //     fails the run (a `migrate-ddl:<j>` that never fires).
+//   - The runner's own tables count first: a runner makes MIGRATOR_TABLES on every run, before any migration, so N
+//     creates those N−1's runner did not make (`runner`, RUNNER_TABLE_FIRST_SCHEMA) before its first migration, and
+//     the fault counts them like a migration's DDL. The scratch database lacks them as N−1's does, and every prefix's
+//     count starts with N's runner making them; each run checks that its seed lacks exactly those tables.
 //   - Its runs: one plain migrate; on mysql80/mysql84 (DDL is not transactional there, a migration can stop halfway)
 //     also one per DDL statement j, with ALTIS_TEST_FAULT=migrate-ddl:<j> first and then again without the fault.
 //   - Its stop: a prefix before the last is reached with ALTIS_TEST_FAULT=migrate:<next> (the migrator throws before
@@ -168,7 +172,33 @@ export interface N1Plan {
   db: TestEngine;
   /** N's migrations N−1's schema already holds (the seed's), in order. */
   base: string[];
+  /**
+   * The runner's own tables N−1's database lacks (its runner did not make them), which N's runner creates before its
+   * first migration: the first DDL statements of every prefix, in this order.
+   */
+  runner: string[];
   prefixes: N1Prefix[];
+}
+
+/** One of the runner's own tables. */
+type RunnerTable = (typeof MIGRATOR_TABLES)[number];
+
+/**
+ * The schema (the NNNN of its last migration) of the first release whose runner made each of the runner's own tables
+ * (MIGRATOR_TABLES). A runner makes its tables on every run, before any migration; a database installed by an older
+ * release lacks the newer ones until N's runner creates them. The other lane's two tables came with the release whose
+ * migrations reached 0030. A table added to MIGRATOR_TABLES needs its entry here (the unit test checks).
+ */
+export const RUNNER_TABLE_FIRST_SCHEMA: Readonly<Record<RunnerTable, string>> = Object.freeze({
+  schema_migrations: '0001',
+  schema_migrations_lock: '0001',
+  schema_migrations_edition: '0030',
+  schema_migrations_edition_lock: '0030',
+});
+
+/** The runner's own tables a database installed by a release at schema `schemaLatest` lacks, in MIGRATOR_TABLES order. */
+export function runnerTablesMissingAt(schemaLatest: string): string[] {
+  return MIGRATOR_TABLES.filter((t) => RUNNER_TABLE_FIRST_SCHEMA[t] > schemaLatest);
 }
 
 const isTestVersion = (version: string): boolean => {
@@ -195,33 +225,43 @@ function isDdlNode(node: { kind: string; sqlFragments?: readonly string[] }): bo
 }
 
 /**
- * The DDL statements each of `added` runs, in order, on a scratch SQLite database (in `scratchDir`) migrated with
- * `base` first: what the `migrate-ddl` fault counts when N migrates N−1's schema. The schema builder's statements are
- * one per object on every dialect (ensureTable, ensureIndex, ensureColumn); PostgreSQL's collation fix-up
- * (ensureByteOrder) never runs on the engines that get the DDL faults.
+ * What the `migrate-ddl` fault counts when N migrates N−1's schema, on a scratch SQLite database (in `scratchDir`)
+ * migrated with `base` first and then made to lack `runner` (the runner's own tables N−1's runner did not make, and
+ * their registry rows), as N−1's database does: `runner`, the DDL statements N's runner executes before any migration
+ * (it makes those tables again); `migrations`, the DDL statements each of `added` runs, in order. The schema builder's
+ * statements are one per object on every dialect (ensureTable, ensureIndex, ensureColumn); PostgreSQL's collation
+ * fix-up (ensureByteOrder) never runs on the engines that get the DDL faults.
  */
 export async function countDdl(
   base: Readonly<Record<string, AltisMigration>>,
   added: readonly [string, AltisMigration][],
-  o: { appVersion: string; scratchDir: string },
-): Promise<number[]> {
+  o: { appVersion: string; scratchDir: string; runner?: readonly string[] },
+): Promise<{ runner: number; migrations: number[] }> {
   const h = await connect({ dialect: 'sqlite' }, { runtime: 'standalone', purpose: 'cli', dataDir: o.scratchDir });
   try {
     await runMigrations(h, { appVersion: o.appVersion, dataDir: o.scratchDir, migrations: { ...base } });
-    const counts: number[] = [];
-    for (const [, migration] of added) {
-      let count = 0;
-      const counter: KyselyPlugin = {
-        transformQuery(args) {
-          if (isDdlNode(args.node as unknown as { kind: string; sqlFragments?: readonly string[] })) count += 1;
-          return args.node;
-        },
-        transformResult: async (args) => args.result,
-      };
-      await migration.up(h.db.withPlugin(counter), 'sqlite');
-      counts.push(count);
+    for (const table of o.runner ?? []) {
+      await h.db.schema.dropTable(table).execute();
+      await h.db.deleteFrom('schema_tables').where('name', '=', table).execute();
     }
-    return counts;
+    let count = 0;
+    const counter: KyselyPlugin = {
+      transformQuery(args) {
+        if (isDdlNode(args.node as unknown as { kind: string; sqlFragments?: readonly string[] })) count += 1;
+        return args.node;
+      },
+      transformResult: async (args) => args.result,
+    };
+    // N's runner on N−1's schema with nothing to apply: only its own tables' DDL.
+    await runMigrations({ db: h.db.withPlugin(counter), dialect: h.dialect }, { appVersion: o.appVersion, dataDir: o.scratchDir, migrations: { ...base } });
+    const runner = count;
+    const migrations: number[] = [];
+    for (const [, migration] of added) {
+      count = 0;
+      await migration.up(h.db.withPlugin(counter), 'sqlite');
+      migrations.push(count);
+    }
+    return { runner, migrations };
   } finally {
     await h.close();
   }
@@ -262,13 +302,15 @@ export async function planN1(
   const added = names.filter((n) => numberOf(n) > from.schemaLatest);
   if (added.length === 0) throw new N1UsageError(`NO_NEW_MIGRATIONS: ${to.version} adds no migration to ${from.version}'s schema ${from.schemaLatest}`);
 
+  const runner = runnerTablesMissingAt(from.schemaLatest);
   const own = o.scratchDir === undefined;
   const scratchDir = o.scratchDir ?? (await fsp.mkdtemp(path.join(os.tmpdir(), 'altis-n1-ddl-')));
-  let counts: number[];
+  let counts: { runner: number; migrations: number[] };
   try {
     counts = await countDdl(Object.fromEntries(base.map((n) => [n, all[n]!])), added.map((n) => [n, all[n]!] as [string, AltisMigration]), {
       appVersion: from.version,
       scratchDir,
+      runner,
     });
   } finally {
     if (own) await fsp.rm(scratchDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -276,10 +318,11 @@ export async function planN1(
 
   const faults = o.ddlFaults === true || DDL_FAULT_ENGINES.includes(db);
   const prefixes: N1Prefix[] = [];
-  let ddl = 0;
+  // N's runner makes the tables N−1's runner did not before its first migration: the first DDL of every prefix.
+  let ddl = counts.runner;
   let contract: string | null = null;
   added.forEach((name, i) => {
-    ddl += counts[i]!;
+    ddl += counts.migrations[i]!;
     const floor = all[name]!.contract?.minCodeVersion;
     if (floor !== undefined && (contract === null || compareSemver(floor, contract) > 0)) contract = floor;
     const next = added[i + 1];
@@ -295,7 +338,7 @@ export async function planN1(
       expect: contract !== null && compareSemver(contract, from.version) > 0 ? 'SCHEMA_TOO_NEW' : 'ok',
     });
   });
-  return { from, to, db, base, prefixes };
+  return { from, to, db, base, runner, prefixes };
 }
 
 /** The facts of the release a zip holds: its `bundled-release/<v>/manifest.json`. */
@@ -554,6 +597,12 @@ async function withDb<T>(db: DbConfig, dataDir: string, fn: (h: DbHandle) => Pro
   }
 }
 
+/** The runner's own tables (MIGRATOR_TABLES) the database lacks, in MIGRATOR_TABLES order. */
+async function missingRunnerTables(h: DbHandle): Promise<string[]> {
+  const present = new Set((await h.db.introspection.getTables()).map((t) => t.name));
+  return MIGRATOR_TABLES.filter((t) => !present.has(t));
+}
+
 /** The names in schema_migrations, sorted. */
 async function appliedMigrations(h: DbHandle): Promise<string[]> {
   return (await h.db.selectFrom('schema_migrations').select('name').execute()).map((r) => r.name).sort(byText);
@@ -677,6 +726,11 @@ async function runOnce(ctx: RunContext, prefix: N1Prefix, fault: string | null, 
   const seedSums = await withDb(db, ctx.dataDir, (h) => checksums(h, seedScope));
   const seedApplied = await withDb(db, ctx.dataDir, (h) => appliedMigrations(h));
   if (seedApplied.join() !== plan.base.join()) problems.push(`the seed holds ${seedApplied.join(', ')}, not ${plan.base.join(', ')}`);
+  // The plan counted N's runner making these tables first; any other set moves every `migrate-ddl` fault off its statement.
+  const seedLacks = await withDb(db, ctx.dataDir, (h) => missingRunnerTables(h));
+  if (seedLacks.join() !== plan.runner.join()) {
+    problems.push(`the seed lacks the runner's tables [${seedLacks.join(', ')}], the plan counted [${plan.runner.join(', ')}]: its DDL faults would hit other statements`);
+  }
 
   // N migrates: the faulted run first, then the run to the prefix.
   await activate(ctx.dataDir, plan.to.version);
@@ -862,7 +916,7 @@ async function main(argv: string[]): Promise<number> {
     process.stderr.write('usage: pnpm n-1 --from <altis-N−1.zip> --to <altis-N.zip> --db <engine> [--keep] [--ddl-faults]\n');
     return 2;
   }
-  say(`plan: ${JSON.stringify(plan.prefixes.map((p) => ({ prefix: p.migration, ddl: p.ddl, runs: p.runs, stop: p.stop, expect: p.expect })))}`);
+  say(`plan: runner tables first ${JSON.stringify(plan.runner)}; ${JSON.stringify(plan.prefixes.map((p) => ({ prefix: p.migration, ddl: p.ddl, runs: p.runs, stop: p.stop, expect: p.expect })))}`);
   const lines = await runN1(plan, options, (line) => void process.stdout.write(`${JSON.stringify(line)}\n`));
   for (const line of lines) {
     for (const run of line.runs) for (const problem of run.problems) say(`FAILED ${line.prefix}${run.fault === null ? '' : ` (${run.fault})`}: ${problem}`);
