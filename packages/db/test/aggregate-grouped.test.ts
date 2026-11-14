@@ -2,12 +2,13 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { newId } from '@altis/shared';
-import type { KyselyPlugin } from 'kysely';
+import { expressionBuilder, sql, type Expression, type KyselyPlugin } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../tools/test/test-db.js';
 import { AggregateOverflowError, countDistinctGrouped, countGrouped, datePrefix, sumGrouped } from '../src/aggregate.js';
 import { runMigrations } from '../src/migrator.js';
 import { PHASE1_MIGRATIONS } from '../src/migrations/index.js';
+import type { DB } from '../src/schema.js';
 
 // The grouped counts and sums every report goes through (the one place for GROUP BY SQL): the helper adds the key
 // selections, the aggregate and the GROUP BY to a query that only filters, and turns whatever the driver returns
@@ -241,6 +242,54 @@ describe.skipIf(!ctx.available)(`grouped counts and sums [${engineLabel()}]`, ()
     await refused(() => sumGrouped(h.db.selectFrom('library_budgets'), { sum: 'year' }, 'library_minor'));
     await refused(() => countGrouped(h.db.selectFrom('library_activities'), { 'a b': 'kind' }));
     await refused(() => sumGrouped(h.db.selectFrom('library_budgets'), {}, 'library_minor; drop'));
+  });
+
+  it('refuses a constant key before any SQL runs (GROUP BY reads a bare constant as a select-list position, PostgreSQL refuses a text one); a constant group goes in a derived table', async () => {
+    // Counts the statements that ran (a result came back); building a query does not count.
+    let sent = 0;
+    const counting: KyselyPlugin = {
+      transformQuery: ({ node }) => node,
+      transformResult: async ({ result }) => {
+        sent += 1;
+        return result;
+      },
+    };
+    const db = h.db.withPlugin(counting);
+    const constants: [string, Expression<unknown>][] = [
+      ['sql.lit text', sql.lit('semua')],
+      ['sql.lit number', sql.lit(1)],
+      ['sql.lit wrapped in a template', sql`${sql.lit('semua')}`],
+      ['sql.lit in parentheses', sql`( ${sql.lit(2)} )`],
+      ['a text constant written in a template', sql`'semua'`],
+      ['a number written in a template', sql`1`],
+      ['a number in parentheses written in a template', sql`(1)`],
+      ['NULL written in a template', sql`null`],
+      ['a literal of the expression builder', expressionBuilder<DB, 'library_activities'>().lit(1)],
+    ];
+    for (const [label, key] of constants) {
+      for (const run of [
+        () => countGrouped(db.selectFrom('library_activities'), { kind: 'kind', all: key }),
+        () => countDistinctGrouped(db.selectFrom('staff_trainings'), { all: key }, 'library_staff_id'),
+        () => sumGrouped(db.selectFrom('library_budgets'), { all: key }, 'library_minor'),
+      ]) {
+        const error = await run().then(
+          () => null,
+          (e: unknown) => e,
+        );
+        expect([label, error instanceof TypeError, String(error)]).toEqual([label, true, expect.stringMatching(/the key all is a constant.*derived table/)]);
+      }
+    }
+    expect(sent).toBe(0);
+
+    // The way to group by a constant: select it as a column of a derived table and group by that column.
+    const all = db.selectFrom('library_activities').select([sql.lit('semua').as('grp'), 'kind']).as('x');
+    expect(await countGrouped(db.selectFrom(all), { grp: 'x.grp' })).toEqual([{ grp: 'semua', count: 5 }]);
+    // An expression with a literal inside it is not a constant: it still keys a group.
+    expect(sorted(await countGrouped(db.selectFrom('library_activities'), { y: datePrefix('held_on', 'year'), k: sql`substr(${sql.ref('kind')}, 1, ${sql.lit(3)})` }))).toEqual([
+      { count: 1, k: 'pro', y: '2025' },
+      { count: 1, k: 'pro', y: '2026' },
+      { count: 3, k: 'rea', y: '2025' },
+    ]);
   });
 
   it('datePrefix: the month or year of a YYYY-MM-DD column; anything else is a TypeError', async () => {
