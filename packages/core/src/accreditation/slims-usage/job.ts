@@ -504,6 +504,8 @@ async function runUsageSlice(ctx: JobContext, payload: ImportSlimsUsagePayload, 
     const c = await rowContext(w, w.state.phase, s.cutoverOn);
     w.state.counts.rows[table] = (w.state.counts.rows[table] ?? 0) + page.rows.length;
     for (const row of page.rows) countRow(c, table, row);
+    // What the page appended is written out once enough waits: a slice's memory stays the same however many rows it reads.
+    await w.flushOver();
     if (page.next === null) {
       w.state.step += 1;
       w.state.cursor = null;
