@@ -28,7 +28,7 @@ import { byteRange, rangeStream } from '../../http/range.js';
 import { hasRecentReauth } from '../../http/reauth-check.js';
 import { route, type RouteContext, type RouteDecl } from '../../http/route.js';
 import { jobHandlers } from '../../jobs/runtime.js';
-import { definitionOf, holdsOf, uiLocaleOf } from './catalog.js';
+import { definitionOf, holdsOf, outputLocaleOf } from './catalog.js';
 
 // The report runs (spec §4.15, §5.2, §13 "Ekspor"):
 //
@@ -89,7 +89,7 @@ function prepareStart(personal: boolean) {
     if (!holdsOf(rc)(permission)) throw await rc.authzDenied(permission);
     if (def.kind === 'document') throw wrongRoute('document_report');
     if (def.personal !== personal) throw wrongRoute(personal ? 'not_personal' : 'personal_report');
-    return { def, locale: await uiLocaleOf(rc) };
+    return { def, locale: await outputLocaleOf(rc, def) };
   };
 }
 
