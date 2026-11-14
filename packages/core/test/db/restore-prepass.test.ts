@@ -42,9 +42,10 @@ const INSTALL_ID = newId();
 
 /**
  * The schedules (scheduler/registry.ts SCHEDULES) added after the committed fixtures were written (1c): a restore of a
- * fixture seeds them beside the archive's rows. 1d Task 28: `update.check`; Phase 2 Task 3: `catalog.housekeeping`.
+ * fixture seeds them beside the archive's rows. 1d Task 28: `update.check`; Phase 2 Task 3: `catalog.housekeeping`;
+ * the community reports: `reports.housekeeping`.
  */
-const SCHEDULES_AFTER_FIXTURES: readonly string[] = ['update.check', 'catalog.housekeeping'];
+const SCHEDULES_AFTER_FIXTURES: readonly string[] = ['update.check', 'catalog.housekeeping', 'reports.housekeeping'];
 // The tables of the Phase 1 schema: under the test profile the registry also names the release fixtures' test_fixture
 // (decision D1d-26), which this database (PHASE1_MIGRATIONS) does not have.
 const PHASE1_SCHEMA = Object.keys(PHASE1_MIGRATIONS).sort().at(-1)!;

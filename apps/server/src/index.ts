@@ -415,7 +415,9 @@ function stringMeta(error: DomainError, key: string): string | undefined {
 /**
  * What the log says about a failed boot: the code, status and reason; the detail of a DomainError (written to be
  * shown to an operator; config errors name field paths, never values) and the message of a MigrationError (made
- * safe by the runner); of any other error only its name and code, as its message may carry driver text.
+ * safe by the runner); of any other error only its name and code, as its message may carry driver text. The class is
+ * `errorName`, as in core's `errorFields`: the server log redacts every field called `name` (a person's name is
+ * personal data).
  */
 function bootErrorFields(error: unknown): LogFields {
   if (isDomainError(error)) {
@@ -430,12 +432,12 @@ function bootErrorFields(error: unknown): LogFields {
   if (error instanceof Error) {
     const code = (error as { code?: unknown }).code;
     return {
-      name: error.name,
+      errorName: error.name,
       code: typeof code === 'string' ? code : undefined,
       message: error.name === 'MigrationError' ? error.message : undefined,
     };
   }
-  return { name: typeof error };
+  return { errorName: typeof error };
 }
 
 /**
