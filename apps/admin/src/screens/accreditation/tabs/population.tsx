@@ -7,11 +7,14 @@ import { useDirtyGuard } from '@/lib/dirty-forms';
 import {
   FormSection,
   PeriodFormFooter,
+  StaleNote,
   TextField,
   numberText,
   textOrNull,
   usePeriodSave,
+  usePeriodValues,
   wholeOrNull,
+  type PeriodFormModel,
   type PeriodPatch,
   type PeriodSaving,
 } from '../period-form';
@@ -31,7 +34,7 @@ export function PopulationTab(props: { periodId: string }): JSX.Element {
 
 /** The form starts over for another period; the save's outcome is kept above it. */
 function PopulationPanel({ ctx }: { ctx: TabContext }) {
-  const saving = usePeriodSave(ctx.period);
+  const saving = usePeriodSave();
   return <PopulationForm key={ctx.period.id} ctx={ctx} saving={saving} />;
 }
 
@@ -76,7 +79,7 @@ const sameSet = (a: readonly string[], b: readonly string[]): boolean => a.lengt
  * What `values` would send for `period`: the fields refused before anything is sent, and the patch of the fields that
  * differ from the stored ones (empty: nothing to save).
  */
-function populationPatch(values: Values, period: PeriodView): { found: Record<string, string>; patch: Record<string, unknown> } {
+function populationPatch(values: Values, period: PeriodView): { found: Record<string, string>; patch: PeriodPatch } {
   const found: Record<string, string> = {};
   const patch: Record<string, unknown> = {};
   for (const { name, max } of NUMBERS) {
@@ -88,10 +91,10 @@ function populationPatch(values: Values, period: PeriodView): { found: Record<st
   if (!sameSet(values.services, period.services ?? [])) patch['services'] = SERVICE_CODES.filter((c) => values.services.includes(c));
   const url = textOrNull(values.externalWebsiteUrl);
   if (url !== period.externalWebsiteUrl) patch['externalWebsiteUrl'] = url;
-  return { found, patch };
+  return { found, patch: patch as PeriodPatch };
 }
 
-/** `values` over the period read again: what was typed stays, every field left as it was takes its value in `after`. */
+/** `values` over a newer period made on this page: what was typed stays, every other field takes its value in `after`. */
 function rebased(values: Values, before: Values, after: Values): Values {
   const numbers = { ...values.numbers };
   for (const { name } of NUMBERS) if (values.numbers[name] === before.numbers[name]) numbers[name] = after.numbers[name];
@@ -103,32 +106,29 @@ function rebased(values: Values, before: Values, after: Values): Values {
   };
 }
 
+const POPULATION_MODEL: PeriodFormModel<Values> = { valuesOf, pending: populationPatch, rebased };
+
 function PopulationForm({ ctx, saving }: { ctx: TabContext; saving: PeriodSaving }) {
   const t = useT();
-  const period = ctx.period;
-  const [values, setValues] = useState<Values>(() => valuesOf(period));
-  // The period the values were taken from. Read again with a new version (another librarian's save, this form's own
-  // save), it never resets what was typed: those fields stay, the others show what is stored now, and the next save
-  // names the new version.
-  const [loaded, setLoaded] = useState(period);
-  if (loaded.version !== period.version) {
-    setLoaded(period);
-    setValues((v) => rebased(v, valuesOf(loaded), valuesOf(period)));
-  }
+  // The values and the period they were read from (period-form.tsx): a save names that period's version, so a change
+  // made elsewhere meanwhile is refused as stale instead of being overwritten.
+  const form = usePeriodValues(ctx.period, saving, POPULATION_MODEL);
+  const { values, setValues } = form;
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const { save, busy, problem, outcome, serverErrors } = saving;
   const off = !ctx.canEdit || busy;
   const errorOf = (name: string): string | undefined => errors[name] ?? serverErrors[name];
-  const pending = populationPatch(values, period);
-  useDirtyGuard(ctx.canEdit && (Object.keys(pending.found).length > 0 || Object.keys(pending.patch).length > 0));
+  useDirtyGuard(ctx.canEdit && form.dirty);
 
   const submit = (e: FormEvent): void => {
     e.preventDefault();
     if (!ctx.canEdit) return;
-    const { found, patch } = populationPatch(values, period);
+    const sent = form.base;
+    const { found, patch } = populationPatch(values, sent);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
-    void save(patch as PeriodPatch, (path) => (path in values.numbers || path === 'externalWebsiteUrl' || path === 'services' ? path : null));
+    const toField = (path: string): string | null => (path in values.numbers || path === 'externalWebsiteUrl' || path === 'services' ? path : null);
+    void save(sent, patch, toField, (version) => form.stored(sent, patch, version));
   };
 
   const number = (name: NumberName) => {
@@ -150,6 +150,7 @@ function PopulationForm({ ctx, saving }: { ctx: TabContext; saving: PeriodSaving
   return (
     <form noValidate onSubmit={submit} className="flex max-w-3xl flex-col gap-6">
       <ReadOnlyNote ctx={ctx} />
+      <StaleNote values={form} />
       <FormSection title={t('accreditation.workspace.population.section.population')} hint={t('accreditation.workspace.population.section.population_hint')}>
         {POPULATION.map(number)}
         <CheckField

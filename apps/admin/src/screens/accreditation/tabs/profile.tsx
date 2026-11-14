@@ -16,10 +16,13 @@ import {
   FormSection,
   PeriodFormFooter,
   SelectField,
+  StaleNote,
   TextField,
   textOrNull,
   usePeriodSave,
+  usePeriodValues,
   wholeOrNull,
+  type PeriodFormModel,
   type PeriodPatch,
   type PeriodSaving,
 } from '../period-form';
@@ -39,13 +42,16 @@ export function ProfileTab(props: { periodId: string }): JSX.Element {
   return <TabState periodId={props.periodId}>{(ctx) => <ProfilePanel ctx={ctx} />}</TabState>;
 }
 
-/** The form starts over for another period; the save's outcome is kept above it. */
+/**
+ * The form starts over for another period; the save's outcome is kept above it, with the period writes made on this
+ * page (the form's saves and the photos below it), which the form tells from changes made elsewhere.
+ */
 function ProfilePanel({ ctx }: { ctx: TabContext }) {
-  const saving = usePeriodSave(ctx.period);
+  const saving = usePeriodSave();
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <ProfileForm key={ctx.period.id} ctx={ctx} saving={saving} />
-      <ProfilePhotos ctx={ctx} />
+      <ProfilePhotos ctx={ctx} saving={saving} />
     </div>
   );
 }
@@ -177,7 +183,7 @@ function profilePatch(values: Values, period: PeriodView): { found: Record<strin
   return { found, patch };
 }
 
-/** `values` over the period read again: what was typed stays, every field left as it was takes its value in `after`. */
+/** `values` over a newer period made on this page: what was typed stays, every other field takes its value in `after`. */
 function rebased(values: Values, before: Values, after: Values): Values {
   const texts = { ...values.texts };
   for (const name of Object.keys(TEXTS) as TextName[]) if (values.texts[name] === before.texts[name]) texts[name] = after.texts[name];
@@ -191,38 +197,35 @@ function rebased(values: Values, before: Values, after: Values): Values {
   };
 }
 
+const PROFILE_MODEL: PeriodFormModel<Values> = { valuesOf, pending: profilePatch, rebased };
+
 function ProfileForm({ ctx, saving }: { ctx: TabContext; saving: PeriodSaving }) {
   const t = useT();
-  const period = ctx.period;
-  const [values, setValues] = useState<Values>(() => valuesOf(period));
-  // The period the values were taken from. Read again with a new version (a photo named below, another librarian's
-  // save, this form's own save), it never resets what was typed: those fields stay, the others show what is stored
-  // now, and the next save names the new version.
-  const [loaded, setLoaded] = useState(period);
-  if (loaded.version !== period.version) {
-    setLoaded(period);
-    setValues((v) => rebased(v, valuesOf(loaded), valuesOf(period)));
-  }
+  // The values and the period they were read from (period-form.tsx): a save names that period's version, so a change
+  // made elsewhere meanwhile is refused as stale instead of being overwritten.
+  const form = usePeriodValues(ctx.period, saving, PROFILE_MODEL);
+  const { values, setValues } = form;
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const { save, busy, problem, outcome, serverErrors } = saving;
   const off = !ctx.canEdit || busy;
   const errorOf = (name: string): string | undefined => errors[name] ?? serverErrors[name];
-  const pending = profilePatch(values, period);
-  useDirtyGuard(ctx.canEdit && (Object.keys(pending.found).length > 0 || Object.keys(pending.patch).length > 0));
+  useDirtyGuard(ctx.canEdit && form.dirty);
 
   const submit = (e: FormEvent): void => {
     e.preventDefault();
     if (!ctx.canEdit) return;
-    const { found, patch } = profilePatch(values, period);
+    const sent = form.base;
+    const { found, patch } = profilePatch(values, sent);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
-    void save(patch, (path) => {
+    const toField = (path: string): string | null => {
       if (path === 'name') return 'name';
       const field = path.startsWith('profile.') ? path.slice('profile.'.length) : null;
       if (field === null) return null;
       if (field in values.texts || field in values.choices) return field;
       return field === 'externalWebsiteFeatures' ? field : null;
-    });
+    };
+    void save(sent, patch, toField, (version) => form.stored(sent, patch, version));
   };
 
   const text = (name: TextName) => {
@@ -256,6 +259,7 @@ function ProfileForm({ ctx, saving }: { ctx: TabContext; saving: PeriodSaving })
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <ReadOnlyNote ctx={ctx} />
+      <StaleNote values={form} />
       <FormSection title={t('accreditation.workspace.profile.section.period')}>
         <TextField
           label={t('accreditation.workspace.profile.name')}
@@ -355,7 +359,7 @@ type Slot = (typeof PHOTOS)[number]['slot'];
  * its file after a confirmation (`DELETE accreditation/evidence/:id`; the server empties a slot that named it), and a
  * slot also lists its files the profile no longer names (a replaced photo, one taken out), each with that delete.
  */
-function ProfilePhotos({ ctx }: { ctx: TabContext }) {
+function ProfilePhotos({ ctx, saving }: { ctx: TabContext; saving: PeriodSaving }) {
   const t = useT();
   const queryClient = useQueryClient();
   const refresh = useRefreshPeriods();
@@ -368,7 +372,12 @@ function ProfilePhotos({ ctx }: { ctx: TabContext }) {
   const photos = period.profile.photos ?? {};
 
   const remove = async (file: EvidenceView): Promise<void> => {
+    const from = period.version;
+    const named = Object.values(photos).includes(file.fileId);
     await api<StoreResponse>('DELETE', `accreditation/evidence/${encodeURIComponent(file.id)}`);
+    // Deleting a photo the profile names empties its slot, which moves the period's version by one: a write of this
+    // page, so the profile form above keeps what was typed.
+    if (named) saving.wrote(period.id, from, from + 1);
     // The period (a slot emptied), its evidence lists, its results and the component sizes all moved.
     await queryClient.invalidateQueries({ queryKey: accreditationKeys.all() });
   };
@@ -391,7 +400,9 @@ function ProfilePhotos({ ctx }: { ctx: TabContext }) {
     try {
       const next = { front: photos.front ?? null, collection: photos.collection ?? null, staff: photos.staff ?? null, readingRoom: photos.readingRoom ?? null };
       next[slot] = fileId;
-      await api('PATCH', periodPath(period.id), { version: period.version, profile: { photos: next } });
+      const answer = await api<StoreResponse>('PATCH', periodPath(period.id), { version: period.version, profile: { photos: next } });
+      // A write of this page: the profile form above keeps what was typed and moves to the new version.
+      saving.wrote(period.id, period.version, answer.version);
       await refresh();
     } catch (e) {
       setProblem(e);

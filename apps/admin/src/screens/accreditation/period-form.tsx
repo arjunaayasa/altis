@@ -1,5 +1,6 @@
 import type { PeriodPatchBody, PeriodView } from '@altis/shared/api/accreditation';
-import { useState, type ReactNode } from 'react';
+import type { StoreResponse } from '@altis/shared/api/catalog/common';
+import { useCallback, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { Field, NoticeAlert, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,9 +11,18 @@ import { periodPath, useRefreshPeriods } from './data';
 
 /**
  * The forms of a period's own data (Profil, Populasi & Sarana): each keeps its values as the inputs show them (text),
- * sends only the fields that differ from the period as loaded, with the period's version, and reads the period again
- * once stored. A field the server refuses shows its error on that field; any other refusal (a frozen period, a newer
- * version) is the form's alert.
+ * sends only the fields that differ from the period it was read from, with that period's version, and reads the period
+ * again once stored. A field the server refuses shows its error on that field; any other refusal (a frozen period, a
+ * newer version) is the form's alert.
+ *
+ * A form keeps the version it was opened or last saved with, as the register forms do ({@link usePeriodValues}):
+ * - its own save shows the values as stored at once (a name typed with a trailing space, a number typed `0400`), so
+ *   nothing typed in another form than the stored one stays "changed" after the save;
+ * - a newer version made on this page (a profile photo named, taken out or deleted below the form) keeps what was
+ *   typed and moves the form to that version: nothing else changed in it;
+ * - a newer version made anywhere else, while something is typed, leaves the form on its version: Simpan is refused as
+ *   stale (`CONFLICT_STALE`) instead of storing these values over that change, the form says so, and "Muat ulang"
+ *   shows what is stored now. With nothing typed the form simply shows the newer version.
  */
 
 /** The fields of a period PATCH beyond its version. */
@@ -21,26 +31,58 @@ export type PeriodPatch = Omit<PeriodPatchBody, 'version'>;
 /** What the last save did. */
 export type SaveOutcome = 'saved' | 'unchanged' | null;
 
-/** The save of a period form: `save(patch, toField)` sends `patch` (nothing to send says so) and maps refused paths. */
-export function usePeriodSave(period: PeriodView) {
+/**
+ * The save of a period form: `save(base, patch, toField, onStored)` sends `patch` with the version of `base`, the
+ * period the form's values came from (nothing to send says so), and maps refused paths. It also keeps the writes this
+ * page made to a period (`wrote`, `madeHere`), so that a form tells a version made here from one made elsewhere.
+ */
+export function usePeriodSave() {
   const refresh = useRefreshPeriods();
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<unknown>(null);
   const [outcome, setOutcome] = useState<SaveOutcome>(null);
   const [serverErrors, setServerErrors] = useState<Readonly<Record<string, string>>>({});
+  // The period versions this page made, by `<period id>:<version it was made on>`. Only ever added to.
+  const writes = useRef(new Map<string, number>());
 
-  /** Sends `patch`; `toField` names the form field of a refused body path (null: the form's alert). */
-  const save = async (patch: PeriodPatch, toField: (path: string) => string | null): Promise<void> => {
+  /** This page changed period `periodId` from version `from`, which made version `to`. */
+  const wrote = useCallback((periodId: string, from: number, to: number): void => {
+    writes.current.set(`${periodId}:${from}`, to);
+  }, []);
+
+  /** Whether this page's own writes alone lead from version `from` of period `periodId` to version `to`. */
+  const madeHere = (periodId: string, from: number, to: number): boolean => {
+    let version = from;
+    while (version < to) {
+      const next = writes.current.get(`${periodId}:${version}`);
+      if (next === undefined) return false;
+      version = next;
+    }
+    return version === to;
+  };
+
+  /** Clears the outcome and the refusals of the last save. */
+  const clear = useCallback((): void => {
     setProblem(null);
     setOutcome(null);
     setServerErrors({});
+  }, []);
+
+  /**
+   * Sends `patch` with the version of `base`; `toField` names the form field of a refused body path (null: the form's
+   * alert); `onStored(version)` runs once it is stored, before the period is read again.
+   */
+  const save = async (base: PeriodView, patch: PeriodPatch, toField: (path: string) => string | null, onStored: (version: number) => void): Promise<void> => {
+    clear();
     if (Object.keys(patch).length === 0) {
       setOutcome('unchanged');
       return;
     }
     setBusy(true);
     try {
-      await api('PATCH', periodPath(period.id), { version: period.version, ...patch });
+      const answer = await api<StoreResponse>('PATCH', periodPath(base.id), { version: base.version, ...patch });
+      wrote(base.id, base.version, answer.version);
+      onStored(answer.version);
       setOutcome('saved');
       await refresh();
     } catch (e) {
@@ -55,16 +97,101 @@ export function usePeriodSave(period: PeriodView) {
       }
       setServerErrors(fields);
       if (Object.keys(fields).length === 0 || unplaced) setProblem(e);
+      // Refused as stale: the page reads the newer version, and the form offers to show it.
+      if (e instanceof ApiError && e.code === 'CONFLICT_STALE') void refresh();
     } finally {
       setBusy(false);
     }
   };
 
-  return { save, busy, problem, outcome, serverErrors };
+  return { save, busy, problem, outcome, serverErrors, wrote, madeHere, clear };
 }
 
 /** The save state of a period form, kept above the form so that its outcome outlives the form's reset after a save. */
 export type PeriodSaving = ReturnType<typeof usePeriodSave>;
+
+/** How a period form reads its values from a period, what they would send, and how typed values go over a newer one. */
+export interface PeriodFormModel<V> {
+  valuesOf(period: PeriodView): V;
+  /** The fields refused before anything is sent, and the patch of the fields that differ from `base`. */
+  pending(values: V, base: PeriodView): { found: Record<string, string>; patch: PeriodPatch };
+  /** `values` over `after`: what was typed (differs from `before`) stays, every other field takes its value in `after`. */
+  rebased(values: V, before: V, after: V): V;
+}
+
+/** `base` once the server stored `patch` over it as `version` (a profile changes the fields it names). */
+export function appliedPatch(base: PeriodView, patch: PeriodPatch, version: number): PeriodView {
+  const { profile, ...rest } = patch;
+  return { ...base, ...rest, profile: profile === undefined ? base.profile : { ...base.profile, ...profile }, version } as PeriodView;
+}
+
+/** The values of a period form over the period `live` as this page reads it now: see the top of this file. */
+export interface PeriodValues<V> {
+  /** The period the values were read from: its version is the one a save names. */
+  base: PeriodView;
+  values: V;
+  setValues: Dispatch<SetStateAction<V>>;
+  /** What a save would send now. */
+  pending: { found: Record<string, string>; patch: PeriodPatch };
+  /** Something typed is not stored (or is refused). */
+  dirty: boolean;
+  /** The period was changed elsewhere while something is typed: a save is refused until the form is read again. */
+  stale: boolean;
+  /** Shows what is stored now; what was typed is dropped. */
+  reload(): void;
+  /** The form's own save of `patch` over `sent` is stored as `version`: show the stored values. */
+  stored(sent: PeriodView, patch: PeriodPatch, version: number): void;
+}
+
+/** The values of a period form and the period they were read from, pinned as the top of this file says. */
+export function usePeriodValues<V>(live: PeriodView, saving: PeriodSaving, model: PeriodFormModel<V>): PeriodValues<V> {
+  const [base, setBase] = useState(live);
+  const [values, setValues] = useState<V>(() => model.valuesOf(live));
+  const pending = model.pending(values, base);
+  const dirty = Object.keys(pending.found).length > 0 || Object.keys(pending.patch).length > 0;
+  // A read older than the base (one made before this form's own save came back) is left alone.
+  if (live !== base && live.version >= base.version) {
+    if (!dirty) {
+      setBase(live);
+      setValues(model.valuesOf(live));
+    } else if (live.version === base.version || saving.madeHere(live.id, base.version, live.version)) {
+      setBase(live);
+      setValues(model.rebased(values, model.valuesOf(base), model.valuesOf(live)));
+    }
+  }
+  return {
+    base,
+    values,
+    setValues,
+    pending,
+    dirty,
+    stale: dirty && live.version > base.version,
+    reload: () => {
+      setBase(live);
+      setValues(model.valuesOf(live));
+      saving.clear();
+    },
+    stored: (sent, patch, version) => {
+      const next = appliedPatch(sent, patch, version);
+      setBase(next);
+      setValues(model.valuesOf(next));
+    },
+  };
+}
+
+/** The note of a form whose period was changed elsewhere while something is typed, with the way to read it again. */
+export function StaleNote({ values }: { values: Pick<PeriodValues<unknown>, 'stale' | 'reload'> }) {
+  const t = useT();
+  if (!values.stale) return null;
+  return (
+    <div role="status" className="flex flex-col items-start gap-2 rounded-md border border-warning-foreground/30 bg-warning px-3 py-2 text-sm text-warning-foreground">
+      <p>{t('accreditation.workspace.form.stale')}</p>
+      <Button type="button" variant="outline" size="sm" onClick={values.reload}>
+        {t('accreditation.workspace.form.reload')}
+      </Button>
+    </div>
+  );
+}
 
 /** The bottom of a period form: its alert, the outcome, and the save button for a user who may change the period. */
 export function PeriodFormFooter({ canEdit, busy, problem, outcome }: { canEdit: boolean; busy: boolean; problem: unknown; outcome: SaveOutcome }) {
