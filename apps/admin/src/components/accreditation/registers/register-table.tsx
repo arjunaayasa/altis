@@ -252,7 +252,8 @@ export function RegisterFileField({
  * changed fields (`body` answers them; nothing changed and no file change → `onUnchanged`). `check` may refuse values
  * first (an amount that is not one). The body is checked with the contract, then the chosen file goes up and its
  * upload id joins the body under `file.key`. Field errors land on the fields (a file error under the file field), any
- * other problem is `problem` (the form's alert). A stale version reads `invalidate` again.
+ * other problem is `problem` (the form's alert). The version sent is the one the form opened with, whatever the list
+ * read since; a stale refusal reads `invalidate` again, so the row opened again shows what is stored now.
  */
 export function useRegisterSave<F extends FieldValues>(o: {
   form: UseFormReturn<F>;
@@ -274,6 +275,12 @@ export function useRegisterSave<F extends FieldValues>(o: {
   const [fileError, setFileError] = useState<string | null>(null);
   // A file that already went up for this form (a later field error must not upload it again): the file and its id.
   const uploaded = useRef<{ file: File; uploadId: string } | null>(null);
+  // The version the values on screen were read at: the row's when the form opened (its own save moves it). The list is
+  // read again in the background (another librarian's save, a return to the window) and hands the form a newer row,
+  // but a save still names this version, so the server refuses it as stale instead of storing these values over the
+  // newer ones; the form says so, and opening the row again shows what is stored now (master tables do the same).
+  const [edited, setEdited] = useState(() => ({ id: o.row?.id ?? null, version: o.row?.version ?? 0 }));
+  if (o.row !== null && o.row.id !== edited.id) setEdited({ id: o.row.id, version: o.row.version });
 
   const save = o.form.handleSubmit(async (values) => {
     setProblem(null);
@@ -290,7 +297,7 @@ export function useRegisterSave<F extends FieldValues>(o: {
       return;
     }
     const schema = o.row === null ? o.create.schema : o.update.schema;
-    const parsed = schema.safeParse(o.row === null ? fields : { version: o.row.version, ...fields }, FORM_PARSE);
+    const parsed = schema.safeParse(o.row === null ? fields : { version: edited.version, ...fields }, FORM_PARSE);
     if (!parsed.success) {
       putFieldErrors(o.form, zodIssues(parsed.error.issues, o.message));
       return;
@@ -338,6 +345,7 @@ export function useRegisterSave<F extends FieldValues>(o: {
       if (isStale(e)) await queryClient.invalidateQueries({ queryKey: o.invalidate });
       return;
     }
+    setEdited({ id: answer.id, version: answer.version });
     o.form.reset(values);
     await o.onSaved(answer.id, o.row === null);
   });

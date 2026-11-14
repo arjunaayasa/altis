@@ -1,11 +1,15 @@
 import { L12_FEATURES, SCHOOL_LEVELS, SCHOOL_STATUSES, vocabKey, type L12Feature } from '@altis/shared';
-import type { AccredProfile, EvidenceListResponse, PeriodView } from '@altis/shared/api/accreditation';
+import type { AccredProfile, EvidenceListResponse, EvidenceView, PeriodView } from '@altis/shared/api/accreditation';
+import type { StoreResponse } from '@altis/shared/api/catalog/common';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent, type JSX } from 'react';
 import { EvidenceUpload } from '@/components/accreditation/evidence-upload';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Badge, CheckField, ProblemAlert } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { useT, type TKey } from '@/i18n';
 import { api } from '@/lib/api';
+import { useDirtyGuard } from '@/lib/dirty-forms';
 import { useApiQuery } from '@/lib/me';
 import { accreditationKeys, keyText, periodPath, retry, useRefreshPeriods } from '../data';
 import {
@@ -35,12 +39,12 @@ export function ProfileTab(props: { periodId: string }): JSX.Element {
   return <TabState periodId={props.periodId}>{(ctx) => <ProfilePanel ctx={ctx} />}</TabState>;
 }
 
-/** The form starts over from the stored period after each save (its version changes); the save's outcome stays. */
+/** The form starts over for another period; the save's outcome is kept above it. */
 function ProfilePanel({ ctx }: { ctx: TabContext }) {
   const saving = usePeriodSave(ctx.period);
   return (
     <div className="flex max-w-3xl flex-col gap-6">
-      <ProfileForm key={ctx.period.version} ctx={ctx} saving={saving} />
+      <ProfileForm key={ctx.period.id} ctx={ctx} saving={saving} />
       <ProfilePhotos ctx={ctx} />
     </div>
   );
@@ -132,52 +136,86 @@ function parsed(name: TextName, text: string): string | number | null | 'invalid
 
 const normalized = (v: unknown): unknown => (v === undefined ? null : v);
 
+const sameSet = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x) => b.includes(x));
+
+/**
+ * What `values` would send for `period`: the fields refused before anything is sent, and the patch of the fields that
+ * differ from the stored ones (empty: nothing to save).
+ */
+function profilePatch(values: Values, period: PeriodView): { found: Record<string, string>; patch: PeriodPatch } {
+  const found: Record<string, string> = {};
+  const next: Record<string, unknown> = {};
+  for (const name of Object.keys(TEXTS) as TextName[]) {
+    const v = parsed(name, values.texts[name]);
+    if (v === 'invalid') found[name] = 'form.error.invalid';
+    else next[name] = v;
+  }
+  for (const [name, v] of Object.entries(values.choices)) next[name] = v === '' ? null : v;
+  const name = values.name.trim();
+  if (name === '') found['name'] = 'form.error.required';
+
+  const profile: Record<string, unknown> = {};
+  const changedParts = new Set<Part>();
+  for (const [path, v] of Object.entries(next)) {
+    if (normalized(storedAt(period.profile, path)) === v) continue;
+    const [head, tail] = path.split('.') as [string, string | undefined];
+    if (tail === undefined) profile[head] = v;
+    else changedParts.add(head as Part);
+  }
+  // A part is replaced whole: send every one of its fields.
+  for (const part of changedParts) {
+    const whole: Record<string, unknown> = {};
+    for (const [path, v] of Object.entries(next)) if (path.startsWith(`${part}.`)) whole[path.slice(part.length + 1)] = v;
+    profile[part] = whole;
+  }
+  if (!sameSet(values.features, period.profile.externalWebsiteFeatures ?? [])) {
+    profile['externalWebsiteFeatures'] = L12_FEATURES.filter((f) => values.features.includes(f));
+  }
+  const patch: PeriodPatch = {};
+  if (name !== '' && name !== period.name) patch.name = name;
+  if (Object.keys(profile).length > 0) patch.profile = profile as AccredProfile;
+  return { found, patch };
+}
+
+/** `values` over the period read again: what was typed stays, every field left as it was takes its value in `after`. */
+function rebased(values: Values, before: Values, after: Values): Values {
+  const texts = { ...values.texts };
+  for (const name of Object.keys(TEXTS) as TextName[]) if (values.texts[name] === before.texts[name]) texts[name] = after.texts[name];
+  const choices = { ...values.choices };
+  for (const name of Object.keys(choices) as ChoiceName[]) if (values.choices[name] === before.choices[name]) choices[name] = after.choices[name];
+  return {
+    name: values.name === before.name ? after.name : values.name,
+    texts,
+    choices,
+    features: sameSet(values.features, before.features) ? after.features : values.features,
+  };
+}
+
 function ProfileForm({ ctx, saving }: { ctx: TabContext; saving: PeriodSaving }) {
   const t = useT();
   const period = ctx.period;
   const [values, setValues] = useState<Values>(() => valuesOf(period));
+  // The period the values were taken from. Read again with a new version (a photo named below, another librarian's
+  // save, this form's own save), it never resets what was typed: those fields stay, the others show what is stored
+  // now, and the next save names the new version.
+  const [loaded, setLoaded] = useState(period);
+  if (loaded.version !== period.version) {
+    setLoaded(period);
+    setValues((v) => rebased(v, valuesOf(loaded), valuesOf(period)));
+  }
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const { save, busy, problem, outcome, serverErrors } = saving;
   const off = !ctx.canEdit || busy;
   const errorOf = (name: string): string | undefined => errors[name] ?? serverErrors[name];
+  const pending = profilePatch(values, period);
+  useDirtyGuard(ctx.canEdit && (Object.keys(pending.found).length > 0 || Object.keys(pending.patch).length > 0));
 
   const submit = (e: FormEvent): void => {
     e.preventDefault();
     if (!ctx.canEdit) return;
-    const found: Record<string, string> = {};
-    const next: Record<string, unknown> = {};
-    for (const name of Object.keys(TEXTS) as TextName[]) {
-      const v = parsed(name, values.texts[name]);
-      if (v === 'invalid') found[name] = 'form.error.invalid';
-      else next[name] = v;
-    }
-    for (const [name, v] of Object.entries(values.choices)) next[name] = v === '' ? null : v;
-    const name = values.name.trim();
-    if (name === '') found['name'] = 'form.error.required';
+    const { found, patch } = profilePatch(values, period);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
-
-    const profile: Record<string, unknown> = {};
-    const changedParts = new Set<Part>();
-    for (const [path, v] of Object.entries(next)) {
-      if (normalized(storedAt(period.profile, path)) === v) continue;
-      const [head, tail] = path.split('.') as [string, string | undefined];
-      if (tail === undefined) profile[head] = v;
-      else changedParts.add(head as Part);
-    }
-    // A part is replaced whole: send every one of its fields.
-    for (const part of changedParts) {
-      const whole: Record<string, unknown> = {};
-      for (const [path, v] of Object.entries(next)) if (path.startsWith(`${part}.`)) whole[path.slice(part.length + 1)] = v;
-      profile[part] = whole;
-    }
-    const stored = period.profile.externalWebsiteFeatures ?? [];
-    if (values.features.length !== stored.length || values.features.some((f) => !stored.includes(f))) {
-      profile['externalWebsiteFeatures'] = L12_FEATURES.filter((f) => values.features.includes(f));
-    }
-    const patch: PeriodPatch = {};
-    if (name !== period.name) patch.name = name;
-    if (Object.keys(profile).length > 0) patch.profile = profile as AccredProfile;
     void save(patch, (path) => {
       if (path === 'name') return 'name';
       const field = path.startsWith('profile.') ? path.slice('profile.'.length) : null;
@@ -310,19 +348,42 @@ type Slot = (typeof PHOTOS)[number]['slot'];
 
 /**
  * The four profile photos: each slot says whether it holds a photo (with its file), and a manager of an open period
- * uploads one (an evidence file of the period under `SCH-PROFIL`, as a JPEG) or takes it out of the profile. After an
- * upload the newest evidence file of that slot is named in the profile.
+ * uploads one (an image, stored as a JPEG evidence file of the period under `SCH-PROFIL`) or takes it out of the
+ * profile. After an upload the newest evidence file of that slot is named in the profile.
+ *
+ * Every evidence file of the profile goes into the evidence ZIP, named in a slot or not. So each one can be deleted with
+ * its file after a confirmation (`DELETE accreditation/evidence/:id`; the server empties a slot that named it), and a
+ * slot also lists its files the profile no longer names (a replaced photo, one taken out), each with that delete.
  */
 function ProfilePhotos({ ctx }: { ctx: TabContext }) {
   const t = useT();
+  const queryClient = useQueryClient();
   const refresh = useRefreshPeriods();
   const period = ctx.period;
   const path = `accreditation/evidence?${new URLSearchParams({ periodId: period.id, indicatorCode: PROFILE_CODE }).toString()}`;
   const evidence = useApiQuery<EvidenceListResponse>({ queryKey: [...accreditationKeys.period(period.id), 'evidence', PROFILE_CODE], path, retry });
   const [problem, setProblem] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState<EvidenceView | null>(null);
   const photos = period.profile.photos ?? {};
-  const fileName = (fileId: string): string => evidence.data?.evidence.find((e) => e.fileId === fileId)?.fileName ?? fileId;
+
+  const remove = async (file: EvidenceView): Promise<void> => {
+    await api<StoreResponse>('DELETE', `accreditation/evidence/${encodeURIComponent(file.id)}`);
+    // The period (a slot emptied), its evidence lists, its results and the component sizes all moved.
+    await queryClient.invalidateQueries({ queryKey: accreditationKeys.all() });
+  };
+
+  const deleteButton = (file: EvidenceView) =>
+    ctx.canEdit && (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-label={t('accreditation.workspace.profile.photo.delete_named', { name: file.fileName })}
+        onClick={() => setRemoving(file)}>
+        {t('accreditation.workspace.profile.photo.delete')}
+      </Button>
+    );
 
   const setSlot = async (slot: Slot, fileId: string | null): Promise<void> => {
     setBusy(true);
@@ -352,6 +413,9 @@ function ProfilePhotos({ ctx }: { ctx: TabContext }) {
       <ul className="grid gap-3 sm:grid-cols-2">
         {PHOTOS.map(({ slot, code, label }) => {
           const fileId = photos[slot] ?? null;
+          const files = (evidence.data?.evidence ?? []).filter((e) => e.evidenceCode === code);
+          const current = files.find((e) => e.fileId === fileId);
+          const unused = files.filter((e) => e.fileId !== fileId);
           return (
             <li key={slot} className="grid gap-2 rounded-md border px-3 py-2 text-sm">
               <div className="flex flex-wrap items-center gap-2">
@@ -361,9 +425,27 @@ function ProfilePhotos({ ctx }: { ctx: TabContext }) {
                 </Badge>
               </div>
               {fileId !== null && (
-                <a href={`/files/${encodeURIComponent(fileId)}`} className="text-primary underline-offset-4 hover:underline">
-                  {fileName(fileId)}
-                </a>
+                <div className="flex flex-wrap items-center gap-2">
+                  <a href={`/files/${encodeURIComponent(fileId)}`} className="text-primary underline-offset-4 hover:underline">
+                    {current?.fileName ?? fileId}
+                  </a>
+                  {current !== undefined && deleteButton(current)}
+                </div>
+              )}
+              {unused.length > 0 && (
+                <ul className="grid gap-2">
+                  {unused.map((file) => (
+                    <li key={file.id} className="grid gap-1">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <a href={`/files/${encodeURIComponent(file.fileId)}`} className="text-primary underline-offset-4 hover:underline">
+                          {file.fileName}
+                        </a>
+                        {deleteButton(file)}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{t('accreditation.workspace.profile.photo.unused')}</span>
+                    </li>
+                  ))}
+                </ul>
               )}
               {ctx.canEdit && (
                 <div className="flex flex-wrap gap-2">
@@ -371,6 +453,7 @@ function ProfilePhotos({ ctx }: { ctx: TabContext }) {
                     periodId={period.id}
                     indicatorCode={PROFILE_CODE}
                     evidenceCode={code}
+                    imagesOnly
                     label={t('accreditation.workspace.profile.photo.upload')}
                     onDone={() => void uploaded(slot, code)}
                   />
@@ -386,6 +469,17 @@ function ProfilePhotos({ ctx }: { ctx: TabContext }) {
         })}
       </ul>
       <ProblemAlert error={problem} />
+      {removing !== null && (
+        <ConfirmDialog
+          open
+          destructive
+          title={t('accreditation.workspace.profile.photo.confirm.title', { name: removing.fileName })}
+          description={t('accreditation.workspace.profile.photo.confirm.body')}
+          confirmLabel={t('accreditation.workspace.profile.photo.delete')}
+          onConfirm={() => remove(removing)}
+          onClose={() => setRemoving(null)}
+        />
+      )}
     </section>
   );
 }

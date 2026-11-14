@@ -8,7 +8,7 @@ import type {
   StaffView,
   TrainingView,
 } from '@altis/shared/api/accreditation';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { formatMajorAmount, parseMajorAmount } from '@/components/accreditation/registers/budgets';
 import { uploadFile } from '@/lib/upload';
@@ -313,6 +313,57 @@ describe('the Register tab', () => {
     expect(sent('PATCH', `accreditation/activities/${ACT}`)[0]!.body).toEqual({ version: 2, participants: 150, externalSpeaker: true });
     expect(await screen.findByText('Pameran buku baru disimpan.')).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it("activities: an edit over another librarian's save, read while the dialog was open, is refused as stale instead of undoing it", async () => {
+    // The server keeps the row and refuses a write that names an older version, as the real one does.
+    let row: ActivityView = { ...ACTIVITY, partner: 'Dinas Perpustakaan' };
+    const { sent, queryClient } = renderWithServer(<RegistersTab periodId={PERIOD} />, {
+      routes: {
+        'GET accreditation/instruments': () => instrumentsAnswer(5),
+        'GET accreditation/evidence': () => ({ evidence: [], componentBytes: { K: 0, SP: 0, L: 0, T: 0, F: 0, G: 0, profil: 0 } }),
+        'GET accreditation/activities': () => ({ rows: [row] }),
+        'PATCH accreditation/activities/:id': (req) => {
+          const { version, ...patch } = req.body as { version: number } & Partial<ActivityView>;
+          if (version !== row.version) return problem(409, 'CONFLICT_STALE');
+          row = { ...row, ...patch, version: row.version + 1 };
+          return { id: row.id, version: row.version };
+        },
+      },
+    });
+    const table = await screen.findByRole('table', { name: 'Daftar kegiatan' });
+    fireEvent.click(within(table).getByRole('button', { name: 'Ubah Pameran buku baru' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Ubah kegiatan' });
+    expect((within(dialog).getByLabelText('Mitra') as HTMLInputElement).value).toBe('Dinas Perpustakaan');
+
+    // Meanwhile another librarian changes the partner, and this page reads the list again (back from another window).
+    row = { ...row, partner: 'Perpustakaan Nasional', version: 3 };
+    await act(() => queryClient.invalidateQueries({ queryKey: ['accreditation', 'registers', 'activities'] }));
+    await within(table).findByText('Perpustakaan Nasional');
+
+    fireEvent.change(within(dialog).getByLabelText('Jumlah peserta'), { target: { value: '150' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan' }));
+    await waitFor(() => expect(sent('PATCH', `accreditation/activities/${ACT}`)).toHaveLength(1));
+    expect(sent('PATCH', `accreditation/activities/${ACT}`)[0]!.body).toMatchObject({ version: 2, participants: 150 });
+    const stale = 'Data ini sudah diubah oleh orang lain. Muat ulang, lalu coba lagi.';
+    expect(await within(dialog).findByText(stale)).toBeTruthy();
+    // Pressing Simpan again is refused again: the values on screen are still the ones read before the other save.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan' }));
+    await waitFor(() => expect(sent('PATCH', `accreditation/activities/${ACT}`)).toHaveLength(2));
+    expect(sent('PATCH', `accreditation/activities/${ACT}`)[1]!.body).toMatchObject({ version: 2 });
+    expect(row).toMatchObject({ version: 3, partner: 'Perpustakaan Nasional', participants: 120 });
+
+    // Opened again, the row shows what is stored now, and the edit goes through without undoing the other one.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Batal' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    fireEvent.click(within(table).getByRole('button', { name: 'Ubah Pameran buku baru' }));
+    const again = await screen.findByRole('dialog', { name: 'Ubah kegiatan' });
+    expect((within(again).getByLabelText('Mitra') as HTMLInputElement).value).toBe('Perpustakaan Nasional');
+    fireEvent.change(within(again).getByLabelText('Jumlah peserta'), { target: { value: '150' } });
+    fireEvent.click(within(again).getByRole('button', { name: 'Simpan' }));
+    await waitFor(() => expect(sent('PATCH', `accreditation/activities/${ACT}`)).toHaveLength(3));
+    expect(sent('PATCH', `accreditation/activities/${ACT}`)[2]!.body).toEqual({ version: 3, participants: 150 });
+    expect(row).toMatchObject({ version: 4, partner: 'Perpustakaan Nasional', participants: 150 });
   });
 
   it('staff: lists each person with the trainings inline, creates one and archives one', async () => {
