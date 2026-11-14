@@ -18,7 +18,10 @@ import { loggableError } from '../safe-error.js';
 // - `audit.verify` (GET audit/verify): verifyAuditChain over the whole log, outside any transaction; from 1c (Task 18,
 //   §7.8, L39) it starts at the retention anchor `audit.anchor` when a purge has set one, so it keeps verifying after
 //   the oldest entries were deleted.
-// - `audit.export` (GET audit/export, `mode: system`, so it keeps working in read-only, §8.6): the `audit.export`
+// - `audit.export` (GET audit/export, `mode: system`, so it keeps working in read-only, §8.6): a re-authentication
+//   within 5 minutes first (401 AUTH_REAUTH_REQUIRED without one), since the file holds personal data: each actor's
+//   staff name (a registered personal column) and each entry's IP address, and exporting personal data always asks
+//   for the password again (§7.3). Then the `audit.export`
 //   entry (meta = the filters given) is committed in its own `rc.withTx` before anything is streamed, so every export
 //   that sends a byte is in the log. The CSV then streams through the one exporter (core's csvRow, §7.4): a UTF-8 BOM
 //   and the header row first, then one chunk per batch of auditBatches (at most 1000 rows, read only when the client
@@ -111,6 +114,7 @@ const auditExport = route({
   method: 'GET',
   path: `${AUDIT}/export`,
   permission: 'system.audit.export',
+  reauth: true,
   mode: 'system',
   idempotency: 'none',
   audit: 'audit.export',

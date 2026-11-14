@@ -76,8 +76,10 @@ export {
 } from './evaluate/index.js';
 export type { EvaluatePayload } from './evaluate/index.js';
 export {
+  SLIMS_USAGE_JOB,
   importSlimsUsageJob,
   importSlimsUsagePayload,
+  releaseCancelledUsageImport,
   slimsUsageRunSettings,
   startSlimsUsageImport,
   testSlimsUsageConnection,

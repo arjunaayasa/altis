@@ -1,5 +1,6 @@
 import {
   REPORT_PREVIEW_MAX_LIMIT,
+  reportOutputLocale,
   type ReportCatalogEntry,
   type ReportCell,
   type ReportColumnType,
@@ -14,12 +15,13 @@ import { createPortal } from 'react-dom';
 import { useDateTime } from '@/components/data-table';
 import { NoticeAlert, ProblemAlert } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
-import { useLocale, useT, type TKey } from '@/i18n';
+import { I18nProvider, useLocale, useT, type TKey } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
 import { isMessageKey } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
 import { cn } from '@/lib/utils';
-import { serverParamErrors } from './param-form';
+import { reportTitle } from './catalog';
+import { serverParamErrors, useDescribeParams, useParamOptions } from './param-form';
 import './print.css';
 
 /**
@@ -27,8 +29,14 @@ import './print.css';
  * applied filters, {@link REPORT_PREVIEW_MAX_LIMIT} rows a page; "Muat lagi" sends the last page's cursor and appends
  * the next page; the totals row (the first page's) closes the table. The columns are the answer's (a definition's
  * columns may depend on its parameters), labelled with the shared report texts; cells are formatted by their column's
- * type (numbers, money in major units, whole percents, `YYYY-MM-DD` dates in the UI language), text cells keep their
- * own script direction (`dir="auto"`: Arabic titles read right to left).
+ * type (numbers, money in major units, whole percents, `YYYY-MM-DD` dates), text cells keep their own script direction
+ * (`dir="auto"`: Arabic titles read right to left).
+ *
+ * The table and its printed copy are in the language of the report's output (`reportOutputLocale`), as the server
+ * writes the cells and the export: an accreditation annex always in Indonesian, the language of the files handed to the
+ * assessors, whatever the reader reads (its heads, title, filters in words, printed line, dates and numbers); any other
+ * report in the UI language. The section around them (its heading, the count of rows, the buttons, the refusals) is
+ * in the UI language. The table and the copy say their language (`lang`).
  *
  * - A report that would scan too much for a preview is refused with 422 `{path: 'params', code: 'export_only'}`: the
  *   screen says so (`report.export_only`) and the export stays offered, on a later page too (a list whose rest needs
@@ -76,7 +84,7 @@ export function isExportOnly(e: unknown): boolean {
 
 const NUMERIC: ReadonlySet<ReportColumnType> = new Set<ReportColumnType>(['int', 'money', 'percent']);
 
-/** Formats a cell by its column's type in the UI language. */
+/** Formats a cell by its column's type in the current language (the output's, under the section's provider). */
 export function useCellFormat(): (type: ReportColumnType, cell: ReportCell) => string {
   const locale = useLocale();
   return useMemo(() => {
@@ -107,7 +115,7 @@ function columnLabel(t: ReturnType<typeof useT>, c: ReportColumnView): string {
   return isMessageKey(c.labelKey) ? t(c.labelKey as TKey) : c.key;
 }
 
-/** The rows of a report as a table (on screen and in the printed copy). */
+/** The rows of a report as a table (on screen and in the printed copy), in the current language. */
 export function ReportTable({
   columns,
   rows,
@@ -122,6 +130,7 @@ export function ReportTable({
   className?: string;
 }) {
   const t = useT();
+  const locale = useLocale();
   const format = useCellFormat();
   const cellClass = (c: ReportColumnView): string => cn('px-3 py-2', NUMERIC.has(c.type) && 'text-right tabular-nums whitespace-nowrap');
   const cells = (row: readonly ReportCell[], foot: boolean) =>
@@ -135,7 +144,7 @@ export function ReportTable({
     });
   return (
     <div className={cn('overflow-x-auto rounded-md border', className)}>
-      <table className="w-full text-sm">
+      <table lang={locale} className="w-full text-sm">
         <caption className="sr-only">{caption}</caption>
         <thead className="bg-muted/50 text-left">
           <tr>
@@ -174,32 +183,54 @@ export function ReportTable({
 /** The attribute on `<html>` that print.css reads while a report is printed. */
 const PRINT_ATTRIBUTE = 'data-print';
 
-/** The copy of the table that is printed (see the top of this file). */
+/** The on-screen table of the preview, its caption naming the report in the current language. */
+function ScreenTable({
+  entry,
+  columns,
+  rows,
+  totals,
+}: {
+  entry: ReportCatalogEntry;
+  columns: readonly ReportColumnView[];
+  rows: readonly (readonly ReportCell[])[];
+  totals: readonly ReportCell[] | null;
+}) {
+  const t = useT();
+  return <ReportTable columns={columns} rows={rows} totals={totals} caption={t('reports.preview.caption', { title: reportTitle(t, entry) })} />;
+}
+
+/**
+ * The copy of the table that is printed (see the top of this file), wholly in the current language: the report's
+ * title, the applied filters `params` in words and the printed line are said here in that language.
+ */
 function PrintCopy({
   entry,
-  title,
-  filters,
+  params,
   columns,
   rows,
   totals,
   more,
 }: {
   entry: ReportCatalogEntry;
-  title: string;
-  filters: string;
+  params: Readonly<Record<string, unknown>> | null;
   columns: readonly ReportColumnView[];
   rows: readonly (readonly ReportCell[])[];
   totals: readonly ReportCell[] | null;
   more: boolean;
 }) {
   const t = useT();
+  const locale = useLocale();
   const me = useMe();
   const dateTime = useDateTime();
+  // The option lists are those the filter form already read (the same queries): the copy names them in its language.
+  const describe = useDescribeParams(entry, useParamOptions(entry));
   const [at] = useState(() => Date.now());
   const library = me?.library.name ?? '';
   const name = me?.authenticated === true ? me.user.name : '';
+  const title = reportTitle(t, entry);
+  const filters = describe(params);
   return createPortal(
-    <div className="report-print-copy" data-report-print="" data-orientation={entry.orientation} aria-hidden="true">
+    <div className="report-print-copy" lang={locale} data-report-print="" data-orientation={entry.orientation} aria-hidden="true">
       <header className="report-print-header">
         {library !== '' && <p>{library}</p>}
         <h1>{title}</h1>
@@ -215,11 +246,13 @@ function PrintCopy({
 
 /**
  * The preview section: what to do before the first "Terapkan", the table and "Muat lagi", the refusals, and "Cetak".
- * `filters` says the applied filters in words (for the printed copy).
+ * `params` are the applied filters (null before the first "Terapkan"), said in words on the printed copy.
  */
-export function PreviewSection({ entry, title, query, applied, filters }: { entry: ReportCatalogEntry; title: string; query: PreviewQuery; applied: boolean; filters: string }) {
+export function PreviewSection({ entry, query, params }: { entry: ReportCatalogEntry; query: PreviewQuery; params: Readonly<Record<string, unknown>> | null }) {
   const t = useT();
   const locale = useLocale();
+  const output = reportOutputLocale(entry.module, locale);
+  const applied = params !== null;
   const headingId = useId();
   const number = new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'id-ID');
   const pages = query.data?.pages;
@@ -268,7 +301,9 @@ export function PreviewSection({ entry, title, query, applied, filters }: { entr
   } else {
     body = (
       <div className="flex flex-col gap-3">
-        <ReportTable columns={columns} rows={rows} totals={totals} caption={t('reports.preview.caption', { title })} />
+        <I18nProvider locale={output}>
+          <ScreenTable entry={entry} columns={columns} rows={rows} totals={totals} />
+        </I18nProvider>
         {query.isFetchNextPageError && (isExportOnly(query.error) ? <NoticeAlert>{t('report.export_only')}</NoticeAlert> : <ProblemAlert error={query.error} />)}
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <span className="text-muted-foreground">{t('reports.preview.shown', { count: number.format(rows.length) })}</span>
@@ -297,7 +332,9 @@ export function PreviewSection({ entry, title, query, applied, filters }: { entr
       </div>
       {body}
       {printing > 0 && first !== undefined && (
-        <PrintCopy entry={entry} title={title} filters={filters} columns={columns} rows={rows} totals={totals} more={query.hasNextPage} />
+        <I18nProvider locale={output}>
+          <PrintCopy entry={entry} params={params} columns={columns} rows={rows} totals={totals} more={query.hasNextPage} />
+        </I18nProvider>
       )}
     </section>
   );

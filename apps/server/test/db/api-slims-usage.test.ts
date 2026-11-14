@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { localStorageDriver, writeRunReport } from '@altis/core';
 import { PHASE1_MIGRATIONS, runMigrations } from '@altis/db';
 import { runWorkPath } from '@altis/platform';
 import { newId } from '@altis/shared';
@@ -16,7 +17,9 @@ import { seedStaff, sessionCookieFor, sessionCsrfFor } from '../support-auth.js'
 // `accreditation.workspace.manage` and a re-authentication within 5 minutes; the connection test answers 200 either way;
 // a start takes a dump upload of its starter, creates the run and its job and audits the start once; a second start while
 // an import runs joins it; an unknown period is 404; an import run stays out of the catalogue's run list for a reader
-// without the accreditation management permission.
+// without the accreditation management permission, while an accreditation manager without the catalogue permission
+// reads an import run and its report (the import wizard's summary), and no other run. An import cancelled while its
+// job waits in the queue loses its raw dump and its run's folder at once, and its run ends cancelled.
 
 const ctx = testDbContext();
 let h: TestDbHandle;
@@ -45,6 +48,7 @@ describe.skipIf(!ctx.available)(`SLiMS usage import API [${engineLabel()}]`, () 
   let other: Client;
   let stale: Client;
   let reader: Client;
+  let jobsManager: Client;
   let periodId: string;
 
   async function signedIn(username: string, permissions: string[], o: { reauth?: boolean } = {}): Promise<Client> {
@@ -125,6 +129,7 @@ describe.skipIf(!ctx.available)(`SLiMS usage import API [${engineLabel()}]`, () 
     other = await signedIn('wakil_akreditasi', ['accreditation.workspace.manage']);
     stale = await signedIn('tanpa_reauth', ['accreditation.workspace.manage'], { reauth: false });
     reader = await signedIn('pembaca_katalog', ['catalog.records.read']);
+    jobsManager = await signedIn('pengelola_tugas', ['system.jobs.manage', 'accreditation.workspace.manage']);
     periodId = await period('2025-07-01', '2026-06-30');
   });
 
@@ -186,6 +191,47 @@ describe.skipIf(!ctx.available)(`SLiMS usage import API [${engineLabel()}]`, () 
     expect(await h.db.selectFrom('catalog_runs').select('id').execute()).toEqual([{ id: runId }]);
   });
 
+  it('a dump import cancelled while its job is queued: the dump and the run folder go at once, the run ends cancelled with its finish entry', async () => {
+    const uploadId = await stagedUpload(manager.userId, new TextEncoder().encode('-- MySQL dump\nINSERT INTO `member` VALUES (\'M-0001\',\'Siti Rahma\');\n'));
+    const res = await manager.post(`${API}/periods/${periodId}/slims-usage`, { source: { kind: 'dump', uploadId } });
+    expect(res.status, res.text).toBe(201);
+    const { runId, jobId } = res.json as { runId: string; jobId: string };
+    expect((await fsp.stat(runWorkPath(dataDir, runId, 'dump.bin'))).isFile()).toBe(true);
+    // What a start whose move was lost leaves: the upload's staging folder, which a queued cancel removes as well.
+    await fsp.mkdir(path.join(dataDir, 'tmp', uploadId), { recursive: true });
+    await fsp.writeFile(path.join(dataDir, 'tmp', uploadId, 'upload.bin'), 'sisa');
+
+    const cancel = await jobsManager.post(`/api/v1/jobs/${jobId}/cancel`);
+    expect(cancel.status, cancel.text).toBe(200);
+    expect((cancel.json as { status: string }).status).toBe('cancelled');
+    await expect(fsp.stat(runWorkPath(dataDir, runId, 'dump.bin'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fsp.stat(path.join(dataDir, 'tmp', runId))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fsp.stat(path.join(dataDir, 'tmp', uploadId))).rejects.toMatchObject({ code: 'ENOENT' });
+    const run = await h.db.selectFrom('catalog_runs').select(['status', 'finished_at']).where('id', '=', runId).executeTakeFirstOrThrow();
+    expect([run.status, Number(run.finished_at)]).toEqual(['cancelled', NOW]);
+    const finish = await h.db.selectFrom('audit_log').select(['actor_type', 'meta']).where('action', '=', 'accreditation.slims_usage.finish').where('entity_id', '=', runId).execute();
+    expect(finish.map((r) => ({ actor: r.actor_type, meta: JSON.parse(r.meta ?? 'null') as unknown }))).toEqual([
+      { actor: 'system', meta: { status: 'cancelled', months: 0, rows: 0 } },
+    ]);
+
+    // The next start finds nothing left to end, and runs.
+    const next = await manager.post(`${API}/periods/${periodId}/slims-usage`, { source: { kind: 'db', db: UNREACHABLE } });
+    expect(next.status, next.text).toBe(201);
+    expect(await h.db.selectFrom('audit_log').select('seq').where('action', '=', 'accreditation.slims_usage.finish').where('entity_id', '=', runId).execute()).toHaveLength(1);
+  });
+
+  it('a running import asked to stop keeps its folder for its own slice to end', async () => {
+    const uploadId = await stagedUpload(manager.userId, new TextEncoder().encode('-- MySQL dump\n'));
+    const res = await manager.post(`${API}/periods/${periodId}/slims-usage`, { source: { kind: 'dump', uploadId } });
+    const { runId, jobId } = res.json as { runId: string; jobId: string };
+    await h.db.updateTable('jobs').set({ status: 'running', locked_by: 'elsewhere', locked_until: NOW + 50_000 }).where('id', '=', jobId).execute();
+    const cancel = await jobsManager.post(`/api/v1/jobs/${jobId}/cancel`);
+    expect(cancel.status, cancel.text).toBe(200);
+    expect((cancel.json as { status: string }).status).toBe('running');
+    expect((await fsp.stat(runWorkPath(dataDir, runId, 'dump.bin'))).isFile()).toBe(true);
+    expect((await h.db.selectFrom('catalog_runs').select('status').where('id', '=', runId).executeTakeFirstOrThrow()).status).toBe('queued');
+  });
+
   it('a database start keeps the password only in the job\'s sealed secret', async () => {
     const res = await manager.post(`${API}/periods/${periodId}/slims-usage`, { source: { kind: 'db', db: UNREACHABLE } });
     expect(res.status, res.text).toBe(201);
@@ -219,5 +265,60 @@ describe.skipIf(!ctx.available)(`SLiMS usage import API [${engineLabel()}]`, () 
     const own = await manager.get('/api/v1/catalog/runs');
     expect((own.json as { items: { id: string; kind: string }[] }).items.map((r) => [r.id, r.kind])).toEqual([[runId, 'slims_usage']]);
     expect((await manager.get(`/api/v1/catalog/runs/${runId}`)).status).toBe(200);
+  });
+
+  it('an accreditation manager without the catalogue permission reads an import run and its report, no other run; neither permission → 403', async () => {
+    const res = await other.post(`${API}/periods/${periodId}/slims-usage`, { source: { kind: 'db', db: UNREACHABLE } });
+    expect(res.status, res.text).toBe(201);
+    const { runId, jobId } = res.json as { runId: string; jobId: string };
+    // The run as its job leaves it: ended, with its report.
+    const fileId = await writeRunReport(h, localStorageDriver(dataDir), runId, ['bagian', 'jumlah'], [['loan', '3']], { now: NOW, createdBy: other.userId });
+    await h.db.updateTable('catalog_runs').set({ status: 'succeeded', report_file_id: fileId, finished_at: NOW }).where('id', '=', runId).execute();
+
+    const view = await other.get(`/api/v1/catalog/runs/${runId}`);
+    expect(view.status, view.text).toBe(200);
+    expect(view.json).toMatchObject({ id: runId, kind: 'slims_usage', status: 'succeeded', jobId, reportFileId: fileId });
+    const report = await other.get(`/api/v1/catalog/runs/${runId}/report`);
+    expect(report.status, report.text).toBe(200);
+    expect(report.headers.get('content-disposition')).toMatch(/^attachment; /);
+    expect(report.text).toContain('"loan","3"');
+
+    // Any other run is out of reach, as one that does not exist; the run list stays the catalogue's.
+    const importRun = newId(NOW);
+    await h.db
+      .insertInto('catalog_runs')
+      .values({
+        id: importRun,
+        kind: 'import',
+        status: 'succeeded',
+        dry_run: 0,
+        format: 'marc21',
+        options: '{}',
+        summary: '{}',
+        report_file_id: null,
+        output_name: null,
+        output_size: null,
+        expires_at: null,
+        job_id: null,
+        created_at: NOW,
+        created_by: null,
+        finished_at: NOW,
+      })
+      .execute();
+    for (const p of [`/api/v1/catalog/runs/${importRun}`, `/api/v1/catalog/runs/${importRun}/report`, `/api/v1/catalog/runs/${newId(NOW)}`]) {
+      const refused = await other.get(p);
+      expect([p, refused.status, code(refused)]).toEqual([p, 404, 'NOT_FOUND']);
+    }
+    expect((await other.get('/api/v1/catalog/runs')).status).toBe(403);
+    // The catalogue reader still reads the import run of their own permission, not the usage import's.
+    expect((await reader.get(`/api/v1/catalog/runs/${importRun}`)).status).toBe(200);
+    expect((await reader.get(`/api/v1/catalog/runs/${runId}/report`)).status).toBe(404);
+
+    // Neither permission: refused as without the catalogue's.
+    const nobody = await signedIn('tanpa_izin_proses', ['accreditation.workspace.read']);
+    for (const p of [`/api/v1/catalog/runs/${runId}`, `/api/v1/catalog/runs/${runId}/report`]) {
+      const denied = await nobody.get(p);
+      expect([p, denied.status, code(denied)]).toEqual([p, 403, 'AUTHZ_DENIED']);
+    }
   });
 });

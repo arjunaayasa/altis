@@ -119,6 +119,15 @@ export interface ReportCatalogEntry {
   columns: ReportColumnView[] | null;
 }
 
+/**
+ * The language a definition's output is written in, wherever it is rendered (the preview and its printed copy, an
+ * export): an accreditation definition always in Indonesian, the language of the files handed to the assessors,
+ * whatever the reader's own language; any other in the reader's language `ui`.
+ */
+export function reportOutputLocale(module: ReportCatalogEntry['module'], ui: Locale): Locale {
+  return module === 'accreditation' ? 'id' : ui;
+}
+
 /** `GET reports/catalog`. */
 export interface ReportCatalogResponse {
   reports: ReportCatalogEntry[];

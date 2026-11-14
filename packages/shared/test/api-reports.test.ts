@@ -14,6 +14,7 @@ import {
   ReportRunCreateBody,
   ReportRunListQuery,
   StoredRunParams,
+  reportOutputLocale,
 } from '../src/api/reports.js';
 
 // The reports API contracts: the preview's page, the run's body and its stored parameters (the definition's values, the
@@ -100,5 +101,14 @@ describe('ReportRunListQuery', () => {
     expect(errorsOf(ReportRunListQuery, { limit: '201' }).map((e) => e.path)).toEqual(['limit']);
     expect(errorsOf(ReportRunListQuery, { limit: '0' }).map((e) => e.path)).toEqual(['limit']);
     expect(errorsOf(ReportRunListQuery, { scope: 'others' })).toEqual([{ path: 'scope', code: 'invalid_value' }]);
+  });
+});
+
+describe('reportOutputLocale', () => {
+  it('writes an accreditation output in Indonesian whatever the reader reads, any other in the reader\'s language', () => {
+    expect(reportOutputLocale('accreditation', 'en')).toBe('id');
+    expect(reportOutputLocale('accreditation', 'id')).toBe('id');
+    expect(reportOutputLocale('collection', 'en')).toBe('en');
+    expect(reportOutputLocale('collection', 'id')).toBe('id');
   });
 });

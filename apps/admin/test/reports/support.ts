@@ -1,4 +1,4 @@
-import { ACQ_SOURCES, ITEM_STATUSES, type Permission } from '@altis/shared';
+import { ACQ_SOURCES, ACTIVITY_KINDS, ITEM_STATUSES, type Permission } from '@altis/shared';
 import type { BranchListResponse } from '@altis/shared/api/branches';
 import { EMPTY_TEMPLATE, type CollectionTypeView, type LanguageView, type MasterListResponse, type MaterialTypeView } from '@altis/shared/api/catalog/masters';
 import type { LocationListResponse, LocationView } from '@altis/shared/api/catalog/locations';
@@ -121,6 +121,18 @@ export const ANNEX_STAFF = entry({
   columns: null,
 });
 
+/** The activities annex, with its real parameters and columns (written in Indonesian whatever the reader reads). */
+export const ANNEX_ACTIVITIES = entry({
+  id: 'accreditation.annex.activities',
+  module: 'accreditation',
+  params: [
+    param('periodId', 'period', { required: true }),
+    param('kinds', 'status', { multiple: true, options: [...ACTIVITY_KINDS], optionLabelPrefix: 'vocab.activity_kind.' }),
+    param('window', 'status', { options: ['period', 'three_periods'] }),
+  ],
+  columns: [col('kind', 'text'), col('title', 'text'), col('held_on', 'date'), col('participants', 'int'), col('partner', 'text')],
+});
+
 export const DOSSIER = entry({
   id: 'accreditation.dossier',
   module: 'accreditation',
@@ -140,6 +152,7 @@ const DEFINITIONS: readonly [ReportCatalogEntry, Permission][] = [
   [TEST_ROWS, 'reports.statistics.read'],
   [TEST_PERSONAL, 'reports.statistics.read'],
   [ANNEX_STAFF, 'accreditation.workspace.read'],
+  [ANNEX_ACTIVITIES, 'accreditation.workspace.read'],
   [DOSSIER, 'accreditation.workspace.read'],
 ];
 
