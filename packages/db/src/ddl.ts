@@ -1238,6 +1238,12 @@ async function withoutSqliteForeignKeys<T>(db: Kysely<T>, fn: (c: Kysely<T>) => 
   });
 }
 
+/** What {@link dropRegisteredTables} leaves in place. */
+export interface DropRegisteredOptions {
+  /** True for a registered table to keep (never asked about `schema_tables` itself). */
+  keep?(t: { name: string; createdBy: string }): boolean;
+}
+
 /**
  * Drops the dialect's full-text virtual tables (FULLTEXT_VIRTUAL_TABLES: SQLite's `search_fts` and with it its
  * shadow tables), then every table listed in `schema_tables` and deletes its row, children before parents: the order comes from
@@ -1258,20 +1264,33 @@ async function withoutSqliteForeignKeys<T>(db: Kysely<T>, fn: (c: Kysely<T>) => 
  * Used by restore (spec §9.10 step 6) and `install:reset`. The caller holds the ops lock, and saves
  * `schema_meta.install_id` first when it must survive (spec §6.5): schema_meta is registered, so it is dropped.
  *
+ * `o.keep` (a restore by code that ships no migration of the other lane): a registered table it accepts, judged by
+ * its name and `created_by`, is left as it is with its `schema_tables` row, and `schema_tables` then stays too, holding
+ * only the rows of the tables kept. A kept table that references a dropped one is refused like an unregistered
+ * dependent.
+ *
  * @throws DomainError `SCHEMA_CONFLICT`, before dropping anything, with `meta.reason` (and `meta.tables`):
  *   `invalid_registered_name` (a registered name is not a plain identifier: it would be read as `schema.table`),
- *   `unregistered_dependent` (a table outside the registry references a registered one), `foreign_key_cycle`
- *   (registered tables reference each other in a cycle), `sqlite_transaction` (SQLite, inside a transaction)
+ *   `unregistered_dependent` (a table outside the registry, or a kept one, references a dropped one),
+ *   `foreign_key_cycle` (registered tables reference each other in a cycle), `sqlite_transaction` (SQLite, inside a
+ *   transaction)
  */
 export async function dropRegisteredTables(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: Kysely<any>,
   dialect: Dialect,
+  o: DropRegisteredOptions = {},
 ): Promise<void> {
   checkDialect(dialect);
   if (dialect === 'sqlite' && db.isTransaction) throw sqliteInTransaction();
   if (!(await tableExists(db, dialect, REGISTRY))) return;
-  const registered = new Set((await registry(db).selectFrom(REGISTRY).select('name').execute()).map((row) => row.name));
+  const rows = await registry(db).selectFrom(REGISTRY).select(['name', 'created_by']).execute();
+  // ---- Komunitas K1 (edition lane): the tables `keep` accepts stay, with their rows and schema_tables ----
+  const keep = o.keep;
+  const kept = new Set(
+    keep === undefined ? [] : rows.filter((row) => row.name !== REGISTRY && keep({ name: row.name, createdBy: row.created_by })).map((row) => row.name),
+  );
+  const registered = new Set(rows.map((row) => row.name).filter((name) => !kept.has(name)));
   const invalid = [...registered].filter((name) => !isIdentifier(name)).sort();
   if (invalid.length > 0) {
     throw conflict(
@@ -1332,7 +1351,7 @@ export async function dropRegisteredTables(
       await k.schema.dropTable(t).ifExists().execute();
       await r.deleteFrom(REGISTRY).where('name', '=', t).execute();
     }
-    if (registered.has(REGISTRY)) await k.schema.dropTable(REGISTRY).ifExists().execute();
+    if (registered.has(REGISTRY) && kept.size === 0) await k.schema.dropTable(REGISTRY).ifExists().execute();
   };
   if (dialect === 'sqlite') await withoutSqliteForeignKeys(db, drop);
   else await drop(db);

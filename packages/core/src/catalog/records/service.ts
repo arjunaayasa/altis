@@ -35,7 +35,8 @@ import { parseTemplate, presenceOf, templateErrors, type TemplateKey, type Templ
 //   the same transaction. `interactive` (the default) then audits (`catalog.record.create` / `.update`, `meta {fields,
 //   authoritiesCreated}`: field names and a count, never values) and publishes `catalog.record.changed {id}` as the
 //   transaction's last statement; `bulk` does neither (its caller audits the run once and publishes
-//   `catalog.bulk.changed`).
+//   `catalog.bulk.changed`). An update that changes only the accreditation fields (ACCRED_COLUMNS) is an annotation:
+//   it bumps `version` only, never `changed_at`, `updated_at` or `updated_by`.
 // - Concurrency: an update, an archive or a restore first locks the record's row with a write that changes nothing
 //   (as lockStaffRow does): concurrent writers of the record serialize, and on MySQL/MariaDB (REPEATABLE READ) the
 //   reads that follow see the latest commit when the lock is the transaction's first statement. `version` is then
@@ -194,6 +195,29 @@ type ScalarKey = keyof typeof SCALAR_COLUMNS;
 type ScalarColumn = (typeof SCALAR_COLUMNS)[ScalarKey];
 
 const SCALAR_KEYS = Object.keys(SCALAR_COLUMNS) as ScalarKey[];
+
+// ---- Komunitas K1 (catalogue accreditation fields) ----
+
+/**
+ * The body keys of the accreditation fields (who a record is meant for, who made a local work and its kind, the kind of
+ * a reference work), and their columns. They are local annotations, not part of the bibliographic description: an
+ * update that changes only these bumps `version` and leaves `updated_by`, `updated_at` and `changed_at` as they were,
+ * so a record migrated from SLiMS still counts as not edited in ALTIS (a re-sync keeps following it) and its public
+ * datestamp does not move. Any other change keeps the usual stamps.
+ */
+export const ACCRED_COLUMNS = Object.freeze({
+  audience: 'audience',
+  localWork: 'local_work',
+  localWorkKind: 'local_work_kind',
+  referenceKind: 'reference_kind',
+} as const);
+
+export type AccredKey = keyof typeof ACCRED_COLUMNS;
+type AccredColumn = (typeof ACCRED_COLUMNS)[AccredKey];
+
+export const ACCRED_KEYS = Object.keys(ACCRED_COLUMNS) as AccredKey[];
+
+const ACCRED_KEY_SET: ReadonlySet<string> = new Set(ACCRED_KEYS);
 
 // ---- checks ----------------------------------------------------------------------------------------------------------
 
@@ -463,6 +487,10 @@ export async function createRecord(tx: TxCtx, body: RecordCreateBody, o: RecordS
       source,
       merged_into: null,
       changed_at: tx.now,
+      audience: b.audience ?? null,
+      local_work: b.localWork ?? null,
+      local_work_kind: b.localWorkKind ?? null,
+      reference_kind: b.referenceKind ?? null,
       archived_at: null,
       created_at: tx.now,
       created_by: tx.actor.id,
@@ -571,7 +599,7 @@ export async function updateRecord(tx: TxCtx, id: string, patch: RecordPatchBody
   if (errors.length > 0) throw validationFailed(errors);
 
   const changed: string[] = [];
-  const set: Partial<Record<ScalarColumn, string | null>> & {
+  const set: Partial<Record<ScalarColumn | AccredColumn, string | null>> & {
     material_type_id?: string;
     title?: string;
     publisher_id?: string | null;
@@ -612,6 +640,12 @@ export async function updateRecord(tx: TxCtx, id: string, patch: RecordPatchBody
   if (source !== undefined && source !== before.source) {
     changed.push('source');
     set.source = source;
+  }
+  for (const k of ACCRED_KEYS) {
+    const value = p[k];
+    if (value === undefined || value === before[ACCRED_COLUMNS[k]]) continue;
+    changed.push(k);
+    set[ACCRED_COLUMNS[k]] = value;
   }
 
   let authoritiesCreated = 0;
@@ -686,16 +720,22 @@ export async function updateRecord(tx: TxCtx, id: string, patch: RecordPatchBody
 
   const title = set.title ?? before.title;
   const subtitle = set.subtitle !== undefined ? set.subtitle : before.subtitle;
+  // Only accreditation fields changed: an annotation, not an edit (see ACCRED_COLUMNS); the stamps stay.
+  const annotationOnly = changed.length > 0 && changed.every((f) => ACCRED_KEY_SET.has(f));
   const updated = await trx
     .updateTable('records')
-    .set((eb) => ({
-      ...set,
-      title_key: titleKey(title, subtitle),
-      changed_at: tx.now,
-      updated_at: tx.now,
-      updated_by: tx.actor.id,
-      version: eb('version', '+', 1),
-    }))
+    .set((eb) =>
+      annotationOnly
+        ? { ...set, version: eb('version', '+', 1) }
+        : {
+            ...set,
+            title_key: titleKey(title, subtitle),
+            changed_at: tx.now,
+            updated_at: tx.now,
+            updated_by: tx.actor.id,
+            version: eb('version', '+', 1),
+          },
+    )
     .where('id', '=', id)
     .where('version', '=', p.version)
     .executeTakeFirst();

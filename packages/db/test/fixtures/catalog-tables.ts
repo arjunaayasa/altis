@@ -323,6 +323,11 @@ export const CATALOG_COLUMNS: Record<CatalogTable, Record<string, string>> = {
     merged_into: 'char(26) null',
     changed_at: 'bigint',
     ...ARCHIVED_TRAIL,
+    // ---- Komunitas K1 (tables): 0033 appends the accreditation fields ----
+    audience: 'varchar(16) null',
+    local_work: 'varchar(16) null',
+    local_work_kind: 'varchar(16) null',
+    reference_kind: 'varchar(16) null',
   },
   record_identifiers: {
     id: 'char(26)',
@@ -433,6 +438,8 @@ export const CATALOG_COLUMNS: Record<CatalogTable, Record<string, string>> = {
     currency: 'char(3) null',
     note: 'text null',
     ...ARCHIVED_TRAIL,
+    // ---- Komunitas K1 (tables): 0033 appends the source system's entry date ----
+    input_on: 'char(10) null',
   },
   item_events: {
     id: 'char(26)',
@@ -705,6 +712,10 @@ export function catalogSampleRows(o: { branchId: string; staffId: string; newId?
         merged_into: recordId2,
         changed_at: LATER_MS,
         ...trail,
+        audience: 'children',
+        local_work: 'student',
+        local_work_kind: 'short_stories',
+        reference_kind: 'encyclopedia',
       },
       {
         id: recordId2,
@@ -736,6 +747,10 @@ export function catalogSampleRows(o: { branchId: string; staffId: string; newId?
         merged_into: null,
         changed_at: EPOCH_MS,
         ...bare,
+        audience: null,
+        local_work: null,
+        local_work_kind: null,
+        reference_kind: null,
       },
     ],
     record_identifiers: [
@@ -908,6 +923,7 @@ export function catalogSampleRows(o: { branchId: string; staffId: string; newId?
         currency: 'IDR',
         note: 'Hadiah',
         ...trail,
+        input_on: '2026-01-09',
       },
       {
         // Same key in another case: another barcode (binary on MySQL/MariaDB too).
@@ -934,6 +950,7 @@ export function catalogSampleRows(o: { branchId: string; staffId: string; newId?
         currency: null,
         note: null,
         ...bare,
+        input_on: null,
       },
     ],
     item_events: [

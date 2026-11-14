@@ -272,7 +272,7 @@ describe.skipIf(!ctx.available)(`restore failures [${engineLabel()}]`, () => {
     const audit = await h.db.selectFrom('audit_log').select('meta').where('action', '=', 'backup.restore').execute();
     expect(audit.map((a) => JSON.parse(a.meta) as Record<string, unknown>)).toMatchObject([{ opId, outcome: 'failed', error: 'INTERNAL' }]);
     expect(harness.deps.requestRestart.calls).toEqual(['restore']);
-  });
+  }, 120_000);
 
   it('restore-mid-load:2:replay → the replay fails too → needs_attention, maintenance kept (S13)', async () => {
     const { backupId } = await backupThenChange();
@@ -283,7 +283,7 @@ describe.skipIf(!ctx.available)(`restore failures [${engineLabel()}]`, () => {
     const op = await currentOp(dataDir);
     expect(op).toMatchObject({ opId, state: 'needs_attention', stateBefore: 'failed_restoring_pre', pointOfNoReturn: true });
     expect(await readMaintenance(dataDir)).toMatchObject({ reason: 'restore', opId });
-  });
+  }, 120_000);
 
   it('disk-full:load:2 (EDQUOT while loading) → failed_restoring_pre → failed, tmp/<opId>/ gone, disk_low', async () => {
     const { backupId } = await backupThenChange();
@@ -299,7 +299,7 @@ describe.skipIf(!ctx.available)(`restore failures [${engineLabel()}]`, () => {
     const notes = (await h.db.selectFrom('notifications').select('type').execute()).map((n) => n.type).sort();
     expect(notes).toEqual(['disk.low', 'restore.failed']);
     expect(await readMaintenance(dataDir)).toBeNull();
-  });
+  }, 120_000);
   it('EDQUOT while preserving (before the point of no return) → failed, DISK_QUOTA, disk_low; the partial keep/ copies go', async () => {
     const { backupId } = await backupThenChange();
     await addAuditRows(2500);

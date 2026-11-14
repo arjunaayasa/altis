@@ -47,6 +47,32 @@ describe('toWinAnsi', () => {
     expect(toWinAnsi('\u{FB01}').replaced).toBe(0);
   });
 
+  it('prints an invisible format character as nothing and a modifier letter of romanisation as its quotation mark', () => {
+    for (const [given, printed] of [
+      ['Sejarah\u{200B}Indonesia', 'SejarahIndonesia'],
+      ['Kitab\u{FEFF}', 'Kitab'],
+      ['a\u{200C}b\u{200D}c\u{2060}d\u{200E}e\u{200F}', 'abcde'],
+      ['Tafsir al-Qur\u{2BC}an', 'Tafsir al-Qur\u{2019}an'],
+      ['Tafs\u{12B}r al-Qur\u{2BE}\u{101}n', 'Tafsir al-Qur\u{2019}an'],
+      ['Mu\u{1E25}ammad \u{2BF}Abduh', 'Muhammad \u{2018}Abduh'],
+      ['Hawai\u{2BB}i', 'Hawai\u{2018}i'],
+    ] as const) {
+      const r = toWinAnsi(given);
+      expect(cp1252(r.bytes), given).toBe(printed);
+      expect([r.replaced, r.otherScript], given).toEqual([0, 0]);
+    }
+    // A soft hyphen is a format character WinAnsi has: it keeps its byte.
+    expect([...toWinAnsi('a\u{AD}b').bytes]).toEqual([0x61, 0xad, 0x62]);
+  });
+
+  it('counts apart the characters of another writing system that print as ?: a symbol or an emoji is none', () => {
+    // Five Arabic letters, two Han characters, a Javanese letter (its vowel sign is a mark, stripped).
+    expect(toWinAnsi('\u{062A}\u{0641}\u{0633}\u{064A}\u{0631} \u{6771}\u{4EAC} \u{A9A0}\u{A9B8}')).toMatchObject({ replaced: 8, otherScript: 8 });
+    expect(toWinAnsi('Belajar \u{1F680} \u{2605} \u{2192} \u{0}')).toMatchObject({ replaced: 4, otherScript: 0 });
+    expect(toWinAnsi('\u{0663}\u{0660}')).toMatchObject({ replaced: 2, otherScript: 2 });
+    expect(toWinAnsi('\u{14B}')).toMatchObject({ replaced: 1, otherScript: 0 });
+  });
+
   it('replaces control characters, lone surrogates, astral characters and other scripts by one ? each', () => {
     const r = toWinAnsi('a\u{0}\u{1F}\u{7F}\u{85}b\u{D800}c\u{1F600}d\u{3B1}\u{5D0}');
     expect(cp1252(r.bytes)).toBe('a????b?c?d??');

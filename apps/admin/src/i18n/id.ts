@@ -1,4 +1,5 @@
 import { CATALOG_ID } from './catalog';
+import { KOMUNITAS_ID } from './komunitas';
 
 /**
  * The admin SPA's own strings, in Indonesian: the default language of ALTIS and the source of truth for
@@ -1201,6 +1202,29 @@ export const ADMIN_ID = {
   // The catalogue's screens: one file per area (i18n/catalog/*.ts, each owned by its task), joined in
   // i18n/catalog/index.ts.
   ...CATALOG_ID,
+
+  // ---- Komunitas K1 (edition lane) ----
+  // Diagnostik: the migrations of another lane the database records.
+  'diagnostics.edition_lane.title': 'Jalur migrasi lain',
+  'diagnostics.edition_lane.applied': 'Migrasi jalur lain terpasang: {count}',
+
+  // ---- Komunitas K1 (reports and accreditation) ----
+  // The Laporan group of the navigation, the settings tab, and the job types, schedule and job messages of reports and
+  // accreditation (Tugas dan Jadwal resolves a job message as `jobs.message.<job type>.<message>`).
+  'nav.group.reports': 'Laporan',
+  'nav.reports.reports': 'Laporan',
+  'nav.reports.accreditation': 'Akreditasi',
+  'settings.tab.accreditation': 'Akreditasi',
+  'jobs.type.reports.export': 'Mengekspor laporan',
+  'jobs.type.reports.housekeeping': 'Merawat berkas laporan',
+  'jobs.type.accreditation.evaluate': 'Menghitung perkiraan nilai akreditasi',
+  'jobs.type.accreditation.import_slims_usage': 'Mengimpor statistik penggunaan SLiMS',
+  'jobs.schedule.reports.housekeeping': 'Perawatan harian berkas laporan',
+  'jobs.message.reports.housekeeping.date_jobs_postponed': 'Tugas berbasis tanggal ditunda: jam sistem melompat',
+  'jobs.message.reports.export.warnings': 'Selesai dengan peringatan; rinciannya ada di daftar ekspor',
+  // The screens of reports and accreditation: one file per area (i18n/reports, i18n/accreditation, i18n/komunitas),
+  // joined in i18n/komunitas/index.ts.
+  ...KOMUNITAS_ID,
 } satisfies Record<string, string>;
 
 export type AdminKey = keyof typeof ADMIN_ID;

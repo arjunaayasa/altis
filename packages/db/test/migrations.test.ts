@@ -9,7 +9,8 @@ import { runMigrations } from '../src/migrator.js';
 
 // Phase 2 (catalog), Task 1: migrations 0020–0029 appended to the frozen migration map (decision P2-06), on the engine
 // picked by ALTIS_TEST_DB. The tables themselves are tables.test.ts's and columns.test.ts's; the seeds
-// catalog-seed.test.ts's; the full-text index fulltext.test.ts's.
+// catalog-seed.test.ts's; the full-text index fulltext.test.ts's. Komunitas K1 appends 0030–0033 (reports and
+// accreditation) to the same map; its tables are tables.test.ts's (fixtures/komunitas-k1-tables.ts).
 
 const ctx = testDbContext();
 
@@ -26,14 +27,23 @@ const CATALOG_MIGRATIONS = [
   '0029_search_token_version',
 ];
 
+// ---- Komunitas K1 (tables) ----
+const K1_MIGRATIONS = ['0030_reports_core', '0031_accreditation', '0032_library_registers', '0033_catalog_accred_fields'];
+
 describe('the Phase 2 migrations in the migration map (P2-06)', () => {
   it('appends 0020–0029 in order to the same frozen map; 0029_search_token_version is the last key', () => {
     const names = Object.keys(PHASE1_MIGRATIONS).sort();
-    expect(names.filter((n) => n >= '0020' && n < '0040')).toEqual(CATALOG_MIGRATIONS);
-    // Phase 2 is the newest range on this branch (Phase 1d's 0010–0019 sort before it).
-    expect(names.at(-1)).toBe('0029_search_token_version');
+    expect(names.filter((n) => n >= '0020' && n < '0030')).toEqual(CATALOG_MIGRATIONS);
     expect(Object.isFrozen(PHASE1_MIGRATIONS)).toBe(true);
     for (const name of CATALOG_MIGRATIONS) expect(typeof PHASE1_MIGRATIONS[name]?.up).toBe('function');
+  });
+
+  it('Komunitas K1 appends 0030–0033 in order; 0033_catalog_accred_fields is the last key', () => {
+    const names = Object.keys(PHASE1_MIGRATIONS).sort();
+    expect(names.filter((n) => n >= '0030' && n < '0040')).toEqual(K1_MIGRATIONS);
+    // Komunitas K1 is the newest range on this branch (Phase 1d's 0010–0019 and Phase 2's 0020–0029 sort before it).
+    expect(names.at(-1)).toBe('0033_catalog_accred_fields');
+    for (const name of K1_MIGRATIONS) expect(typeof PHASE1_MIGRATIONS[name]?.up).toBe('function');
   });
 });
 
@@ -72,14 +82,14 @@ describe.skipIf(!ctx.available)(`the Phase 2 migrations [${engineLabel()}]`, () 
     return rows.map((r) => String(r.col));
   }
 
-  it('migrates an empty database to 0029, and a second run reports it up to date', async () => {
+  it('migrates an empty database to 0033, and a second run reports it up to date', async () => {
     const first = await runMigrations(h, { appVersion: '0.1.0', dataDir, migrations: PHASE1_MIGRATIONS });
     expect(first.mode).toBe('migrated');
-    expect(first.applied.slice(-CATALOG_MIGRATIONS.length)).toEqual(CATALOG_MIGRATIONS);
-    expect(first.schemaVersion).toBe('0029');
+    expect(first.applied.slice(-(CATALOG_MIGRATIONS.length + K1_MIGRATIONS.length))).toEqual([...CATALOG_MIGRATIONS, ...K1_MIGRATIONS]);
+    expect(first.schemaVersion).toBe('0033');
     const second = await runMigrations(h, { appVersion: '0.1.0', dataDir, migrations: PHASE1_MIGRATIONS });
-    expect(second).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0029', minCodeVersion: '0.0.0' });
-    expect(await h.db.selectFrom('schema_meta').select('schema_version').execute()).toEqual([{ schema_version: '0029' }]);
+    expect(second).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0033', minCodeVersion: '0.0.0', edition: { mode: 'empty', applied: [] } });
+    expect(await h.db.selectFrom('schema_meta').select('schema_version').execute()).toEqual([{ schema_version: '0033' }]);
   });
 
   it('S14: search_doc has the newest-first indexes (is_public, created_at) and (created_at)', async () => {
@@ -122,5 +132,35 @@ describe.skipIf(!ctx.available)(`the Phase 2 migrations [${engineLabel()}]`, () 
     for (const name of CATALOG_MIGRATIONS) await PHASE1_MIGRATIONS[name]!.up(h.db, h.dialect);
     expect(await h.db.selectFrom('schema_tables').selectAll().orderBy('name').execute()).toEqual(before);
     expect(await h.db.selectFrom('material_types').select(['id', 'code_key']).orderBy('code_key').execute()).toEqual(seeded);
+  });
+
+  // ---- Komunitas K1 (tables) ----
+  it('0033: the accession register reads items in (received_date, inventory_no) order through its index', async () => {
+    expect(await indexColumns('items', 'ix_items_received_date_inventory_no')).toEqual(['received_date', 'inventory_no']);
+  });
+
+  it('every Komunitas K1 migration can run again without changing anything (idempotent)', async () => {
+    const before = await h.db.selectFrom('schema_tables').selectAll().orderBy('name').execute();
+    const indexes = await indexColumns('items', 'ix_items_received_date_inventory_no');
+    for (const name of K1_MIGRATIONS) await PHASE1_MIGRATIONS[name]!.up(h.db, h.dialect);
+    expect(await h.db.selectFrom('schema_tables').selectAll().orderBy('name').execute()).toEqual(before);
+    expect(await indexColumns('items', 'ix_items_received_date_inventory_no')).toEqual(indexes);
+    const k1 = before.filter((t) => t.created_by >= '0030' && t.created_by < '0040').map((t) => [t.name, t.class, t.created_by]);
+    expect(k1).toEqual([
+      ['accred_answers', 'data', '0031_accreditation'],
+      ['accred_evidence', 'data', '0031_accreditation'],
+      ['accred_periods', 'data', '0031_accreditation'],
+      ['accred_results', 'volatile', '0031_accreditation'],
+      ['accred_snapshots', 'data', '0031_accreditation'],
+      ['library_activities', 'data', '0032_library_registers'],
+      ['library_budgets', 'data', '0032_library_registers'],
+      ['library_documents', 'data', '0032_library_registers'],
+      ['library_partnerships', 'data', '0032_library_registers'],
+      ['library_staff', 'data', '0032_library_registers'],
+      ['report_runs', 'volatile', '0030_reports_core'],
+      ['staff_trainings', 'data', '0032_library_registers'],
+      ['usage_group_map', 'data', '0031_accreditation'],
+      ['usage_stats', 'data', '0031_accreditation'],
+    ]);
   });
 });

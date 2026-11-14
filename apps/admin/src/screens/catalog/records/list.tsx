@@ -1,11 +1,11 @@
 import { isUlid } from '@altis/shared';
 import { EXPORT_RECORD_IDS_MAX } from '@altis/shared/api/catalog/exchange';
 import type { MasterListResponse, MaterialTypeView } from '@altis/shared/api/catalog/masters';
-import { RECORD_SORTS, type RecordListItem, type RecordListResponse, type RecordSort } from '@altis/shared/api/catalog/records';
+import { RECORD_BULK_MAX, RECORD_SORTS, type RecordListItem, type RecordListResponse, type RecordSort } from '@altis/shared/api/catalog/records';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
-import { BookIcon, DownloadIcon, PlusIcon, SearchIcon } from 'lucide-react';
+import { BookIcon, DownloadIcon, PencilIcon, PlusIcon, SearchIcon } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { AddToPrintQueue } from '@/components/catalog/print-queue';
 import { DataTable, useDateTime } from '@/components/data-table';
@@ -16,6 +16,7 @@ import { useLocale, useT, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
 import { useApiQuery, useMe } from '@/lib/me';
+import { RecordBulkDialog } from './bulk-dialog';
 
 /**
  * Bibliografi, the record list (Phase 2 spec §13, §4.4, §4.5; plan Task 24): `GET catalog/records`.
@@ -31,6 +32,8 @@ import { useApiQuery, useMe } from '@/lib/me';
  *   form includes archived records by default), and Impor/Ekspor opens with `?export=selection`; 1 000 ULIDs (about
  *   28 KB) would pass the common URL and header limits, so they never travel in the URL. A storage that is blocked or
  *   full shows a notice instead. The selection belongs to the filters it was made under: another search starts empty.
+ * - "Ubah data akreditasi" (for a user who manages records) sets the accreditation fields of the selected records at
+ *   once ({@link RecordBulkDialog}, at most {@link RECORD_BULK_MAX}).
  */
 
 /** Where "Ekspor terpilih" leaves the selected ids for Impor/Ekspor (Task 29 reads it once, then clears it). */
@@ -200,6 +203,7 @@ export function RecordsListScreen() {
   const canExport = holds(me, 'catalog.export.run');
   const [selection, setSelection] = useState<{ key: string; rows: ReadonlyMap<string, RecordListItem> }>({ key: searchKey, rows: NO_SELECTION });
   const [notice, setNotice] = useState<'too_many' | 'blocked' | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const selected = selection.key === searchKey ? selection.rows : NO_SELECTION;
 
   const types = useApiQuery<MasterListResponse<MaterialTypeView>>({
@@ -449,11 +453,21 @@ export function RecordsListScreen() {
               {t('catalog.records.list.export_selected')}
             </Button>
           )}
+          {canManage && (
+            <Button type="button" size="sm" variant="outline" disabled={selected.size > RECORD_BULK_MAX} onClick={() => setBulkOpen(true)}>
+              <PencilIcon aria-hidden="true" />
+              {t('catalog.records.list.accred_bulk')}
+            </Button>
+          )}
+          {canManage && selected.size > RECORD_BULK_MAX && (
+            <span className="w-full text-muted-foreground">{t('catalog.records.list.accred_bulk_too_many', { max: number.format(RECORD_BULK_MAX) })}</span>
+          )}
           <Button type="button" size="sm" variant="ghost" onClick={() => setSelection({ key: searchKey, rows: NO_SELECTION })}>
             {t('catalog.records.list.clear_selection')}
           </Button>
         </section>
       )}
+      <RecordBulkDialog open={bulkOpen} records={[...selected.values()]} onClose={() => setBulkOpen(false)} />
       {notice === 'too_many' && <Notice kind="error">{t('catalog.records.list.export_too_many', { max: number.format(EXPORT_SELECTION_MAX) })}</Notice>}
       {notice === 'blocked' && <Notice kind="error">{t('catalog.records.list.export_blocked')}</Notice>}
 

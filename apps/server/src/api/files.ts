@@ -26,7 +26,7 @@ import { z } from 'zod';
 import { problemResponse } from '../http/problem.js';
 import { route, type RouteContext, type RouteDecl } from '../http/route.js';
 import { validationFailed } from '../http/validate.js';
-import { byteRange } from './backups.js';
+import { byteRange } from '../http/range.js';
 
 // The upload and file routes of Task 9 (route catalog "Berkas"; spec §7.5, P10; decision C7). Uploads are
 // `mode: system` (a backup upload must work in read-only, §8.6, C7) and belong to the signed-in staff user who
@@ -47,6 +47,12 @@ import { byteRange } from './backups.js';
 //   a staff file stays `private, no-store` without an ETag.
 
 const UPLOADS = '/api/v1/files/uploads';
+
+// The accreditation files: an evidence file (and a register's certificate, agreement or document) is served only to a
+// reader of the accreditation workspace, a 404 to other staff as for a file that does not exist; a snapshot's copy of
+// the evidence file is never served here (its snapshot serves it).
+const ACCREDITATION_EVIDENCE_CONTEXT = 'accreditation.evidence';
+const SNAPSHOT_DOSSIER_CONTEXT = 'accreditation.dossier';
 
 /** The chunk route's body limit: the largest chunk (5 MiB) plus 64 KiB for the multipart framing. */
 export const CHUNK_ROUTE_MAX_BYTES = CHUNK_DEFAULT_BYTES + 64 * 1024;
@@ -254,11 +260,18 @@ const filesGet = route({
       .where('id', '=', id)
       .executeTakeFirst();
     if (row === undefined || row.status !== 'ok') throw new DomainError('NOT_FOUND');
+    // A snapshot's evidence file copy is served only through its snapshot (re-authenticated and audited there).
+    if (row.context === SNAPSHOT_DOSSIER_CONTEXT) throw new DomainError('NOT_FOUND');
     const access = await catalogFileAccess(rc.db.db, row);
     if (access === 'never') throw new DomainError('NOT_FOUND');
     if (access !== 'public') {
       if (rc.auth === null) throw new DomainError(access === 'unpublished' ? 'NOT_FOUND' : 'AUTH_REQUIRED');
       if (rc.auth.stage !== 'full') throw new DomainError('AUTH_MFA_REQUIRED');
+    }
+    // An accreditation file (evidence, a training certificate, a partnership agreement, a document) is for the readers
+    // of the accreditation workspace: to other staff it does not exist.
+    if (row.context === ACCREDITATION_EVIDENCE_CONTEXT && (rc.auth === null || !can(rc.auth.grants, 'accreditation.workspace.read'))) {
+      throw new DomainError('NOT_FOUND');
     }
     const size = Number(row.size);
     const driver = localStorageDriver(rc.services.dataDir);

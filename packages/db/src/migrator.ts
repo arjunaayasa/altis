@@ -5,6 +5,7 @@ import { Migrator, type Migration, type MigrationProvider } from 'kysely/migrati
 import type { DbHandle, Dialect } from './connect.js';
 import { isDriverError, safeCause } from './db-errors.js';
 import { ensureBootstrap, ensureTable } from './ddl.js';
+import { EDITION_MIGRATIONS, EDITION_MIGRATION_NAME, EDITION_MIGRATOR_TABLES } from './edition-migrations.js';
 import { yieldToEventLoop } from './yield.js';
 
 // The migration runner (spec §6.4).
@@ -66,6 +67,20 @@ import { yieldToEventLoop } from './yield.js';
 //   then schema_version moves to the migration's number. After the Migrator returns, schema_meta is reconciled
 //   with schema_migrations (which is the truth, e.g. after a crash between the two) and mirrored to the file.
 //
+// - Migrasi jalur lain (edition-migrations.ts; `MigrationOptions.editionMigrations`, default EDITION_MIGRATIONS):
+//   a second lane, `eNNNN_slug`, with its own plan, its own decision and its own bookkeeping
+//   (`schema_migrations_edition`, `schema_migrations_edition_lock`, made with the two tables above on every run).
+//   The core lane's plan, decision, Migrator and schema_meta are exactly as described above whatever that lane holds.
+//   - An empty lane (this edition): `schema_migrations_edition` is never read for the decision and no second Migrator
+//     is built; the outcome's `edition` is `{mode: 'empty', applied: []}`.
+//   - Otherwise its applied names are read after the core lane's decision: a name the code does not know makes the
+//     lane `schema-ahead` (nothing of it runs, no second Migrator is built); a gap in it is SCHEMA_CONFLICT
+//     `migration_order` (`meta.lane: 'edition'`). Its pending migrations run in a second Kysely Migrator with its own
+//     two tables, after the core lane's, under the same migrate.lock and the same database lock (taken again by the
+//     second Migrator: GET_LOCK on MySQL/MariaDB, the advisory lock on PostgreSQL). Each turn runs `up()` only:
+//     schema_meta follows the core lane alone, and a `contract` of the lane is ignored.
+//   - `MigrationOutcome.mode` is the core lane's, except `schema-ahead` when only the other lane is ahead.
+//
 // - Progress (1d, preflight 1D-03; `onProgress`): reported before and after each migration, and by a 5 s timer for
 //   the whole run, so a long wait for a migration lock (`waiting: true`) and a long statement inside a migration both
 //   count as progress; only a hung process stalls. The timer is allowed under Passenger because the caller holds
@@ -81,8 +96,11 @@ import { yieldToEventLoop } from './yield.js';
 /** Migration names: four digits, an underscore, then lower-case letters, digits and underscores. */
 export const MIGRATION_NAME = /^\d{4}_[a-z0-9_]+$/;
 
-/** The tables of the Kysely Migrator; created here and registered in schema_tables as class `migrator`. */
-export const MIGRATOR_TABLES = ['schema_migrations', 'schema_migrations_lock'] as const;
+/**
+ * The tables of the Kysely Migrators, the core lane's and then the other lane's (EDITION_MIGRATOR_TABLES); all four
+ * are created here on every run and registered in schema_tables as class `migrator`.
+ */
+export const MIGRATOR_TABLES = ['schema_migrations', 'schema_migrations_lock', ...EDITION_MIGRATOR_TABLES] as const;
 
 /** A migration as the code ships it. `up()` must be idempotent (MySQL/MariaDB/SQLite rerun a failed one). */
 export interface AltisMigration {
@@ -114,6 +132,12 @@ export interface MigrationOptions {
    * it. Errors the callback throws or rejects with are ignored.
    */
   onProgress?: (e: MigrationProgress) => void;
+  // ---- Komunitas K1 (edition lane) ----
+  /**
+   * The migrations of the other lane (`eNNNN_slug`), by name; default EDITION_MIGRATIONS (empty in this edition).
+   * See the top of this file.
+   */
+  editionMigrations?: Readonly<Record<string, AltisMigration>>;
 }
 
 /** What {@link MigrationOptions.onProgress} receives. */
@@ -126,14 +150,24 @@ export interface MigrationProgress {
 
 export type MigrationMode = 'migrated' | 'up-to-date' | 'schema-ahead' | 'too-old';
 
+/**
+ * The other lane's part of a run: `empty` when the code ships no migration of it (its table is not read), `schema-ahead`
+ * when the database holds a name of it the code does not know (nothing of it ran), else `migrated` or `up-to-date`.
+ */
+export type EditionLaneMode = 'empty' | 'migrated' | 'up-to-date' | 'schema-ahead';
+
 export interface MigrationOutcome {
+  /** The core lane's mode, except `schema-ahead` when only the other lane is ahead. */
   mode: MigrationMode;
-  /** The migrations applied by this run, in order (empty unless `migrated`). */
+  /** The core lane's migrations applied by this run, in order. */
   applied: string[];
   /** `schema_meta.schema_version` after the run. */
   schemaVersion: string;
   /** `schema_meta.min_code_version` after the run. */
   minCodeVersion: string;
+  // ---- Komunitas K1 (edition lane) ----
+  /** The other lane: its mode, and its migrations applied by this run, in order. */
+  edition: { mode: EditionLaneMode; applied: string[] };
 }
 
 /** The content of `releases/schema-meta.json`. */
@@ -240,11 +274,14 @@ function describeDriverError(driverError: unknown): string {
  * - A DomainError with a raw driver error below it is rebuilt as a DomainError with the same code (so status) and
  *   meta and a safe cause; its detail is kept unless its message repeats a driver error's text, which the driver
  *   error's safe fields then replace (`galat database / database error ER_DUP_ENTRY, errno 1062, ...`).
- * - An AggregateError becomes `{name, message, errors}` (plus `cause` when it has one), a SuppressedError
- *   `{name, message, error, suppressed}` (plus `cause`), each link made safe; either loses its message when that
+ * - An AggregateError becomes `{errorName, message, errors}` (plus `cause` when it has one), a SuppressedError
+ *   `{errorName, message, error, suppressed}` (plus `cause`), each link made safe; either loses its message when that
  *   repeats a driver error's text.
- * - Any other Error becomes `{name, message, cause}` with the cause made safe, unless its message repeats a driver
- *   error's text: then the chain is cut there and that driver error's safe fields take its place.
+ * - Any other Error becomes `{errorName, message, cause}` with the cause made safe, unless its message repeats a
+ *   driver error's text: then the chain is cut there and that driver error's safe fields take its place.
+ *
+ * A rebuilt link names the error's class `errorName`, never `name`: the server log redacts every field called `name`
+ * (a person's name is personal data), and the class would read as "[redacted]" there.
  */
 export function safeChain(error: unknown, depth = 0): unknown {
   if (isRawDriverError(error)) return safeCause(error);
@@ -265,13 +302,13 @@ export function safeChain(error: unknown, depth = 0): unknown {
   const cause = error.cause === undefined ? {} : { cause: safeBelow(error.cause) };
   if (error instanceof AggregateError) {
     const errors = deeper && Array.isArray(error.errors) ? error.errors.map(safeBelow) : [];
-    return { name: error.name, ...message, errors, ...cause };
+    return { errorName: error.name, ...message, errors, ...cause };
   }
   if (isSuppressedError(error)) {
-    return { name: error.name, ...message, error: safeBelow(error.error), suppressed: safeBelow(error.suppressed), ...cause };
+    return { errorName: error.name, ...message, error: safeBelow(error.error), suppressed: safeBelow(error.suppressed), ...cause };
   }
   if (repeated !== undefined) return safeCause(repeated);
-  return { name: error.name, message: error.message, ...(deeper ? { cause: safeBelow(error.cause) } : {}) };
+  return { errorName: error.name, message: error.message, ...(deeper ? { cause: safeBelow(error.cause) } : {}) };
 }
 
 /**
@@ -316,6 +353,7 @@ export class MigrationError extends Error {
 }
 
 const [MIGRATION_TABLE, MIGRATION_LOCK_TABLE] = MIGRATOR_TABLES;
+const [EDITION_TABLE, EDITION_LOCK_TABLE] = EDITION_MIGRATOR_TABLES;
 const CREATED_BY = 'migrator';
 const LOCK_FILE = 'migrate.lock';
 const MIRROR_FILE = 'schema-meta.json';
@@ -335,6 +373,7 @@ const MAX_VERSION_LENGTH = 32;
 type MetaTables = {
   schema_meta: { id: number; schema_version: string; min_code_version: string; install_id: string | null };
   schema_migrations: { name: string; timestamp: string };
+  schema_migrations_edition: { name: string; timestamp: string };
 };
 
 function metaDb<T>(db: Kysely<T>): Kysely<MetaTables> {
@@ -402,6 +441,43 @@ function plan(o: MigrationOptions): Plan {
   }
   // Names have distinct four-digit numbers, so plain string order is number order (as Kysely sorts them too).
   return { appVersion, dataDir, lockWaitMs, names: [...byName.keys()].sort(), byName, onProgress };
+}
+
+// ---- Komunitas K1 (edition lane) ----
+
+/** The other lane of a run: its migrations, by name and in order (none: the lane is neither read nor run). */
+interface EditionPlan {
+  names: string[];
+  byName: ReadonlyMap<string, AltisMigration>;
+}
+
+/**
+ * Checks the other lane's migrations (`o.editionMigrations`, default EDITION_MIGRATIONS) as {@link plan} checks the
+ * core lane's, by the lane's own name rule (`e0001_slug`, distinct numbers, not e0000), before anything is touched. A
+ * `contract` is not looked at: the lane never moves schema_meta.
+ */
+function planEdition(o: MigrationOptions): EditionPlan {
+  const migrations = o.editionMigrations ?? EDITION_MIGRATIONS;
+  if (typeof migrations !== 'object' || migrations === null) throw new TypeError('editionMigrations must be an object');
+  const byName = new Map<string, AltisMigration>();
+  const byNumber = new Map<string, string>();
+  for (const [name, m] of Object.entries(migrations)) {
+    if (!EDITION_MIGRATION_NAME.test(name) || name.startsWith(`e${NO_SCHEMA}`) || name.length > MAX_NAME_LENGTH) {
+      throw new TypeError(
+        `migration name ${JSON.stringify(name.slice(0, 64))} of the other lane must look like e0001_slug ` +
+          `(${EDITION_MIGRATION_NAME}, not e0000, at most ${MAX_NAME_LENGTH} characters)`,
+      );
+    }
+    const number = name.slice(1, 5);
+    const other = byNumber.get(number);
+    if (other !== undefined) throw new TypeError(`migrations ${other} and ${name} share the number ${number}`);
+    byNumber.set(number, name);
+    if (typeof m !== 'object' || m === null || typeof m.up !== 'function') {
+      throw new TypeError(`migration ${name} must have an up() function`);
+    }
+    byName.set(name, m);
+  }
+  return { names: [...byName.keys()].sort(), byName };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -517,6 +593,17 @@ async function ensureMigratorTables(h: MigrationHandle): Promise<void> {
     t.int('is_locked').default(0);
     t.primaryKey(['id']);
   });
+  // ---- Komunitas K1 (edition lane): the other lane's two tables, the same shapes, on every install ----
+  await ensureTable(h.db, h.dialect, EDITION_TABLE, 'migrator', CREATED_BY, (t) => {
+    t.key191('name');
+    t.varchar('timestamp', 64);
+    t.primaryKey(['name']);
+  });
+  await ensureTable(h.db, h.dialect, EDITION_LOCK_TABLE, 'migrator', CREATED_BY, (t) => {
+    t.key191('id');
+    t.int('is_locked').default(0);
+    t.primaryKey(['id']);
+  });
 }
 
 interface DbState {
@@ -579,6 +666,40 @@ function decide(p: Plan, state: DbState): Decision {
     );
   }
   return { mode: 'migrate', pending: p.names.filter((name) => !applied.has(name)) };
+}
+
+// ---- Komunitas K1 (edition lane) ----
+
+type EditionDecision =
+  | { mode: 'empty' }
+  | { mode: 'schema-ahead' }
+  | { mode: 'migrate'; applied: string[]; pending: string[] };
+
+/** The names in schema_migrations_edition, sorted. */
+async function readEditionApplied(h: MigrationHandle): Promise<string[]> {
+  return (await metaDb(h.db).selectFrom(EDITION_TABLE).select('name').execute()).map((r) => r.name).sort();
+}
+
+/**
+ * The other lane's decision, as {@link decide} makes the core lane's: an empty lane is `empty` without reading its
+ * table; a name the code does not know is `schema-ahead`; applied names that are not the first N of the lane are
+ * SCHEMA_CONFLICT `migration_order` (`meta.lane: 'edition'`); otherwise its pending migrations.
+ */
+async function decideEdition(h: MigrationHandle, ep: EditionPlan): Promise<EditionDecision> {
+  if (ep.names.length === 0) return { mode: 'empty' };
+  const applied = await readEditionApplied(h);
+  if (applied.some((name) => !ep.byName.has(name))) return { mode: 'schema-ahead' };
+  const set = new Set(applied);
+  const missing = ep.names.slice(0, applied.length).filter((name) => !set.has(name));
+  if (missing.length > 0) {
+    throw conflict(
+      'migration_order',
+      `Migrasi jalur lain ${missing.join(', ')} belum dijalankan padahal migrasi sesudahnya sudah / ` +
+        `Migration ${missing.join(', ')} of the other lane was never applied although later ones were`,
+      { missing, lane: 'edition' },
+    );
+  }
+  return { mode: 'migrate', applied, pending: ep.names.filter((name) => !set.has(name)) };
 }
 
 /** Inserts the schema_meta row (id 1, `0000`, `0.0.0`, no install_id) when it is missing. */
@@ -729,6 +850,37 @@ function provider(dialect: Dialect, p: Plan, inFlight: InFlight, progress: Progr
   };
 }
 
+// ---- Komunitas K1 (edition lane) ----
+
+/** One turn of the other lane: `up()` only (schema_meta follows the core lane alone; a contract is ignored). */
+async function applyEditionOne(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: Kysely<any>,
+  dialect: Dialect,
+  name: string,
+  m: AltisMigration,
+  inFlight: InFlight,
+  progress: Progress,
+): Promise<void> {
+  inFlight.name = name;
+  progress.report({ migration: name, waiting: false });
+  migrateFault(name);
+  await yieldToEventLoop();
+  await m.up(db, dialect);
+  await yieldToEventLoop();
+  progress.report({ migration: name, waiting: false });
+}
+
+function editionProvider(dialect: Dialect, ep: EditionPlan, inFlight: InFlight, progress: Progress): MigrationProvider {
+  return {
+    async getMigrations() {
+      const migrations: Record<string, Migration> = {};
+      for (const [name, m] of ep.byName) migrations[name] = { up: (db) => applyEditionOne(db, dialect, name, m, inFlight, progress) };
+      return migrations;
+    },
+  };
+}
+
 type KyselyRun =
   | { applied: string[]; failure: null }
   | {
@@ -742,16 +894,33 @@ type KyselyRun =
  * whose status is Error (a migration that rejected with `undefined` leaves `error` undefined).
  */
 async function runKysely(h: MigrationHandle, p: Plan, step: 'all' | 'one', progress: Progress): Promise<KyselyRun> {
+  const tables = { table: MIGRATION_TABLE, lock: MIGRATION_LOCK_TABLE };
+  return runMigrator(h, p.lockWaitMs, tables, (inFlight) => provider(h.dialect, p, inFlight, progress), step, progress);
+}
+
+/**
+ * The Kysely Migrator of one lane (its two tables, its provider), with the per-database migration lock on
+ * MySQL/MariaDB (DatabaseScopedMysqlAdapter); see {@link runKysely}.
+ */
+async function runMigrator(
+  h: MigrationHandle,
+  lockWaitMs: number,
+  tables: { table: string; lock: string },
+  providerOf: (inFlight: InFlight) => MigrationProvider,
+  step: 'all' | 'one',
+  progress: Progress,
+): Promise<KyselyRun> {
   const inFlight: InFlight = { name: null };
   const db = mysqlFamily(h.dialect)
-    ? withAdapter(h.db, new DatabaseScopedMysqlAdapter(Math.ceil(p.lockWaitMs / 1000), progress))
+    ? withAdapter(h.db, new DatabaseScopedMysqlAdapter(Math.ceil(lockWaitMs / 1000), progress))
     : h.db;
   const migrator = new Migrator({
     db,
-    provider: provider(h.dialect, p, inFlight, progress),
-    migrationTableName: MIGRATION_TABLE,
-    migrationLockTableName: MIGRATION_LOCK_TABLE,
-    // The order of the applied names was checked by decide(); see the top of this file.
+    provider: providerOf(inFlight),
+    migrationTableName: tables.table,
+    migrationLockTableName: tables.lock,
+    // The order of the applied names was checked by decide() (decideEdition() for the other lane); see the top of
+    // this file.
     allowUnorderedMigrations: true,
   });
   const { error, results } = step === 'all' ? await migrator.migrateToLatest() : await migrator.migrateUp();
@@ -848,15 +1017,16 @@ interface LockedResult {
 }
 
 /** Everything that happens under migrate.lock. */
-async function underLock(h: MigrationHandle, p: Plan, step: 'all' | 'one', progress: Progress): Promise<LockedResult> {
+async function underLock(h: MigrationHandle, p: Plan, ep: EditionPlan, step: 'all' | 'one', progress: Progress): Promise<LockedResult> {
   const state = await readState(h);
   const decision = decide(p, state);
   if (decision.mode !== 'migrate') {
     // The database belongs to other code: read only, never the Migrator. The mirror follows the database.
     const current = state.meta ?? { schemaVersion: versionOf(state.applied), minCodeVersion: ANY_CODE };
     await writeMirror(p.dataDir, current);
-    return { outcome: { mode: decision.mode, applied: [], ...current }, pendingAfter: 0 };
+    return { outcome: { mode: decision.mode, applied: [], ...current, edition: await editionAside(h, ep) }, pendingAfter: 0 };
   }
+  const editionDecision = await decideEdition(h, ep);
 
   await ensureMetaRow(h);
   const first = decision.pending[0];
@@ -876,13 +1046,72 @@ async function underLock(h: MigrationHandle, p: Plan, step: 'all' | 'one', progr
   }
   if (run.failure !== null) throw runFailure(h, state.applied, run.failure, current);
   const { schemaVersion, minCodeVersion } = current;
+  const pendingAfter = decision.pending.length - run.applied.length;
+  // One step (migrateUpOne) applies the other lane's migrations only once the core lane has nothing left to do.
+  const editionStep = step === 'one' && (run.applied.length > 0 || pendingAfter > 0) ? 'none' : step;
+  const lane = await runEditionLane(h, p, ep, editionDecision, editionStep, run.applied, progress);
+  const mode = lane.edition.mode === 'schema-ahead' ? 'schema-ahead' : run.applied.length > 0 ? 'migrated' : 'up-to-date';
   return {
-    outcome: { mode: run.applied.length > 0 ? 'migrated' : 'up-to-date', applied: run.applied, schemaVersion, minCodeVersion },
-    pendingAfter: decision.pending.length - run.applied.length,
+    outcome: { mode, applied: run.applied, schemaVersion, minCodeVersion, edition: lane.edition },
+    pendingAfter: pendingAfter + lane.pendingAfter,
   };
 }
 
-async function locked(h: MigrationHandle, p: Plan, step: 'all' | 'one'): Promise<LockedResult> {
+// ---- Komunitas K1 (edition lane) ----
+
+/**
+ * The other lane's part of the outcome when the core lane does not run (`too-old`, `schema-ahead`): read only, never
+ * run (an empty lane is not read).
+ */
+async function editionAside(h: MigrationHandle, ep: EditionPlan): Promise<MigrationOutcome['edition']> {
+  if (ep.names.length === 0) return { mode: 'empty', applied: [] };
+  const applied = await readEditionApplied(h);
+  return { mode: applied.some((name) => !ep.byName.has(name)) ? 'schema-ahead' : 'up-to-date', applied: [] };
+}
+
+/**
+ * The other lane after the core lane (see the top of this file): its second Migrator runs only for a decision with
+ * pending migrations and a step that allows it (`none`: one step whose core lane had work). A failure is reported as
+ * the core lane's are (failureOf), `meta.applied` holding the core migrations this run applied and the lane's that
+ * stayed applied.
+ */
+async function runEditionLane(
+  h: MigrationHandle,
+  p: Plan,
+  ep: EditionPlan,
+  d: EditionDecision,
+  step: 'all' | 'one' | 'none',
+  coreApplied: readonly string[],
+  progress: Progress,
+): Promise<{ edition: MigrationOutcome['edition']; pendingAfter: number }> {
+  if (d.mode !== 'migrate') return { edition: { mode: d.mode, applied: [] }, pendingAfter: 0 };
+  if (d.pending.length === 0 || step === 'none') return { edition: { mode: 'up-to-date', applied: [] }, pendingAfter: d.pending.length };
+  const tables = { table: EDITION_TABLE, lock: EDITION_LOCK_TABLE };
+  const run = await runMigrator(h, p.lockWaitMs, tables, (inFlight) => editionProvider(h.dialect, ep, inFlight, progress), step, progress);
+  if (run.failure !== null) {
+    let reconciled: { applied: string[] } | null = null;
+    let secondary: unknown;
+    try {
+      reconciled = { applied: await readEditionApplied(h) };
+    } catch (error) {
+      secondary = error;
+    }
+    const kept = keptAfterFailure({ dialect: h.dialect, before: d.applied, reconciled, inBatch: run.failure.inBatch });
+    const meta: MigrationFailureMeta = {
+      migration: run.failure.migration,
+      applied: kept.applied === null ? null : [...coreApplied, ...kept.applied],
+      appliedVerified: kept.appliedVerified,
+    };
+    if (secondary !== undefined) meta.secondary = safeChain(secondary);
+    throw failureOf(run.failure.error, meta);
+  }
+  return {
+    edition: { mode: run.applied.length > 0 ? 'migrated' : 'up-to-date', applied: run.applied },
+    pendingAfter: d.pending.length - run.applied.length,
+  };
+}
+
+async function locked(h: MigrationHandle, p: Plan, ep: EditionPlan, step: 'all' | 'one'): Promise<LockedResult> {
   const progress = progressOf(p.onProgress);
   try {
     // R20: schema_tables and schema_meta exist before anything else; R27: then Kysely's two tables. All of it is
@@ -897,7 +1126,7 @@ async function locked(h: MigrationHandle, p: Plan, step: 'all' | 'one'): Promise
       dataPath(p.dataDir, 'tmp', LOCK_FILE),
       () => {
         progress.set({ waiting: false });
-        return underLock(h, p, step, progress);
+        return underLock(h, p, ep, step, progress);
       },
       { waitMs: p.lockWaitMs, ...(staleMs === undefined ? {} : { staleMs }) },
     );
@@ -942,7 +1171,8 @@ async function locked(h: MigrationHandle, p: Plan, step: 'all' | 'one'): Promise
  */
 export async function runMigrations(h: MigrationHandle, o: MigrationOptions): Promise<MigrationOutcome> {
   const p = plan(o);
-  return (await locked(h, p, 'all')).outcome;
+  const ep = planEdition(o);
+  return (await locked(h, p, ep, 'all')).outcome;
 }
 
 /**
@@ -956,7 +1186,8 @@ export async function runMigrations(h: MigrationHandle, o: MigrationOptions): Pr
  */
 export async function migrateUpOne(h: MigrationHandle, o: MigrationOptions): Promise<{ done: boolean; applied?: string }> {
   const p = plan(o);
-  const { outcome, pendingAfter } = await locked(h, p, 'one');
+  const ep = planEdition(o);
+  const { outcome, pendingAfter } = await locked(h, p, ep, 'one');
   if (outcome.mode === 'too-old') {
     const { schemaVersion, minCodeVersion } = outcome;
     throw new DomainError('SCHEMA_TOO_NEW', {
@@ -966,7 +1197,8 @@ export async function migrateUpOne(h: MigrationHandle, o: MigrationOptions): Pro
       meta: { appVersion: p.appVersion, schemaVersion, minCodeVersion },
     });
   }
-  const applied = outcome.applied[0];
+  // The core lane's migration, or (once the core lane is done) the other lane's.
+  const applied = outcome.applied[0] ?? outcome.edition.applied[0];
   return applied === undefined ? { done: true } : { done: pendingAfter === 0, applied };
 }
 

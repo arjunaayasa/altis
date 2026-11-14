@@ -65,3 +65,14 @@ export type { ForeignMysql, ForeignMysqlConfig } from './foreign-mysql.js';
 // ---- Phase 2 (catalog): Task 15 (the query side of the registered full-text helpers) ----
 export { fullTextClear, fullTextDeleteRows, fullTextExcluded, fullTextInsertRows, fullTextRanked, fullTextWhere } from './fulltext-query.js';
 export type { FtExpr, FullTextField, FullTextRow } from './fulltext-query.js';
+// ---- Komunitas K1 (tables): grouped counts and the personal-data dictionary ----
+export { AggregateOverflowError, countDistinctGrouped, countGrouped, datePrefix, sumGrouped } from './aggregate.js';
+export type { GroupKeys } from './aggregate.js';
+export { PERSONAL_COLUMNS, isPersonalColumn, personalLogKeys } from './registry.js';
+export type { PersonalCategory, PersonalColumn } from './registry.js';
+// ---- Komunitas K1 (edition lane): migrasi jalur lain (its own bookkeeping, restore and revert refusal) ----
+export { EDITION_MIGRATIONS, EDITION_MIGRATION_NAME, EDITION_MIGRATOR_TABLES, editionLaneState, isEditionCreatedBy } from './edition-migrations.js';
+export { readSchemaTableOrigins } from './catalog.js';
+export type { SchemaTableOrigin } from './catalog.js';
+export type { DropRegisteredOptions } from './ddl.js';
+export type { EditionLaneMode } from './migrator.js';

@@ -1,4 +1,5 @@
 import type { DB } from '@altis/db';
+import { AUDIENCES, LOCAL_WORKS, LOCAL_WORK_KINDS, REFERENCE_KINDS } from '@altis/shared';
 import type { AttachmentAccess, AttachmentKind, IdentifierType, ItemStatus, RelationType, RelatorRole } from '@altis/shared';
 import { isHttpUrl } from '@altis/shared/api/catalog/common';
 import type { RecordData } from '@altis/shared/api/catalog/record-data';
@@ -21,6 +22,8 @@ import { loadCustomDefs, readCustomValues } from '../data/custom-fields.js';
 // - `links` are the URL attachments of the load that pass the http(s) check again (S4), as `{url, title}`.
 // - Each item carries its branch's code and its location's code (`locationCode`, B3: 852 `$c`), its collection type's
 //   code, and whether it is loanable and self-service (§2.5).
+// - The accreditation fields (`audience`, `localWork`, `localWorkKind`, `referenceKind`) are on every load, null when
+//   not stated; nothing in them is personal.
 
 const ID_BATCH = 500;
 
@@ -35,6 +38,14 @@ export interface LoadedRecord {
 
 /** `v` when it is not null, else undefined: the draft-shaped optional fields of {@link RecordData}. */
 const opt = <T>(v: T | null): T | undefined => (v === null ? undefined : v);
+
+/**
+ * A stored accreditation field: its code when it is one of `values`, else null (a value this version does not know is
+ * never handed on, so an export never writes what an import would refuse).
+ */
+function codeOrNull<T extends string>(values: readonly T[], v: string | null): T | null {
+  return v !== null && (values as readonly string[]).includes(v) ? (v as T) : null;
+}
 
 function groupBy<T>(rows: readonly T[], key: (r: T) => string): Map<string, T[]> {
   const out = new Map<string, T[]>();
@@ -315,6 +326,11 @@ async function loadBatch(
       // In the definitions' order (sort order, then code).
       customPublic: publicDefs.flatMap((d) => (Object.hasOwn(values, d.code) ? [{ code: d.code, labelId: d.labelId, labelEn: d.labelEn, value: values[d.code] }] : [])),
       ...(o.publicOnly ? {} : { custom: values }),
+      // ---- Komunitas K1 (catalogue accreditation fields): null when not stated ----
+      audience: codeOrNull(AUDIENCES, row.audience),
+      localWork: codeOrNull(LOCAL_WORKS, row.local_work),
+      localWorkKind: codeOrNull(LOCAL_WORK_KINDS, row.local_work_kind),
+      referenceKind: codeOrNull(REFERENCE_KINDS, row.reference_kind),
     };
     return { row, data };
   });

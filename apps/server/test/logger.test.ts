@@ -223,7 +223,8 @@ describe('values', () => {
     a['self'] = a;
     a['list'] = [a, { back: a }];
     make().info('x', { a });
-    expect(only()['a']).toEqual({ name: 'a', self: '[circular]', list: ['[circular]', { back: '[circular]' }] });
+    // `name` is redacted as a personal column's name (logger-personal.test.ts).
+    expect(only()['a']).toEqual({ name: '[redacted]', self: '[circular]', list: ['[circular]', { back: '[circular]' }] });
   });
 
   it('is not fooled by the same object appearing twice without a cycle', () => {

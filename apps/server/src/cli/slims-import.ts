@@ -31,6 +31,12 @@ import { notInstalled } from './migrate.js';
 // [--branch <code>] [--price-mode major|minor|skip] [--dry-run] [--allow-non-empty] [--json]` (spec §11, §12.6; Phase 2
 // Task 23, preflight M15): migrates a SLiMS catalogue through the same job a server runs.
 //
+// ---- Komunitas K1 (catalogue re-sync) ----
+// `[--catalog-mode append|sync] [--skip-catalog --from-run <id>]`: the catalogue mode, the skip of the catalogue stages
+// and the dry run a run follows, checked by cli/index.ts and taken over by the run's options. With `--from-run` the run
+// takes over a dry run this command started (its work folder; a dump is not given again, a database is), and with
+// `--skip-catalog` the start refuses it unless that dry run was a sync one that found no catalogue change.
+//
 // 1. Before anything is written: the database password from `ALTIS_SLIMS_DB_PASSWORD`, else a prompt without echo at
 //    the terminal (never an argument: cli/index.ts refuses `--password`); with `--allow-non-empty` the library's name
 //    typed at the terminal (the start compares it, D2-25); `--files-dir` resolved to its real path, which must be a
@@ -71,6 +77,13 @@ export interface SlimsImportOptions {
   dryRun: boolean;
   /** `--allow-non-empty`: migrate into a catalogue that has live records (asks for the library's name). */
   allowNonEmpty: boolean;
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  /** `--catalog-mode`: `append` (default) adds new rows only; `sync` also rewrites the mapped rows no one edited in ALTIS. */
+  catalogMode?: 'append' | 'sync';
+  /** `--skip-catalog`: skip the catalogue stages; only with `fromRunId`, a sync dry run that found nothing to change. */
+  skipCatalog?: boolean;
+  /** `--from-run <id>`: the dry run this run follows. */
+  fromRunId?: string;
   /** Asks the operator for the database password without echoing it; null without a terminal. */
   promptSecret: (question: string) => Promise<string | null>;
   /** Asks the operator a question (the library's name for `--allow-non-empty`); null without a terminal. */
@@ -250,7 +263,9 @@ export async function slimsImport(ctx: BootContext, env: Env, o: SlimsImportOpti
             sourceName: 'slims',
             allowNonEmpty: o.allowNonEmpty,
             confirmLibraryName,
-            fromRunId: null,
+            fromRunId: o.fromRunId ?? null,
+            ...(o.catalogMode === undefined ? {} : { catalogMode: o.catalogMode }),
+            ...(o.skipCatalog === undefined ? {} : { skipCatalog: o.skipCatalog }),
           },
           { keyring: config.keyring },
         );

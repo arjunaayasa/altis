@@ -64,6 +64,8 @@ const REPORT_KEYS = [
   // ---- Phase 2 (catalog): Task 3 (B2): null until Task 15 fills them ----
   'search',
   'oai',
+  // ---- Komunitas K1 (edition lane) ----
+  'editionLane',
 ].sort();
 
 describe.skipIf(!ctx.available)(`the Diagnostik report [${engineLabel()}]`, () => {
@@ -179,6 +181,17 @@ describe.skipIf(!ctx.available)(`the Diagnostik report [${engineLabel()}]`, () =
     expect(report.clock).toEqual({ anomaly: null });
     expect(report.exposure).toBeNull();
     expect(report.disk).toEqual({ lowAt: null });
+  });
+
+  // ---- Komunitas K1 (edition lane) ----
+  it('editionLane counts the migrations of another lane the database records: 0 on a fresh install, then 1', async () => {
+    expect((await collectDiagnostics(options())).editionLane).toEqual({ applied: 0 });
+    await h.db.insertInto('schema_migrations_edition').values({ name: 'e0001_test_widgets', timestamp: new Date(NOW).toISOString() }).execute();
+    try {
+      expect((await collectDiagnostics(options())).editionLane).toEqual({ applied: 1 });
+    } finally {
+      await h.db.deleteFrom('schema_migrations_edition').execute();
+    }
   });
 
   // ---- Phase 2 (catalog): Task 15 (B2) ----

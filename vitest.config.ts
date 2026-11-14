@@ -1,8 +1,9 @@
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
-// Vitest >= 4 no longer reads vitest.workspace.ts; projects are declared here. Every project excludes `.claude/**`:
-// agent worktrees (.claude/worktrees/<name>, full checkouts of this repository) must not be run as part of it.
+// Vitest >= 4 no longer reads vitest.workspace.ts; projects are declared here. Every project excludes `.claude/**` and
+// `.worktrees/**`: agent worktrees (.claude/worktrees/<name>) and nested git worktrees (.worktrees/<branch>) are full
+// checkouts of this repository and must not be run as part of it.
 export default defineConfig({
   // Test-only hooks (ALTIS_TEST_FAULT, ALTIS_TEST_FAKE_NODE_VERSION) are guarded by
   // `__BUILD_PROFILE__ !== 'production'`; the tests always run with the 'test' profile. `__TEST_FIXTURE__` is the
@@ -18,7 +19,7 @@ export default defineConfig({
           include: ['**/test/**/*.test.ts', 'tools/**/*.test.ts'],
           // packages/db/test/*.test.ts and every test/db/ folder (apps/server, packages/core, ...) need a database
           // engine (the db project); packages/db/test/unit/ does not. apps/admin's tests need a DOM (the admin project).
-          exclude: ['**/node_modules/**', '**/dist/**', '.claude/**', 'packages/db/test/*.test.ts', '**/test/db/**', 'apps/admin/**'],
+          exclude: ['**/node_modules/**', '**/dist/**', '.claude/**', '.worktrees/**', 'packages/db/test/*.test.ts', '**/test/db/**', 'apps/admin/**'],
         },
       },
       {
@@ -31,7 +32,7 @@ export default defineConfig({
           name: 'admin',
           environment: 'jsdom',
           include: ['apps/admin/test/**/*.test.{ts,tsx}'],
-          exclude: ['**/node_modules/**', '**/dist/**', '.claude/**'],
+          exclude: ['**/node_modules/**', '**/dist/**', '.claude/**', '.worktrees/**'],
           setupFiles: ['apps/admin/test/setup.ts'],
         },
       },
@@ -40,7 +41,7 @@ export default defineConfig({
         test: {
           name: 'db',
           include: ['packages/db/test/**/*.test.ts', '**/test/db/**/*.test.ts'],
-          exclude: ['**/node_modules/**', '**/dist/**', '.claude/**', 'packages/db/test/unit/**'],
+          exclude: ['**/node_modules/**', '**/dist/**', '.claude/**', '.worktrees/**', 'packages/db/test/unit/**'],
           // ALTIS_TEST_DB picks the engine (default sqlite); one database per worker (tools/test/test-db.ts).
           globalSetup: ['tools/test/global-setup.ts'],
           testTimeout: 30_000,

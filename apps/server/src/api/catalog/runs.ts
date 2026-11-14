@@ -20,16 +20,24 @@ import { DedupeScanBody, RunListQuery, type RunListResponse, type RunStarted, ty
 import { z } from 'zod';
 import { route, type RouteContext, type RouteDecl } from '../../http/route.js';
 import { jobHandlers } from '../../jobs/runtime.js';
-import { byteRange } from '../backups.js';
+import { byteRange, rangeStream } from '../../http/range.js';
 
 // The catalog API routes of catalog runs and the duplicate scan (Phase 2 spec §3.3, §5.4, §12.2, §12.3; plan Task 19,
 // route catalog; decisions P2-12, P2-23, P2-27):
 //
 //   GET  catalog/runs                 `catalog.records.read`: newest first (keyset, `?kind=`); migration runs only for
 //                                     a holder of `catalog.migration.run` (P2-27)
-//   GET  catalog/runs/:id             `catalog.records.read`: one run (a migration run is 404 without that permission)
-//   GET  catalog/runs/:id/report      `catalog.records.read`, `mode: system`: the run's CSV report (a staff `files` row,
+//   GET  catalog/runs/:id             `catalog.records.read`: one run (a migration run is 404 without that permission);
+//                                     or `accreditation.workspace.manage` alone: a SLiMS usage import run only
+//   GET  catalog/runs/:id/report      the same readers, `mode: system`: the run's CSV report (a staff `files` row,
 //                                     context `catalog.report`, never served by `/files/:id`, S18), as an attachment
+//
+// The usage import's wizard (accreditation) shows its run and links its report through these two routes, and the
+// import itself needs only `accreditation.workspace.manage`: a role made for accreditation work, without the catalogue,
+// must still see what its import did. The declaration names one permission, so both routes take any signed-in staff
+// member and check here (oneRunViewerOf): a catalogue reader as before; an accreditation manager without the catalogue
+// permission reads the usage import runs and nothing else (any other run is 404, as one that does not exist); anyone
+// else is refused as without `catalog.records.read` (403 AUTHZ_DENIED).
 //   GET  catalog/runs/:id/download    `catalog.export.run`, `mode: system`, a side-effect GET (its audit; HEAD → 404,
 //                                     no cross-site request): an export's file `exports/<runId>.<ext>` as an attachment,
 //                                     one `Range: bytes=a-b` (or `a-`, `-n`) → 206, past the end → 416
@@ -46,8 +54,6 @@ import { byteRange } from '../backups.js';
 
 const RUNS = '/api/v1/catalog/runs';
 const RunParams = z.strictObject({ id: ulidField });
-/** A file is read in pieces of this size, each only once the client took the previous one. */
-const DOWNLOAD_CHUNK_BYTES = 256 * 1024;
 
 /** The Content-Type of each export file extension. */
 const EXPORT_MIME: Readonly<Record<ExportFileExt, string>> = Object.freeze({
@@ -57,10 +63,29 @@ const EXPORT_MIME: Readonly<Record<ExportFileExt, string>> = Object.freeze({
   csv: 'text/csv; charset=utf-8',
 });
 
-/** What the request's user may see of runs (P2-27): a route with a permission runs with a session. */
+/**
+ * What the request's user may see of runs: migration runs only with `catalog.migration.run`, the SLiMS usage import
+ * runs only with `accreditation.workspace.manage`. A route with a permission runs with a session.
+ */
 function viewerOf(rc: RouteContext<unknown, unknown, unknown>): RunViewer {
   if (rc.auth === null) throw new DomainError('AUTH_REQUIRED');
-  return { migration: can(rc.auth.grants, 'catalog.migration.run') };
+  return { migration: can(rc.auth.grants, 'catalog.migration.run'), slimsUsage: can(rc.auth.grants, 'accreditation.workspace.manage') };
+}
+
+/**
+ * What the request's user may see of run `rc.params.id` on GET catalog/runs/:id and its report (see the top of this
+ * file).
+ *
+ * @throws DomainError `AUTHZ_DENIED` holding neither `catalog.records.read` nor `accreditation.workspace.manage`;
+ *   `NOT_FOUND` for an accreditation manager without the catalogue permission and a run that is not a usage import
+ */
+async function oneRunViewerOf(rc: RouteContext<unknown, unknown, { id: string }>): Promise<RunViewer> {
+  const viewer = viewerOf(rc);
+  if (rc.auth !== null && can(rc.auth.grants, 'catalog.records.read')) return viewer;
+  if (viewer.slimsUsage !== true) throw await rc.authzDenied('catalog.records.read');
+  const run = await rc.db.db.selectFrom('catalog_runs').select('kind').where('id', '=', rc.params.id).executeTakeFirst();
+  if (run?.kind !== 'slims_usage') throw new DomainError('NOT_FOUND', { detail: 'Proses katalog tidak ditemukan / Catalog run not found' });
+  return { migration: false, slimsUsage: true };
 }
 
 function exportGone(): DomainError {
@@ -75,44 +100,6 @@ function registryOf(rc: RouteContext<unknown, unknown, unknown>): JobRegistry {
   if (reg?.get(DEDUPE_SCAN_JOB) !== undefined) return reg;
   fallbackRegistry ??= createJobRegistry(jobHandlers());
   return fallbackRegistry;
-}
-
-/**
- * Bytes `first` to `last` of `handle`, read only as the client takes them (highWaterMark 0); the handle is closed at
- * the end, on an error, or when the client goes.
- */
-function rangeStream(handle: FileHandle, first: number, last: number): ReadableStream<Uint8Array> {
-  let position = first;
-  let open = true;
-  const close = async (): Promise<void> => {
-    if (!open) return;
-    open = false;
-    await handle.close().catch(() => undefined);
-  };
-  return new ReadableStream<Uint8Array>(
-    {
-      async pull(controller) {
-        try {
-          const left = last + 1 - position;
-          if (left <= 0) {
-            await close();
-            controller.close();
-            return;
-          }
-          const buffer = new Uint8Array(Math.min(DOWNLOAD_CHUNK_BYTES, left));
-          const { bytesRead } = await handle.read(buffer, 0, buffer.byteLength, position);
-          if (bytesRead === 0) throw new Error('the export file is shorter than its size');
-          position += bytesRead;
-          controller.enqueue(buffer.subarray(0, bytesRead));
-        } catch (error) {
-          await close();
-          controller.error(error);
-        }
-      },
-      cancel: close,
-    },
-    { highWaterMark: 0 },
-  );
 }
 
 /** `source` as a web stream; cancelling the stream (a client gone) ends the iteration, which closes the file. */
@@ -148,12 +135,13 @@ const runsGet = route({
   id: 'catalog.runs.get',
   method: 'GET',
   path: `${RUNS}/:id`,
-  permission: 'catalog.records.read',
+  public: true,
+  session: 'required',
   idempotency: 'none',
   audit: null,
   params: RunParams,
   handler: async (rc) => {
-    const body: RunView = await getRunView(rc.db.db, rc.params.id, viewerOf(rc));
+    const body: RunView = await getRunView(rc.db.db, rc.params.id, await oneRunViewerOf(rc));
     return { body };
   },
 });
@@ -163,13 +151,14 @@ const runsReport = route({
   id: 'catalog.runs.report',
   method: 'GET',
   path: `${RUNS}/:id/report`,
-  permission: 'catalog.records.read',
+  public: true,
+  session: 'required',
   mode: 'system',
   idempotency: 'none',
   audit: null,
   params: RunParams,
   handler: async (rc) => {
-    const file = await runReportFile(rc.db.db, rc.params.id, viewerOf(rc));
+    const file = await runReportFile(rc.db.db, rc.params.id, await oneRunViewerOf(rc));
     const driver = localStorageDriver(rc.services.dataDir);
     const stored = await driver.stat(file.fileId);
     if (stored === null || stored.size !== file.size) {

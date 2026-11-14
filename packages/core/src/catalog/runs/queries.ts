@@ -12,6 +12,8 @@ import { getRun, type RunRow } from '../data/runs.js';
 //
 // - A `migration` run is 404 to anyone without `catalog.migration.run` (P2-27): it is left out of the list, and getting
 //   it, its report or its file answers NOT_FOUND. The route says which the viewer holds (`viewer.migration`).
+// - A `slims_usage` run (the SLiMS usage import of the accreditation workspace) is hidden the same way from anyone
+//   without `accreditation.workspace.manage` (`viewer.slimsUsage`; absent counts as not held).
 // - The list is newest first, keyset over `(created_at, id)` (both descending), paged by an opaque cursor
 //   `<createdAt>.<id>` that names the last row of the page; with `kind`, `ix_catalog_runs_kind_created_at` serves it.
 // - Each run carries its job's status (`jobStatus`, null without a job row): a run still `queued` or `running` whose
@@ -23,9 +25,20 @@ import { getRun, type RunRow } from '../data/runs.js';
 
 type Db = Kysely<DB> | Transaction<DB>;
 
-/** Who reads runs: whether they hold `catalog.migration.run` (P2-27). */
+/** Who reads runs: whether they hold `catalog.migration.run`, and `accreditation.workspace.manage`. */
 export interface RunViewer {
   migration: boolean;
+  // ---- Komunitas K1 (usage import runs) ----
+  /** Holds `accreditation.workspace.manage`: sees the SLiMS usage import runs (absent: does not). */
+  slimsUsage?: boolean;
+}
+
+/** The run kinds `viewer` may not see. */
+function hiddenKinds(viewer: RunViewer): string[] {
+  const hidden: string[] = [];
+  if (!viewer.migration) hidden.push('migration');
+  if (viewer.slimsUsage !== true) hidden.push('slims_usage');
+  return hidden;
 }
 
 /** The file extension of each export format (`marcjson` is MARC-in-JSON as JSON Lines). */
@@ -105,16 +118,18 @@ function parseCursor(cursor: string): { createdAt: number; id: string } {
 
 /**
  * A page of runs, newest first (see the top of this file): `q.kind` filters, `q.cursor` continues after the row it
- * names, `q.limit` rows at most. Migration runs only for a viewer with `catalog.migration.run`.
+ * names, `q.limit` rows at most. Migration runs only for a viewer with `catalog.migration.run`, usage import runs only for
+ * one with `accreditation.workspace.manage`.
  *
  * @throws DomainError `VALIDATION_FAILED` (`cursor`, `invalid`) for a cursor that does not parse
  */
 export async function listRuns(db: Db, q: RunListQuery, viewer: RunViewer): Promise<Paged<RunView>> {
   const after = q.cursor === undefined ? null : parseCursor(q.cursor);
-  if (q.kind === 'migration' && !viewer.migration) return { items: [], nextCursor: null };
+  const hidden = hiddenKinds(viewer);
+  if (q.kind !== undefined && hidden.includes(q.kind)) return { items: [], nextCursor: null };
   let query = db.selectFrom('catalog_runs as r').leftJoin('jobs as j', 'j.id', 'r.job_id').selectAll('r').select('j.status as job_status');
   if (q.kind !== undefined) query = query.where('r.kind', '=', q.kind);
-  else if (!viewer.migration) query = query.where('r.kind', '!=', 'migration');
+  else if (hidden.length > 0) query = query.where('r.kind', 'not in', hidden);
   if (after !== null) {
     query = query.where((eb) =>
       eb.or([eb('r.created_at', '<', after.createdAt), eb.and([eb('r.created_at', '=', after.createdAt), eb('r.id', '<', after.id)])]),
@@ -132,7 +147,7 @@ export async function listRuns(db: Db, q: RunListQuery, viewer: RunViewer): Prom
 /** The run `id` if `viewer` may see it (P2-27), else NOT_FOUND. */
 async function visibleRun(db: Db, id: string, viewer: RunViewer): Promise<RunRow> {
   const row = await getRun(db, id);
-  if (row === null || (row.kind === 'migration' && !viewer.migration)) throw runNotFound();
+  if (row === null || hiddenKinds(viewer).includes(row.kind)) throw runNotFound();
   return row;
 }
 

@@ -57,11 +57,15 @@ describe('the catalog routes in ALL_ROUTES (Wave 0)', () => {
     for (const route of [...CATALOG_ROUTES, ...OPAC_CATALOG_ROUTES]) expect(ALL_ROUTES).toContain(route);
   });
 
-  it('routes.ts spreads CATALOG_ROUTES before INSTALL_ROUTES, and OPAC_CATALOG_ROUTES right before OPAC_ROUTES', async () => {
+  it('routes.ts spreads CATALOG_ROUTES before INSTALL_ROUTES (only the community routes between), and OPAC_CATALOG_ROUTES right before OPAC_ROUTES', async () => {
     const text = await fsp.readFile(new URL('../../src/routes.ts', import.meta.url), 'utf8');
     const spreads = [...text.matchAll(/^\s*\.\.\.([A-Z_]+)|^\s*\.\.\.(testOnlyRoutes)\(\)/gm)].map((m) => m[1] ?? m[2]);
     expect(spreads.indexOf('CATALOG_ROUTES')).toBeGreaterThan(spreads.indexOf('DIAGNOSTICS_ROUTES'));
-    expect(spreads.indexOf('CATALOG_ROUTES')).toBe(spreads.indexOf('INSTALL_ROUTES') - 1);
+    expect(spreads.slice(spreads.indexOf('CATALOG_ROUTES'), spreads.indexOf('INSTALL_ROUTES') + 1)).toEqual([
+      'CATALOG_ROUTES',
+      'KOMUNITAS_ROUTES',
+      'INSTALL_ROUTES',
+    ]);
     expect(spreads.indexOf('OPAC_CATALOG_ROUTES')).toBe(spreads.indexOf('OPAC_ROUTES') - 1);
   });
 });
@@ -206,7 +210,7 @@ describe('the boot hook', () => {
     expect(c.markHealthy).toHaveBeenCalledTimes(1);
     await vi.waitFor(async () => {
       const line = (await serverLog(dirs.dataDir)).find((l) => l['msg'] === 'catalog boot hook failed');
-      expect(line).toMatchObject({ level: 'error', error: { name: 'Error' } });
+      expect(line).toMatchObject({ level: 'error', error: { errorName: 'Error' } });
     });
   });
 });

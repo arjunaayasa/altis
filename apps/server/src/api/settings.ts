@@ -1,6 +1,7 @@
 import { groupKeys, readSettings, writeSettings, type SettingKey } from '@altis/core';
 import { DomainError, isDomainError } from '@altis/shared';
 import {
+  AccreditationSettingsBody,
   CatalogSettingsBody,
   EmailSettingsBody,
   LibrarySettingsBody,
@@ -34,8 +35,10 @@ import { SYSTEM_CONFIG_ROUTES } from './system-config.js';
 //   cache's 30 s). `PUT settings/security` needs a reauth (§7.3). They answer the changed keys, a small body whatever
 //   the texts hold (an idempotency `store` response is at most 60 000 bytes).
 // - Phase 2 (Task 2): `PUT settings/catalog` (`settings.catalog.put`), whose `sru.allowPrivateHosts` only a super admin
-//   may change (M11), and `GET catalog/config` (`catalog.config`, `catalog.records.read`, P2-26) for the catalog
-//   screens.
+//   may change (M11), and `GET catalog/config` (`catalog.config`, `catalog.records.read`) for the catalog
+//   screens, which need some of the catalogue settings without `system.settings.read`.
+// - Reports and accreditation: `PUT settings/accreditation` (`settings.accreditation.put`) for the sixteen settings of
+//   the accreditation group; `GET settings/accreditation` is the same settings.get.
 
 const SETTINGS_PATH = '/api/v1/settings';
 
@@ -87,6 +90,25 @@ const FIELDS: Readonly<Record<SettingsGroupName, FieldMap>> = Object.freeze({
     [['isbn', 'arsyaEnabled'], 'catalog.isbn.arsyaEnabled'],
     [['attachment', 'maxMb'], 'catalog.attachment.maxMb'],
     [['dedupe', 'threshold'], 'catalog.dedupe.threshold'],
+  ],
+  // ---- Komunitas K1 (settings) ----
+  accreditation: [
+    [['schoolYearStartMonth'], 'accreditation.schoolYearStartMonth'],
+    [['fiction', 'collectionTypeCodes'], 'accreditation.fiction.collectionTypeCodes'],
+    [['fiction', 'callNumberPrefixes'], 'accreditation.fiction.callNumberPrefixes'],
+    [['fiction', 'ddcPrefixes'], 'accreditation.fiction.ddcPrefixes'],
+    [['referenceCollectionTypeCodes'], 'accreditation.referenceCollectionTypeCodes'],
+    [['electronicMaterialTypeCodes'], 'accreditation.electronicMaterialTypeCodes'],
+    [['usedUnit'], 'accreditation.usedUnit'],
+    [['websiteFeatures'], 'accreditation.websiteFeatures'],
+    [['liveFrom'], 'accreditation.liveFrom'],
+    [['evidence', 'maxMb'], 'accreditation.evidence.maxMb'],
+    [['evidence', 'componentLimitMb'], 'accreditation.evidence.componentLimitMb'],
+    [['textbookCollectionTypeCodes'], 'accreditation.textbookCollectionTypeCodes'],
+    [['k7', 'processedThresholdPct'], 'accreditation.k7.processedThresholdPct'],
+    [['undatedShareMaxPct'], 'accreditation.undatedShareMaxPct'],
+    [['visits', 'dedupeLegacy'], 'accreditation.visits.dedupeLegacy'],
+    [['unknownMemberGroup', 'default'], 'accreditation.unknownMemberGroup.default'],
   ],
 });
 
@@ -250,7 +272,7 @@ const CATALOG_CONFIG_KEYS = [
 ] as const satisfies readonly SettingKey[];
 
 /**
- * GET catalog/config (decision P2-26): what the catalog screens need of the settings, for a holder of
+ * GET catalog/config: what the catalog screens need of the settings, for a holder of
  * `catalog.records.read` without `system.settings.read`. Profiles and SRU servers by id and name only: no SRU URL and
  * no `allowPrivateHosts` reach a reader. Read afresh, as `GET settings/:group` is.
  */
@@ -292,5 +314,7 @@ export const SETTINGS_ROUTES: RouteDecl[] = [
   // `sru/test` into a probe of the internal network).
   settingsPut('catalog', CatalogSettingsBody, { superAdminOnly: ['catalog.sru.allowPrivateHosts'] }),
   catalogConfig,
+  // ---- Komunitas K1 (settings) ----
+  settingsPut('accreditation', AccreditationSettingsBody),
   ...SYSTEM_CONFIG_ROUTES,
 ];

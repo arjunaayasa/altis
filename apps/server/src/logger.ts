@@ -1,4 +1,5 @@
 import { createRotatingFile, dataPath, type RotatingFile } from '@altis/platform';
+import { personalLogKeys } from '@altis/db';
 import { isDomainError } from '@altis/shared';
 import type { Config } from './config.js';
 import { loggableError } from './safe-error.js';
@@ -16,6 +17,12 @@ import { loggableError } from './safe-error.js';
 // over-redacts on purpose. Message texts and error messages are not inspected: do not put a secret in either. The
 // one exception is a raw database driver error (its message and SQL can hold the values of a statement): it is
 // written as its safe fields only, wherever it is, a cause chain included (safe-error.ts loggableError).
+//
+// Personal data is redacted by key name too: a field whose name, lower-cased and without underscores, is the name of a
+// registered personal column or JSON path (`personalLogKeys()` of @altis/db: `name`, `note`, `address`,
+// `appointment_ref` and `appointmentRef` alike, ...) has its value replaced the same way, at every depth. This also
+// over-redacts on purpose (`name` is personal far more often than not); a field that is not personal is logged under
+// another key (`schedule`, `errorName`). The class name of an error (its `name`) is kept.
 //
 // With `stdout: true` (ruling R59) every line is also written, as it is in the file, to process.stdout.
 //
@@ -56,6 +63,14 @@ const RANK: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 4
 
 const REDACT = /pass|secret|token|key|authorization|cookie|email|phone/i;
 const REDACTED = '[redacted]';
+
+/** The registered personal column names and JSON paths, lower case without underscores (read once). */
+const PERSONAL_KEYS: ReadonlySet<string> = personalLogKeys();
+
+/** True when the value of a field named `key` is not written: a secret-like name, or a personal column's. */
+function redacted(key: string): boolean {
+  return REDACT.test(key) || PERSONAL_KEYS.has(key.toLowerCase().replace(/_/g, ''));
+}
 
 /** Levels of nesting kept below a field; a container deeper than this becomes "[max depth]". */
 const MAX_DEPTH = 6;
@@ -111,15 +126,19 @@ function serializeError(error: Error, depth: number, path: Set<object>): Record<
   return Object.fromEntries(entries);
 }
 
-function serializeObject(object: object, depth: number, path: Set<object>): Record<string, unknown> {
+/**
+ * The fields of a plain object, redacted by name. `errorShaped`: the object is an error made safe to log (safe-error.ts
+ * loggableError) or one of its links, whose `name` is the error's class and is kept.
+ */
+function serializeObject(object: object, depth: number, path: Set<object>, errorShaped = false): Record<string, unknown> {
   const keys = Object.keys(object);
   const entries: [string, unknown][] = [];
   for (const key of keys.slice(0, MAX_ITEMS)) {
-    if (REDACT.test(key)) {
+    if (redacted(key) && !(key === 'name' && errorShaped)) {
       entries.push([key, REDACTED]);
       continue;
     }
-    const value = serializeChild(readProperty(object, key), depth + 1, path);
+    const value = serializeChild(readProperty(object, key), depth + 1, path, errorShaped && (key === 'cause' || key === 'errors'));
     if (value !== undefined) entries.push([key, value]);
   }
   if (keys.length > MAX_ITEMS) entries.push(['…', `[+${keys.length - MAX_ITEMS} more]`]);
@@ -136,9 +155,9 @@ function readProperty(object: object, key: string): unknown {
 }
 
 /** `serialize`, made safe: a value whose inspection throws (a Proxy, a hostile getter) becomes "[unserializable]". */
-function serializeChild(value: unknown, depth: number, path: Set<object>): unknown {
+function serializeChild(value: unknown, depth: number, path: Set<object>, errorShaped = false): unknown {
   try {
-    return serialize(value, depth, path);
+    return serialize(value, depth, path, errorShaped);
   } catch {
     return UNSERIALIZABLE;
   }
@@ -148,7 +167,7 @@ function serializeChild(value: unknown, depth: number, path: Set<object>): unkno
  * A JSON-safe copy of `value`, or `undefined` when it should be left out (undefined, functions). `path` holds the
  * containers being walked right now, so that only a real cycle is called "[circular]".
  */
-function serialize(value: unknown, depth: number, path: Set<object>): unknown {
+function serialize(value: unknown, depth: number, path: Set<object>, errorShaped = false): unknown {
   switch (typeof value) {
     case 'string':
       return clip(value);
@@ -175,14 +194,14 @@ function serialize(value: unknown, depth: number, path: Set<object>): unknown {
     if (object instanceof Error) {
       // A raw database driver error, or one with such an error below it, is written as its safe fields only.
       const safe = loggableError(object);
-      return safe === object ? serializeError(object, depth, path) : serializeObject(safe as object, depth, path);
+      return safe === object ? serializeError(object, depth, path) : serializeObject(safe as object, depth, path, true);
     }
     if (Array.isArray(object)) {
-      const items: unknown[] = object.slice(0, MAX_ITEMS).map((item) => serializeChild(item, depth + 1, path) ?? null);
+      const items: unknown[] = object.slice(0, MAX_ITEMS).map((item) => serializeChild(item, depth + 1, path, errorShaped) ?? null);
       if (object.length > MAX_ITEMS) items.push(`[+${object.length - MAX_ITEMS} more]`);
       return items;
     }
-    return serializeObject(object, depth, path);
+    return serializeObject(object, depth, path, errorShaped);
   } finally {
     path.delete(object);
   }
@@ -194,7 +213,7 @@ function fieldEntries(fields: LogFields): [string, unknown][] {
   const path = new Set<object>();
   for (const key of Object.keys(fields)) {
     const name = RESERVED.has(key) ? `_${key}` : key;
-    if (REDACT.test(key)) {
+    if (redacted(key)) {
       entries.push([name, REDACTED]);
       continue;
     }

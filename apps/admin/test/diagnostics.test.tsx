@@ -4,6 +4,7 @@ import type { DiagnosticsReport, ProbePollResponse } from '@altis/shared/api/dia
 import type { OpView } from '@altis/shared/api/ops';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { translate } from '@/i18n';
 import { adminMe, problem, signedIn, startApp, superMe, type FakeHandler } from './fake-api';
 
 // Diagnostik (spec §11, §13.3 "Diagnostik: §11; aktifkan SSE (.manage), konfirmasi 'jam sekarang benar'", §9.4
@@ -58,6 +59,8 @@ function report(o: Partial<DiagnosticsReport> = {}): DiagnosticsReport {
     // ---- Phase 2 (catalog): Task 3 (B2): null until the search provider fills them (Task 15) ----
     search: null,
     oai: null,
+    // ---- Komunitas K1 (edition lane) ----
+    editionLane: { applied: 0 },
     ...o,
   };
 }
@@ -90,7 +93,7 @@ function op(o: Partial<OpView> = {}): OpView {
     error: null,
     pointOfNoReturn: false,
     backupId: null,
-    actor: { type: 'staff', id: 'U1' },
+    actor: { type: 'staff', id: adminMe().user.id },
     mode: 'external',
     csrfToken: null,
     driveable: false,
@@ -177,6 +180,18 @@ describe('the report', () => {
     const oai = document.querySelector('[data-diagnostics-block="oai"]') as HTMLElement;
     expect(within(oai).getByText('Aktif')).toBeTruthy();
     expect(within(oai).getByText('Belum diisi')).toBeTruthy();
+  });
+});
+
+// ---- Komunitas K1 (edition lane) ----
+describe('the migrations of another lane', () => {
+  it('shows how many the database records, in Indonesian and in English', async () => {
+    startApp({ me: adminMe(), path: '/admin/diagnostics', routes: routes(() => report({ editionLane: { applied: 2 } })) });
+    const line = await screen.findByText('Migrasi jalur lain terpasang: 2');
+    const block = line.closest('[data-diagnostics-block]') as HTMLElement;
+    expect(block.getAttribute('data-diagnostics-block')).toBe('editionLane');
+    expect(within(block).getByRole('heading', { name: 'Jalur migrasi lain' })).toBeTruthy();
+    expect(translate('en', 'diagnostics.edition_lane.applied', { count: 0 })).toBe('Migrations from another lane installed: 0');
   });
 });
 
@@ -310,6 +325,25 @@ describe('Jam sekarang benar', () => {
     startApp({ me: adminMe(), path: '/admin/diagnostics', routes: routes(() => report()) });
     expect(await screen.findByText('Tidak ada pergeseran jam yang terdeteksi.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Jam sekarang benar' })).toBeNull();
+  });
+});
+
+// ---- Komunitas K1 (date-based jobs) ----
+describe('the date-based jobs held back by a clock anomaly', () => {
+  const POSTPONED = 'Tugas berbasis tanggal ditunda: jam sistem melompat';
+
+  it('the clock block says so while the anomaly is set, in Indonesian and in English', async () => {
+    const anomaly = { detectedAt: AT - 600_000, maxSeen: AT + 3_600_000 };
+    startApp({ me: adminMe(), path: '/admin/diagnostics', routes: routes(() => report({ clock: { anomaly } })) });
+    const line = await screen.findByText(POSTPONED);
+    expect(line.closest('[data-diagnostics-block]')?.getAttribute('data-diagnostics-block')).toBe('clock');
+    expect(translate('en', 'jobs.message.reports.housekeeping.date_jobs_postponed')).toBe('Date-based jobs postponed: the system clock jumped');
+  });
+
+  it('and not without an anomaly', async () => {
+    startApp({ me: adminMe(), path: '/admin/diagnostics', routes: routes(() => report()) });
+    expect(await screen.findByText('Tidak ada pergeseran jam yang terdeteksi.')).toBeTruthy();
+    expect(screen.queryByText(POSTPONED)).toBeNull();
   });
 });
 

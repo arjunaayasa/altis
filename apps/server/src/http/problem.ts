@@ -135,6 +135,9 @@ export const PROBLEM_REASONS: Readonly<Partial<Record<ErrorCode, readonly string
   FEED_UNREACHABLE: Object.freeze(['no_feed_url', 'network', 'status', 'timeout', 'too_large', 'insecure']),
   ROLLBACK_UNAVAILABLE: Object.freeze(['no_previous', 'incompatible', 'missing', 'pending']),
   UPDATE_HIDDEN: Object.freeze(['image']),
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  // A real SLiMS migration run that skips the catalogue follows a sync dry run that found catalogue changes.
+  MIGRATION_PRECHECK_FAILED: Object.freeze(['catalog_changed']),
 });
 
 /** The 5xx codes whose `reason` is sent (S7): all the others keep it out, as R53 says. */

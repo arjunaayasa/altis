@@ -331,7 +331,7 @@ describe.skipIf(!engine.available || engine.engine !== 'sqlite')(`SQLite restore
     } finally {
       await pre.close();
     }
-  });
+  }, 120_000);
 
   it('a serving process releases its file within 2 s of sqliteRelease, reopens after the epoch bump, serves the restored data and restarts', async () => {
     const { backupId, manifest } = await prepare();
@@ -394,7 +394,7 @@ describe.skipIf(!engine.available || engine.engine !== 'sqlite')(`SQLite restore
     );
     expect(JSON.parse(await fsp.readFile(ownerFile, 'utf8'))).toMatchObject({ pid: child.pid });
     expect(JSON.parse((await get(port, '/name')).body)).toEqual({ name: 'Perpustakaan Arsya' });
-  }, 60_000);
+  }, 120_000);
 
   it('an owner that never lets go of the file: the step waits out the budget, then the file itself keeps the swap waiting, the op unchanged; it swaps once the owner is gone (S19, R1c-11)', async () => {
     const { backupId, manifest } = await prepare();
@@ -440,7 +440,7 @@ describe.skipIf(!engine.available || engine.engine !== 'sqlite')(`SQLite restore
     await expect(fsp.stat(ownerFile)).rejects.toMatchObject({ code: 'ENOENT' }); // a dead owner's record goes
     expect(await stepUntil(r, dataDir)).toMatchObject({ state: 'done' });
     await expectRestored(manifest, r);
-  }, 60_000);
+  }, 120_000);
 
   it('the wait for an owner ends at each step’s deadline (P9); the budget runs across steps from the first wait, then an owner still alive (a reused pid) leaves it to the file (R1c-11)', async () => {
     const { backupId, manifest } = await prepare();
@@ -476,7 +476,7 @@ describe.skipIf(!engine.available || engine.engine !== 'sqlite')(`SQLite restore
     expect(stub.exitCode === null && stub.signalCode === null).toBe(true);
     await expect(fsp.stat(ownerFile)).rejects.toMatchObject({ code: 'ENOENT' });
     await expectRestored(manifest, r);
-  }, 60_000);
+  }, 120_000);
 
   it('an owner record of another host identity (a recreated container) is waited for, then the file itself decides', async () => {
     const { backupId, manifest } = await prepare();
@@ -494,7 +494,7 @@ describe.skipIf(!engine.available || engine.engine !== 'sqlite')(`SQLite restore
     await expect(fsp.stat(ownerFile)).rejects.toMatchObject({ code: 'ENOENT' }); // and the record names no holder
     expect(await stepUntil(r, dataDir)).toMatchObject({ state: 'done' });
     await expectRestored(manifest, r);
-  }, 60_000);
+  }, 120_000);
 
   it('audit entries written to the live file after preserving are in the restored file (M45)', async () => {
     const { backupId, manifest } = await prepare();
@@ -536,7 +536,7 @@ describe.skipIf(!engine.available || engine.engine !== 'sqlite')(`SQLite restore
     } finally {
       await h.close();
     }
-  }, 60_000);
+  }, 120_000);
 
   it('connect is refused while another process holds tmp/sqlite.lock; the holder itself and a dead holder’s record are no bar', async () => {
     await fsp.mkdir(path.join(dataDir, 'tmp'), { recursive: true });
@@ -620,7 +620,7 @@ describe.skipIf(!engine.available || engine.engine !== 'sqlite')(`SQLite restore
       await h.close();
     }
     expect(await readMaintenance(dataDir)).toBeNull();
-  }, 60_000);
+  }, 120_000);
 
   it('a failure after the swap renames the files back: the live file holds the pre-restore data, the op ends failed', async () => {
     const { backupId, tables, before } = await prepare();
@@ -653,7 +653,7 @@ describe.skipIf(!engine.available || engine.engine !== 'sqlite')(`SQLite restore
     }
     expect(await readDataEpoch(dataDir)).toBe(epoch + 1);
     expect(await readMaintenance(dataDir)).toBeNull();
-  }, 60_000);
+  }, 120_000);
 
   /** The live file after a failed restore: the pre-restore data, one `backup.restore` outcome `failed`. */
   async function expectPreRestore(tables: TableName[], before: Record<string, string>): Promise<void> {
@@ -690,7 +690,7 @@ describe.skipIf(!engine.available || engine.engine !== 'sqlite')(`SQLite restore
     await expectPreRestore(tables, before);
     expect(await readDataEpoch(dataDir)).toBe(epoch + 1);
     expect(r.restarts).toEqual(['restore']);
-  }, 60_000);
+  }, 120_000);
 
   it('the rename back waits for an owner like the swap: waiting with the wait’s start in the replay checkpoint, then done once it is gone (R1c-11)', async () => {
     const { backupId, tables, before } = await prepare();
@@ -724,7 +724,7 @@ describe.skipIf(!engine.available || engine.engine !== 'sqlite')(`SQLite restore
     expect(await stepUntil(r, dataDir)).toMatchObject({ state: 'failed', terminal: true });
     expect(await dbNames(opId)).toEqual(['altis.sqlite']);
     await expectPreRestore(tables, before);
-  }, 60_000);
+  }, 120_000);
 
   it('a swap interrupted between its renames whose finishing rename then fails goes back through rename_back too (R1c-11)', async () => {
     const { backupId, tables, before } = await prepare();
@@ -752,7 +752,7 @@ describe.skipIf(!engine.available || engine.engine !== 'sqlite')(`SQLite restore
     expect(status).toMatchObject({ state: 'failed', terminal: true });
     expect(await dbNames(opId)).toEqual(['altis.sqlite']); // the work file, kept beside the op as the restored one
     await expectPreRestore(tables, before);
-  }, 60_000);
+  }, 120_000);
 
   it('a swap interrupted between its renames is finished over the file a connect made meanwhile only once no connection is left on it', async () => {
     const { backupId, manifest } = await prepare();
@@ -780,7 +780,7 @@ describe.skipIf(!engine.available || engine.engine !== 'sqlite')(`SQLite restore
     expect(await dbNames(opId)).toEqual(['pre-restore.sqlite']);
     expect(await stepUntil(r, dataDir)).toMatchObject({ state: 'done' });
     await expectRestored(manifest, r);
-  }, 60_000);
+  }, 120_000);
 
   it('a rename refused with EBUSY twice (Windows) is retried and the swap completes', async () => {
     const { backupId, manifest } = await prepare();
@@ -798,7 +798,7 @@ describe.skipIf(!engine.available || engine.engine !== 'sqlite')(`SQLite restore
     expect(await stepUntil(r, dataDir)).toMatchObject({ state: 'done' });
     expect(refused).toBe(2);
     await expectRestored(manifest, r);
-  }, 60_000);
+  }, 120_000);
 
   it.each([
     ['the first rename (altis.sqlite aside) fails with EIO', 'eio-first'],

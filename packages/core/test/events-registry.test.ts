@@ -34,8 +34,15 @@ describe('EVENT_TYPES (R1c-8)', () => {
     ]) {
       expect(EVENT_TYPES).toContain(type);
     }
-    // Phase 2 (its spec §12.6), appended after 1c's, in this order: the `catalog` channel's hints.
-    expect(EVENT_TYPES.slice(-3)).toEqual(['catalog.record.changed', 'catalog.item.changed', 'catalog.bulk.changed']);
+    // Phase 2 (its spec §12.6), appended after 1d's, in this order: the `catalog` channel's hints.
+    const phase2 = EVENT_TYPES.indexOf('catalog.record.changed');
+    expect(EVENT_TYPES[phase2 - 1]).toBe('update.checked');
+    expect(EVENT_TYPES.slice(phase2, phase2 + 3)).toEqual(['catalog.record.changed', 'catalog.item.changed', 'catalog.bulk.changed']);
+    // Reports and accreditation, appended after Phase 2's: the `accreditation` channel's hint that a period's results
+    // changed.
+    const k1 = EVENT_TYPES.indexOf('accreditation.results.changed');
+    expect(k1).toBe(phase2 + 3);
+    expect(EVENT_TYPES.slice(k1, k1 + 1)).toEqual(['accreditation.results.changed']);
     expect(new Set(EVENT_TYPES).size).toBe(EVENT_TYPES.length);
     expect(Object.isFrozen(EVENT_TYPES)).toBe(true);
   });

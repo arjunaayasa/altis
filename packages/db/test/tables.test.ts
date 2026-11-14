@@ -38,6 +38,19 @@ import {
   CATALOG_UNIQUE,
   catalogSampleRows,
 } from './fixtures/catalog-tables.js';
+// ---- Komunitas K1 (tables) ----
+import {
+  K1_CLASSES,
+  K1_COLUMNS,
+  K1_DEFAULTS,
+  K1_FOREIGN_KEYS,
+  K1_INDEXES,
+  K1_NON_BINARY_KEY_COLUMNS,
+  K1_PRIMARY_KEYS,
+  K1_TABLES_BY_MIGRATION,
+  K1_UNIQUE,
+  k1SampleRows,
+} from './fixtures/komunitas-k1-tables.js';
 import { MIGRATION_NAME, runMigrations } from '../src/migrator.js';
 import { PHASE1_MIGRATIONS } from '../src/migrations/index.js';
 import { SECRET_COLUMNS, SETTINGS_SCOPE_CLASS, TABLE_CLASSES, type SettingsScope, type TableName } from '../src/registry.js';
@@ -47,7 +60,9 @@ import { withTx } from '../src/tx.js';
 // The Phase 1 tables (spec §6.5): the nine migrations (0008 adds an index only, 0009 a column and an index), the
 // table-class registry, the secret-column registry and the hand-written Kysely types, on the engine picked by
 // ALTIS_TEST_DB (default sqlite); see tools/test/test-db.ts. Phase 2 (catalog, Task 1) adds the 27 tables of
-// 0020–0025, three columns of 0026 and the seeds of 0027 through fixtures/catalog-tables.ts.
+// 0020–0025, three columns of 0026 and the seeds of 0027 through fixtures/catalog-tables.ts. Komunitas K1 adds the 14
+// tables of 0030–0032 (reports and accreditation) and the columns and index of 0033 through
+// fixtures/komunitas-k1-tables.ts.
 
 const ctx = testDbContext();
 
@@ -101,6 +116,11 @@ const EXPECTED_CLASSES = {
   schema_tables: 'migrator',
   // ---- Phase 2 (catalog): Task 1 (Phase 2 spec §2.3) ----
   ...CATALOG_CLASSES,
+  // ---- Komunitas K1 (tables) ----
+  ...K1_CLASSES,
+  // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping, made by the runner ----
+  schema_migrations_edition: 'migrator',
+  schema_migrations_edition_lock: 'migrator',
 };
 
 /** Which migration creates which tables, in creation order (parents before the tables that reference them). */
@@ -118,6 +138,8 @@ const TABLES_BY_MIGRATION: Record<string, TableName[]> = {
   '0009_ops_jobs': [],
   // ---- Phase 2 (catalog): Task 1 (0020–0027) ----
   ...CATALOG_TABLES_BY_MIGRATION,
+  // ---- Komunitas K1 (tables) ----
+  ...K1_TABLES_BY_MIGRATION,
 };
 
 /** The created_by of the tables the runner makes itself (ensureBootstrap, ruling R27). */
@@ -126,6 +148,9 @@ const RUNNER_TABLES: Record<string, string> = {
   schema_meta: 'bootstrap',
   schema_migrations: 'migrator',
   schema_migrations_lock: 'migrator',
+  // ---- Komunitas K1 (edition lane) ----
+  schema_migrations_edition: 'migrator',
+  schema_migrations_edition_lock: 'migrator',
 };
 
 /** The primary key columns of every table, in key order. */
@@ -164,6 +189,11 @@ const EXPECTED_PRIMARY_KEYS: Record<TableName, string[]> = {
   schema_tables: ['name'],
   // ---- Phase 2 (catalog): Task 1 ----
   ...CATALOG_PRIMARY_KEYS,
+  // ---- Komunitas K1 (tables) ----
+  ...K1_PRIMARY_KEYS,
+  // ---- Komunitas K1 (edition lane) ----
+  schema_migrations_edition: ['name'],
+  schema_migrations_edition_lock: ['id'],
 };
 
 interface IndexFacts {
@@ -234,6 +264,8 @@ const EXPECTED_INDEXES: IndexFacts[] = [
   ...PHASE1_INDEXES,
   // ---- Phase 2 (catalog): Task 1 (its full-text indexes: fulltext.test.ts) ----
   ...CATALOG_INDEXES,
+  // ---- Komunitas K1 (tables) ----
+  ...K1_INDEXES,
 ].sort((a, b) => a.table.localeCompare(b.table) || a.name.localeCompare(b.name));
 
 /** The full-text indexes, which {@link indexes} leaves out (an expression index has no column list on PostgreSQL). */
@@ -258,9 +290,18 @@ const EXPECTED_FOREIGN_KEYS: ForeignKeyFacts[] = [
   { table: 'user_roles', column: 'user_id', refTable: 'staff_users', refColumn: 'id', onDelete: 'cascade' },
   // ---- Phase 2 (catalog): Task 1 ----
   ...CATALOG_FOREIGN_KEYS,
+  // ---- Komunitas K1 (tables) ----
+  ...K1_FOREIGN_KEYS,
 ].sort((a, b) => a.table.localeCompare(b.table) || a.column.localeCompare(b.column));
 
-type MigratorTable = 'schema_migrations' | 'schema_migrations_lock' | 'schema_meta' | 'schema_tables';
+type MigratorTable =
+  | 'schema_migrations'
+  | 'schema_migrations_lock'
+  | 'schema_meta'
+  | 'schema_tables'
+  // ---- Komunitas K1 (edition lane) ----
+  | 'schema_migrations_edition'
+  | 'schema_migrations_edition_lock';
 /** The tables the Phase 1 migrations make. */
 type Phase1Table = Exclude<TableName, MigratorTable>;
 
@@ -535,6 +576,8 @@ const EXPECTED_COLUMNS: Record<Phase1Table, Record<string, string>> = {
   },
   // ---- Phase 2 (catalog): Task 1 ----
   ...CATALOG_COLUMNS,
+  // ---- Komunitas K1 (tables) ----
+  ...K1_COLUMNS,
 };
 
 /**
@@ -596,9 +639,13 @@ describe('the table-class registry and the Phase 1 migration list (spec §6.5)',
     expect(Object.keys(PHASE1_MIGRATIONS).sort()).toEqual(MIGRATION_NAMES);
     expect(LAST_MIGRATION).toBe(MIGRATION_NAMES.at(-1));
     // Phase 2's ten migrations, in its reserved range 0020–0039 (P2-06; 0028: Task 39's indexes; 0029: the token version).
-    const catalog = MIGRATION_NAMES.filter((name) => name >= '0020' && name < '0040');
+    const catalog = MIGRATION_NAMES.filter((name) => name >= '0020' && name < '0030');
     expect(catalog).toEqual(Object.keys(CATALOG_TABLES_BY_MIGRATION));
     expect(catalog.at(-1)).toBe('0029_search_token_version');
+    // Komunitas K1: reports and accreditation in its range 0030–0039; 0033 adds columns and an index only.
+    const k1 = MIGRATION_NAMES.filter((name) => name >= '0030' && name < '0040');
+    expect(k1).toEqual(Object.keys(K1_TABLES_BY_MIGRATION));
+    expect(k1.at(-1)).toBe('0033_catalog_accred_fields');
     for (const [name, m] of Object.entries(PHASE1_MIGRATIONS)) {
       expect(name).toMatch(MIGRATION_NAME);
       expect(typeof m.up).toBe('function');
@@ -1165,6 +1212,8 @@ function sampleRows(): { [T in RoundTripTable]: Selectable<DB[T]>[] } {
     ],
     // ---- Phase 2 (catalog): Task 1 (locations reference the branch above) ----
     ...catalogSampleRows({ branchId, staffId }),
+    // ---- Komunitas K1 (tables) ----
+    ...k1SampleRows({ branchId, staffId }),
   };
 }
 
@@ -1214,6 +1263,8 @@ const DEFAULTS: { [T in RoundTripTable]: { [K in GeneratedKeys<DB[T]>]: SelectTy
   license_state: { clock_high_water: 0 },
   // ---- Phase 2 (catalog): Task 1 (parents first: the defaults test inserts in this order) ----
   ...CATALOG_DEFAULTS,
+  // ---- Komunitas K1 (tables) ----
+  ...K1_DEFAULTS,
 };
 
 /** One row of each table the runner fills itself, typed by `DB`: their keys are the columns the type declares. */
@@ -1222,6 +1273,9 @@ const RUNNER_ROW_SHAPES: { [T in MigratorTable | 'audit_head']: Selectable<DB[T]
   schema_meta: { id: 1, schema_version: '0007', min_code_version: '0.0.0', install_id: null },
   schema_migrations: { name: '0001_x', timestamp: '2026-01-01T00:00:00.000Z' },
   schema_migrations_lock: { id: 'migration_lock', is_locked: 0 },
+  // ---- Komunitas K1 (edition lane): empty while this code ships no migration of the other lane (see the test below) ----
+  schema_migrations_edition: { name: 'e0001_x', timestamp: '2026-01-01T00:00:00.000Z' },
+  schema_migrations_edition_lock: { id: 'migration_lock', is_locked: 0 },
   audit_head: { id: 1, last_seq: 0, last_hash: GENESIS_HASH },
 };
 
@@ -1464,7 +1518,13 @@ describe.skipIf(!ctx.available)(`Phase 1 tables [${engineLabel()}]`, () => {
   });
 
   it('applies every migration on an empty database', () => {
-    expect(firstRun).toEqual({ mode: 'migrated', applied: MIGRATION_NAMES, schemaVersion: LAST_SCHEMA_VERSION, minCodeVersion: '0.0.0' });
+    expect(firstRun).toEqual({
+      mode: 'migrated',
+      applied: MIGRATION_NAMES,
+      schemaVersion: LAST_SCHEMA_VERSION,
+      minCodeVersion: '0.0.0',
+      edition: { mode: 'empty', applied: [] },
+    });
   });
 
   it('leaves exactly the tables of TABLE_CLASSES in the database (schema_migrations* included, R4)', async () => {
@@ -1507,6 +1567,8 @@ describe.skipIf(!ctx.available)(`Phase 1 tables [${engineLabel()}]`, () => {
         'custom_field_defs(entity, code_key)',
         // ---- Phase 2 (catalog): Task 1 ----
         ...CATALOG_UNIQUE,
+        // ---- Komunitas K1 (tables) ----
+        ...K1_UNIQUE,
       ].sort(),
     );
   });
@@ -1539,8 +1601,11 @@ describe.skipIf(!ctx.available)(`Phase 1 tables [${engineLabel()}]`, () => {
     async () => {
       // The key and token columns 0001–0008 and the runner made (`since` at most 0008): the ones 0009 converts. A later
       // migration (Phase 2's 0020–0027) makes its own in "C" from the start, and 0009 (frozen, R44) does not name them.
+      // The other migration lane's runner tables came after 0009: the runner made them in "C" from the start.
+      const later = new Set<string>(['schema_migrations_edition', 'schema_migrations_edition_lock']);
       const binary = Object.entries(TABLE_COLUMNS).flatMap(([table, columns]) =>
         columns
+          .filter(() => !later.has(table))
           .filter((c) => c.kind === 'id' || c.kind === 'ulid' || c.kind === 'char' || c.kind === 'key191')
           .filter((c) => c.since.slice(0, 4) <= '0008')
           .map((c) => ({ table, column: c.name, type: (c.kind === 'key191' ? 'varchar(191)' : `char(${String(c.length)})`) as ColumnDataType })),
@@ -1621,7 +1686,10 @@ describe.skipIf(!ctx.available)(`Phase 1 tables [${engineLabel()}]`, () => {
       expect(textual.map((r) => `${r.table}.${r.col}`)).toEqual(
         expect.arrayContaining(['user_roles.scope_key', 'custom_field_defs.entity', 'idempotency_keys.subject_type']),
       );
-      expect(textual.filter((r) => r.coll !== 'utf8mb4_bin')).toEqual([]);
+      // Komunitas K1: the named exceptions of usage_stats's primary key (codes and dates, see the fixture) are the only
+      // key columns that are not binary.
+      const nonBinary = textual.filter((r) => r.coll !== 'utf8mb4_bin').map((r) => `${r.table}.${r.col}`);
+      expect(nonBinary.sort()).toEqual(Object.keys(K1_NON_BINARY_KEY_COLUMNS).sort());
       const { rows: all } = await sql<{ table: string; col: string; coll: string }>`
         SELECT TABLE_NAME AS "table", COLUMN_NAME AS col, COLLATION_NAME AS coll FROM information_schema.COLUMNS
         WHERE TABLE_SCHEMA = DATABASE() AND COLLATION_NAME IS NOT NULL`.execute(h.db);
@@ -1764,13 +1832,21 @@ describe.skipIf(!ctx.available)(`Phase 1 tables [${engineLabel()}]`, () => {
 
   it("declares exactly the columns of the runner's tables and of audit_head in the DB type", async () => {
     for (const [t, shape] of Object.entries(RUNNER_ROW_SHAPES)) {
-      const row = await db.selectFrom(t as MigratorTable | 'audit_head').selectAll().executeTakeFirstOrThrow();
-      expect({ t, columns: Object.keys(row).sort() }).toEqual({ t, columns: Object.keys(shape).sort() });
+      const row = await db.selectFrom(t as MigratorTable | 'audit_head').selectAll().executeTakeFirst();
+      // The other lane's two tables hold no row while this code ships no migration of that lane: their catalog columns.
+      const columns = row === undefined ? Object.keys(await catalogColumns(t)) : Object.keys(row);
+      expect({ t, columns: columns.sort() }).toEqual({ t, columns: Object.keys(shape).sort() });
     }
   });
 
   it('a second run finds nothing to do', async () => {
-    expect(await migrate()).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: LAST_SCHEMA_VERSION, minCodeVersion: '0.0.0' });
+    expect(await migrate()).toEqual({
+      mode: 'up-to-date',
+      applied: [],
+      schemaVersion: LAST_SCHEMA_VERSION,
+      minCodeVersion: '0.0.0',
+      edition: { mode: 'empty', applied: [] },
+    });
   });
 
   it('every migration can run again without changing anything (idempotent)', async () => {

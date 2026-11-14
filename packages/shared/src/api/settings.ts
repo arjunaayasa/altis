@@ -10,6 +10,8 @@
  */
 import { z } from 'zod';
 import { localeField, timezoneField, ulidField } from './common.js';
+import { ACCRED_GROUPS } from '../accreditation-vocab.js';
+import { isCalendarDate } from '../dates.js';
 import type { Locale } from '../i18n/index.js';
 
 /**
@@ -23,6 +25,8 @@ export const SETTINGS_GROUPS = Object.freeze([
   'opac',
   // ---- Phase 2 (catalog): Task 2 ----
   'catalog',
+  // ---- Komunitas K1 (settings) ----
+  'accreditation',
 ] as const);
 
 export type SettingsGroupName = (typeof SETTINGS_GROUPS)[number];
@@ -180,6 +184,8 @@ export interface SettingsView {
   opac: OpacSettings;
   // ---- Phase 2 (catalog): Task 2 ----
   catalog: CatalogSettings;
+  // ---- Komunitas K1 (settings) ----
+  accreditation: AccreditationSettingsView;
 }
 
 /**
@@ -234,7 +240,7 @@ const barcodeAffixField = z.string().max(16).regex(/^[\x21-\x7E]*$/).toUpperCase
 
 /**
  * One barcode numbering pattern (`catalog.barcode.patterns`, §3.4): barcodes `<prefix><number zero-padded to
- * digits><suffix>`, numbered by the items service (decision P2-34).
+ * digits><suffix>`, numbered by the items service.
  */
 export const BarcodePattern = z.strictObject({
   id: catalogConfigIdField,
@@ -369,7 +375,7 @@ export const marcOrgCodeField = z.string().min(1).max(16).regex(/^[A-Za-z0-9-]*$
 /** `catalog.currency`: an ISO 4217 code. */
 export const currencyField = z.string().regex(/^[A-Z]{3}$/);
 
-/** `catalog.attachment.maxMb`: the largest attachment, 1-2048 MB (the context's static ceiling is 2 GiB, P2-22). */
+/** `catalog.attachment.maxMb`: the largest attachment, 1-2048 MB (the upload context's static ceiling is 2 GiB). */
 export const attachmentMaxMbField = z.int().min(1).max(2048);
 
 /** `catalog.dedupe.threshold`: the score from which two records are offered as duplicates, 50-100. */
@@ -397,7 +403,7 @@ export type CatalogSettingsBody = z.infer<typeof CatalogSettingsBody>;
 
 /** `GET settings/catalog`. */
 export interface CatalogSettings {
-  /** null: an export omits 003 and the 040 `$a` (decision P2-32). */
+  /** null: an export omits 003 and the 040 `$a`. */
   marcOrgCode: string | null;
   defaultMaterialTypeId: string | null;
   defaultCollectionTypeId: string | null;
@@ -412,7 +418,7 @@ export interface CatalogSettings {
 }
 
 /**
- * `GET catalog/config` (`catalog.records.read`, decision P2-26): what the catalog screens need of the settings without
+ * `GET catalog/config` (`catalog.records.read`): what the catalog screens need of the settings without
  * `system.settings.read`: the barcode patterns and the symbology, the label profiles and the SRU servers by name only
  * (no URL), the currency, the duplicate threshold and the defaults.
  */
@@ -427,4 +433,123 @@ export interface CatalogConfigView {
   sruServers: { id: string; name: string; enabled: boolean }[];
   /** `catalog.isbn.arsyaEnabled`: reserved, ignored by the community edition. */
   arsyaEnabled: boolean;
+}
+
+// ---- Komunitas K1 (settings) ----------------------------------------------------------------------------------------
+// The `accreditation` group: its value schemas, which the settings registry (packages/core/src/settings/registry.ts)
+// reuses, its strict body and its view. Every key is of scope `data` and none is a secret. The repeat window of member
+// visits (`visits.dedupeMinutes`, group `visits`) is registered too, but its group has no screen yet.
+
+/**
+ * A master code of a list setting (a collection type or a material type code): 1-16 printable ASCII characters,
+ * trimmed, stored upper case so it compares as the masters' code keys do.
+ */
+export const accredCodeField = z.string().trim().min(1).max(16).regex(/^[\x20-\x7E]*$/).toUpperCase();
+
+/** A list of master codes (at most 20). */
+export const accredCodeListField = z.array(accredCodeField).max(20);
+
+/** A call number or DDC prefix: 1-16 characters without a control character, trimmed. */
+export const accredPrefixField = z.string().trim().min(1).max(16).regex(/^\P{Cc}*$/u);
+
+/** `accreditation.schoolYearStartMonth`: the month a school year starts in, 1-12 (default July). */
+export const schoolYearStartMonthField = z.int().min(1).max(12);
+
+/** `accreditation.usedUnit`: collection use is counted per title or per copy. */
+export const USED_UNITS = Object.freeze(['titles', 'items'] as const);
+
+export type UsedUnit = (typeof USED_UNITS)[number];
+
+/** A social media address of the website features: an http(s) URL of at most 500 characters. */
+const socialUrlField = z
+  .string()
+  .max(500)
+  .check((ctx) => {
+    if (!isPlainHttpUrl(ctx.value)) ctx.issues.push({ code: 'invalid_format', format: 'url', input: ctx.value });
+  });
+
+/**
+ * `accreditation.websiteFeatures`: which OPAC page shows each feature of the library website the website indicator
+ * counts (profile, services, contact, online databases, FAQ), and up to five social media addresses.
+ */
+export const WebsiteFeatures = z.strictObject({
+  profilePageId: ulidField.optional(),
+  servicesPageId: ulidField.optional(),
+  contactPageId: ulidField.optional(),
+  databasesPageId: ulidField.optional(),
+  faqPageId: ulidField.optional(),
+  socialUrls: z.array(socialUrlField).max(5).optional(),
+});
+
+export type WebsiteFeatures = z.infer<typeof WebsiteFeatures>;
+
+/** A calendar date `YYYY-MM-DD`, or null (`accreditation.liveFrom`: the day the library started working in ALTIS). */
+export const calendarDateOrNull = z
+  .string()
+  .check((ctx) => {
+    if (!isCalendarDate(ctx.value)) ctx.issues.push({ code: 'invalid_format', format: 'date', input: ctx.value });
+  })
+  .nullable();
+
+/** `accreditation.evidence.maxMb` and `.componentLimitMb`: 1-100 MB. */
+export const evidenceMbField = z.int().min(1).max(100);
+
+/** `accreditation.k7.processedThresholdPct`: the share of fully processed copies a collection needs, 50-100 %. */
+export const processedThresholdPctField = z.int().min(50).max(100);
+
+/** `accreditation.undatedShareMaxPct`: above this share of copies without an acquisition date no suggestion is made. */
+export const undatedShareMaxPctField = z.int().min(0).max(100);
+
+/**
+ * `accreditation.unknownMemberGroup.default`: the group of visits by members deleted in SLiMS; `'auto'` reads as
+ * students in a school library and as none elsewhere; null counts them in no group.
+ */
+export const unknownMemberGroupField = z.enum([...ACCRED_GROUPS, 'auto']).nullable();
+
+/** `visits.dedupeMinutes`: a member's check-in within this many minutes of an earlier one is a repeat; 0 turns it off. */
+export const visitsDedupeMinutesField = z.int().min(0).max(720);
+
+/** `PUT settings/accreditation`: each key is its setting's name without `accreditation.`, nested at its dots. */
+export const AccreditationSettingsBody = z.strictObject({
+  schoolYearStartMonth: schoolYearStartMonthField.optional(),
+  fiction: z
+    .strictObject({
+      collectionTypeCodes: accredCodeListField.optional(),
+      callNumberPrefixes: z.array(accredPrefixField).max(20).optional(),
+      ddcPrefixes: z.array(accredPrefixField).max(50).optional(),
+    })
+    .optional(),
+  referenceCollectionTypeCodes: accredCodeListField.optional(),
+  electronicMaterialTypeCodes: accredCodeListField.optional(),
+  usedUnit: z.enum(USED_UNITS).optional(),
+  websiteFeatures: WebsiteFeatures.optional(),
+  liveFrom: calendarDateOrNull.optional(),
+  evidence: z.strictObject({ maxMb: evidenceMbField.optional(), componentLimitMb: evidenceMbField.optional() }).optional(),
+  textbookCollectionTypeCodes: accredCodeListField.optional(),
+  k7: z.strictObject({ processedThresholdPct: processedThresholdPctField.optional() }).optional(),
+  undatedShareMaxPct: undatedShareMaxPctField.optional(),
+  visits: z.strictObject({ dedupeLegacy: z.boolean().optional() }).optional(),
+  unknownMemberGroup: z.strictObject({ default: unknownMemberGroupField.optional() }).optional(),
+});
+
+export type AccreditationSettingsBody = z.infer<typeof AccreditationSettingsBody>;
+
+/** `GET settings/accreditation`. */
+export interface AccreditationSettingsView {
+  /** The month a school year starts in, 1-12 (default 7). */
+  schoolYearStartMonth: number;
+  /** How a title counts as fiction: by collection type code, call number prefix or DDC prefix. */
+  fiction: { collectionTypeCodes: string[]; callNumberPrefixes: string[]; ddcPrefixes: string[] };
+  referenceCollectionTypeCodes: string[];
+  electronicMaterialTypeCodes: string[];
+  usedUnit: UsedUnit;
+  websiteFeatures: WebsiteFeatures;
+  liveFrom: string | null;
+  evidence: { maxMb: number; componentLimitMb: number };
+  /** Empty: every non-reference title counts as enrichment. */
+  textbookCollectionTypeCodes: string[];
+  k7: { processedThresholdPct: number };
+  undatedShareMaxPct: number;
+  visits: { dedupeLegacy: boolean };
+  unknownMemberGroup: { default: (typeof ACCRED_GROUPS)[number] | 'auto' | null };
 }

@@ -6,12 +6,23 @@ import {
   BarcodePatternList,
   LabelProfileList,
   SruServerList,
+  USED_UNITS,
+  WebsiteFeatures,
+  accredCodeListField,
+  accredPrefixField,
   attachmentMaxMbField,
+  calendarDateOrNull,
   currencyField,
   dedupeThresholdField,
+  evidenceMbField,
   marcOrgCodeField,
   oaiAdminEmailField,
   passwordResetBodyField,
+  processedThresholdPctField,
+  schoolYearStartMonthField,
+  undatedShareMaxPctField,
+  unknownMemberGroupField,
+  visitsDedupeMinutesField,
 } from '@altis/shared/api/settings';
 import { z } from 'zod';
 
@@ -31,8 +42,21 @@ import { z } from 'zod';
 // - Phase 2 (its spec §12.6) adds six `opac` keys and the group `catalog`, all `data` and none a secret. The value
 //   schemas of the catalog lists are @altis/shared/api/settings's (the admin form validates with the same ones); each
 //   list's longest JSON text stays under the 60 000 bytes a MySQL TEXT column holds (settings.test.ts measures it).
+// - Reports and accreditation add the group `accreditation` (sixteen keys, edited on its own screen) and the group
+//   `visits` with the repeat window of member visits, which the usage import needs now and whose screen comes with the
+//   members and visits milestone. All are `data` and none is a secret; the value schemas are the shared ones again.
 
-export type SettingsGroup = 'library' | 'email' | 'security' | 'opac' | 'smtp' | 'system' | 'catalog';
+export type SettingsGroup =
+  | 'library'
+  | 'email'
+  | 'security'
+  | 'opac'
+  | 'smtp'
+  | 'system'
+  | 'catalog'
+  // ---- Komunitas K1 (settings) ----
+  | 'accreditation'
+  | 'visits';
 
 /** Every registered key. The compiler checks {@link SETTINGS} against it both ways (no missing key, no extra one). */
 export type SettingKey =
@@ -64,7 +88,16 @@ export type SettingKey =
   | `catalog.sru.${'servers' | 'allowPrivateHosts'}`
   | 'catalog.isbn.arsyaEnabled'
   | 'catalog.attachment.maxMb'
-  | 'catalog.dedupe.threshold';
+  | 'catalog.dedupe.threshold'
+  // ---- Komunitas K1 (settings) ----
+  | `accreditation.${'schoolYearStartMonth' | 'referenceCollectionTypeCodes' | 'electronicMaterialTypeCodes' | 'usedUnit'}`
+  | `accreditation.${'websiteFeatures' | 'liveFrom' | 'textbookCollectionTypeCodes' | 'undatedShareMaxPct'}`
+  | `accreditation.fiction.${'collectionTypeCodes' | 'callNumberPrefixes' | 'ddcPrefixes'}`
+  | `accreditation.evidence.${'maxMb' | 'componentLimitMb'}`
+  | 'accreditation.k7.processedThresholdPct'
+  | 'accreditation.visits.dedupeLegacy'
+  | 'accreditation.unknownMemberGroup.default'
+  | 'visits.dedupeMinutes';
 
 export interface SettingDef {
   group: SettingsGroup;
@@ -312,7 +345,7 @@ export const SETTINGS: Readonly<Record<SettingKey, SettingDef>> = Object.freeze(
     schema: z.strictObject({ version: SEMVER, at: int, failures: z.array(word(64)).max(8) }).nullable(),
     default: null,
   }),
-  // The keyset writer refused documents because DATA_DIR/releases/keyset.json is full (R65c): the Diagnostik alert.
+  // The keyset writer refused documents because DATA_DIR/releases/keyset.json is full: the Diagnostik alert.
   'system.keyset_full': instance({ schema: z.strictObject({ at: int, refused: int.min(0) }).nullable(), default: null }),
 
   // ---- Phase 2 (catalog): Task 2 ----
@@ -324,7 +357,7 @@ export const SETTINGS: Readonly<Record<SettingKey, SettingDef>> = Object.freeze(
   'opac.oai.adminEmail': def({ group: 'opac', schema: oaiAdminEmailField, default: '' }),
   'opac.showShelfMap': def({ group: 'opac', schema: z.boolean(), default: true }),
   'opac.newTitlesCount': def({ group: 'opac', schema: z.int().min(0).max(48), default: 12 }),
-  // The catalog (§12.6). marcOrgCode null: an export omits 003 and the 040 $a (P2-32). The default material and
+  // The catalog (§12.6). marcOrgCode null: an export omits 003 and the 040 $a. The default material and
   // collection types are ids of masters (not checked here: a reader falls back when one is gone).
   'catalog.marcOrgCode': def({ group: 'catalog', schema: marcOrgCodeField, default: null }),
   'catalog.defaultMaterialTypeId': def({ group: 'catalog', schema: ulidField.nullable(), default: null }),
@@ -403,7 +436,7 @@ export const SETTINGS: Readonly<Record<SettingKey, SettingDef>> = Object.freeze(
       },
     ]),
   }),
-  // Both seeds stay disabled until the owner has verified them (P5); Perpusnas has no URL until then (P2-33).
+  // Both seeds stay disabled until the owner has verified them (P5); Perpusnas has no URL until it is verified.
   'catalog.sru.servers': def({
     group: 'catalog',
     schema: SruServerList,
@@ -430,10 +463,63 @@ export const SETTINGS: Readonly<Record<SettingKey, SettingDef>> = Object.freeze(
   }),
   // Super admin only (M11): settings.catalog.put refuses anyone else's change of it.
   'catalog.sru.allowPrivateHosts': def({ group: 'catalog', schema: z.boolean(), default: false }),
-  // Reserved: accepted and ignored by the community edition (kept for settings and API compatibility, ruling R23).
+  // Reserved: accepted and ignored by the community edition (kept for settings and API compatibility).
   'catalog.isbn.arsyaEnabled': def({ group: 'catalog', schema: z.boolean(), default: false }),
   'catalog.attachment.maxMb': def({ group: 'catalog', schema: attachmentMaxMbField, default: 200 }),
   'catalog.dedupe.threshold': def({ group: 'catalog', schema: dedupeThresholdField, default: 80 }),
+
+  // ---- Komunitas K1 (settings) ----
+  // Accreditation: the school year, how a title counts as fiction, reference, electronic or a textbook (master codes,
+  // stored upper case), the unit of collection use, the website features, the day ALTIS went live, the evidence size
+  // limits, the processed-copies threshold, the largest share of undated copies a suggestion tolerates, whether imported
+  // visits are counted without repeats, and the group of visits by members deleted in SLiMS ('auto': students in a
+  // school library, none elsewhere; loadAccredSettings resolves it).
+  'accreditation.schoolYearStartMonth': def({ group: 'accreditation', schema: schoolYearStartMonthField, default: 7 }),
+  'accreditation.fiction.collectionTypeCodes': def({
+    group: 'accreditation',
+    schema: accredCodeListField,
+    default: seed(accredCodeListField, ['FIKSI']),
+  }),
+  'accreditation.fiction.callNumberPrefixes': def({
+    group: 'accreditation',
+    schema: z.array(accredPrefixField).max(20),
+    default: seed(z.array(accredPrefixField).max(20), []),
+  }),
+  'accreditation.fiction.ddcPrefixes': def({
+    group: 'accreditation',
+    schema: z.array(accredPrefixField).max(50),
+    default: seed(z.array(accredPrefixField).max(50), []),
+  }),
+  'accreditation.referenceCollectionTypeCodes': def({
+    group: 'accreditation',
+    schema: accredCodeListField,
+    default: seed(accredCodeListField, ['REF']),
+  }),
+  'accreditation.electronicMaterialTypeCodes': def({
+    group: 'accreditation',
+    schema: accredCodeListField,
+    default: seed(accredCodeListField, ['EBOOK']),
+  }),
+  'accreditation.usedUnit': def({ group: 'accreditation', schema: z.enum(USED_UNITS), default: 'titles' }),
+  'accreditation.websiteFeatures': def({ group: 'accreditation', schema: WebsiteFeatures, default: seed(WebsiteFeatures, {}) }),
+  'accreditation.liveFrom': def({ group: 'accreditation', schema: calendarDateOrNull, default: null }),
+  'accreditation.evidence.maxMb': def({ group: 'accreditation', schema: evidenceMbField, default: 5 }),
+  'accreditation.evidence.componentLimitMb': def({ group: 'accreditation', schema: evidenceMbField, default: 9 }),
+  'accreditation.textbookCollectionTypeCodes': def({
+    group: 'accreditation',
+    schema: accredCodeListField,
+    default: seed(accredCodeListField, []),
+  }),
+  'accreditation.k7.processedThresholdPct': def({ group: 'accreditation', schema: processedThresholdPctField, default: 100 }),
+  'accreditation.undatedShareMaxPct': def({ group: 'accreditation', schema: undatedShareMaxPctField, default: 10 }),
+  'accreditation.visits.dedupeLegacy': def({ group: 'accreditation', schema: z.boolean(), default: true }),
+  'accreditation.unknownMemberGroup.default': def({
+    group: 'accreditation',
+    schema: unknownMemberGroupField,
+    default: 'auto',
+  }),
+  // Visits: a member's check-in within this many minutes of an earlier one is a repeat (0 turns the rule off).
+  'visits.dedupeMinutes': def({ group: 'visits', schema: visitsDedupeMinutesField, default: 60 }),
 });
 
 /** The registered keys in registry order. */

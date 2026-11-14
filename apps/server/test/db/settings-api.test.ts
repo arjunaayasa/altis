@@ -293,8 +293,8 @@ describe.skipIf(!ctx.available)(`settings API [${engineLabel()}]`, () => {
   });
 
   // ---- Phase 2 (catalog): Task 2 ----
-  // The catalog group (Phase 2 spec §12.6) and `GET catalog/config` (decision P2-26), with M11: only a super admin may
-  // change `catalog.sru.allowPrivateHosts`.
+  // The catalog group (Phase 2 spec §12.6) and `GET catalog/config` (for the catalogue screens without
+  // system.settings.read), with M11: only a super admin may change `catalog.sru.allowPrivateHosts`.
   describe('Phase 2: settings/catalog and catalog/config', () => {
     const PRIVATE = 'catalog.sru.allowPrivateHosts';
 
@@ -472,6 +472,95 @@ describe.skipIf(!ctx.available)(`settings API [${engineLabel()}]`, () => {
       const res = (await reader.get('/api/v1/catalog/config')).json as { barcodePatterns: unknown; currency: string };
       expect(res.barcodePatterns).toEqual([{ ...pattern, prefix: 'REF-' }]);
       expect(res.currency).toBe('USD');
+    });
+  });
+
+  // ---- Komunitas K1 (settings) ----
+  // The accreditation group: `GET settings/accreditation` (the existing settings.get) and `PUT settings/accreditation`
+  // (settings.accreditation.put, system.settings.manage, audited as settings.update).
+  describe('settings/accreditation', () => {
+    const DEFAULTS = {
+      schoolYearStartMonth: 7,
+      fiction: { collectionTypeCodes: ['FIKSI'], callNumberPrefixes: [], ddcPrefixes: [] },
+      referenceCollectionTypeCodes: ['REF'],
+      electronicMaterialTypeCodes: ['EBOOK'],
+      usedUnit: 'titles',
+      websiteFeatures: {},
+      liveFrom: null,
+      evidence: { maxMb: 5, componentLimitMb: 9 },
+      textbookCollectionTypeCodes: [],
+      k7: { processedThresholdPct: 100 },
+      undatedShareMaxPct: 10,
+      visits: { dedupeLegacy: true },
+      unknownMemberGroup: { default: 'auto' },
+    };
+
+    it('GET answers the defaults on an empty table, every key of the group once', async () => {
+      const admin = await manager();
+      const res = await admin.get(`${SETTINGS_PATH}/accreditation`);
+      expect(res.status, res.text).toBe(200);
+      expect(res.json).toEqual(DEFAULTS);
+      expect(groupKeys('accreditation')).toHaveLength(16);
+      // The visits group has no screen yet: it is not served.
+      expect((await admin.get(`${SETTINGS_PATH}/visits`)).status).toBe(404);
+    });
+
+    it('PUT round-trips (codes upper case), audited as settings.update with the changed keys; a second PUT changes nothing', async () => {
+      const admin = await manager();
+      const body = {
+        schoolYearStartMonth: 1,
+        fiction: { collectionTypeCodes: ['fiksi', 'novel'], callNumberPrefixes: ['F'] },
+        usedUnit: 'items',
+        websiteFeatures: { profilePageId: '01JZ0000000000000000000ABC', socialUrls: ['https://instagram.com/perpus'] },
+        liveFrom: '2025-07-01',
+        k7: { processedThresholdPct: 95 },
+        unknownMemberGroup: { default: null },
+      };
+      const put = await admin.put(`${SETTINGS_PATH}/accreditation`, body);
+      expect(put.status, put.text).toBe(200);
+      expect(put.json).toEqual({
+        changed: [
+          'accreditation.schoolYearStartMonth',
+          'accreditation.fiction.collectionTypeCodes',
+          'accreditation.fiction.callNumberPrefixes',
+          'accreditation.usedUnit',
+          'accreditation.websiteFeatures',
+          'accreditation.liveFrom',
+          'accreditation.k7.processedThresholdPct',
+          'accreditation.unknownMemberGroup.default',
+        ],
+      });
+      const view = await admin.get(`${SETTINGS_PATH}/accreditation`);
+      expect(view.json).toEqual({
+        ...DEFAULTS,
+        schoolYearStartMonth: 1,
+        fiction: { collectionTypeCodes: ['FIKSI', 'NOVEL'], callNumberPrefixes: ['F'], ddcPrefixes: [] },
+        usedUnit: 'items',
+        websiteFeatures: body.websiteFeatures,
+        liveFrom: '2025-07-01',
+        k7: { processedThresholdPct: 95 },
+        unknownMemberGroup: { default: null },
+      });
+      expect(await audits('settings.update')).toEqual([
+        { actor_type: 'staff', actor_id: admin.userId, entity: 'settings', entity_id: null, meta: { group: 'accreditation', keys: (put.json as { changed: string[] }).changed } },
+      ]);
+      const again = await admin.put(`${SETTINGS_PATH}/accreditation`, body);
+      expect(again.json).toEqual({ changed: [] });
+    });
+
+    it('a threshold under 50 → 422 VALIDATION_FAILED at the body path; an unknown key → 422', async () => {
+      const admin = await manager();
+      const low = await admin.put(`${SETTINGS_PATH}/accreditation`, { k7: { processedThresholdPct: 40 } });
+      expect([low.status, code(low)]).toEqual([422, 'VALIDATION_FAILED']);
+      expect(errors(low)).toEqual([{ path: 'k7.processedThresholdPct', code: 'too_small' }]);
+      const unknown = await admin.put(`${SETTINGS_PATH}/accreditation`, { dedupeMinutes: 30 });
+      expect([unknown.status, code(unknown)]).toEqual([422, 'VALIDATION_FAILED']);
+    });
+
+    it('needs system.settings.manage: a reader of the settings → 403 AUTHZ_DENIED', async () => {
+      const reader = await signedIn({ roles: [{ permissions: ['system.settings.read', 'accreditation.workspace.manage'] }] });
+      const res = await reader.put(`${SETTINGS_PATH}/accreditation`, { usedUnit: 'items' });
+      expect({ status: res.status, code: code(res) }).toEqual({ status: 403, code: 'AUTHZ_DENIED' });
     });
   });
 });

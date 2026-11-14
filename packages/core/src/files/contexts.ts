@@ -13,14 +13,16 @@ import type { MagicKind } from './magic.js';
 //
 // Phase 2 (its spec §8; plan Task 2) adds the catalog's contexts. `magic` became a set of kinds (magic.ts detects
 // them; S1), so a context names exactly the types it takes. `maxBytesSetting` names a setting in MB that lowers the
-// static ceiling when the upload is declared (Task 18 enforces it, P2-22).
+// static ceiling when the upload is declared (the setting is the real limit; the ceiling only bounds it).
+// Reports and accreditation add the evidence files and the staged SLiMS dump of the usage import; the files whose
+// owner never claims them are swept by the housekeeping job ORPHAN_UPLOAD_CONTEXTS (orphan-contexts.ts) names.
 
 const MIB = 1024 * 1024;
 const GIB = 1024 * MIB;
 
 export interface UploadContext {
   name: UploadContextName;
-  /** The permission the uploader needs; null: any signed-in staff user (or a route that is the gate, P2-18). */
+  /** The permission the uploader needs; null: any signed-in staff user (or a route that claims the file is the gate). */
   permission: Permission | null;
   /** The largest declared size accepted (UPLOAD_TOO_LARGE above it). */
   maxBytes: number;
@@ -50,7 +52,8 @@ const IMAGES: readonly MagicKind[] = ['jpeg', 'png', 'webp'];
 
 /**
  * The contexts of this build. `test` (16 MiB, any type, a `files` row, any signed-in staff user) exists only when
- * `__BUILD_PROFILE__ === 'test'` (ruling R57): a production build has `backup` and `update`, and Phase 2's seven.
+ * `__BUILD_PROFILE__ === 'test'` (test hooks never reach a production build): a production build has `backup` and
+ * `update`, Phase 2's seven and the two of accreditation.
  */
 export const UPLOAD_CONTEXTS: Readonly<Partial<Record<UploadContextName, UploadContext>>> = Object.freeze({
   backup: context({ name: 'backup', permission: 'system.backup.restore', maxBytes: 20 * GIB, magic: ['zip'], kind: 'staged' }),
@@ -63,7 +66,7 @@ export const UPLOAD_CONTEXTS: Readonly<Partial<Record<UploadContextName, UploadC
   // ---- Phase 2 (catalog): Task 2 ----
   // Covers are shrunk in the browser before they are sent (§8); Task 18 strips their metadata.
   'catalog.cover': context({ name: 'catalog.cover', permission: 'catalog.records.manage', maxBytes: 2 * MIB, magic: IMAGES, kind: 'file' }),
-  // Any type (an unknown one is served as a download); the static ceiling is 2 GiB, the setting the real limit (P2-22).
+  // Any type (an unknown one is served as a download); the static ceiling is 2 GiB, the setting the real limit.
   'catalog.attachment': context({
     name: 'catalog.attachment',
     permission: 'catalog.records.manage',
@@ -72,7 +75,7 @@ export const UPLOAD_CONTEXTS: Readonly<Partial<Record<UploadContextName, UploadC
     kind: 'file',
     maxBytesSetting: 'catalog.attachment.maxMb',
   }),
-  // No permission here (P2-18): the branch-scoped map route that claims the file is the gate; an upload context
+  // No permission here: the branch-scoped map route that claims the file is the gate; an upload context
   // cannot name a branch, and an unclaimed file is removed after 24 h.
   'catalog.floor_plan': context({ name: 'catalog.floor_plan', permission: null, maxBytes: 5 * MIB, magic: IMAGES, kind: 'file' }),
   'opac.page_image': context({
@@ -94,6 +97,27 @@ export const UPLOAD_CONTEXTS: Readonly<Partial<Record<UploadContextName, UploadC
   'slims.dump': context({ name: 'slims.dump', permission: 'catalog.migration.run', maxBytes: 4 * GIB, magic: ['text', 'gzip'], kind: 'staged' }),
   // The SLiMS files folder as a ZIP (`ensureHeadroom` 2×, as every upload).
   'slims.files': context({ name: 'slims.files', permission: 'catalog.migration.run', maxBytes: 10 * GIB, magic: ['zip'], kind: 'staged' }),
+
+  // ---- Komunitas K1 (uploads) ----
+  // Accreditation evidence and register attachments: PDF, or JPEG (the browser converts other images first). The
+  // static ceiling is 100 MiB, `accreditation.evidence.maxMb` the real limit. The claiming row (an evidence row, a
+  // training certificate, a partnership or a document) is its owner.
+  'accreditation.evidence': context({
+    name: 'accreditation.evidence',
+    permission: 'accreditation.workspace.manage',
+    maxBytes: 100 * MIB,
+    magic: ['pdf', 'jpeg'],
+    kind: 'file',
+    maxBytesSetting: 'accreditation.evidence.maxMb',
+  }),
+  // A SLiMS SQL dump, plain or gzipped, for the read-only import of usage statistics.
+  'accreditation.slims_dump': context({
+    name: 'accreditation.slims_dump',
+    permission: 'accreditation.workspace.manage',
+    maxBytes: 4 * GIB,
+    magic: ['text', 'gzip'],
+    kind: 'staged',
+  }),
 });
 
 /** The context `name` of this build, or null (an unknown name, or `test` outside the test profile). */

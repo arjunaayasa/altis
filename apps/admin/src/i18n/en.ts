@@ -1,4 +1,5 @@
 import { CATALOG_EN } from './catalog';
+import { KOMUNITAS_EN } from './komunitas';
 import type { AdminKey } from './id';
 
 /** The admin SPA's own strings in English, complete: typed against the Indonesian keys (`id.ts`). */
@@ -1141,4 +1142,22 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'jobs.type.catalog.housekeeping': 'Maintain the catalogue',
   'jobs.schedule.catalog.housekeeping': 'Daily catalogue upkeep',
   ...CATALOG_EN,
+
+  // ---- Komunitas K1 (edition lane) ----
+  'diagnostics.edition_lane.title': 'Other migration lane',
+  'diagnostics.edition_lane.applied': 'Migrations from another lane installed: {count}',
+
+  // ---- Komunitas K1 (reports and accreditation) ----
+  'nav.group.reports': 'Reports',
+  'nav.reports.reports': 'Reports',
+  'nav.reports.accreditation': 'Accreditation',
+  'settings.tab.accreditation': 'Accreditation',
+  'jobs.type.reports.export': 'Export a report',
+  'jobs.type.reports.housekeeping': 'Maintain report files',
+  'jobs.type.accreditation.evaluate': 'Calculate the accreditation estimate',
+  'jobs.type.accreditation.import_slims_usage': 'Import SLiMS usage statistics',
+  'jobs.schedule.reports.housekeeping': 'Daily report file upkeep',
+  'jobs.message.reports.housekeeping.date_jobs_postponed': 'Date-based jobs postponed: the system clock jumped',
+  'jobs.message.reports.export.warnings': 'Finished with warnings; see the export list for details',
+  ...KOMUNITAS_EN,
 };

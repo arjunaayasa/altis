@@ -99,6 +99,8 @@ export default defineConfig(
     '**/.build/**',
     // Agent worktrees: other checkouts of this repository, linted in their own right.
     '.claude/**',
+    // Nested git worktrees (.worktrees/<branch>): full checkouts of this repository, linted in their own right.
+    '.worktrees/**',
     // Fixtures hold deliberate violations; lint-rules.test.ts lints their text under virtual paths.
     'tools/lint-fixtures/*.{ts,tsx,js,mjs,cjs}',
     '!tools/lint-fixtures/*.test.ts',

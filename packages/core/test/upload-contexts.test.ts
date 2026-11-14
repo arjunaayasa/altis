@@ -1,11 +1,13 @@
 import { UPLOAD_CONTEXT_NAMES } from '@altis/shared/api/files';
 import { describe, expect, it } from 'vitest';
 import { UPLOAD_CONTEXTS, uploadContext } from '../src/files/contexts.js';
+import { ORPHAN_UPLOAD_CONTEXTS } from '../src/files/orphan-contexts.js';
 import { SETTINGS } from '../src/settings/registry.js';
 
-// The upload contexts (spec §7.5, decision C7) with Phase 2's (its spec §8; plan Task 2): who may upload, the largest
-// declared size, the magic kinds the file must start with, and what completion does with it. Task 18 enforces
-// `maxBytesSetting` and strips metadata; the table itself is pinned here.
+// The upload contexts (spec §7.5, decision C7) with Phase 2's (its spec §8; plan Task 2) and the accreditation ones:
+// who may upload, the largest declared size, the magic kinds the file must start with, and what completion does with
+// it. The upload service enforces `maxBytesSetting` and strips metadata; the table itself is pinned here, with the
+// registry of the contexts whose unclaimed files a housekeeping job sweeps.
 
 const MIB = 1024 * 1024;
 const GIB = 1024 * MIB;
@@ -21,7 +23,7 @@ describe('UPLOAD_CONTEXTS', () => {
     const table = [
       ['catalog.cover', 'catalog.records.manage', 2 * MIB, ['jpeg', 'png', 'webp'], 'file'],
       ['catalog.attachment', 'catalog.records.manage', 2 * GIB, 'any', 'file'],
-      // P2-18: the branch-scoped map route is the gate; an upload context cannot name a branch.
+      // The branch-scoped map route is the gate: an upload context cannot name a branch.
       ['catalog.floor_plan', null, 5 * MIB, ['jpeg', 'png', 'webp'], 'file'],
       ['opac.page_image', 'opac.pages.manage', 2 * MIB, ['jpeg', 'png', 'webp', 'gif'], 'file'],
       ['catalog.import', 'catalog.import.run', 512 * MIB, ['text', 'xml', 'iso2709'], 'staged'],
@@ -36,10 +38,31 @@ describe('UPLOAD_CONTEXTS', () => {
     expect(uploadContext('catalog.cover')?.magic).toEqual(['jpeg', 'png', 'webp']);
   });
 
-  it('only catalog.attachment names a size setting (P2-22), and it is a registered setting', () => {
+  it('the accreditation contexts: evidence files of PDF or JPEG, and a staged SLiMS dump for the usage import', () => {
+    expect(uploadContext('accreditation.evidence')).toEqual({
+      name: 'accreditation.evidence',
+      permission: 'accreditation.workspace.manage',
+      maxBytes: 100 * MIB,
+      magic: ['pdf', 'jpeg'],
+      kind: 'file',
+      maxBytesSetting: 'accreditation.evidence.maxMb',
+    });
+    expect(uploadContext('accreditation.slims_dump')).toEqual({
+      name: 'accreditation.slims_dump',
+      permission: 'accreditation.workspace.manage',
+      maxBytes: 4 * GIB,
+      magic: ['text', 'gzip'],
+      kind: 'staged',
+    });
+  });
+
+  it('a size setting lowers the ceiling of the attachment and the evidence contexts only, and each is a registered setting', () => {
     const named = Object.values(UPLOAD_CONTEXTS).filter((c) => c?.maxBytesSetting !== undefined);
-    expect(named.map((c) => [c!.name, c!.maxBytesSetting])).toEqual([['catalog.attachment', 'catalog.attachment.maxMb']]);
-    expect(Object.hasOwn(SETTINGS, 'catalog.attachment.maxMb')).toBe(true);
+    expect(named.map((c) => [c!.name, c!.maxBytesSetting])).toEqual([
+      ['catalog.attachment', 'catalog.attachment.maxMb'],
+      ['accreditation.evidence', 'accreditation.evidence.maxMb'],
+    ]);
+    for (const c of named) expect(Object.hasOwn(SETTINGS, c!.maxBytesSetting!), c!.name).toBe(true);
   });
 
   it('every name of UPLOAD_CONTEXT_NAMES is a context of the test build, and nothing else is', () => {
@@ -56,5 +79,27 @@ describe('UPLOAD_CONTEXTS', () => {
       expect(new Set(context.magic).size, context.name).toBe(context.magic.length);
       expect(context.magic.length, context.name).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('ORPHAN_UPLOAD_CONTEXTS', () => {
+  it('lists the four catalogue file contexts for the catalogue housekeeping, then the evidence files for the reports housekeeping', () => {
+    expect(ORPHAN_UPLOAD_CONTEXTS).toEqual([
+      { context: 'catalog.cover', sweptBy: 'catalog.housekeeping' },
+      { context: 'catalog.attachment', sweptBy: 'catalog.housekeeping' },
+      { context: 'catalog.floor_plan', sweptBy: 'catalog.housekeeping' },
+      { context: 'opac.page_image', sweptBy: 'catalog.housekeeping' },
+      { context: 'accreditation.evidence', sweptBy: 'reports.housekeeping' },
+    ]);
+    expect(Object.isFrozen(ORPHAN_UPLOAD_CONTEXTS)).toBe(true);
+  });
+
+  it('holds file contexts only, each once: a staged upload is never a files row to sweep', () => {
+    const names = ORPHAN_UPLOAD_CONTEXTS.map((entry) => entry.context);
+    expect(new Set(names).size).toBe(names.length);
+    for (const name of names) expect(uploadContext(name)?.kind, name).toBe('file');
+    const staged = Object.values(UPLOAD_CONTEXTS).filter((c) => c?.kind === 'staged').map((c) => c!.name);
+    expect(staged.length).toBeGreaterThan(0);
+    for (const name of staged) expect(names as readonly string[], name).not.toContain(name);
   });
 });

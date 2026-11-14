@@ -17,6 +17,11 @@ import {
   opKeepPath,
   releaseStagingName,
   releaseStagingPath,
+  reportExportPath,
+  reportExportsDir,
+  reportWorkDir,
+  reportWorkPath,
+  reportWorkRoot,
   runWorkDir,
   runWorkPath,
   stagedReleaseFile,
@@ -877,4 +882,82 @@ describe('Phase 2: the exports area, run work files and adoptRunWork (P2-24, S3)
     await fsp.mkdir(path.join(dataDir, 'tmp', DRY), { recursive: true });
     await expect(adoptRunWork(dataDir, DRY, DRY)).rejects.toMatchObject({ code: 'INVALID_PATH_SEGMENT', meta: { reason: 'target_exists' } });
   });
+});
+
+// ---- Komunitas K1 (report paths) ----
+describe('the report paths: exports/reports/ and tmp/reports/, and the usage import work files', () => {
+  const RUN = '01JBX5ZK3M8Q4R7T9V0W2Y6A1H';
+
+  it('the two folders, a run file and a run work folder', () => {
+    expect(reportExportsDir(dataDir)).toBe(path.join(dataDir, 'exports', 'reports'));
+    expect(reportWorkRoot(dataDir)).toBe(path.join(dataDir, 'tmp', 'reports'));
+    expect(reportWorkDir(dataDir, RUN)).toBe(path.join(dataDir, 'tmp', 'reports', RUN));
+    expectTypeOf(reportWorkDir(dataDir, RUN)).toEqualTypeOf<DataPath>();
+    // dataPath names neither folder: these builders are the only way there.
+    expectInvalid(() => dataPath(dataDir, 'exports', 'reports'));
+    expectInvalid(() => dataPath(dataDir, 'tmp', 'reports'));
+  });
+
+  it.each(['csv', 'xlsx', 'pdf', 'zip'] as const)('reportExportPath: exports/reports/<ulid>.%s', (ext) => {
+    const p = reportExportPath(dataDir, RUN, ext);
+    expect(p).toBe(path.join(dataDir, 'exports', 'reports', `${RUN}.${ext}`));
+    expect(p.endsWith(path.join('exports', 'reports', `${RUN}.${ext}`))).toBe(true);
+    expectTypeOf(p).toEqualTypeOf<DataPath>();
+  });
+
+  it.each(['mrc', 'jsonl', 'XLSX', '', 'pdf/..', '../zip', 'csv\0', 7 as unknown as string])('reportExportPath refuses the extension %j', (ext) => {
+    expectInvalid(() => reportExportPath(dataDir, RUN, ext as 'csv'));
+  });
+
+  it.each(['../x', '', '01jbx5zk3m8q4r7t9v0w2y6a1h', 'reports', SHA256])('the report builders refuse the run id %j', (id) => {
+    expectInvalid(() => reportExportPath(dataDir, id, 'pdf'));
+    expectInvalid(() => reportWorkDir(dataDir, id));
+    expectInvalid(() => reportWorkPath(dataDir, id, 'rows.ndjson'));
+  });
+
+  it.each([
+    'rows.ndjson',
+    'output.part',
+    'output.central',
+    'dossier.pdf',
+    'component-K.zip',
+    'component-SP.central',
+    'component-profil.zip',
+    'entry-1.pdf',
+    'entry-9999.pdf',
+  ])('reportWorkPath: tmp/reports/<ulid>/%s', (name) => {
+    const p = reportWorkPath(dataDir, RUN, name);
+    expect(p).toBe(path.join(dataDir, 'tmp', 'reports', RUN, name));
+    expectTypeOf(p).toEqualTypeOf<DataPath>();
+  });
+
+  it.each([
+    '../x',
+    '..',
+    '',
+    'rows.json',
+    'output.part/..',
+    'component-X.zip',
+    'component-k.zip',
+    'component-K.pdf',
+    'entry-0.pdf',
+    'entry-01.pdf',
+    'entry-10000.pdf',
+    'entry-1.zip',
+    'dossier.pdf\0',
+    'a/rows.ndjson',
+  ])('reportWorkPath refuses the name %j', (name) => {
+    expectInvalid(() => reportWorkPath(dataDir, RUN, name));
+  });
+
+  it.each(['usage-visits-2025-07.bin', 'usage-loans.json', `usage-${'a'.repeat(40)}.json`])('runWorkPath also takes the usage import file %s', (name) => {
+    expect(runWorkPath(dataDir, RUN, name)).toBe(path.join(dataDir, 'tmp', RUN, name));
+  });
+
+  it.each(['usage-.bin', `usage-${'a'.repeat(41)}.json`, 'usage-Visits.bin', 'usage-x.ndjson', 'usage-x_y.bin', 'usage-x.bin/..'])(
+    'runWorkPath refuses the usage name %j',
+    (name) => {
+      expectInvalid(() => runWorkPath(dataDir, RUN, name));
+    },
+  );
 });

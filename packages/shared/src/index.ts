@@ -28,7 +28,7 @@ export {
   isTerminal,
 } from './ops.js';
 export type { OpKind, OpState } from './ops.js';
-export { parseChannel } from './channels.js';
+export { FIXED_CHANNEL_NAMES, ID_CHANNEL_PREFIXES, parseChannel } from './channels.js';
 export type { ChannelRule } from './channels.js';
 export { DEFAULT_LOCALE, LOCALES, MESSAGES, isLocale, resolveLocale, t } from './i18n/index.js';
 export type { Locale, MessageKey } from './i18n/index.js';
@@ -111,3 +111,66 @@ export type {
   VocabMessageKey,
   VocabValue,
 } from './catalog-vocab.js';
+// ---- Komunitas K1 (reports and accreditation) ----
+// The accreditation vocabularies, the calendar-date helpers and the DDC reader (no Zod: the API contracts are imported
+// as `@altis/shared/api/<area>`).
+export {
+  ACCRED_GROUPS,
+  ACCREDITATION_VOCAB_LISTS,
+  ACTIVITY_KINDS,
+  ANSWER_MODES,
+  AUDIENCES,
+  DOCUMENT_ASPECTS,
+  DOCUMENT_KINDS,
+  EDUCATION_LEVELS,
+  EMPLOYMENTS,
+  EVIDENCE_ENTITIES,
+  EVIDENCE_KINDS,
+  L12_FEATURES,
+  LOCAL_WORKS,
+  LOCAL_WORK_KINDS,
+  PARTNERSHIP_KINDS,
+  PERIOD_KINDS,
+  PERIOD_STATUSES,
+  REFERENCE_KINDS,
+  REPORT_FORMATS,
+  REPORT_RUN_STATUSES,
+  SCHOOL_LEVELS,
+  SCHOOL_STATUSES,
+  SERVICE_CODES,
+  STAFF_ROLES,
+  USAGE_METRICS,
+} from './accreditation-vocab.js';
+export type {
+  AccredGroup,
+  ActivityKind,
+  AnswerMode,
+  Audience,
+  DocumentKind,
+  EducationLevel,
+  Employment,
+  EvidenceEntity,
+  EvidenceKind,
+  L12Feature,
+  LocalWork,
+  LocalWorkKind,
+  PartnershipKind,
+  PeriodKind,
+  PeriodStatus,
+  ReferenceKind,
+  ReportFormat,
+  ReportRunStatus,
+  SchoolLevel,
+  SchoolStatus,
+  ServiceCode,
+  StaffRole,
+  UsageMetric,
+} from './accreditation-vocab.js';
+export { addDays, addMonths, diffDays, endOfMonth, isCalendarDate, isoWeekday, localDate, monthOf, monthsBetween } from './dates.js';
+export { DDC_MAINS, compareDdcRowKeys, ddcClassOf, ddcDivisionKey, ddcRowKind, foldByDdc } from './ddc.js';
+export type { DdcClass, DdcMain, DdcRowKey } from './ddc.js';
+// ---- Komunitas K1 (contracts) ----
+// The types of the report and accreditation contracts the domain code shares (types only: the Zod schemas are imported
+// as `@altis/shared/api/reports` and `@altis/shared/api/accreditation`, so the root pulls no Zod in).
+export type { AnswerLetter, NoteRef, PrerequisitesView, SnpOutcome } from './api/accreditation.js';
+export type { ReportCell, ReportColumnType, ReportColumnView, ReportParamKind, ReportParamSpec } from './api/reports.js';

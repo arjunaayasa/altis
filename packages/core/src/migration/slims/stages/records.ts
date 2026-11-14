@@ -1,6 +1,6 @@
-import type { DB } from '@altis/db';
-import { newId, normalizeKey } from '@altis/shared';
-import type { Insertable, Kysely, Transaction } from 'kysely';
+import { fullTextFamily, type DB } from '@altis/db';
+import { DomainError, newId, normalizeKey } from '@altis/shared';
+import type { Insertable, Kysely, Selectable, Transaction, Updateable } from 'kysely';
 import { CUSTOM_TEXT_MAX, coerceCustomValues, customValuesSchema, loadCustomDefs, writeCustomValues, type CustomFieldDef } from '../../../catalog/data/custom-fields.js';
 import { defaultMaterialTypeId } from '../../../catalog/data/defaults.js';
 import { mapLegacy, type LegacyMapping } from '../../../catalog/data/legacy-map.js';
@@ -16,6 +16,7 @@ import { phpUnserialize } from '../source/php-unserialize.js';
 import type { SlimsRow } from '../source/types.js';
 import type { SlimsReportRow, SlimsStage, SlimsStageContext } from '../stage.js';
 import { slimsCustomField } from './masters.js';
+import { sourceKeys } from './stage-b-kit.js';
 import {
   countUnmapped,
   cutChars,
@@ -31,8 +32,9 @@ import {
   refsOf,
   runSteps,
   textOf,
+  Ledger,
   type BatchIo,
-  type Ledger,
+  type DoneRow,
   type Step,
 } from './stage-a-kit.js';
 
@@ -59,6 +61,12 @@ import {
 //    a value refused is reported and left out, the record keeps the rest.
 // 5. Likely duplicates among the records migrated under the run's source (an ISBN key, or a title key and year) are
 //    reported (`possible_duplicate`), never merged (§3.3).
+//
+// The catalogue re-sync (`catalogMode = sync`): a `biblio` row an earlier run mapped is worked out again as a first run
+// would and compared with its record, source-derived values only (syncRecords): a record no one edited in ALTIS is
+// rewritten where it differs (its identifiers too), one edited in ALTIS is left as it is (`edited_in_altis`, the
+// differing fields). The items stage archives the records whose source row is gone, after their copies. The links and
+// custom values of a mapped row are still skipped `already_migrated`.
 //
 // Each batch indexes the records it wrote or linked (`indexRecords`, §4.1) and, as its last write, moves their OAI
 // datestamp to the clock read then (`stampChanged`, C14: `changed_at` = the moment the batch commits, never the slice's
@@ -189,155 +197,383 @@ const RDA_COLUMNS: readonly (readonly [RdaKind, string])[] = [
   ['carrier', 'carrier_type_id'],
 ];
 
+/** What the batch looks a `biblio` row's references up in. */
+interface BiblioLookups {
+  gmds: Map<string, string>;
+  publishers: Map<string, string>;
+  languages: Map<string, string>;
+  rda: Awaited<ReturnType<typeof rdaMaps>>;
+  places: Awaited<ReturnType<typeof placeMap>>;
+  timeZone: string;
+  /** The default material type (read once, on first need). */
+  fallbackType(): Promise<string>;
+}
+
+/**
+ * The record and the identifiers a first run writes for the `biblio` row `row` (key `key`), with id `id`: its repairs
+ * counted and its problems reported to `l`.
+ */
+async function biblioValues(
+  c: SlimsStageContext,
+  l: Ledger,
+  key: string,
+  row: SlimsRow,
+  id: string,
+  x: BiblioLookups,
+): Promise<{ record: RecordInsert; ids: Insertable<DB['record_identifiers']>[] }> {
+  const T = 'biblio';
+  const text = (column: string): string => oneLine(textOf(l, T, column, row[column]) ?? '');
+  // Title and subtitle.
+  const whole = text('title');
+  let title = whole;
+  let subtitle: string | null = null;
+  const colon = whole.indexOf(':');
+  if (colon >= 0) {
+    const head = whole.slice(0, colon).trim();
+    const tail = whole.slice(colon + 1).trim();
+    if (head !== '' && tail !== '') [title, subtitle] = [head, tail];
+  }
+  if (title === '') {
+    title = `[Tanpa judul - SLiMS #${key}]`;
+    l.report(T, key, 'title_empty', 'Judul kosong / The title is empty');
+  }
+  title = fitText(l, T, key, 'title', title) ?? title;
+  subtitle = fitText(l, T, key, 'title', subtitle);
+  // Masters through the legacy map.
+  const gmd = keyOf(row['gmd_id']);
+  let materialTypeId = isRef(gmd) ? x.gmds.get(gmd) : undefined;
+  if (materialTypeId === undefined) {
+    materialTypeId = await x.fallbackType();
+    l.report(T, key, 'material_type_default', `gmd_id=${gmd || '-'}`);
+  }
+  const publisher = keyOf(row['publisher_id']);
+  let publisherId: string | null = null;
+  if (isRef(publisher)) {
+    publisherId = x.publishers.get(publisher) ?? null;
+    if (publisherId === null) l.report(T, key, 'publisher_missing', `publisher_id=${cutChars(publisher, 40)}`);
+  }
+  const language = keyOf(row['language_id']);
+  let languageId: string | null = null;
+  if (language !== '') {
+    languageId = x.languages.get(language) ?? x.languages.get(language.toLowerCase()) ?? x.languages.get(language.toUpperCase()) ?? null;
+    if (languageId === null) l.report(T, key, 'language_missing', `language_id=${cutChars(language, 40)}`);
+  }
+  // RDA codes and the place.
+  const codes: Partial<Record<RdaKind, string | null>> = {};
+  for (const [kind, column] of RDA_COLUMNS) {
+    const rid = keyOf(row[column]);
+    codes[kind] = null;
+    if (!isRef(rid)) continue;
+    if (x.rda[kind].has(rid)) codes[kind] = x.rda[kind].get(rid) ?? null;
+    else l.report(T, key, 'rda_unmatched', `${column}=${cutChars(rid, 40)}`);
+  }
+  const placeKey = keyOf(row['publish_place_id']);
+  let place: string | null = null;
+  if (isRef(placeKey)) {
+    if (x.places.has(placeKey)) place = x.places.get(placeKey) ?? null;
+    else l.report(T, key, 'place_missing', `publish_place_id=${cutChars(placeKey, 40)}`);
+  }
+  // The year (§11.5 step 5): the text kept, its first year extracted.
+  const yearText = text('publish_year');
+  const year = yearText === '' ? null : extractYear(yearText);
+  if (yearText !== '' && yearText !== year) l.fixed(`${T}.publish_year`, ['year'], yearText, year ?? '');
+  const record: RecordInsert = {
+    id,
+    material_type_id: materialTypeId,
+    title,
+    subtitle,
+    responsibility: fitText(l, T, key, 'sor', text('sor')),
+    title_key: titleKey(title, subtitle),
+    edition: fitChars(l, T, key, 'edition', text('edition'), 191),
+    material_detail: fitChars(l, T, key, 'spec_detail_info', text('spec_detail_info'), 191),
+    publisher_id: publisherId,
+    publication_place: place,
+    publication_year: year,
+    publication_date_text: fitChars(l, T, key, 'publish_year', yearText, 64),
+    physical_desc: fitChars(l, T, key, 'collation', text('collation'), 191),
+    series: fitChars(l, T, key, 'series_title', text('series_title'), 191),
+    classification: fitChars(l, T, key, 'classification', text('classification'), 64),
+    call_number: fitChars(l, T, key, 'call_number', text('call_number'), 64),
+    language_id: languageId,
+    content_type: codes.content ?? null,
+    media_type: codes.media ?? null,
+    carrier_type: codes.carrier ?? null,
+    summary: null,
+    notes: fitText(l, T, key, 'notes', multiLine(textOf(l, T, 'notes', row['notes']) ?? '').trim()),
+    cover_file_id: null,
+    opac_visible: intOf(row['opac_hide']) === 1 ? 0 : 1,
+    promoted: intOf(row['promoted']) === 1 ? 1 : 0,
+    source: cutChars(`slims:${key}`, SOURCE_MAX),
+    merged_into: null,
+    changed_at: c.now,
+    archived_at: null,
+    created_at: instantOf(l, key, 'input_date', row['input_date'], x.timeZone, c.now),
+    created_by: null,
+    updated_at: instantOf(l, key, 'last_update', row['last_update'], x.timeZone, c.now),
+    updated_by: null,
+  };
+  // Identifiers (§3.2): each ISBN, ISSN or other text of the cell once.
+  const ids: Insertable<DB['record_identifiers']>[] = [];
+  const seen = new Set<string>();
+  const idText = text('isbn_issn');
+  for (const part of idText === '' ? [] : splitIdentifierText(idText)) {
+    const valueKey = part.key ?? cutChars(normalizeKey(part.value), 191);
+    const unique = `${part.type}\u0000${valueKey}`;
+    if (valueKey === '' || seen.has(unique)) continue;
+    seen.add(unique);
+    if (part.type !== 'other' && !part.valid) l.report(T, key, 'identifier_invalid', `${part.type}=${cutChars(part.value, 40)}`);
+    ids.push({
+      id: newId(c.now),
+      record_id: id,
+      type: part.type,
+      value_display: cutChars(part.value, ID_DISPLAY_MAX),
+      value_key: valueKey,
+      qualifier: part.qualifier === null ? null : cutChars(part.qualifier, ID_DISPLAY_MAX) || null,
+      is_valid: part.type === 'other' || part.valid ? 1 : 0,
+      sort_order: seen.size - 1,
+    });
+  }
+  return { record, ids };
+}
+
 async function biblioBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: BatchIo, l: Ledger): Promise<void> {
   const T = 'biblio';
-  const fresh = await freshRows(c, io, l, T, rows, ['biblio_id']);
-  if (fresh.length === 0) return;
+  const done: DoneRow[] = [];
+  const fresh = await freshRows(c, io, l, T, rows, ['biblio_id'], c.options.catalogMode === 'sync' ? { done } : {});
+  if (fresh.length === 0 && done.length === 0) return;
   countUnmapped(l, fresh, BIBLIO_UNMAPPED);
-  const refs = (column: string) => fresh.map(({ row }) => keyOf(row[column])).filter(isRef);
-  const gmds = await refsOf(c, io, 'mst_gmd', refs('gmd_id'));
-  const publishers = await refsOf(c, io, 'mst_publisher', refs('publisher_id'));
-  // SLiMS compares language codes without case: the exact key first, then its lower and upper case.
-  const languages = await refsOf(c, io, 'mst_language', refs('language_id').flatMap((k) => [k, k.toLowerCase(), k.toUpperCase()]));
-  const rda = await rdaMaps(c.source);
-  const places = await placeMap(c.source);
-  const timeZone = await timeZoneOf(io.db);
+  const all = [...fresh, ...done];
+  const refs = (column: string) => all.map(({ row }) => keyOf(row[column])).filter(isRef);
   let fallbackType: string | null = null;
+  const x: BiblioLookups = {
+    gmds: await refsOf(c, io, 'mst_gmd', refs('gmd_id')),
+    publishers: await refsOf(c, io, 'mst_publisher', refs('publisher_id')),
+    // SLiMS compares language codes without case: the exact key first, then its lower and upper case.
+    languages: await refsOf(c, io, 'mst_language', refs('language_id').flatMap((k) => [k, k.toLowerCase(), k.toUpperCase()])),
+    rda: await rdaMaps(c.source),
+    places: await placeMap(c.source),
+    timeZone: await timeZoneOf(io.db),
+    fallbackType: async () => {
+      if (fallbackType === null) {
+        const configured = (await readSettings(io.db, ['catalog.defaultMaterialTypeId'], []))['catalog.defaultMaterialTypeId'] as string | null;
+        fallbackType = await defaultMaterialTypeId(io.db, configured);
+      }
+      return fallbackType;
+    },
+  };
   const records: RecordInsert[] = [];
   const identifiers: Insertable<DB['record_identifiers']>[] = [];
   const maps = mapsOf(c, T);
 
   for (const { key, row, replay } of fresh) {
-    const text = (column: string): string => oneLine(textOf(l, T, column, row[column]) ?? '');
-    // Title and subtitle.
-    const whole = text('title');
-    let title = whole;
-    let subtitle: string | null = null;
-    const colon = whole.indexOf(':');
-    if (colon >= 0) {
-      const head = whole.slice(0, colon).trim();
-      const tail = whole.slice(colon + 1).trim();
-      if (head !== '' && tail !== '') [title, subtitle] = [head, tail];
-    }
-    if (title === '') {
-      title = `[Tanpa judul - SLiMS #${key}]`;
-      l.report(T, key, 'title_empty', 'Judul kosong / The title is empty');
-    }
-    title = fitText(l, T, key, 'title', title) ?? title;
-    subtitle = fitText(l, T, key, 'title', subtitle);
-    // Masters through the legacy map.
-    const gmd = keyOf(row['gmd_id']);
-    let materialTypeId = isRef(gmd) ? gmds.get(gmd) : undefined;
-    if (materialTypeId === undefined) {
-      if (fallbackType === null) {
-        const configured = (await readSettings(io.db, ['catalog.defaultMaterialTypeId'], []))['catalog.defaultMaterialTypeId'] as string | null;
-        fallbackType = await defaultMaterialTypeId(io.db, configured);
-      }
-      materialTypeId = fallbackType;
-      l.report(T, key, 'material_type_default', `gmd_id=${gmd || '-'}`);
-    }
-    const publisher = keyOf(row['publisher_id']);
-    let publisherId: string | null = null;
-    if (isRef(publisher)) {
-      publisherId = publishers.get(publisher) ?? null;
-      if (publisherId === null) l.report(T, key, 'publisher_missing', `publisher_id=${cutChars(publisher, 40)}`);
-    }
-    const language = keyOf(row['language_id']);
-    let languageId: string | null = null;
-    if (language !== '') {
-      languageId = languages.get(language) ?? languages.get(language.toLowerCase()) ?? languages.get(language.toUpperCase()) ?? null;
-      if (languageId === null) l.report(T, key, 'language_missing', `language_id=${cutChars(language, 40)}`);
-    }
-    // RDA codes and the place (M13).
-    const codes: Partial<Record<RdaKind, string | null>> = {};
-    for (const [kind, column] of RDA_COLUMNS) {
-      const id = keyOf(row[column]);
-      codes[kind] = null;
-      if (!isRef(id)) continue;
-      if (rda[kind].has(id)) codes[kind] = rda[kind].get(id) ?? null;
-      else l.report(T, key, 'rda_unmatched', `${column}=${cutChars(id, 40)}`);
-    }
-    const placeKey = keyOf(row['publish_place_id']);
-    let place: string | null = null;
-    if (isRef(placeKey)) {
-      if (places.has(placeKey)) place = places.get(placeKey) ?? null;
-      else l.report(T, key, 'place_missing', `publish_place_id=${cutChars(placeKey, 40)}`);
-    }
-    // The year (§11.5 step 5): the text kept, its first year extracted.
-    const yearText = text('publish_year');
-    const year = yearText === '' ? null : extractYear(yearText);
-    if (yearText !== '' && yearText !== year) l.fixed(`${T}.publish_year`, ['year'], yearText, year ?? '');
-    const id = newId(c.now);
     // The values are worked out (their repairs counted, their problems reported) for a replay too, which is stored.
-    const record: RecordInsert = {
-      id,
-      material_type_id: materialTypeId,
-      title,
-      subtitle,
-      responsibility: fitText(l, T, key, 'sor', text('sor')),
-      title_key: titleKey(title, subtitle),
-      edition: fitChars(l, T, key, 'edition', text('edition'), 191),
-      material_detail: fitChars(l, T, key, 'spec_detail_info', text('spec_detail_info'), 191),
-      publisher_id: publisherId,
-      publication_place: place,
-      publication_year: year,
-      publication_date_text: fitChars(l, T, key, 'publish_year', yearText, 64),
-      physical_desc: fitChars(l, T, key, 'collation', text('collation'), 191),
-      series: fitChars(l, T, key, 'series_title', text('series_title'), 191),
-      classification: fitChars(l, T, key, 'classification', text('classification'), 64),
-      call_number: fitChars(l, T, key, 'call_number', text('call_number'), 64),
-      language_id: languageId,
-      content_type: codes.content ?? null,
-      media_type: codes.media ?? null,
-      carrier_type: codes.carrier ?? null,
-      summary: null,
-      notes: fitText(l, T, key, 'notes', multiLine(textOf(l, T, 'notes', row['notes']) ?? '').trim()),
-      cover_file_id: null,
-      opac_visible: intOf(row['opac_hide']) === 1 ? 0 : 1,
-      promoted: intOf(row['promoted']) === 1 ? 1 : 0,
-      source: cutChars(`slims:${key}`, SOURCE_MAX),
-      merged_into: null,
-      changed_at: c.now,
-      archived_at: null,
-      created_at: instantOf(l, key, 'input_date', row['input_date'], timeZone, c.now),
-      created_by: null,
-      updated_at: instantOf(l, key, 'last_update', row['last_update'], timeZone, c.now),
-      updated_by: null,
-    };
-    // Identifiers (§3.2): each ISBN, ISSN or other text of the cell once.
-    const ids: Insertable<DB['record_identifiers']>[] = [];
-    const seen = new Set<string>();
-    const idText = text('isbn_issn');
-    for (const part of idText === '' ? [] : splitIdentifierText(idText)) {
-      const valueKey = part.key ?? cutChars(normalizeKey(part.value), 191);
-      const unique = `${part.type}\u0000${valueKey}`;
-      if (valueKey === '' || seen.has(unique)) continue;
-      seen.add(unique);
-      if (part.type !== 'other' && !part.valid) l.report(T, key, 'identifier_invalid', `${part.type}=${cutChars(part.value, 40)}`);
-      ids.push({
-        id: newId(c.now),
-        record_id: id,
-        type: part.type,
-        value_display: cutChars(part.value, ID_DISPLAY_MAX),
-        value_key: valueKey,
-        qualifier: part.qualifier === null ? null : cutChars(part.qualifier, ID_DISPLAY_MAX) || null,
-        is_valid: part.type === 'other' || part.valid ? 1 : 0,
-        sort_order: seen.size - 1,
-      });
-    }
+    const { record, ids } = await biblioValues(c, l, key, row, newId(c.now), x);
     if (replay !== null) continue;
     records.push(record);
     identifiers.push(...ids);
-    maps.add(key, id);
+    maps.add(key, record.id as string);
   }
   l.migrated(T, fresh.length);
+  l.changed(T, fresh.length);
+  const synced = done.length === 0 ? [] : await syncRecords(c, io, l, done, c.dryRun ? await doneLookups(c, io, done, x) : x);
   if (io.trx === null) return;
   await insertChunks(io.trx, 'records', records, RECORD_ROWS_PER_INSERT, RECORD_BYTES_PER_INSERT);
   await insertChunks(io.trx, 'record_identifiers', identifiers, ROWS_PER_INSERT);
   await maps.write(io);
-  const written = records.map((r) => r.id);
+  const written = [...records.map((r) => r.id as string), ...synced];
   await indexRecords(io.trx, written, c.now);
   await stampChanged(io.trx, written, c.clock());
+}
+
+// ---- 1b. the catalogue re-sync of records mapped by an earlier run --------------------------------------------------------
+
+/**
+ * The record fields a re-sync compares and writes, by the name its report rows give (`title_key` goes with the title):
+ * the source-derived columns only. The clock fallbacks and the bookkeeping (`created_at`, `updated_at`, `changed_at`,
+ * `created_by`, `updated_by`, `version`) are never compared and never written from the source, and neither are the
+ * columns other stages or ALTIS fill (`cover_file_id`, `summary`, `merged_into`, `archived_at`, the accreditation fields).
+ */
+const RECORD_SYNC_FIELDS = Object.freeze([
+  ['materialType', 'material_type_id'],
+  ['title', 'title'],
+  ['subtitle', 'subtitle'],
+  ['responsibility', 'responsibility'],
+  ['edition', 'edition'],
+  ['materialDetail', 'material_detail'],
+  ['publisher', 'publisher_id'],
+  ['publicationPlace', 'publication_place'],
+  ['publicationYear', 'publication_year'],
+  ['publicationDateText', 'publication_date_text'],
+  ['physicalDesc', 'physical_desc'],
+  ['series', 'series'],
+  ['classification', 'classification'],
+  ['callNumber', 'call_number'],
+  ['language', 'language_id'],
+  ['contentType', 'content_type'],
+  ['mediaType', 'media_type'],
+  ['carrierType', 'carrier_type'],
+  ['notes', 'notes'],
+  ['opacVisible', 'opac_visible'],
+  ['promoted', 'promoted'],
+] as const satisfies readonly (readonly [string, keyof RecordInsert])[]);
+
+type StoredRecord = Pick<
+  Selectable<DB['records']>,
+  'id' | 'version' | 'archived_at' | 'updated_by' | (typeof RECORD_SYNC_FIELDS)[number][1]
+>;
+
+/** The flag columns a re-sync compares (by value, whatever type a driver reads them back as). */
+const FLAG_COLUMNS: ReadonlySet<string> = new Set(['opac_visible', 'promoted']);
+
+/** A stored or computed cell of `column` as compared: a number by value, text as it is. */
+function cell(column: string, v: unknown): string | number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'bigint' || FLAG_COLUMNS.has(column)) return Number(v);
+  if (typeof v === 'number' || typeof v === 'string') return v;
+  return String(v);
+}
+
+/** An identifier as compared. */
+function identifierKey(r: { type: string; value_key: string; value_display: string; qualifier?: string | null; is_valid?: unknown; sort_order?: unknown }): string {
+  return JSON.stringify([r.type, r.value_key, r.value_display, r.qualifier ?? null, Number(r.is_valid ?? 1), Number(r.sort_order ?? 0)]);
+}
+
+/**
+ * The records `ids`, read for a re-sync: in a real run with a locking read (FOR UPDATE where the engine has it; SQLite
+ * has one writer), so they are the latest commit and an editor's save waits for the batch.
+ */
+async function storedRecords(io: BatchIo, ids: readonly string[]): Promise<Map<string, StoredRecord>> {
+  const out = new Map<string, StoredRecord>();
+  const unique = [...new Set(ids)].sort();
+  const locking = io.trx !== null && fullTextFamily(io.trx) !== 'fts5';
+  for (let i = 0; i < unique.length; i += ROWS_PER_INSERT) {
+    const q = io.db
+      .selectFrom('records')
+      .select(['id', 'version', 'archived_at', 'updated_by', ...RECORD_SYNC_FIELDS.map(([, column]) => column)])
+      .where('id', 'in', unique.slice(i, i + ROWS_PER_INSERT));
+    for (const r of await (locking ? q.forUpdate() : q).execute()) out.set(r.id, r as StoredRecord);
+  }
+  return out;
+}
+
+/**
+ * The re-sync of the `biblio` rows `done` an earlier run mapped (`catalogMode = sync`): each record's source-derived
+ * values worked out as a first run would (their repairs and problems are not counted again: they were when the row was
+ * first migrated), then
+ * - a record no one edited in ALTIS (`updated_by` null) whose values differ is rewritten: the differing columns, its
+ *   identifiers when they differ, `version + 1`, `updated_at = now` (`changed_at` and the index by the caller); counted
+ *   migrated and changed;
+ * - a record edited in ALTIS that differs is left as it is: skipped `edited_in_altis`, reported with the differing
+ *   fields;
+ * - a record archived (or merged) in ALTIS is skipped `target_archived`, one gone `target_missing`;
+ * - any other is counted migrated (unchanged).
+ * A dry run counts and reports alike and writes nothing.
+ *
+ * @returns the ids of the records rewritten
+ */
+async function syncRecords(c: SlimsStageContext, io: BatchIo, l: Ledger, done: readonly DoneRow[], x: BiblioLookups): Promise<string[]> {
+  const T = 'biblio';
+  const stored = await storedRecords(io, done.map((d) => d.targetId));
+  const storedIds = new Map<string, string[]>();
+  for (let i = 0; i < done.length; i += ROWS_PER_INSERT) {
+    const rows = await io.db
+      .selectFrom('record_identifiers')
+      .selectAll()
+      .where(
+        'record_id',
+        'in',
+        done.slice(i, i + ROWS_PER_INSERT).map((d) => d.targetId),
+      )
+      .execute();
+    for (const r of rows) storedIds.set(r.record_id, [...(storedIds.get(r.record_id) ?? []), identifierKey(r)]);
+  }
+  const rewritten: string[] = [];
+  for (const d of done) {
+    const before = stored.get(d.targetId);
+    if (before === undefined) {
+      l.skipped(T, 'target_missing');
+      continue;
+    }
+    if (before.archived_at !== null) {
+      l.skipped(T, 'target_archived');
+      continue;
+    }
+    // A ledger of its own: the row's repairs and problems were counted when it was first migrated.
+    const { record, ids } = await biblioValues(c, new Ledger(new Map(), new Map()), d.key, d.row, d.targetId, x);
+    const fields: string[] = [];
+    const set: Record<string, unknown> = {};
+    for (const [name, column] of RECORD_SYNC_FIELDS) {
+      if (cell(column, record[column]) === cell(column, before[column])) continue;
+      fields.push(name);
+      set[column] = record[column];
+    }
+    const idsBefore = [...(storedIds.get(d.targetId) ?? [])].sort();
+    const idsAfter = ids.map(identifierKey).sort();
+    const idsDiffer = idsBefore.length !== idsAfter.length || idsBefore.some((k, i) => k !== idsAfter[i]);
+    if (idsDiffer) fields.push('identifiers');
+    if (fields.length === 0) {
+      l.migrated(T);
+      continue;
+    }
+    fields.sort();
+    if (before.updated_by !== null) {
+      l.skipped(T, 'edited_in_altis');
+      l.report(T, d.key, 'edited_in_altis', fields.join(','));
+      continue;
+    }
+    l.migrated(T);
+    l.changed(T);
+    // A dry run lists what the real run would change.
+    if (io.trx === null) {
+      l.report(T, d.key, 'sync_change', fields.join(','));
+      continue;
+    }
+    if (set['title'] !== undefined || set['subtitle'] !== undefined) set['title_key'] = record.title_key;
+    const updated = await io.trx
+      .updateTable('records')
+      .set((eb) => ({ ...(set as Updateable<DB['records']>), updated_at: c.now, version: eb('version', '+', 1) }))
+      .where('id', '=', d.targetId)
+      .where('version', '=', Number(before.version))
+      .where('updated_by', 'is', null)
+      .executeTakeFirst();
+    if (Number(updated.numUpdatedRows) !== 1) throw syncConflict();
+    if (idsDiffer) {
+      await io.trx.deleteFrom('record_identifiers').where('record_id', '=', d.targetId).execute();
+      await insertChunks(io.trx, 'record_identifiers', ids, ROWS_PER_INSERT);
+    }
+    rewritten.push(d.targetId);
+  }
+  return rewritten;
+}
+
+/**
+ * A dry run's lookups for the records an earlier run mapped: the legacy map only, plus a stand-in for a master the
+ * source has and the real run would map first (a value no stored record holds, so it counts as a change). refsOf's
+ * stand-ins for every key not mapped (a dry run's own records) would take a reference to a master the source lacks,
+ * which a first run reported and left out, for a change.
+ */
+async function doneLookups(c: SlimsStageContext, io: BatchIo, done: readonly DoneRow[], x: BiblioLookups): Promise<BiblioLookups> {
+  const refs = async (entity: string, table: string, column: string, keys: readonly string[]): Promise<Map<string, string>> => {
+    const found = await mappedOf(c, io, entity, keys);
+    const present = await sourceKeys(c, table, column);
+    for (const k of keys) if (!found.has(k) && present.has(k)) found.set(k, `~${entity}:${k}`);
+    return found;
+  };
+  const keys = (column: string) => done.map(({ row }) => keyOf(row[column])).filter(isRef);
+  return {
+    ...x,
+    gmds: await refs('mst_gmd', 'mst_gmd', 'gmd_id', keys('gmd_id')),
+    publishers: await refs('mst_publisher', 'mst_publisher', 'publisher_id', keys('publisher_id')),
+    languages: await refs('mst_language', 'mst_language', 'language_id', keys('language_id').flatMap((k) => [k, k.toLowerCase(), k.toUpperCase()])),
+  };
+}
+
+/** A row changed between the batch's locking read and its write: the batch runs again (withTx). */
+function syncConflict(): DomainError {
+  return new DomainError('TX_CONFLICT', {
+    detail: 'Baris katalog baru saja diubah; transaksi diulang / A catalogue row was just changed; the transaction is run again',
+    meta: { attempts: 1, code: 'MIGRATION_SYNC_RACE' },
+  });
 }
 
 // ---- 2, 3. authors and topics of records --------------------------------------------------------------------------------

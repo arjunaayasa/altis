@@ -19,6 +19,7 @@ import {
   type ItemStatus,
   type RelationType,
 } from '../../catalog-vocab.js';
+import { AUDIENCES, LOCAL_WORKS, LOCAL_WORK_KINDS, REFERENCE_KINDS } from '../../accreditation-vocab.js';
 import { codeField, customValuesField, lineText, longText, multilineSafe, shortText, URL_MAX, yearField } from './common.js';
 
 /** At most this many entries of each list in a draft or a record body (the create body's bounds). */
@@ -96,6 +97,18 @@ const draftItem = z.strictObject({
 });
 
 /**
+ * The accreditation fields of a record (`records.audience`, `local_work`, `local_work_kind`, `reference_kind`): each a
+ * value of its vocabulary, null to clear, absent to leave as it is. Shared by the draft, the create and patch bodies
+ * and the bulk change.
+ */
+export const recordAccredFields = {
+  audience: z.enum(AUDIENCES).nullable().optional(),
+  localWork: z.enum(LOCAL_WORKS).nullable().optional(),
+  localWorkKind: z.enum(LOCAL_WORK_KINDS).nullable().optional(),
+  referenceKind: z.enum(REFERENCE_KINDS).nullable().optional(),
+};
+
+/**
  * A record as an importer reads it (MARC, MARCXML, CSV, SRU, the SLiMS migration), before it is stored. The fields
  * are the record's columns (§2.2) under their API names; masters by code, authorities by name. Strict at every depth.
  */
@@ -131,6 +144,10 @@ export const RecordDraft = z.strictObject({
   marcExtra: z.array(MarcExtraField).max(RECORD_LIST_MAX.marcExtra),
   /** Custom values by code, as read (CSV strings stay strings until `coerceCustomValues`, S19). */
   custom: customValuesField.optional(),
+  // ---- Komunitas K1 (catalogue accreditation fields) ----
+  // Who the record is meant for, who made a local work and its kind, the kind of a reference work; all optional, so a
+  // draft from an older importer stays valid.
+  ...recordAccredFields,
 });
 
 export type RecordDraft = z.infer<typeof RecordDraft>;
