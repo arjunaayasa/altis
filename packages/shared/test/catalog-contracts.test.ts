@@ -541,7 +541,9 @@ describe('masters', () => {
     expect(errorsOf(CustomFieldBody, { ...field, type: 'select', options: [{ value: 'a', labelId: 'A' }, { value: 'a', labelId: 'A2' }] })).toEqual([
       { path: 'options.1.value', code: 'duplicate' },
     ]);
-    expect(ok(CustomFieldBody, { ...field, entity: 'members' })).toBe(false);
+    // Members have custom fields too (the server refuses a public or searchable one).
+    expect(ok(CustomFieldBody, { ...field, entity: 'members' })).toBe(true);
+    expect(ok(CustomFieldBody, { ...field, entity: 'loans' })).toBe(false);
     expect(ok(CustomFieldPatchBody, { version: 1, labelId: 'Halaman' })).toBe(true);
     expect(ok(CustomFieldPatchBody, { version: 1, entity: 'items' })).toBe(false);
     expect(ok(CustomFieldPatchBody, { version: 1, type: 'text' })).toBe(false);
