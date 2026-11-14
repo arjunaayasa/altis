@@ -13,7 +13,7 @@ import { useDateTime } from '@/components/data-table';
 import { Badge, Field, Notice, NoticeAlert, ProblemAlert, RefetchProblem, RootError, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
 import { useT, type TKey } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
@@ -371,9 +371,6 @@ export function MemberCreateScreen() {
 
 type DetailTab = 'data' | 'loans' | 'history' | 'events';
 
-/** A member page tab: the height of one row of the tab list, also when the tabs wrap onto a second row. */
-const TAB_ROW = 'h-7.5';
-
 export function MemberDetailScreen() {
   const t = useT();
   const me = useMe();
@@ -470,25 +467,24 @@ export function MemberDetailScreen() {
       {notice !== null && <Notice kind="success">{notice}</Notice>}
       {m.storedStatus === 'suspended' && m.statusNote !== null && <NoticeAlert>{t('members.suspended_note', { note: m.statusNote })}</NoticeAlert>}
       {/* Wide screens: the tabs in the wide column, the summary beside them. Narrow screens: the summary first, above
-          the long form. The tab row grows when its tabs wrap, instead of covering the panel below it: the list's height
-          follows its rows, and each tab keeps the height of one row (not a share of the list's). */}
+          the long form; the tabs wrap onto a second row there (WRAPPING_TABS). */}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
         <Tabs value={tab} onValueChange={(v) => setTab(v as DetailTab)} className="order-1 min-w-0 lg:order-none">
-          <TabsList className="h-auto flex-wrap">
-            <TabsTrigger value="data" className={TAB_ROW}>
+          <TabsList className={WRAPPING_TABS.list}>
+            <TabsTrigger value="data" className={WRAPPING_TABS.trigger}>
               {t('members.tab.data')}
             </TabsTrigger>
             {canLoans && (
-              <TabsTrigger value="loans" className={TAB_ROW}>
+              <TabsTrigger value="loans" className={WRAPPING_TABS.trigger}>
                 {t('members.tab.loans', { count: m.openLoans })}
               </TabsTrigger>
             )}
             {canLoans && (
-              <TabsTrigger value="history" className={TAB_ROW}>
+              <TabsTrigger value="history" className={WRAPPING_TABS.trigger}>
                 {t('members.tab.history')}
               </TabsTrigger>
             )}
-            <TabsTrigger value="events" className={TAB_ROW}>
+            <TabsTrigger value="events" className={WRAPPING_TABS.trigger}>
               {t('members.tab.events')}
             </TabsTrigger>
           </TabsList>

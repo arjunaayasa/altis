@@ -489,6 +489,11 @@ describe('RecordEditScreen', () => {
     const { requests } = start({ path: `/admin/catalog/records/${RECORD}`, routes: { [`GET catalog/records/${RECORD}/marc`]: () => marc } });
     await screen.findByRole('heading', { name: 'Bumi Manusia' });
     expect(screen.getByRole('tab', { name: 'Eksemplar (2)' })).toBeTruthy();
+    // On a narrow screen the tabs wrap: the list grows with its rows and each tab keeps one row's height, so the
+    // second row never covers the panel (where Tampilan MARC could not be clicked).
+    const list = screen.getByRole('tablist', { name: 'Bagian cantuman' });
+    expect(list.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-auto', 'flex-wrap']));
+    for (const tab of within(list).getAllByRole('tab')) expect(tab.className.split(/\s+/)).toContain('h-7.5');
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Lampiran' }));
     await waitFor(() => expect(gets(requests, `catalog/records/${RECORD}/attachments`)).toBe(1));
