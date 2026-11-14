@@ -1222,8 +1222,18 @@ export const ADMIN_ID = {
   'jobs.schedule.reports.housekeeping': 'Perawatan harian berkas laporan',
   'jobs.message.reports.housekeeping.date_jobs_postponed': 'Tugas berbasis tanggal ditunda: jam sistem melompat',
   'jobs.message.reports.export.warnings': 'Selesai dengan peringatan; rinciannya ada di daftar ekspor',
-  // The screens of reports and accreditation: one file per area (i18n/reports, i18n/accreditation, i18n/komunitas),
-  // joined in i18n/komunitas/index.ts.
+  // ---- Members and desk circulation (nav) ----
+  'nav.group.circulation': 'Layanan',
+  'nav.group.members': 'Anggota',
+  'nav.circulation.desk': 'Meja Layanan',
+  'nav.circulation.quick_return': 'Kembali Cepat',
+  'nav.circulation.overdue': 'Terlambat & Jatuh Tempo',
+  'nav.circulation.policies': 'Aturan Peminjaman',
+  'nav.members.list': 'Daftar Anggota',
+  'nav.members.types': 'Tipe Anggota',
+  'nav.members.import': 'Impor Anggota',
+  // The screens of reports and accreditation, members and circulation: one file per area (i18n/reports,
+  // i18n/accreditation, i18n/komunitas), joined in i18n/komunitas/index.ts.
   ...KOMUNITAS_ID,
 } satisfies Record<string, string>;
 
