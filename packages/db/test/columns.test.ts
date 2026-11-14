@@ -1,10 +1,22 @@
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { DataTypeNode, sql, type ColumnDataType } from 'kysely';
+import {
+  DataTypeNode,
+  DummyDriver,
+  Kysely,
+  PostgresAdapter,
+  PostgresIntrospector,
+  PostgresQueryCompiler,
+  sql,
+  type ColumnDataType,
+  type CompiledQuery,
+  type DatabaseConnection,
+} from 'kysely';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { emptyDatabase, engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../tools/test/test-db.js';
 import { RUNNER_TABLES_SINCE, TABLE_COLUMNS, TABLE_KEYS, columnsAt, type ColumnSpec } from '../src/columns.js';
+import { EDITION_MIGRATOR_TABLES } from '../src/edition-migrations.js';
 import { FULLTEXT_DIALECT_OBJECTS } from '../src/fulltext.js';
 import { PHASE1_MIGRATIONS, releaseMigrations } from '../src/migrations/index.js';
 import { runMigrations } from '../src/migrator.js';
@@ -75,6 +87,68 @@ function pgCollation(c: ColumnSpec): string | null {
   if (c.kind === 'id' || c.kind === 'ulid' || c.kind === 'char' || c.kind === 'key191') return 'C';
   if (c.kind === 'date' || c.kind === 'varchar' || c.kind === 'text' || c.kind === 'json') return 'default';
   return null;
+}
+
+/** The migration before 0009, which the PostgreSQL collation case installs first. */
+const BEFORE_0009 = '0008_access_indexes';
+
+/**
+ * The key and token columns the PostgreSQL collation case turns back to the database's default collation, as an
+ * install of 0001–0008 made by an earlier build had them: the ones 0009 must convert to "C". The other migration
+ * lane's runner tables are left out: they came after 0009, the runner makes them in "C" from the start, and 0009
+ * (frozen) does not name them, so degrading them would describe no install that ever existed.
+ */
+function degradedBefore0009(): { table: TableName; column: string; type: ColumnDataType }[] {
+  const later = new Set<string>(EDITION_MIGRATOR_TABLES);
+  return TABLES.filter((table) => !later.has(table)).flatMap((table) =>
+    columnsAt(table, BEFORE_0009)
+      .filter((c) => pgCollation(c) === 'C')
+      .map((c) => ({ table, column: c.name, type: catalogType(c) as ColumnDataType })),
+  );
+}
+
+/**
+ * A PostgreSQL Kysely without a server: every statement is recorded, and the catalog reads answer as an install of
+ * 0001–0008 made in the database's default collation would (every table there, every key and token column of
+ * `columnsAt(table, '0008…')` in collation "default"); any other read answers no row.
+ */
+function recordingPostgres(): { db: Kysely<unknown>; statements: CompiledQuery[] } {
+  const statements: CompiledQuery[] = [];
+  const answer = (q: CompiledQuery): unknown[] => {
+    if (q.sql.includes('AS present FROM pg_catalog.pg_class')) return [{ present: 1 }];
+    if (q.sql.includes('co.collname AS coll')) {
+      return columnsAt(String(q.parameters[0]) as TableName, BEFORE_0009).map((c) => ({
+        name: c.name,
+        type: catalogType(c),
+        coll: 'default',
+        ns: 'pg_catalog',
+      }));
+    }
+    return [];
+  };
+  const connection: DatabaseConnection = {
+    executeQuery: <R>(q: CompiledQuery) => {
+      statements.push(q);
+      return Promise.resolve({ rows: answer(q) as R[] });
+    },
+    streamQuery: () => {
+      throw new Error('not used here');
+    },
+  };
+  class RecordingDriver extends DummyDriver {
+    override acquireConnection(): Promise<DatabaseConnection> {
+      return Promise.resolve(connection);
+    }
+  }
+  const db = new Kysely<unknown>({
+    dialect: {
+      createAdapter: () => new PostgresAdapter(),
+      createDriver: () => new RecordingDriver(),
+      createIntrospector: (k) => new PostgresIntrospector(k),
+      createQueryCompiler: () => new PostgresQueryCompiler(),
+    },
+  });
+  return { db, statements };
 }
 
 /** A column as the drift test compares it: name, catalog type, nullability (and the collation on server dialects). */
@@ -166,6 +240,22 @@ describe('the column registry (decision C11)', () => {
     expect(() => columnsAt('jobs', 'latest')).toThrow(TypeError);
     expect(() => columnsAt('jobs', '9_x')).toThrow(TypeError);
     expect(() => columnsAt('nope' as TableName, '0009')).toThrow(TypeError);
+  });
+
+  it('the PostgreSQL collation case degrades exactly the key and token columns 0009 converts back to "C"', async () => {
+    // Runs on every engine: the frozen 0009 against a recorded PostgreSQL, so a column the case degrades but 0009
+    // never names (a runner table registered after 0009, for example) shows here, not only on a PostgreSQL run.
+    const { db, statements } = recordingPostgres();
+    await PHASE1_MIGRATIONS['0009_ops_jobs']!.up(db, 'postgres');
+    const converted = statements
+      .filter((q) => /^alter table /i.test(q.sql) && q.sql.includes('collate "C"'))
+      .flatMap((q) => {
+        const table = /^alter table "(\w+)"/i.exec(q.sql)?.[1];
+        return [...q.sql.matchAll(/alter column "(\w+)" type /gi)].map((m) => `${String(table)}.${String(m[1])}`);
+      });
+    expect(converted.length).toBeGreaterThan(0);
+    expect(new Set(converted).size).toBe(converted.length);
+    expect(degradedBefore0009().map((b) => `${b.table}.${b.column}`).sort()).toEqual([...converted].sort());
   });
 });
 
@@ -445,11 +535,7 @@ describe.skipIf(!ctx.available)(`the column registry against the catalog: drift 
       const upTo8 = await runMigrations(h, { appVersion: '0.1.0', dataDir, migrations: migrationsUpTo(PHASE1_MIGRATIONS, '0008_access_indexes') });
       expect(upTo8.applied).toHaveLength(8);
       await h.db.insertInto('settings').values({ scope: 'data', key: 'test.kept', value: '1', updated_at: 1, updated_by: null }).execute();
-      const binary = TABLES.flatMap((table) =>
-        columnsAt(table, '0008_access_indexes')
-          .filter((c) => pgCollation(c) === 'C')
-          .map((c) => ({ table, column: c.name, type: catalogType(c) as ColumnDataType })),
-      );
+      const binary = degradedBefore0009();
       for (const b of binary) {
         const type = { toOperationNode: () => DataTypeNode.create(b.type) };
         await h.db.schema
