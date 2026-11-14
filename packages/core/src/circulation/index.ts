@@ -91,6 +91,7 @@ export { FinePreviewer, finesSkipClosedDays, overdueFineMinor } from './fines.js
 export type { FineTerms, PreviewLoan } from './fines.js';
 export {
   CHARGES_SEAM,
+  anonymizeLoanCharges,
   bookLostCharges,
   bookOverdueFine,
   cancelLostCharges,
@@ -124,3 +125,5 @@ export {
 } from './payments.js';
 export type { PaymentInput, ReceiptData } from './payments.js';
 export { memberBlocked } from './desk.js';
+export { buildSlipPdf, slipData } from './slips.js';
+export type { SlipData } from './slips.js';

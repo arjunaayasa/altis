@@ -205,6 +205,30 @@ export const ReceiptQuery = z.strictObject({ paper: z.enum(RECEIPT_PAPERS).optio
 
 export type ReceiptQuery = z.infer<typeof ReceiptQuery>;
 
+/** A list of ids, 0 to `max`, without repeats. */
+const idsField = (max: number) =>
+  z
+    .array(ulidField)
+    .max(max)
+    .refine((ids) => new Set(ids).size === ids.length, { params: { code: 'duplicate' } });
+
+/**
+ * `POST branches/:branchId/circulation/slips` → `application/pdf` (`circulation.desk.use`, a POST read): the transaction
+ * slip of a visit on a 58 or 80 mm roll: the loans and renewals (`loanIds`, made or returned at this branch), the items
+ * returned (`returnedLoanIds`, with days late and the fine booked) and the payments taken here (`paymentIds`). At least
+ * one id; any of another branch is 404.
+ */
+export const SlipBody = z
+  .strictObject({
+    loanIds: idsField(50).default([]),
+    returnedLoanIds: idsField(50).default([]),
+    paymentIds: idsField(10).default([]),
+    paper: z.enum(RECEIPT_PAPERS).optional(),
+  })
+  .refine((b) => b.loanIds.length + b.returnedLoanIds.length + b.paymentIds.length > 0, { params: { code: 'required' }, path: ['loanIds'] });
+
+export type SlipBody = z.infer<typeof SlipBody>;
+
 // ---- records (`circulation.records.read`) ----------------------------------------------------------------------------
 
 /** `GET circulation/members/:memberId/charges` → `MemberChargesResponse`: every charge and payment of the member, newest first. */

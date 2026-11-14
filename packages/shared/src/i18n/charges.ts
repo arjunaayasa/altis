@@ -56,6 +56,15 @@ export const CHARGES_ID = {
   'receipt.note': 'Catatan',
   'receipt.voided': 'DIBATALKAN',
   'receipt.non_latin': 'teks non-Latin',
+  // ---- slip.*: the transaction slip of a visit at the desk (in the library's language) ----
+  'slip.title': 'SLIP TRANSAKSI',
+  'slip.loans': 'Dipinjam',
+  'slip.returns': 'Dikembalikan',
+  'slip.payments': 'Pembayaran',
+  'slip.item': 'Eksemplar',
+  'slip.due': 'Jatuh tempo',
+  'slip.renewed': 'diperpanjang',
+  'slip.late': 'Terlambat (hari)',
 } as const;
 
 export const CHARGES_EN: Record<keyof typeof CHARGES_ID, string> = {
@@ -101,4 +110,12 @@ export const CHARGES_EN: Record<keyof typeof CHARGES_ID, string> = {
   'receipt.note': 'Note',
   'receipt.voided': 'VOID',
   'receipt.non_latin': 'non-Latin text',
+  'slip.title': 'TRANSACTION SLIP',
+  'slip.loans': 'Borrowed',
+  'slip.returns': 'Returned',
+  'slip.payments': 'Payments',
+  'slip.item': 'Item',
+  'slip.due': 'Due',
+  'slip.renewed': 'renewed',
+  'slip.late': 'Days late',
 };

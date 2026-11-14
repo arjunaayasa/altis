@@ -296,6 +296,28 @@ export async function waiveCharge(tx: TxCtx, i: { branchId: string; chargeId: st
   return (await chargeViews(trx, [after]))[0]!;
 }
 
+// ---- privacy ---------------------------------------------------------------------------------------------------------
+
+/**
+ * For the anonymisation of loan history: the charges of the loans `loanIds` that are settled or cancelled lose their
+ * loan, their item and their description (amount, kind, dates, branch and member stay, as a financial record), so a
+ * charge can no longer tie an anonymised loan back to its borrower. Open charges keep them. The number changed.
+ */
+export async function anonymizeLoanCharges(trx: Transaction<DB>, loanIds: readonly string[], now: number): Promise<number> {
+  let changed = 0;
+  const ids = [...new Set(loanIds)];
+  for (let k = 0; k < ids.length; k += 500) {
+    const done = await trx
+      .updateTable('charges')
+      .set((eb) => ({ loan_id: null, item_id: null, description: '', updated_at: now, updated_by: null, version: eb('version', '+', 1) }))
+      .where('loan_id', 'in', ids.slice(k, k + 500))
+      .where('status', 'in', ['settled', 'cancelled'])
+      .executeTakeFirst();
+    changed += Number(done.numUpdatedRows);
+  }
+  return changed;
+}
+
 // ---- the seam --------------------------------------------------------------------------------------------------------
 
 /** What the circulation core calls (seams.ts), plugged in when this module loads. */

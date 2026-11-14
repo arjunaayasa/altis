@@ -13,6 +13,8 @@ import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { MasterTable, type MasterColumn } from '@/screens/catalog/masters/master-table';
 import { useCalendarDate, useMemberTypes, useTypeName } from './common';
+// ---- Komunitas (charges and payments) ----
+import { useMoney } from './charges';
 
 /**
  * Terlambat & Jatuh Tempo (`/admin/layanan/terlambat`): the open loans past their due date, the longest-overdue first
@@ -45,6 +47,7 @@ export function OverdueScreen() {
   const t = useT();
   const me = useMe();
   const day = useCalendarDate();
+  const money = useMoney();
   const typeName = useTypeName();
   const ids = useId();
   const types = useMemberTypes(true);
@@ -119,7 +122,14 @@ export function OverdueScreen() {
     {
       id: 'late',
       header: t('circulation.col.late'),
-      cell: (row) => <Badge tone={row.daysLate > LATE_RED_AFTER_DAYS ? 'danger' : 'warning'}>{t('circulation.due.late', { count: row.daysLate })}</Badge>,
+      cell: (row) => (
+        <div className="grid gap-1">
+          <Badge tone={row.daysLate > LATE_RED_AFTER_DAYS ? 'danger' : 'warning'}>{t('circulation.due.late', { count: row.daysLate })}</Badge>
+          {row.finePreview !== null && (
+            <span className="text-xs text-destructive">{t('charges.fine_preview', { amount: money(row.finePreview.amount, row.finePreview.currency), days: row.finePreview.days })}</span>
+          )}
+        </div>
+      ),
     },
     ...(canServe
       ? [

@@ -62,7 +62,7 @@ import {
 // ---- Komunitas (holds) ----
 import { HoldSlipPrint, MemberHoldsPanel, type HoldSlip } from './holds';
 // ---- Komunitas (charges and payments) ----
-import { MemberChargesPanel, receiptHref, useMoney } from './charges';
+import { MemberChargesPanel, printSlip, receiptHref, useMoney } from './charges';
 
 /**
  * Meja Layanan (`/admin/layanan`) and Kembali Cepat (`/admin/layanan/kembali`): the circulation desk, built for a
@@ -122,6 +122,8 @@ interface VisitRow {
   title: string;
   barcode: string;
   note: string;
+  /** The loan of a loan, renewal or return (the slip lists it). */
+  refId?: string;
 }
 
 interface ReturnRow {
@@ -357,6 +359,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
   const [chargesDialog, setChargesDialog] = useState(false);
   const [payNow, setPayNow] = useState(0);
   const [receipt, setReceipt] = useState<{ href: string; number: string } | null>(null);
+  const [visitPayments, setVisitPayments] = useState<string[]>([]);
   const money = useMoney();
   const forceInput = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
@@ -463,6 +466,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
     setValue('');
     setActive(-1);
     setReceipt(null);
+    setVisitPayments([]);
     const refusal = borrowRefusalText(t, view);
     const notes = warningTexts(t, day, view.warnings);
     if (refusal !== null) say(view.borrowRefusal === 'CIRC_LIMIT_REACHED' || view.borrowRefusal === 'MEMBER_SUSPENDED' ? 'warning' : 'error', t('circulation.feedback.member_loaded', { name: view.name }), refusal);
@@ -523,7 +527,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
       }
       const limit = panel.type.loanLimit;
       const next = limit === null ? t('circulation.feedback.scan_next') : t('circulation.feedback.loan_count', { count: panel.counts.openLoans + 1, limit });
-      addVisit({ kind: 'loan', title: loan.record.title, barcode: loan.item.barcode, note: t('circulation.visit.due', { date: day(loan.dueOn) }) });
+      addVisit({ kind: 'loan', title: loan.record.title, barcode: loan.item.barcode, note: t('circulation.visit.due', { date: day(loan.dueOn) }), refId: loan.id });
       setLastLoan({ id: loan.id, title: loan.record.title, barcode: loan.item.barcode });
       say(notes.length > 0 ? 'warning' : 'success', t('circulation.feedback.lent', { title: loan.record.title, date: day(loan.dueOn) }), [...notes, next].join(' '));
       await refreshPanel();
@@ -615,7 +619,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
         setSlip(null);
         say(otherBranch !== null || done.daysLate > 0 ? 'warning' : 'success', title, detail);
       }
-      addVisit({ kind: 'return', title: done.record.title, barcode: done.item.barcode, note: done.daysLate > 0 ? t('circulation.due.late', { count: done.daysLate }) : t('circulation.due.on_time') });
+      addVisit({ kind: 'return', title: done.record.title, barcode: done.item.barcode, note: done.daysLate > 0 ? t('circulation.due.late', { count: done.daysLate }) : t('circulation.due.on_time'), refId: done.id });
       seq.current += 1;
       const row: ReturnRow = {
         seq: seq.current,
@@ -651,7 +655,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
       });
       settle();
       const notes = warningTexts(t, day, done.warnings, done.dueOn);
-      addVisit({ kind: 'renew', title: loan.record.title, barcode: loan.item.barcode, note: t('circulation.visit.due', { date: day(done.dueOn) }) });
+      addVisit({ kind: 'renew', title: loan.record.title, barcode: loan.item.barcode, note: t('circulation.visit.due', { date: day(done.dueOn) }), refId: done.id });
       say(notes.length > 0 ? 'warning' : 'success', t('circulation.feedback.renewed', { date: day(done.dueOn) }), [loan.record.title, ...notes].join(' · '));
       await refreshPanel();
     } catch (e) {
@@ -702,9 +706,29 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
     setLastLoan(null);
     setForcing(null);
     setReceipt(null);
+    setVisitPayments([]);
     if (search.member !== undefined) void navigate({ href: '/admin/layanan', replace: true });
     say('info', name === undefined ? t('circulation.feedback.ready') : t('circulation.feedback.done', { name }));
     focusBox();
+  };
+
+  /** F9: the slip of this visit (the loans, renewals and returns of the list, and the payments taken). */
+  const slipNow = async (): Promise<void> => {
+    if (branchId === null) return;
+    const ids = (kinds: VisitRow['kind'][]) => [...new Set(visit.filter((r) => kinds.includes(r.kind) && r.refId !== undefined).map((r) => r.refId!))].slice(0, 50);
+    const body = { loanIds: ids(['loan', 'renew']), returnedLoanIds: ids(['return']), paymentIds: visitPayments.slice(0, 10) };
+    if (body.loanIds.length + body.returnedLoanIds.length + body.paymentIds.length === 0) {
+      say('info', t('charges.slip.empty'));
+      return;
+    }
+    try {
+      await printSlip(branchId, body);
+      say('success', t('charges.slip.printed'));
+    } catch (e) {
+      say('error', deskRefusal(t, e, { action: 'renew', code: '', member }).title);
+    } finally {
+      focusBox();
+    }
   };
 
   const confirmOffer = async (): Promise<void> => {
@@ -832,6 +856,9 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
       } else if ((key === 'z' || key === 'Z') && (e.ctrlKey || e.metaKey) && !e.shiftKey && value === '' && forcing === null && lastLoan !== null) {
         e.preventDefault();
         void voidLast();
+      } else if (key === 'F9' && !quickReturn && !inLibrary) {
+        e.preventDefault();
+        void slipNow();
       } else if (key === 'F6' && !quickReturn) {
         e.preventDefault();
         switchMode('name');
@@ -1182,7 +1209,12 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
                     <TabsTrigger value="charges">{t('charges.member.tab', { count: member.charges.charges.length })}</TabsTrigger>
                     {canReadLoans && <TabsTrigger value="history">{t('circulation.tab.history')}</TabsTrigger>}
                   </TabsList>
-                  <TabsContent value="visit">
+                  <TabsContent value="visit" className="flex flex-col gap-2">
+                    <div className="flex justify-end">
+                      <Button type="button" variant="outline" size="sm" onClick={() => void slipNow()}>
+                        {t('charges.slip.print')}
+                      </Button>
+                    </div>
                     <VisitList rows={visit} />
                   </TabsContent>
                   <TabsContent value="loans" className="flex flex-col gap-2">
@@ -1295,6 +1327,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
                         onPaid={(p: PaymentView) => {
                           const number = p.receiptNo ?? '-';
                           setReceipt({ href: receiptHref(p.branchId, p.id), number });
+                          setVisitPayments((list) => [...list, p.id]);
                           say('success', t('charges.pay.done', { amount: money(p.amount, p.currency), number }));
                         }}
                         onSaid={(tone, text) => say(tone, text)}
@@ -1688,6 +1721,7 @@ const SHORTCUTS: readonly [string, TKey, boolean][] = [
   ['H', 'circulation.help.h', false],
   // ---- Komunitas (charges and payments) ----
   ['B', 'charges.help.b', false],
+  ['F9', 'charges.help.f9', false],
   ['Ctrl+Z', 'circulation.help.ctrl_z', false],
   ['?', 'circulation.help.question', true],
 ];
