@@ -1,0 +1,18 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist" },
+  // The community performance seed and runner (pnpm perf:komunitas): a project of its own, as tools/test/perf-phase2.
+  // It imports packages/core, packages/platform and packages/shared by relative path, the Phase 2 perf seed and the
+  // release tooling (tools/release/smoke, tools/release/perf); tools/test itself is referenced by packages/core, so
+  // tools/test cannot reference core (a cycle).
+  "include": ["*.ts", "../../../globals.d.ts"],
+  "references": [
+    { "path": "../../../packages/shared" },
+    { "path": "../../../packages/platform" },
+    { "path": "../../../packages/db" },
+    { "path": "../../../packages/core" },
+    { "path": "../../release" },
+    { "path": ".." },
+    { "path": "../perf-phase2" }
+  ]
+}
