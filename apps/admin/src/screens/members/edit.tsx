@@ -6,7 +6,7 @@ import { MemberBody, MemberPatchBody, type MemberEventsResponse, type MemberView
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-router';
 import { ArrowLeftIcon } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useDateTime } from '@/components/data-table';
@@ -29,8 +29,10 @@ import { ExtendDialog, SuspendDialog, refreshMembers, useMember } from './common
  *
  * - **The form** (membership, personal data, contact, internal note) is checked with the shared contract before it is
  *   sent; the server's field errors land on their fields (a taken member number: "Sudah dipakai"). An edit sends the
- *   member's `version` and only what changed; someone else's change in between is CONFLICT_STALE, said above the form,
- *   which keeps what was typed ("Muat ulang data" reads the member again). Gender has no default.
+ *   member's `version` and only the fields the user changed; someone else's change in between is CONFLICT_STALE, said
+ *   above the form, which keeps what was typed ("Muat ulang data" reads the member again). Whenever the member is read
+ *   at a new version (after Perpanjang, Tangguhkan, Aktifkan or "Muat ulang data"), the fields the user has not touched
+ *   take the new values, so a later save never sends an old value back. Gender has no default.
  * - **The page** shows the status, the validity and the counts beside tabs: Data anggota (the form), Pinjaman aktif,
  *   Riwayat pinjaman (both need `circulation.records.read`) and Riwayat keanggotaan (the member's events).
  * - **Actions** for `members.records.manage`: extend the membership, suspend (a note is required) or reactivate, and
@@ -159,6 +161,15 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
   const [problem, setProblem] = useState<unknown>(null);
   const form = useForm<MemberForm>({ defaultValues: formOf(member) });
   const { errors, isDirty, isSubmitting } = form.formState;
+  // What the form started from, which a save compares with: the member as first read, the values just saved, or the
+  // member read again at a new version, whose values the untouched fields then take (the typed ones and their errors
+  // stay).
+  const base = useRef<{ version: number | undefined; values: MemberForm }>({ version: member?.version, values: formOf(member) });
+  useEffect(() => {
+    if (member === null || member.version === base.current.version) return;
+    base.current = { version: member.version, values: formOf(member) };
+    form.reset(base.current.values, { keepDirtyValues: true, keepDirty: true, keepErrors: true });
+  }, [member, form]);
   useDirtyGuard(isDirty);
   const typeId = form.watch('memberTypeId');
   const type = types.data?.items.find((x) => x.id === typeId);
@@ -180,7 +191,8 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
         return;
       }
     } else {
-      const fields = changedFields(patchFields(values), patchFields(formOf(member)));
+      // Only what the user changed from what the form started from (never an untouched field's old value).
+      const fields = changedFields(patchFields(values), patchFields(base.current.values));
       if (Object.keys(fields).length > 0) {
         const parsed = MemberPatchBody.safeParse({ version: member.version, ...fields }, FORM_PARSE);
         if (!parsed.success) {
@@ -196,6 +208,7 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
         }
       }
     }
+    base.current = { ...base.current, values };
     form.reset(values);
     await refreshMembers(queryClient);
     await onSaved(id);
