@@ -310,7 +310,7 @@ export async function assertLiveMember(db: Db | Transaction<DB>, memberId: strin
 
 // ---- the PDF -------------------------------------------------------------------------------------------------------------
 
-const PAPER: Record<ClearancePaper, PaperSize> = { A4: 'A4', A5: 'A5', '58': 'R58', '80': 'R80' };
+const PAPER: Record<ClearancePaper, PaperSize> = { A4: 'A4', A5: 'A5', '58': 'Roll58', '80': 'Roll80' };
 
 /** The margins of a paper, in millimetres: a sheet has room, a receipt roll almost none. */
 function marginsOf(paper: ClearancePaper): { top: number; right: number; bottom: number; left: number } {
