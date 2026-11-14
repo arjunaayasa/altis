@@ -439,6 +439,14 @@ describe.skipIf(!ctx.available)(`registers metric provider [${engineLabel()}]`, 
       const v = (await compute(p, ['registers.population_per_staff'])).get('registers.population_per_staff');
       expect(v).toMatchObject({ value: null, notes: [{ key: 'accred.note.population_missing' }] });
     });
+
+    it('a school population of 0 counts as missing: no ratio, the same note, and no suggestion', async () => {
+      const p = await period({ students: 0, teachers: 0, edu_staff: 0 });
+      await staff('Teknis');
+      const v = (await compute(p, ['registers.population_per_staff'])).get('registers.population_per_staff')!;
+      expect(v).toMatchObject({ value: null, notes: [{ key: 'accred.note.population_missing' }] });
+      expect(suggestAnswer(indicator('T5'), v, null).suggestion).toBeNull();
+    });
   });
 
   describe('partnerships', () => {
