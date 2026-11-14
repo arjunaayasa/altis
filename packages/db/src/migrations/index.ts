@@ -29,6 +29,8 @@ import { libraryRegisters } from './0032_library_registers.js';
 import { catalogAccredFields } from './0033_catalog_accred_fields.js';
 // ---- Komunitas (members and circulation) ----
 import { membersCirculation } from './0040_members_circulation.js';
+// ---- Komunitas K2 (visits) ----
+import { visits } from './0041_visits.js';
 
 /**
  * The Phase 1 tables (spec §6.5), their indexes and the columns added since, keyed by migration name (= file stem). All of them are expand-only
@@ -41,7 +43,7 @@ import { membersCirculation } from './0040_members_circulation.js';
  * Phase 2 (decision P2-06) appends its migrations 0020–0029 (range 0020–0039) to this same frozen map, keeping its
  * name so that its consumers stay unchanged; 0010–0019 are Phase 1d's. Komunitas K1 appends 0030–0033 (range 0030–0039:
  * reports and accreditation) the same way, and the members and circulation milestone 0040 (members, loan rules and
- * loans in one migration). Tests that need the latest migration take the last key of the map rather
+ * loans in one migration) and 0041 (visits and guestbook stations). Tests that need the latest migration take the last key of the map rather
  * than naming one.
  */
 export const PHASE1_MIGRATIONS: Readonly<Record<string, AltisMigration>> = Object.freeze({
@@ -74,6 +76,8 @@ export const PHASE1_MIGRATIONS: Readonly<Record<string, AltisMigration>> = Objec
   '0033_catalog_accred_fields': catalogAccredFields,
   // ---- Komunitas (members and circulation) ----
   '0040_members_circulation': membersCirculation,
+  // ---- Komunitas K2 (visits) ----
+  '0041_visits': visits,
 });
 
 // ---------------------------------------------------------------------------------------------------------------

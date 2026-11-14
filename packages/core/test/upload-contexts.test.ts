@@ -83,13 +83,15 @@ describe('UPLOAD_CONTEXTS', () => {
 });
 
 describe('ORPHAN_UPLOAD_CONTEXTS', () => {
-  it('lists the four catalogue file contexts for the catalogue housekeeping, then the evidence files for the reports housekeeping', () => {
+  it('lists the four catalogue file contexts for the catalogue housekeeping, then the evidence files, member photos and card pictures for the reports housekeeping', () => {
     expect(ORPHAN_UPLOAD_CONTEXTS).toEqual([
       { context: 'catalog.cover', sweptBy: 'catalog.housekeeping' },
       { context: 'catalog.attachment', sweptBy: 'catalog.housekeeping' },
       { context: 'catalog.floor_plan', sweptBy: 'catalog.housekeeping' },
       { context: 'opac.page_image', sweptBy: 'catalog.housekeeping' },
       { context: 'accreditation.evidence', sweptBy: 'reports.housekeeping' },
+      { context: 'members.photo', sweptBy: 'reports.housekeeping' },
+      { context: 'members.card_asset', sweptBy: 'reports.housekeeping' },
     ]);
     expect(Object.isFrozen(ORPHAN_UPLOAD_CONTEXTS)).toBe(true);
   });

@@ -1327,6 +1327,66 @@ export interface LoansTable {
   updated_by: string | null;
 }
 
+// ---- Komunitas K2 (visits) ----
+// Migration 0041: guestbook stations and visits, both branch-scoped. Dates are `YYYY-MM-DD` in the branch's time zone.
+
+/** Class data. UNIQUE (token_hash): one paired device per token (NULLs distinct). */
+export interface VisitStationsTable {
+  id: string;
+  branch_id: string;
+  /** The room (a location) the station stands in, or null. */
+  location_id: string | null;
+  name: string;
+  /** SHA-256 hex of the device token while the station is paired; null otherwise. */
+  token_hash: string | null;
+  /** SHA-256 hex of the pending activation code; null once used or replaced. */
+  activation_hash: string | null;
+  activation_expires_at: EpochMs | null;
+  activated_at: EpochMs | null;
+  last_seen_at: EpochMs | null;
+  revoked_at: EpochMs | null;
+  version: Generated<number>;
+  created_at: EpochMs;
+  created_by: string | null;
+  updated_at: EpochMs;
+  updated_by: string | null;
+}
+
+/** Class data. UNIQUE (day_key): one desk or online visit per member, branch and day. */
+export interface VisitsTable {
+  id: string;
+  branch_id: string;
+  location_id: string | null;
+  visited_on: string;
+  visited_at: EpochMs;
+  /** `VISIT_SOURCES`. */
+  source: string;
+  /** null for a guest, a group, an anonymised visit or a migrated visit of a member who is gone. */
+  member_id: string | null;
+  member_type_id: string | null;
+  /** The population group of the day (`ACCRED_GROUPS`, `guest`, `unknown`). */
+  accred_group: string | null;
+  class_name: string | null;
+  /** Personal data. */
+  guest_name: string | null;
+  /** Personal data. */
+  guest_institution: string | null;
+  /** `VISIT_PURPOSES`. */
+  purpose: string | null;
+  /** Default 1. */
+  headcount: Generated<number>;
+  /** Default 0: a migrated visit within the repeat window of the member's earlier one. */
+  is_repeat: Generated<number>;
+  station_id: string | null;
+  /** `<source>:<member id>:<branch id>:<date>` for desk and online visits; null otherwise. */
+  day_key: string | null;
+  /** Personal data (free text). */
+  note: string | null;
+  voided_at: EpochMs | null;
+  voided_by: string | null;
+  created_by: string | null;
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // The runner's tables (class migrator): made by ensureBootstrap (ddl.ts) and migrator.ts, never by a migration.
 
@@ -1455,6 +1515,9 @@ export interface DB {
   member_events: MemberEventsTable;
   policies: PoliciesTable;
   loans: LoansTable;
+  // ---- Komunitas K2 (visits) ----
+  visit_stations: VisitStationsTable;
+  visits: VisitsTable;
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: SchemaMigrationsEditionTable;
   schema_migrations_edition_lock: SchemaMigrationsEditionLockTable;

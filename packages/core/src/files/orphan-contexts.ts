@@ -21,4 +21,8 @@ export const ORPHAN_UPLOAD_CONTEXTS: readonly OrphanUploadContext[] = Object.fre
   // ---- Komunitas K1 (uploads) ----
   // Evidence files and register attachments (training certificates, partnership and document files).
   Object.freeze<OrphanUploadContext>({ context: 'accreditation.evidence', sweptBy: 'reports.housekeeping' }),
+  // ---- Komunitas K2 (members extended) ----
+  // A member photo never claimed by a member, and card pictures no card profile names.
+  Object.freeze<OrphanUploadContext>({ context: 'members.photo', sweptBy: 'reports.housekeeping' }),
+  Object.freeze<OrphanUploadContext>({ context: 'members.card_asset', sweptBy: 'reports.housekeeping' }),
 ]);

@@ -23,14 +23,32 @@ export interface PdfImage {
 
 /** One page; coordinates are PDF points (1/72 in) from the bottom left corner of the page. */
 export interface PdfPage {
-  /** Draws `s` (converted to WinAnsi) with its baseline starting at (x, y). An empty text draws nothing. */
-  text(x: number, y: number, s: string, o: { font: PdfFont; size: number }): void;
-  /** A rectangle with its lower left corner at (x, y). Filled unless `stroke` is set without `fill`. */
-  rect(x: number, y: number, w: number, h: number, o?: { fill?: boolean; stroke?: boolean }): void;
+  /**
+   * Draws `s` (converted to WinAnsi) with its baseline starting at (x, y). An empty text draws nothing. `color` (RGB,
+   * each 0-1) paints it in that colour instead of black.
+   */
+  text(x: number, y: number, s: string, o: { font: PdfFont; size: number; color?: PdfColor }): void;
+  /**
+   * A rectangle with its lower left corner at (x, y). Filled unless `stroke` is set without `fill`; `color` (RGB, each
+   * 0-1) is the fill colour instead of black.
+   */
+  rect(x: number, y: number, w: number, h: number, o?: { fill?: boolean; stroke?: boolean; color?: PdfColor }): void;
   /** A straight stroked line from (x1, y1) to (x2, y2), `PDF_LINE_WIDTH` wide unless `width` (points, > 0) is given. */
   line(x1: number, y1: number, x2: number, y2: number, o?: { width?: number }): void;
   /** Draws a picture of this document stretched over the box with its lower left corner at (x, y); `w`, `h` > 0. */
   image(img: PdfImage, x: number, y: number, w: number, h: number): void;
+}
+
+/** A colour as red, green and blue, each from 0 to 1. */
+export type PdfColor = readonly [number, number, number];
+
+/** The `rg` operator of `c` (fill colour), each component clamped to 0-1. */
+function fillColor(c: PdfColor): string {
+  const part = (v: number): string => {
+    if (!Number.isFinite(v)) throw new RangeError(`pdf: colour component ${v} is not finite`);
+    return String(Math.round(Math.min(1, Math.max(0, v)) * 1000) / 1000);
+  };
+  return `${part(c[0])} ${part(c[1])} ${part(c[2])} rg`;
 }
 
 /** The smallest and largest page side PDF 1.4 allows (Appendix C: 3-14 400 units). */
@@ -105,20 +123,23 @@ class Page implements PdfPage {
     readonly height: number,
   ) {}
 
-  text(x: number, y: number, s: string, o: { font: PdfFont; size: number }): void {
+  text(x: number, y: number, s: string, o: { font: PdfFont; size: number; color?: PdfColor }): void {
     if (!PDF_FONTS.includes(o.font)) throw new TypeError(`pdf: ${String(o.font)} is not a font of this writer`);
     if (!(o.size > 0)) throw new RangeError(`pdf: font size ${o.size}`);
     const at = `${pdfNumber(x, 'x')} ${pdfNumber(y, 'y')}`;
     const size = pdfNumber(o.size, 'font size');
     if (s === '') return;
-    this.#push(`BT /${FONT_RESOURCE[o.font]} ${size} Tf ${at} Td ${pdfLiteral(toWinAnsi(s).bytes)} Tj ET`);
+    const op = `BT /${FONT_RESOURCE[o.font]} ${size} Tf ${at} Td ${pdfLiteral(toWinAnsi(s).bytes)} Tj ET`;
+    // A colour is set inside a saved graphics state, so later drawing keeps black.
+    this.#push(o.color === undefined ? op : `q ${fillColor(o.color)} ${op} Q`);
   }
 
-  rect(x: number, y: number, w: number, h: number, o?: { fill?: boolean; stroke?: boolean }): void {
+  rect(x: number, y: number, w: number, h: number, o?: { fill?: boolean; stroke?: boolean; color?: PdfColor }): void {
     const stroke = o?.stroke ?? false;
     const fill = o?.fill ?? !stroke;
     const path = [pdfNumber(x, 'x'), pdfNumber(y, 'y'), pdfNumber(w, 'width'), pdfNumber(h, 'height')].join(' ');
-    this.#push(`${path} re ${fill && stroke ? 'B' : fill ? 'f' : stroke ? 'S' : 'n'}`);
+    const op = `${path} re ${fill && stroke ? 'B' : fill ? 'f' : stroke ? 'S' : 'n'}`;
+    this.#push(o?.color === undefined ? op : `q ${fillColor(o.color)} ${op} Q`);
   }
 
   line(x1: number, y1: number, x2: number, y2: number, o?: { width?: number }): void {

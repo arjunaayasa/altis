@@ -185,6 +185,8 @@ describe('SCHEDULES (the schedules this release defines)', () => {
       ['catalog.housekeeping', '40 3 * * *', 'catalog.housekeeping', 'system.jobs.manage'],
       // ---- Komunitas K1 (reports) ----
       ['reports.housekeeping', '50 3 * * *', 'reports.housekeeping', 'system.jobs.manage'],
+      // ---- Komunitas K2 (privacy) ----
+      ['privacy.anonymize', '15 2 * * *', 'privacy.anonymize', 'system.jobs.manage'],
     ]);
     expect(SCHEDULES.filter((d) => d.exprEditable === true).map((d) => d.name)).toEqual(['backup.daily']);
     for (const d of SCHEDULES) {

@@ -23,6 +23,7 @@ import { ANNEX_REGISTERS_ID } from './k1/annex-registers.js';
 import { ANNEX_USAGE_ID } from './k1/annex-usage.js';
 import { COLLECTION_REPORTS_ID } from './k1/collection-reports.js';
 import { MEMBERS_CIRCULATION_ID } from './members-circulation.js';
+import { MEMBERS_VISITS_ID } from './members-visits.js';
 
 /**
  * The keys that exist only in the test profile (spec §12.5, ruling S28), next to `permissionCatalog`'s test entry and the
@@ -664,6 +665,7 @@ const BASE = {
   'vocab.custom_field_type.url': 'Alamat web (URL)',
   'vocab.custom_field_entity.records': 'Cantuman',
   'vocab.custom_field_entity.items': 'Eksemplar',
+  'vocab.custom_field_entity.members': 'Anggota',
   'vocab.attachment_kind.file': 'Berkas',
   'vocab.attachment_kind.url': 'Tautan',
   'vocab.attachment_access.public': 'Publik',
@@ -1572,6 +1574,8 @@ const BASE = {
   // ---- Komunitas (members and circulation) ----
   // Permissions, audit actions, error codes and vocabularies of members and desk circulation (i18n/members-circulation.ts).
   ...MEMBERS_CIRCULATION_ID,
+  // ---- Komunitas K2 (members extended and visits) ----
+  ...MEMBERS_VISITS_ID,
 } satisfies Record<string, string>;
 
 /**

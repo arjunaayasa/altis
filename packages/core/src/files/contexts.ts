@@ -122,6 +122,12 @@ export const UPLOAD_CONTEXTS: Readonly<Partial<Record<UploadContextName, UploadC
   // ---- Komunitas (members and circulation) ----
   // The CSV file of a member import (UTF-8 or cp1252 text), staged until `POST members/imports` takes it.
   'members.import': context({ name: 'members.import', permission: 'members.import.run', maxBytes: 50 * MIB, magic: ['text'], kind: 'staged' }),
+
+  // ---- Komunitas K2 (members extended) ----
+  // A member's photo, cropped in the browser to 300 × 400 JPEG; claimed by `PUT members/:id/photo`, staff only.
+  'members.photo': context({ name: 'members.photo', permission: 'members.records.manage', maxBytes: 500 * 1024, magic: ['jpeg'], kind: 'file' }),
+  // The card's logo, signature and stamp (JPEG, converted in the browser), claimed when the card profile is saved.
+  'members.card_asset': context({ name: 'members.card_asset', permission: 'system.settings.manage', maxBytes: 500 * 1024, magic: ['jpeg'], kind: 'file' }),
 });
 
 /** The context `name` of this build, or null (an unknown name, or `test` outside the test profile). */

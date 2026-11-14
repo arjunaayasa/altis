@@ -351,6 +351,16 @@ export const ERROR_CODES = Object.freeze({
   CIRC_LOAN_NOT_OPEN: Object.freeze({ status: 409 }),
   /** The loan cannot be renewed; `meta {reason}` (RENEW_REFUSALS). */
   CIRC_RENEW_REFUSED: Object.freeze({ status: 409 }),
+
+  // ---- Komunitas K2 (members extended and visits) ----
+  /** The member was anonymised: nothing more can be done with the row. */
+  MEMBER_ANONYMIZED: Object.freeze({ status: 409 }),
+  /** Too many members for one card sheet request; `meta {max}`. */
+  MEMBER_CARD_LIMIT: Object.freeze({ status: 422 }),
+  /** The guestbook page has no valid station cookie (never activated, revoked, or replaced by a newer code). */
+  VISIT_STATION_UNPAIRED: Object.freeze({ status: 401 }),
+  /** The activation code is wrong, used already or expired. */
+  VISIT_ACTIVATION_INVALID: Object.freeze({ status: 422 }),
 });
 
 export type ErrorCode = keyof typeof ERROR_CODES;

@@ -12,6 +12,10 @@ import { z } from 'zod';
 import { localeField, timezoneField, ulidField } from './common.js';
 import { ACCRED_GROUPS } from '../accreditation-vocab.js';
 import { isCalendarDate } from '../dates.js';
+import { CardProfile } from './member-ops.js';
+
+/** The card profile as the members settings carry it. */
+export type CardProfileForSettings = CardProfile;
 import type { Locale } from '../i18n/index.js';
 
 /**
@@ -27,6 +31,10 @@ export const SETTINGS_GROUPS = Object.freeze([
   'catalog',
   // ---- Komunitas K1 (settings) ----
   'accreditation',
+  // ---- Komunitas K2 (members extended, visits, privacy) ----
+  'members',
+  'visits',
+  'privacy',
 ] as const);
 
 export type SettingsGroupName = (typeof SETTINGS_GROUPS)[number];
@@ -186,6 +194,10 @@ export interface SettingsView {
   catalog: CatalogSettings;
   // ---- Komunitas K1 (settings) ----
   accreditation: AccreditationSettingsView;
+  // ---- Komunitas K2 (members extended, visits, privacy) ----
+  members: MembersSettingsView;
+  visits: VisitsSettingsView;
+  privacy: PrivacySettingsView;
 }
 
 /**
@@ -508,6 +520,63 @@ export const unknownMemberGroupField = z.enum([...ACCRED_GROUPS, 'auto']).nullab
 
 /** `visits.dedupeMinutes`: a member's check-in within this many minutes of an earlier one is a repeat; 0 turns it off. */
 export const visitsDedupeMinutesField = z.int().min(0).max(720);
+
+// ---- Komunitas K2 (members extended, visits, privacy) ----
+/** `privacy.*.anonymizeAfterYears`: 1-20 years, or null (never). */
+export const anonymizeYearsField = z.int().min(1).max(20).nullable();
+
+/** `PUT settings/members`: the member card profile (`members.card.profile`). */
+export const MembersSettingsBody = z.strictObject({
+  card: z.strictObject({ profile: CardProfile.optional() }).optional(),
+});
+
+export type MembersSettingsBody = z.infer<typeof MembersSettingsBody>;
+
+/** `GET settings/members`. */
+export interface MembersSettingsView {
+  card: { profile: CardProfile };
+}
+
+/** `PUT settings/visits`: the repeat window, the visit sources, and the guestbook station's options. */
+export const VisitsSettingsBody = z.strictObject({
+  dedupeMinutes: visitsDedupeMinutesField.optional(),
+  fromDesk: z.boolean().optional(),
+  fromOnline: z.boolean().optional(),
+  askPurpose: z.boolean().optional(),
+  station: z
+    .strictObject({
+      showPhoto: z.boolean().optional(),
+      welcome: z.strictObject({ id: textOrNull(300).optional(), en: textOrNull(300).optional() }).optional(),
+    })
+    .optional(),
+});
+
+export type VisitsSettingsBody = z.infer<typeof VisitsSettingsBody>;
+
+/** `GET settings/visits`. */
+export interface VisitsSettingsView {
+  dedupeMinutes: number;
+  fromDesk: boolean;
+  fromOnline: boolean;
+  askPurpose: boolean;
+  station: { showPhoto: boolean; welcome: { id: string | null; en: string | null } };
+}
+
+/** `PUT settings/privacy` (needs a fresh password confirmation): the retention periods of personal data in history. */
+export const PrivacySettingsBody = z.strictObject({
+  loans: z.strictObject({ anonymizeAfterYears: anonymizeYearsField.optional() }).optional(),
+  visits: z.strictObject({ anonymizeAfterYears: anonymizeYearsField.optional() }).optional(),
+  members: z.strictObject({ anonymizeArchivedAfterYears: anonymizeYearsField.optional() }).optional(),
+});
+
+export type PrivacySettingsBody = z.infer<typeof PrivacySettingsBody>;
+
+/** `GET settings/privacy`. */
+export interface PrivacySettingsView {
+  loans: { anonymizeAfterYears: number | null };
+  visits: { anonymizeAfterYears: number | null };
+  members: { anonymizeArchivedAfterYears: number | null };
+}
 
 /** `PUT settings/accreditation`: each key is its setting's name without `accreditation.`, nested at its dots. */
 export const AccreditationSettingsBody = z.strictObject({
