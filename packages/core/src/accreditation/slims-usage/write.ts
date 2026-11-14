@@ -1,7 +1,7 @@
 import { upsert, withTx, type DbHandle } from '@altis/db';
 import { addDays, endOfMonth, type AccredGroup } from '@altis/shared';
 import type { DateSpan } from '../windows.js';
-import { nextMonth, type UsageCells } from './count.js';
+import { importedLabel, nextMonth, type UsageCells } from './count.js';
 import { guessGroup } from './guess.js';
 
 // The write step of a SLiMS usage import: everything it counted goes into `usage_stats` (source `slims`) and the
@@ -145,7 +145,7 @@ export async function writeUsageImport(h: DbHandle, input: UsageWriteInput): Pro
       const groupKey = `slims_type:${id}`;
       const before = existing.get(groupKey);
       // The SLiMS name; a type SLiMS no longer names keeps the label it has, or is labelled by its id.
-      const named = Object.hasOwn(input.types, id) ? input.types[id]! : (before?.label ?? id);
+      const named = Object.hasOwn(input.types, id) ? importedLabel(input.types[id]!) : (before?.label ?? id);
       if (Object.hasOwn(mapped, id)) {
         const accred = mapped[id] ?? null;
         await upsert(

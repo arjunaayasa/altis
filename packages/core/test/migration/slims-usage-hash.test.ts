@@ -31,6 +31,13 @@ describe('memberHash', () => {
     expect(memberHash(KEY, '\tM001\n')).toBe(memberHash(KEY, 'M001'));
   });
 
+  it('hashes an id as SLiMS compares it, without case: A01 and a01 are one member', () => {
+    expect(memberHash(KEY, 'a01')).toBe(memberHash(KEY, 'A01'));
+    expect(memberHash(KEY, ' sis-0001\t')).toBe(memberHash(KEY, 'SIS-0001'));
+    expect(memberHash(KEY, 'a01')).toBe(createHmac('sha256', KEY).update('A01', 'utf8').digest().subarray(0, 16).toString('hex'));
+    expect(memberHash(KEY, 'a02')).not.toBe(memberHash(KEY, 'A01'));
+  });
+
   it('refuses a key shorter than 16 bytes', () => {
     expect(() => memberHash(new Uint8Array(8), 'M001')).toThrow(TypeError);
     expect(() => usageRowTransform(new Uint8Array(0))).toThrow(TypeError);

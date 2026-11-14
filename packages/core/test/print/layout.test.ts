@@ -210,6 +210,15 @@ describe('non-Latin rows', () => {
     expect(y(NOTE)).toBeGreaterThan(y('Pérez'));
   });
 
+  it('a romanised title, an invisible character or a symbol is no text of another script: such rows are neither marked nor counted', () => {
+    const layout = make();
+    const rows = [['Tafs\u012br al-Qur\u02be\u0101n'], ['Mu\u1e25ammad \u02bfAbduh'], ['Sejarah\u200bIndonesia'], ['Kitab\ufeff'], ['Belajar \u{1F680}'], ['\u062a\u0641\u0633\u064a\u0631']];
+    expect(layout.table([{ header: 'Judul' }], rows)).toEqual({ rows: 6, nonLatinRows: 1 });
+    const texts = textsOf(checkPdf(layout.toBytes()).pages[0]!);
+    expect(count(texts, NOTE)).toBe(1);
+    for (const printed of ['Tafsir al-Qur\u2019an', 'Muhammad \u2018Abduh', 'SejarahIndonesia', 'Kitab', 'Belajar ?']) expect(texts).toContain(printed);
+  });
+
   it('counts a row once however many of its cells lost characters, adds up over tables, and ignores paragraphs', () => {
     const layout = make();
     layout.paragraph('صحيح البخاري');

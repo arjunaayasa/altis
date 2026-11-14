@@ -12,7 +12,8 @@ import { workDirsStep } from './work-dirs.js';
 
 // `reports.housekeeping` (spec §4.15, §5.6): the reports' daily upkeep, scheduled at 03:50 (scheduler/registry.ts). It
 // sweeps only `exports/reports/` and `tmp/reports/` (the catalogue's housekeeping never looks there, and this one never
-// looks anywhere else) and the community upload contexts' orphans. One job runs the steps in a fixed order across
+// looks anywhere else), the community upload contexts' orphans and the snapshot evidence file copies a killed copy
+// left unfinished. One job runs the steps in a fixed order across
 // slices, as `catalog.housekeeping` does: the payload is the schedule's window plus the checkpoint `{step, cursor}`,
 // and a step answers `{done: true}` when it finished or `{done: false, cursor}` when its budget ran out.
 //

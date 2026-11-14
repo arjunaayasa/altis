@@ -8,6 +8,10 @@ import type { CompactSnapshot, NoteRef } from '@altis/shared/api/accreditation';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDbContext } from '../../../../tools/test/test-db.js';
 import { copySnapshotDossier, freezePeriod, getSnapshot, listSnapshots, openSnapshotDossier, unfreezePeriod } from '../../src/accreditation/evaluate/index.js';
+import { sweepUnfinishedSnapshotCopies } from '../../src/accreditation/snapshots.js';
+import type { CatalogJobDeps } from '../../src/catalog/jobs-deps.js';
+import type { StorageDriver } from '../../src/files/serve.js';
+import { orphanUploadsReportsStep } from '../../src/reports/housekeeping/orphan-uploads.js';
 import { ACCRED_METRICS, type AccredMetricId } from '../../src/accreditation/metric-ids.js';
 import { putUsageCells } from '../../src/accreditation/usage/cells.js';
 import { txCtx } from '../../src/context.js';
@@ -36,7 +40,8 @@ import {
 // - the first statement of both is their conditional update of the period row;
 // - the compact values of the largest instrument with the most notes stay within 60 000 bytes;
 // - the newest evidence file PDF of the whole dossier, finished after the results were computed, is copied for the
-//   snapshot (a request letter alone never is).
+//   snapshot (a request letter alone never is); a copy that fails leaves nothing behind, and one killed on the way
+//   leaves a row the reports housekeeping removes, with its content, a day later.
 
 const ctx = testDbContext();
 
@@ -419,6 +424,85 @@ describe.skipIf(!ctx.available)(`accreditation freeze and snapshots [${engineLab
       const { id } = await freeze(periodId);
       expect(await copy(id)).toBeNull();
       expect((await getSnapshot(db.h.db, id)).dossierFileId).toBeNull();
+    });
+
+    it('a copy whose storing fails leaves neither a file row nor content behind', async () => {
+      const periodId = await answeredPeriod();
+      const readyAt = await readyAtOf(periodId);
+      await dossierRun(periodId, { createdAt: readyAt, finishedAt: readyAt + 1, content: '%PDF-1.4 gagal disimpan' });
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const { id } = await freeze(periodId);
+      let key: string | null = null;
+      const failing: StorageDriver = {
+        ...db.storage,
+        put: async (k, d, m) => {
+          key = k;
+          await db.storage.put(k, d, m);
+          throw new Error('disk gone');
+        },
+      };
+      expect(await copySnapshotDossier(db.h, id, { dataDir: db.dataDir, storage: failing, now: Date.now(), log: silent })).toBeNull();
+      expect(key).not.toBeNull();
+      expect(await db.storage.stat(key!)).toBeNull();
+      expect(await db.h.db.selectFrom('files').select('id').where('owner_id', '=', id).execute()).toEqual([]);
+      expect((await getSnapshot(db.h.db, id)).dossierFileId).toBeNull();
+    });
+
+    it('a copy killed after it stored the content leaves a row, which the reports housekeeping removes with the content a day later', async () => {
+      const periodId = await answeredPeriod();
+      const readyAt = await readyAtOf(periodId);
+      await dossierRun(periodId, { createdAt: readyAt, finishedAt: readyAt + 1, content: '%PDF-1.4 terputus' });
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const { id } = await freeze(periodId);
+      // The process dies once the content is stored: the copy never goes on.
+      let stored!: (key: string) => void;
+      const storedKey = new Promise<string>((resolve) => (stored = resolve));
+      const dying: StorageDriver = {
+        ...db.storage,
+        put: async (k, d, m) => {
+          await db.storage.put(k, d, m);
+          stored(k);
+          return new Promise<void>(() => undefined);
+        },
+      };
+      const at = Date.now();
+      void copySnapshotDossier(db.h, id, { dataDir: db.dataDir, storage: dying, now: at, log: silent });
+      const key = await storedKey;
+      expect(await db.storage.stat(key)).not.toBeNull();
+      expect((await getSnapshot(db.h.db, id)).dossierFileId).toBeNull();
+      expect(await db.h.db.selectFrom('files').select(['id', 'status']).where('owner_id', '=', id).execute()).toEqual([{ id: key, status: 'missing' }]);
+
+      const sweep = (now: number) =>
+        orphanUploadsReportsStep.run({
+          h: db.h,
+          now,
+          deps: { dataDir: db.dataDir, baseUrl: 'https://perpus.example.sch.id', keyring: [], storage: db.storage, log: silent } satisfies CatalogJobDeps,
+          cursor: null,
+          budgetLeftMs: () => 60_000,
+          enqueue: async () => undefined,
+        });
+      // Not a day old yet: a copy may still be on its way.
+      expect(await sweep(at + 60_000)).toEqual({ done: true, cursor: null });
+      expect(await db.storage.stat(key)).not.toBeNull();
+      expect(await sweep(at + 25 * 3_600_000)).toEqual({ done: true, cursor: null });
+      expect(await db.storage.stat(key)).toBeNull();
+      expect(await db.h.db.selectFrom('files').select('id').where('owner_id', '=', id).execute()).toEqual([]);
+    });
+
+    it('the housekeeping never removes a copy a snapshot names, even one whose content went missing', async () => {
+      const periodId = await answeredPeriod();
+      const readyAt = await readyAtOf(periodId);
+      await dossierRun(periodId, { createdAt: readyAt, finishedAt: readyAt + 1, content: '%PDF-1.4 tetap' });
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const { id } = await freeze(periodId);
+      const at = Date.now();
+      const fileId = await copySnapshotDossier(db.h, id, { dataDir: db.dataDir, storage: db.storage, now: at, log: silent });
+      expect(fileId).not.toBeNull();
+      // A restore that did not find the content marks the row missing; the snapshot still names it.
+      await db.h.db.updateTable('files').set({ status: 'missing' }).where('id', '=', fileId!).execute();
+      await sweepUnfinishedSnapshotCopies(db.h.db, { storage: db.storage, now: at + 25 * 3_600_000, log: silent });
+      expect(await db.h.db.selectFrom('files').select('id').where('id', '=', fileId!).execute()).toHaveLength(1);
+      expect(await db.storage.stat(fileId!)).not.toBeNull();
     });
   });
 });

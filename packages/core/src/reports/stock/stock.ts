@@ -4,7 +4,8 @@ import type { AcqBasis } from './acq-date.js';
 // The stock at a date D (dates are `YYYY-MM-DD` strings in the library's time zone, compared as text). A copy is in
 // the stock at D when it was acquired by D (or its acquisition date is unknown), was not withdrawn by D, and was
 // neither on order nor lost at D. A copy that never left its order (still on order, or an order cancelled) was never
-// acquired; one made here on order is acquired the day it left the order, not the day it was ordered. A title is in
+// acquired; one made here on order, or imported on order without a date, is acquired the day it left the order, not the
+// day it was ordered or imported (an explicit receiving date still wins). A title is in
 // the stock when it was not archived by D and has such a copy; a title without any copy counts from its creation when
 // it is electronic or has a public file; a title merged into another never counts (its copies moved there). Every test
 // reads what held at D, so a title weeded later still counts at the dates before. The first acquisition of a title
@@ -111,7 +112,9 @@ export interface Acquisition {
 /**
  * When copy `i` entered the stock, or null when it never did: it is on order, or its order ended without it ever
  * being in the stock (cancelled: on order, then withdrawn). A copy made here on order without a receiving date is
- * acquired the day its status first left the order (it was received then), not the day it was ordered.
+ * acquired the day its status first left the order (it was received then), not the day it was ordered. So is a copy a
+ * catalogue import brought in on order without any date (otherwise undated): the day it left the order is the one
+ * date it has, and it is in the stock from then on.
  */
 export function acquisitionOf(i: ItemStockFacts): Acquisition | null {
   if (i.status === 'on_order') return null;
@@ -120,6 +123,7 @@ export function acquisitionOf(i: ItemStockFacts): Acquisition | null {
     const arrived = timeline.find((e) => e.to !== 'on_order' && e.to !== 'withdrawn');
     if (arrived === undefined) return null;
     if (i.acqBasis === 'item_created' && i.acqDate !== null) return { date: arrived.on > i.acqDate ? arrived.on : i.acqDate, basis: 'received' };
+    if (i.acqDate === null) return { date: arrived.on, basis: 'received' };
   }
   return { date: i.acqDate, basis: i.acqBasis };
 }

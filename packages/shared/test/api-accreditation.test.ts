@@ -20,6 +20,7 @@ import {
   StaffBody,
   TrainingBody,
   UsageGroupsPutBody,
+  USAGE_IMPORT_ONLY_METRICS,
   UsagePutBody,
 } from '../src/api/accreditation.js';
 
@@ -119,6 +120,12 @@ describe('UsagePutBody and UsageGroupsPutBody', () => {
     expect(errorsOf(UsagePutBody, { cells: Array.from({ length: 501 }, (_, i) => cell(i)) })).toEqual([{ path: 'cells', code: 'too_big' }]);
     expect(errorsOf(UsagePutBody, { cells: [{ ...cell(0), groupKey: 'grp:alumni' }] })).toEqual([{ path: 'cells.0.groupKey', code: 'invalid_format' }]);
     expect(errorsOf(UsagePutBody, { cells: [{ ...cell(0), value: -1 }] })).toEqual([{ path: 'cells.0.value', code: 'too_small' }]);
+  });
+
+  it('refuses a manual cell of the visits without repeats, which only an import counts, even to remove one', () => {
+    expect(USAGE_IMPORT_ONLY_METRICS).toEqual(['visits_deduped']);
+    expect(errorsOf(UsagePutBody, { cells: [cell(0), { ...cell(1), metric: 'visits_deduped' }] })).toEqual([{ path: 'cells.1.metric', code: 'import_only' }]);
+    expect(errorsOf(UsagePutBody, { cells: [{ ...cell(0), metric: 'visits_deduped', value: null }] })).toEqual([{ path: 'cells.0.metric', code: 'import_only' }]);
   });
 
   it('groups: a SLiMS member type or the members a source no longer has, 1-200 rows', () => {

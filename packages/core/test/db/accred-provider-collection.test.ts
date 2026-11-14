@@ -348,7 +348,7 @@ describe.skipIf(!ctx.available)(`accreditation collection provider [${engineLabe
     });
 
     /** Replaces the history of copy `itemId` by `entries` (local dates in the fixture's time zone). */
-    async function history(itemId: string, entries: readonly { on: string; type: 'created' | 'migrated' | 'status' | 'archived'; to: string }[]): Promise<void> {
+    async function history(itemId: string, entries: readonly { on: string; type: 'created' | 'imported' | 'migrated' | 'status' | 'archived'; to: string }[]): Promise<void> {
       await h.db.deleteFrom('item_events').where('item_id', '=', itemId).execute();
       for (const e of entries) {
         await h.db
@@ -415,6 +415,51 @@ describe.skipIf(!ctx.available)(`accreditation collection provider [${engineLabe
       }
     });
 
+    it('a title acquired in 2024 and weeded and archived in 2025 is an addition of 2024; a title merged into another never is', async () => {
+      const weeded = await addTitle(h.db, branchId, {
+        title: 'Fisika Edisi Lama',
+        classification: '530',
+        createdAt: stockAt('2024-06-02'),
+        archivedAt: stockAt('2025-08-02'),
+        items: [{ barcode: 'WED-0003', status: 'withdrawn', receivedDate: '2024-06-01', createdAt: stockAt('2024-06-02'), archivedAt: stockAt('2025-08-01') }],
+      });
+      const merged = await addTitle(h.db, branchId, {
+        title: 'Fisika Edisi Lama (duplikat)',
+        classification: '530',
+        createdAt: stockAt('2024-07-02'),
+        archivedAt: stockAt('2025-01-10'),
+        items: [{ barcode: 'MRG-0001', status: 'withdrawn', receivedDate: '2024-07-01', createdAt: stockAt('2024-07-02'), archivedAt: stockAt('2025-01-10') }],
+      });
+      try {
+        await history(weeded.itemIds[0]!, [
+          { on: '2024-06-02', type: 'created', to: 'available' },
+          { on: '2025-08-01', type: 'archived', to: 'withdrawn' },
+        ]);
+        await history(merged.itemIds[0]!, [
+          { on: '2024-07-02', type: 'created', to: 'available' },
+          { on: '2025-01-10', type: 'archived', to: 'withdrawn' },
+        ]);
+        await h.db.updateTable('records').set({ merged_into: weeded.recordId }).where('id', '=', merged.recordId).execute();
+        const { start, added } = await k6Values();
+        expect(start).toBe(8);
+        expect([added.numerator, added.denominator, added.table]).toEqual([
+          5,
+          8,
+          [
+            ['2023-12-31', 8],
+            [2024, 3],
+            [2025, 2],
+            [2026, 0],
+          ],
+        ]);
+        // Neither is in the stock at D.
+        expect((await value(periodId, 'collection.titles')).value).toBe(9);
+      } finally {
+        await h.db.updateTable('records').set({ merged_into: null }).where('id', '=', merged.recordId).execute();
+        await removeTitles([merged, weeded]);
+      }
+    });
+
     it('a copy weeded in SLiMS before the migration is not in the stock of 2023-12-31', async () => {
       const migratedAt = stockAt('2025-09-01', '09:00');
       const weeded = await addTitle(h.db, branchId, {
@@ -472,6 +517,36 @@ describe.skipIf(!ctx.available)(`accreditation collection provider [${engineLabe
         ]);
       } finally {
         await removeTitles([cancelled, late]);
+      }
+    });
+
+    it('a copy a catalogue import brought in on order and that arrived in 2025 is an addition of 2025, not missing from both sides', async () => {
+      const imported = await addTitle(h.db, branchId, {
+        title: 'Ekonomi Kelas XI',
+        classification: '330',
+        createdAt: stockAt('2024-11-05'),
+        items: [{ barcode: 'IMP-0001', status: 'available', createdAt: stockAt('2024-11-05'), event: 'imported' }],
+      });
+      try {
+        await history(imported.itemIds[0]!, [
+          { on: '2024-11-05', type: 'imported', to: 'on_order' },
+          { on: '2025-02-10', type: 'status', to: 'available' },
+        ]);
+        const { start, added } = await k6Values();
+        expect(start).toBe(8);
+        expect([added.numerator, added.denominator, added.table]).toEqual([
+          5,
+          8,
+          [
+            ['2023-12-31', 8],
+            [2024, 2],
+            [2025, 3],
+            [2026, 0],
+          ],
+        ]);
+        expect((await value(periodId, 'collection.titles')).value).toBe(10);
+      } finally {
+        await removeTitles([imported]);
       }
     });
 

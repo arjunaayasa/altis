@@ -323,6 +323,40 @@ describe.skipIf(!ctx.available)(`accreditation monthly usage [${engineLabel()}]`
       expect(await manualRows()).toEqual([]);
     });
 
+    it('refuses a manual cell of the visits without repeats, which only the import counts; a stored one is never read', async () => {
+      const id = await period();
+      expect(
+        await failure(
+          put(id, [
+            { metric: 'visits', month: '2025-08', groupKey: '', value: 50 },
+            { metric: 'visits_deduped', month: '2025-08', groupKey: '', value: 45 },
+          ]),
+        ),
+      ).toEqual({ code: 'VALIDATION_FAILED', errors: [{ path: 'cells.1.metric', code: 'import_only' }] });
+      expect(await manualRows()).toEqual([]);
+
+      // A manual row of that metric written before the rule: the grid, the resolved table and the results ignore it.
+      await h.db
+        .insertInto('usage_stats')
+        .values({ source: 'manual', metric: 'visits_deduped', span_from: '2025-08-01', span_to: '2025-08-31', branch_key: '', group_key: '', value: 7, run_id: null, updated_at: NOW - 500, updated_by: null })
+        .execute();
+      await h.db
+        .insertInto('usage_stats')
+        .values({ source: 'manual', metric: 'visits_deduped', span_from: '2025-09-01', span_to: '2025-09-30', branch_key: '', group_key: '', value: 9, run_id: null, updated_at: NOW - 500, updated_by: null })
+        .execute();
+      await slims('visits', '2025-08', '', 60);
+      await slims('visits_deduped', '2025-08', '', 40);
+      const t = await resolved();
+      expect(t.cell('visits', '2025-08', 'total')).toEqual({ value: 40, source: 'slims', spanTo: null });
+      expect(t.cell('visits_deduped', '2025-08', 'total')).toEqual({ value: 40, source: 'slims', spanTo: null });
+      expect(t.cell('visits_deduped', '2025-09', 'total')).toEqual({ value: null, source: 'none', spanTo: null });
+      expect(t.monthsWithData('visits_deduped')).toBe(1);
+      const grid = await getUsageGrid(h.db, id, await loadAccredSettings(h.db));
+      const total = (metric: string, month: string) => grid.cells.find((c) => c.metric === metric && c.month === month && c.groupKey === '');
+      expect(total('visits_deduped', '2025-08')).toMatchObject({ value: 40, source: 'slims' });
+      expect(total('visits_deduped', '2025-09')).toMatchObject({ value: null, source: 'none' });
+    });
+
     it('a frozen period → ACCRED_PERIOD_FROZEN; an unknown or archived period → NOT_FOUND', async () => {
       const frozen = await period({ status: 'frozen' });
       expect(await failure(put(frozen, [{ metric: 'visits', month: '2025-08', groupKey: '', value: 1 }]))).toEqual({ code: 'ACCRED_PERIOD_FROZEN' });
@@ -367,6 +401,38 @@ describe.skipIf(!ctx.available)(`accreditation monthly usage [${engineLabel()}]`
       expect(await lastChangeOf(h.db, next)).toBe(NOW);
       expect((await getPeriod(h.db, next, NOW)).stale).toBe(true);
       expect((await listPeriods(h.db)).periods.find((p) => p.id === next)).toMatchObject({ stale: true });
+    });
+
+    it('a cell removed through a period with free dates that shares a month with another makes that one stale: both read the whole month', async () => {
+      // P reads 2026-03 whole (its last month), and Q starts inside that month.
+      const p = await period({ startsOn: '2025-03-10', endsOn: '2026-03-09' });
+      const q = await period({ startsOn: '2026-03-10', endsOn: '2027-03-09' });
+      await put(q, [{ metric: 'visits', month: '2026-03', groupKey: '', value: 30 }], NOW - 100);
+      const meta = { status: 'ready', startedAt: NOW - 50, jobId: newId(NOW), computedAt: NOW - 50, durationMs: 1 };
+      await h.db.insertInto('accred_results').values({ period_id: p, indicator_code: '_meta', payload: JSON.stringify(meta), computed_at: NOW - 50 }).execute();
+      expect((await getPeriod(h.db, p, NOW)).stale).toBe(false);
+      expect((await resolved({ from: '2025-03-10', to: '2026-03-09' })).cell('visits', '2026-03', 'total').value).toBe(30);
+
+      await put(q, [{ metric: 'visits', month: '2026-03', groupKey: '', value: null }], NOW);
+      expect(await manualRows()).toEqual([]);
+      expect(await lastChangeOf(h.db, p)).toBe(NOW);
+      expect((await getPeriod(h.db, p, NOW)).stale).toBe(true);
+      expect((await listPeriods(h.db)).periods.find((x) => x.id === p)).toMatchObject({ stale: true });
+    });
+
+    it('a cell removed through a period that ends inside the first month of the twelve months read before another makes that one stale', async () => {
+      // The reading interest of P compares it with the twelve months from 2024-03-10, read from 2024-03-01.
+      const p = await period({ startsOn: '2025-03-10', endsOn: '2026-03-09' });
+      const before = await period({ startsOn: '2023-03-05', endsOn: '2024-03-04' });
+      await put(before, [{ metric: 'visits', month: '2024-03', groupKey: '', value: 12 }], NOW - 100);
+      const meta = { status: 'ready', startedAt: NOW - 50, jobId: newId(NOW), computedAt: NOW - 50, durationMs: 1 };
+      await h.db.insertInto('accred_results').values({ period_id: p, indicator_code: '_meta', payload: JSON.stringify(meta), computed_at: NOW - 50 }).execute();
+      expect((await getPeriod(h.db, p, NOW)).stale).toBe(false);
+
+      await put(before, [{ metric: 'visits', month: '2024-03', groupKey: '', value: null }], NOW);
+      expect(await lastChangeOf(h.db, p)).toBe(NOW);
+      expect((await getPeriod(h.db, p, NOW)).stale).toBe(true);
+      expect((await listPeriods(h.db)).periods.find((x) => x.id === p)).toMatchObject({ stale: true });
     });
 
     it('removing the only cell still moves the last change of the period forward', async () => {

@@ -1,4 +1,4 @@
-import { USAGE_CELL_GROUP_KEY, USAGE_PUT_MAX_CELLS, type UsageGridView, type UsagePutBody } from '@altis/shared/api/accreditation';
+import { USAGE_CELL_GROUP_KEY, USAGE_IMPORT_ONLY_METRICS, USAGE_PUT_MAX_CELLS, type UsageGridView, type UsagePutBody } from '@altis/shared/api/accreditation';
 import type { UsageMetric } from '@altis/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { SaveIcon, Undo2Icon } from 'lucide-react';
@@ -23,7 +23,8 @@ import { accredKeys, accredPaths } from './queries';
  * A user who may manage accreditation edits cells in place while the period is open: the changed cells (of every
  * group) are kept until "Simpan perubahan" (the page asks before it is left meanwhile), which sends them in writes of at
  * most {@link USAGE_PUT_MAX_CELLS} cells; an empty cell removes its manual entry. A value that is not a whole number of 0 or more is marked and nothing is
- * sent. The imported figures without a group are read-only (the mapping below the grid moves them).
+ * sent. The imported figures without a group are read-only (the mapping below the grid moves them), and so are the
+ * visits without repeats, which only the import counts ({@link USAGE_IMPORT_ONLY_METRICS}).
  */
 
 type GridCell = UsageGridView['cells'][number];
@@ -206,7 +207,7 @@ export function UsageGrid({ periodId, grid, span, editable }: UsageGridProps) {
             autoComplete="off"
             aria-label={t('accreditation.usage.cell', { metric: t(`vocab.usage_metric.${metric}`), month: rowLabel, group: groupLabel })}
             aria-invalid={isInvalid ? true : undefined}
-            disabled={!groupEditable || saving}
+            disabled={!groupEditable || saving || USAGE_IMPORT_ONLY_METRICS.includes(metric)}
             onChange={(e) => change(key, e.target.value)}
             className={cn('h-8 w-24 text-right tabular-nums', dirty && 'border-primary bg-primary/5')}
           />
@@ -265,6 +266,7 @@ export function UsageGrid({ periodId, grid, span, editable }: UsageGridProps) {
       </div>
       {group?.key === 'unmapped' && <p className="text-sm text-muted-foreground">{t('accreditation.usage.group.unmapped_hint')}</p>}
       {editable && groupEditable && <p className="text-xs text-muted-foreground">{t('accreditation.usage.empty_hint')}</p>}
+      {editable && groupEditable && <p className="text-xs text-muted-foreground">{t('accreditation.usage.import_only_hint')}</p>}
       {error !== null && <Notice kind="error">{error}</Notice>}
       {state.kind === 'saved' && <Notice kind="success">{t('accreditation.usage.saved')}</Notice>}
 
