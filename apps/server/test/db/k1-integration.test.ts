@@ -553,8 +553,9 @@ describe.skipIf(!ctx.available)(`the SLiMS catalogue re-sync end to end [${engin
     // This year (snapshot date after the sync): the deleted title and the title whose last live copy is now lost leave
     // the stock; the weeded copies' titles keep another live copy, the new copy's title was in stock already.
     expect(after.current).toBe(before.current - 2);
-    // Last year (snapshot date before the sync): the loss counts from the sync date, so only the archived title leaves.
-    expect(after.last).toBe(before.last - 1);
+    // Last year (snapshot date before the sync): the loss and the archive both count from the sync date, so the stock of
+    // that date is what it was: a title the source deleted later was still in stock then.
+    expect(after.last).toBe(before.last);
   }, 600_000);
 
   it('the entry date of a copy whose receiving date SLiMS emptied dates its acquisition', async () => {

@@ -1,11 +1,12 @@
-import { t } from '@altis/shared';
+import { newId, t } from '@altis/shared';
 import { REPORT_EXPORT_CURSOR_MAX } from '@altis/shared/api/reports';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDbContext } from '../../../../tools/test/test-db.js';
 import { collectionAcquisitionsReport as def } from '../../src/reports/collection/acquisitions.js';
 import { collectionDdcRecapReport } from '../../src/reports/collection/ddc-recap.js';
 import type { ReportRow, TableReport } from '../../src/reports/types.js';
-import { ctxFor, drain, openCollectionDb, rowsStarting, seedBulk, type CollectionDb } from './report-collection-support.js';
+import { stockAt } from '../support/stock-fixture.js';
+import { addTitle, ctxFor, drain, openCollectionDb, rowsStarting, seedBulk, type CollectionDb } from './report-collection-support.js';
 
 // Acquisitions per year and DDC main class over the stock fixture. A copy is dated by the acquisition-date chain, and
 // the time a migration ran is never an acquisition date: the migrated copies without dates, the copy of a placeholder
@@ -86,6 +87,69 @@ describe.skipIf(!ctx.available)(`collection.acquisitions [${engineLabel()}]`, ()
     const entered = await drain(def, ctxFor(c, def, { detailYear: 2023 }, { locale: 'en' }));
     expect(entered.rows).toEqual([['STK-0002', 'Laskar Pelangi', '800', 'General', '2023-07-20', t('en', 'report.acq_basis.input_on'), null, null, null]]);
     expect(rowsStarting((await drain(def, ctxFor(c, def, { detailYear: 2026 }))).rows, 'STK-0007')).toEqual([]);
+  });
+
+  it('a weeded and archived title stays in the year it was acquired; a cancelled order is in no row; a copy received late is in the year it arrived', async () => {
+    const weeded = await addTitle(c.db, c.branchId, {
+      title: 'Kimia Kurikulum Lama',
+      classification: '540',
+      createdAt: stockAt('2018-05-02'),
+      archivedAt: stockAt('2025-03-02'),
+      items: [{ barcode: 'ACQ-0001', status: 'withdrawn', receivedDate: '2018-05-01', createdAt: stockAt('2018-05-02'), archivedAt: stockAt('2025-03-01') }],
+    });
+    const cancelled = await addTitle(c.db, c.branchId, {
+      title: 'Fisika Kelas XII',
+      classification: '530',
+      createdAt: stockAt('2025-03-01'),
+      items: [{ barcode: 'ACQ-0002', status: 'withdrawn', createdAt: stockAt('2025-03-01'), archivedAt: stockAt('2025-05-01') }],
+    });
+    const late = await addTitle(c.db, c.branchId, {
+      title: 'Geografi Kelas X',
+      classification: '910',
+      createdAt: stockAt('2024-12-10'),
+      items: [{ barcode: 'ACQ-0003', status: 'available', createdAt: stockAt('2024-12-10') }],
+    });
+    const events = async (itemId: string, entries: readonly [string, string, string][]): Promise<void> => {
+      await c.db.deleteFrom('item_events').where('item_id', '=', itemId).execute();
+      for (const [on, type, to] of entries) {
+        await c.db
+          .insertInto('item_events')
+          .values({ id: newId(stockAt(on)), item_id: itemId, at: stockAt(on), type, from_status: null, to_status: to, from_location_id: null, to_location_id: null, actor_type: 'staff', actor_id: null, meta: '{"fields":["status"]}' })
+          .execute();
+      }
+    };
+    try {
+      await events(weeded.itemIds[0]!, [
+        ['2018-05-02', 'created', 'available'],
+        ['2025-03-01', 'archived', 'withdrawn'],
+      ]);
+      await events(cancelled.itemIds[0]!, [
+        ['2025-03-01', 'created', 'on_order'],
+        ['2025-05-01', 'archived', 'withdrawn'],
+      ]);
+      await events(late.itemIds[0]!, [
+        ['2024-12-10', 'created', 'on_order'],
+        ['2025-01-20', 'status', 'available'],
+      ]);
+      // The fixture alone: in titles 2024 {000: 1, 200: 1} and 2025 {500: 1, non: 1}; in copies 2024 {200: 1} and 2025 {non: 1}.
+      const expected = {
+        titles: [matrixRow('2018', { '400': 1, '500': 1 }), matrixRow('2024', { '000': 1, '200': 1 }), matrixRow('2025', { '500': 1, '900': 1, non: 1 })],
+        items: [matrixRow('2018', { '400': 1, '500': 1 }), matrixRow('2024', { '200': 1 }), matrixRow('2025', { '900': 1, non: 1 })],
+      };
+      for (const unit of ['titles', 'items'] as const) {
+        const { rows } = await drain(def, ctxFor(c, def, { yearFrom: 2018, yearTo: 2025, unit }));
+        expect(['2018', '2024', '2025'].map((year) => rows.find((r) => r[0] === year)), unit).toEqual(expected[unit]);
+      }
+      const detail = await drain(def, ctxFor(c, def, { detailYear: 2025 }));
+      expect(rowsStarting(detail.rows, 'ACQ-0003')).toEqual([['ACQ-0003', 'Geografi Kelas X', '900', 'Umum', '2025-01-20', t('id', 'report.acq_basis.received'), null, null, null]]);
+      expect(rowsStarting(detail.rows, 'ACQ-0002')).toEqual([]);
+    } finally {
+      for (const x of [weeded, cancelled, late]) {
+        await c.db.deleteFrom('item_events').where('item_id', 'in', x.itemIds).execute();
+        await c.db.deleteFrom('items').where('id', 'in', x.itemIds).execute();
+        await c.db.deleteFrom('records').where('id', '=', x.recordId).execute();
+      }
+    }
   });
 
   it('refuses a range whose first year is after its last', () => {
