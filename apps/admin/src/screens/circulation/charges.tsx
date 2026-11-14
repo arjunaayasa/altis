@@ -29,6 +29,8 @@ import { useMe } from '@/lib/me';
 import { cn } from '@/lib/utils';
 import { amountOf } from './desk-dialogs';
 import { newTransactionKey, todayLocal, useCalendarDate } from './common';
+// ---- Komunitas (member, visit and circulation reports) ----
+import { ReportLinks } from '@/screens/reports/report-links';
 
 /**
  * Charges and payments in the admin.
@@ -823,6 +825,7 @@ export function ChargesScreen() {
         <h1 className="text-2xl font-semibold">{t('nav.circulation.charges')}</h1>
         <p className="text-sm text-muted-foreground">{t('charges.page.intro')}</p>
       </div>
+      <ReportLinks reports={[{ id: 'circulation.payments_daily', permission: 'circulation.records.read' }, { id: 'circulation.charges', permission: 'circulation.records.read' }]} />
       <Tabs value={tab} onValueChange={(v) => setTab(v as PageTab)}>
         <TabsList className="print:hidden">
           <TabsTrigger value="open">{t('charges.page.tab.open')}</TabsTrigger>
