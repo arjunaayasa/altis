@@ -274,11 +274,14 @@ function describeDriverError(driverError: unknown): string {
  * - A DomainError with a raw driver error below it is rebuilt as a DomainError with the same code (so status) and
  *   meta and a safe cause; its detail is kept unless its message repeats a driver error's text, which the driver
  *   error's safe fields then replace (`galat database / database error ER_DUP_ENTRY, errno 1062, ...`).
- * - An AggregateError becomes `{name, message, errors}` (plus `cause` when it has one), a SuppressedError
- *   `{name, message, error, suppressed}` (plus `cause`), each link made safe; either loses its message when that
+ * - An AggregateError becomes `{errorName, message, errors}` (plus `cause` when it has one), a SuppressedError
+ *   `{errorName, message, error, suppressed}` (plus `cause`), each link made safe; either loses its message when that
  *   repeats a driver error's text.
- * - Any other Error becomes `{name, message, cause}` with the cause made safe, unless its message repeats a driver
- *   error's text: then the chain is cut there and that driver error's safe fields take its place.
+ * - Any other Error becomes `{errorName, message, cause}` with the cause made safe, unless its message repeats a
+ *   driver error's text: then the chain is cut there and that driver error's safe fields take its place.
+ *
+ * A rebuilt link names the error's class `errorName`, never `name`: the server log redacts every field called `name`
+ * (a person's name is personal data), and the class would read as "[redacted]" there.
  */
 export function safeChain(error: unknown, depth = 0): unknown {
   if (isRawDriverError(error)) return safeCause(error);
@@ -299,13 +302,13 @@ export function safeChain(error: unknown, depth = 0): unknown {
   const cause = error.cause === undefined ? {} : { cause: safeBelow(error.cause) };
   if (error instanceof AggregateError) {
     const errors = deeper && Array.isArray(error.errors) ? error.errors.map(safeBelow) : [];
-    return { name: error.name, ...message, errors, ...cause };
+    return { errorName: error.name, ...message, errors, ...cause };
   }
   if (isSuppressedError(error)) {
-    return { name: error.name, ...message, error: safeBelow(error.error), suppressed: safeBelow(error.suppressed), ...cause };
+    return { errorName: error.name, ...message, error: safeBelow(error.error), suppressed: safeBelow(error.suppressed), ...cause };
   }
   if (repeated !== undefined) return safeCause(repeated);
-  return { name: error.name, message: error.message, ...(deeper ? { cause: safeBelow(error.cause) } : {}) };
+  return { errorName: error.name, message: error.message, ...(deeper ? { cause: safeBelow(error.cause) } : {}) };
 }
 
 /**

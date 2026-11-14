@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { personalLogKeys } from '@altis/db';
+import { MigrationError, personalLogKeys } from '@altis/db';
 import { describe, expect, it } from 'vitest';
 import { createLogger } from '../src/logger.js';
 import { useDataDir } from './support.js';
@@ -45,5 +45,26 @@ describe('the logger and the personal columns', () => {
     log.error('failed', { error: new RangeError('r') });
     expect(lines()[0]!['error']).toMatchObject({ name: 'RangeError', message: 'r' });
     expect([...personalLogKeys()]).toEqual(expect.arrayContaining(['name', 'appointmentref', 'schoolhead', 'note', 'profile', 'address']));
+  });
+
+  it('keeps the class of every link of a failed migration whose cause chain was made safe, and still no driver text', () => {
+    // A raw driver error (as mysql2 throws it) inside the rejections a migration reports: the runner rebuilds the
+    // links above it as plain objects, and their class must still read in the log.
+    const raw = Object.assign(new Error("Incorrect integer value: 'nik-3201' for column 'n' at row 1"), {
+      code: 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD',
+      errno: 1366,
+      sqlState: 'HY000',
+      sqlMessage: "Incorrect integer value: 'nik-3201' for column 'n' at row 1",
+      sql: "insert into t (n) values ('nik-3201')",
+    });
+    const cause = new TypeError('0007 backfill failed', { cause: new AggregateError([raw], 'backfill failed') });
+    const log = createLogger({ dataDir: dirs.dataDir, level: 'debug' });
+    log.error('migration failed', { error: new MigrationError(cause, { migration: '0007_backfill', applied: [], appliedVerified: true }) });
+    const [line] = lines();
+    expect(line!['error']).toMatchObject({
+      name: 'MigrationError',
+      cause: { errorName: 'TypeError', message: '0007 backfill failed', cause: { errorName: 'AggregateError', message: 'backfill failed', errors: [{ code: 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD' }] } },
+    });
+    expect(JSON.stringify(line)).not.toMatch(/\[redacted\]|nik-3201|insert into/);
   });
 });

@@ -85,7 +85,10 @@ export class AggregateOverflowError extends Error {
 
 /**
  * The keys of a grouped aggregate: result field name → a column reference (`kind`, `i.status`) or an expression
- * without bound parameters ({@link datePrefix}, `sql.ref(...)`, `sql.lit(...)`).
+ * without bound parameters that is not a constant ({@link datePrefix}, `sql.ref(...)`, an expression over columns with
+ * `sql.lit(...)` inside it). A constant key is refused: GROUP BY reads a bare number as a select-list position, and
+ * PostgreSQL refuses a bare text constant. A constant group is selected as a column of a derived table, and grouped by
+ * that column.
  */
 export type GroupKeys<K extends string> = Readonly<Record<K, string | Expression<unknown>>>;
 
@@ -115,6 +118,26 @@ function bindsParameter(node: unknown, depth = 0): boolean {
   return false;
 }
 
+/** SQL text that is one constant and nothing else: a quoted string, a number, NULL, TRUE or FALSE. */
+const CONSTANT_TEXT = /^\s*(?:'(?:[^']|'')*'|[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?|null|true|false)\s*$/i;
+/** SQL text that only wraps what it surrounds: blanks and parentheses. */
+const WRAPPER_TEXT = /^[\s()]*$/;
+
+/**
+ * True when `node` (an operation node tree) is a constant and nothing else: an immediate value (`sql.lit(...)`,
+ * `eb.lit(...)`), a template whose text is just a constant (`'x'`, `1`, `(NULL)`), or a template that only wraps one of
+ * those in blanks and parentheses. An expression with a constant inside it (`substr(col, 1, 4)`) is not one.
+ */
+function isConstant(node: unknown, depth = 0): boolean {
+  if (depth > 64 || typeof node !== 'object' || node === null) return false;
+  const n = node as { kind?: unknown; immediate?: unknown; sqlFragments?: unknown; parameters?: unknown };
+  if (n.kind === 'ValueNode') return n.immediate === true;
+  if (n.kind !== 'RawNode' || !Array.isArray(n.sqlFragments) || !Array.isArray(n.parameters)) return false;
+  const text = (n.sqlFragments as unknown[]).join('');
+  if (n.parameters.length === 0) return CONSTANT_TEXT.test(text.replace(/^[\s(]+|[\s)]+$/g, ''));
+  return n.parameters.length === 1 && WRAPPER_TEXT.test(text) && isConstant(n.parameters[0], depth + 1);
+}
+
 /** The keys as [alias, expression] pairs, checked. */
 function keyExpressions(fn: string, keys: Readonly<Record<string, unknown>>, aggregate: string): Array<[string, Expression<unknown>]> {
   if (typeof keys !== 'object' || keys === null || Array.isArray(keys)) throw new TypeError(`${fn}: keys must be an object`);
@@ -127,8 +150,15 @@ function keyExpressions(fn: string, keys: Readonly<Record<string, unknown>>, agg
     if (typeof expression?.toOperationNode !== 'function') {
       throw new TypeError(`${fn}: the key ${alias} must be a column reference or an expression, got ${describe(key)}`);
     }
-    if (bindsParameter(expression.toOperationNode() as OperationNode)) {
+    const node = expression.toOperationNode() as OperationNode;
+    if (bindsParameter(node)) {
       throw new TypeError(`${fn}: the key ${alias} binds a parameter; use literals (sql.lit) so that its GROUP BY matches it`);
+    }
+    if (isConstant(node)) {
+      throw new TypeError(
+        `${fn}: the key ${alias} is a constant, which GROUP BY reads as a select-list position or PostgreSQL refuses; ` +
+          'select the constant as a column of a derived table and group by that column',
+      );
     }
     return [alias, expression as Expression<unknown>];
   });
