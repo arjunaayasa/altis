@@ -9,6 +9,16 @@
  * No Node built-ins here: the browser bundles this module.
  */
 
-export const ANNEX_COLLECTION_ID = {} as const;
+export const ANNEX_COLLECTION_ID = {
+  // The additions table: the titles in stock on the last day before the three years, the titles added in each year,
+  // and their total (its share of the starting collection beside it).
+  'report.row.accred_collection.start': 'Stok awal per {date}',
+  'report.row.accred_collection.year': 'Penambahan tahun {year}',
+  'report.row.accred_collection.total': 'Jumlah penambahan tiga tahun',
+} as const;
 
-export const ANNEX_COLLECTION_EN: Readonly<Record<keyof typeof ANNEX_COLLECTION_ID, string>> = {};
+export const ANNEX_COLLECTION_EN: Readonly<Record<keyof typeof ANNEX_COLLECTION_ID, string>> = {
+  'report.row.accred_collection.start': 'Starting collection on {date}',
+  'report.row.accred_collection.year': 'Added in {year}',
+  'report.row.accred_collection.total': 'Total added in the three years',
+};
