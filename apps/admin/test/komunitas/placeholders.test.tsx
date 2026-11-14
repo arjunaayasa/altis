@@ -1,6 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EvidenceUpload } from '@/components/accreditation/evidence-upload';
 import { ADMIN_MESSAGES, I18nProvider } from '@/i18n';
 import { KOMUNITAS_AREAS_ID, type KomunitasPlaceholderScreen } from '@/i18n/komunitas';
 import { ACCREDITATION_TABS, validateAccreditationSearch } from '@/screens/accreditation/search';
@@ -28,7 +27,7 @@ afterEach(() => {
 const ULID = '01JZ0000000000000000000ABC';
 
 /** The screens an owning task has replaced with the real one. */
-const REPLACED: ReadonlySet<KomunitasPlaceholderScreen> = new Set<KomunitasPlaceholderScreen>(['reports_catalog', 'report_detail']);
+const REPLACED: ReadonlySet<KomunitasPlaceholderScreen> = new Set<KomunitasPlaceholderScreen>(['reports_catalog', 'report_detail', 'tab_registers']);
 
 /** Each path (a parameter filled in), and the placeholder its screen shows. */
 const ROUTES: readonly [path: string, screen: KomunitasPlaceholderScreen][] = [
@@ -105,24 +104,12 @@ describe('the reports and accreditation routes and their placeholder screens', (
     expect(validateAccreditationSearch({})).toEqual({});
   });
 
-  it.each(TABS)('a workspace tab shows its placeholder (%#)', (Tab, key) => {
+  it.each(TABS.filter(([, key]) => !REPLACED.has(key)))('a workspace tab shows its placeholder (%#)', (Tab, key) => {
     render(
       <I18nProvider locale="id">
         <Tab periodId={ULID} />
       </I18nProvider>,
     );
     expect(screen.getByRole('heading', { name: ADMIN_MESSAGES.id[`komunitas.placeholder.${key}`] })).toBeTruthy();
-  });
-
-  it('the evidence upload is a disabled button with its label until its task fills it', () => {
-    const onDone = vi.fn();
-    render(
-      <I18nProvider locale="id">
-        <EvidenceUpload periodId={ULID} indicatorCode="SCH-K3" evidenceCode="policy_document" entity="library_documents" label="Unggah kebijakan" onDone={onDone} />
-      </I18nProvider>,
-    );
-    const button = screen.getByRole('button', { name: 'Unggah kebijakan' });
-    expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(onDone).not.toHaveBeenCalled();
   });
 });
