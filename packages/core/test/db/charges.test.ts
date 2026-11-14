@@ -4,8 +4,10 @@ import type { MemberBody } from '@altis/shared/api/members';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { engineLabel, testDbContext } from '../../../../tools/test/test-db.js';
 import {
+  anonymizeLoanCharges,
   archiveMember,
   buildReceiptPdf,
+  buildSlipPdf,
   createCalendarRule,
   createCharge,
   createMember,
@@ -20,6 +22,7 @@ import {
   receiptData,
   renewLoan,
   returnItem,
+  slipData,
   takePayment,
   voidPayment,
   waiveCharge,
@@ -307,6 +310,20 @@ describe.skipIf(!ctx.available)(`charges and payments [${engineLabel()}]`, () =>
     expect(summary.all.byMethod.other).toBe('500.00');
     expect(Number(summary.all.byMethod.cash)).toBeGreaterThanOrEqual(1000);
     expect(isDomainError(await paymentSummary(db.h.db, { from: '2026-01-01', to: '2027-01-02' }, NOW).catch((e: unknown) => e))).toBe(true);
+
+    // The visit's slip: the late return with its fine and the payments; another branch's slip finds none of them.
+    const loanId = (await db.h.db.selectFrom('loans').select('id').where('member_id', '=', reader).executeTakeFirstOrThrow()).id;
+    const paid = (await db.h.db.selectFrom('payments').select('id').where('member_id', '=', reader).execute()).map((p) => p.id);
+    const slip = await slipData(db.h.db, { branchId: db.branchId, loanIds: [], returnedLoanIds: [loanId], paymentIds: paid, now: at(10) });
+    expect(slip.returns).toEqual([{ barcode: book.barcode, title: expect.any(String), returnedOn: day, daysLate: 3, fine: '1500.00' }]);
+    expect(slip.payments.map((p) => p.amount)).toEqual(['1000.00', '500.00']);
+    expect(slip.member?.memberNo).toMatch(/^CH-/);
+    for (const paper of ['58', '80'] as const) expect(Buffer.from(buildSlipPdf({ ...slip, paper })).subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    expect(await failure(slipData(db.h.db, { branchId: db.otherBranchId, loanIds: [loanId], returnedLoanIds: [], paymentIds: [], now: NOW }))).toMatchObject({ code: 'NOT_FOUND' });
+
+    // Anonymising the loan: its settled fine loses the loan, the item and the line; the sums stay.
+    expect(await withTx(db.h, (trx) => anonymizeLoanCharges(trx, [loanId], NOW))).toBe(1);
+    expect((await charges(reader)).map((r) => [r.loan_id, r.item_id, r.description, r.status, Number(r.amount_minor)])).toEqual([[null, null, '', 'settled', 150_000]]);
   });
 });
 

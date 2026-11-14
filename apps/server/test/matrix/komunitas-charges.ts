@@ -1,7 +1,7 @@
 import { newId } from '@altis/shared';
 import type { MatrixFixture, MatrixSeed } from '../matrix-fixtures.js';
 import type { AreaMatrix } from './catalog.js';
-import { seedBranch } from './komunitas-circulation.js';
+import { seedBranch, seedOpenLoan } from './komunitas-circulation.js';
 import { seedMember } from './komunitas-members.js';
 
 // The matrix rows, fixtures and maintenance entries of charges and payments: the desk's charge, waive, payment, void and
@@ -20,6 +20,7 @@ const rows: Record<string, string> = {
   'circulation.desk.payments.create': `POST ${DESK_API}/members/:memberId/payments | ${DESK} | - | - | write | deny | store | circulation.payment.create | handler | -`,
   'circulation.desk.payments.void': `POST ${DESK_API}/payments/:id/void | ${WAIVE} | - | - | write | deny | store | circulation.payment.void | handler | -`,
   'circulation.desk.payments.receipt': `GET ${DESK_API}/payments/:id/receipt | ${DESK} | - | - | read | deny | none | null | - | -`,
+  'circulation.desk.slips': `POST ${DESK_API}/slips | ${DESK} | - | - | read | deny | none | null | self | -`,
   'circulation.charges.member': `GET /api/v1/circulation/members/:memberId/charges | ${RECORDS} | - | - | read | deny | none | null | - | -`,
   'circulation.charges.open': `GET /api/v1/circulation/charges/open | ${RECORDS} | - | - | read | deny | none | null | - | -`,
   'circulation.payments.summary': `GET /api/v1/circulation/payments/summary | ${RECORDS} | - | - | read | deny | none | null | - | -`,
@@ -122,6 +123,10 @@ const fixtures: Record<string, MatrixFixture> = {
   'circulation.desk.payments.receipt': async (s) => {
     const p = await seedPayment(s);
     return { params: { branchId: p.branchId, id: p.id }, query: { paper: '80' } };
+  },
+  'circulation.desk.slips': async (s) => {
+    const p = await seedPayment(s);
+    return { params: { branchId: p.branchId }, body: { loanIds: [(await seedOpenLoan(s, p.branchId)).id], paymentIds: [p.id], paper: '58' } };
   },
   'circulation.charges.member': async (s) => ({ params: { memberId: (await chargeAtBranch(s)).memberId }, query: {} }),
   'circulation.charges.open': async () => ({ query: {} }),

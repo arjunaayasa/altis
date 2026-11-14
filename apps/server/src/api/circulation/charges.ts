@@ -1,5 +1,6 @@
 import {
   buildReceiptPdf,
+  buildSlipPdf,
   createCharge,
   ensureReceiptLockRow,
   listPayments,
@@ -8,6 +9,7 @@ import {
   paymentSummary,
   receiptData,
   receiptYearOf,
+  slipData,
   takePayment,
   voidPayment,
   waiveCharge,
@@ -22,6 +24,7 @@ import {
   PaymentSummaryQuery,
   PaymentVoidBody,
   ReceiptQuery,
+  SlipBody,
   type ChargeView,
   type MemberChargesResponse,
   type OpenBalancesResponse,
@@ -41,6 +44,7 @@ import { route, type RouteDecl } from '../../http/route.js';
 //   POST branches/:branchId/circulation/members/:memberId/payments  PaymentBody → 201 PaymentView      circulation.payment.create  (desk.use)
 //   POST branches/:branchId/circulation/payments/:id/void           PaymentVoidBody → PaymentView      circulation.payment.void    (charges.waive)
 //   GET  branches/:branchId/circulation/payments/:id/receipt        ReceiptQuery → application/pdf                                 (desk.use)
+//   POST branches/:branchId/circulation/slips                       SlipBody → application/pdf (the visit's slip; read, tx self)   (desk.use)
 // Records (`circulation.records.read`, library-wide):
 //   GET  circulation/members/:memberId/charges                      MemberChargesQuery → MemberChargesResponse
 //   GET  circulation/charges/open                                   OpenBalancesQuery → OpenBalancesResponse
@@ -162,16 +166,46 @@ const paymentsReceipt = route({
   query: ReceiptQuery,
   handler: async (rc) => {
     const data = await receiptData(rc.db.db, { branchId: rc.params.branchId, paymentId: rc.params.id, ...(rc.query.paper === undefined ? {} : { paper: rc.query.paper }) });
-    const pdf = buildReceiptPdf(data);
-    return new Response(pdf, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': 'inline; filename="kuitansi.pdf"',
-        'Content-Length': String(pdf.byteLength),
-        'Cache-Control': 'private, no-store',
-      },
+    return pdfResponse(buildReceiptPdf(data), 'kuitansi.pdf');
+  },
+});
+
+/** A PDF answer, never cached. */
+function pdfResponse(pdf: Uint8Array, filename: string): Response {
+  return new Response(pdf, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${filename}"`,
+      'Content-Length': String(pdf.byteLength),
+      'Cache-Control': 'private, no-store',
+    },
+  });
+}
+
+const slips = route({
+  id: 'circulation.desk.slips',
+  method: 'POST',
+  path: `${API}/slips`,
+  permission: 'circulation.desk.use',
+  branchParam: 'branchId',
+  mode: 'read',
+  idempotency: 'none',
+  audit: null,
+  tx: 'self',
+  params: z.strictObject({ branchId: ulidField }),
+  body: SlipBody,
+  handler: async (rc) => {
+    const b = rc.body;
+    const data = await slipData(rc.db.db, {
+      branchId: rc.params.branchId,
+      loanIds: b.loanIds,
+      returnedLoanIds: b.returnedLoanIds,
+      paymentIds: b.paymentIds,
+      now: rc.now,
+      ...(b.paper === undefined ? {} : { paper: b.paper }),
     });
+    return pdfResponse(buildSlipPdf(data), 'slip.pdf');
   },
 });
 
@@ -238,6 +272,7 @@ export const CHARGE_ROUTES: RouteDecl[] = [
   paymentsCreate,
   paymentsVoid,
   paymentsReceipt,
+  slips,
   memberChargesList,
   openBalancesList,
   paymentsSummary,

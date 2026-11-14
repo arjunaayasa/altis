@@ -131,6 +131,7 @@ describe('charges at the desk', () => {
     const app = start(
       {
         'GET branches/:branchId/circulation/members/:memberId': () => member,
+        'POST branches/:branchId/circulation/slips': () => new Response(new Uint8Array([37, 80, 68, 70]), { status: 200, headers: { 'Content-Type': 'application/pdf' } }),
         'POST branches/:branchId/circulation/members/:memberId/payments': () => {
           member = deskMember({ balance: '0.00', charges: [], payments: [PAYMENT] });
           return new Response(JSON.stringify(PAYMENT), { status: 201, headers: { 'Content-Type': 'application/json', 'X-Altis-Build': '0.1.0' } });
@@ -156,6 +157,16 @@ describe('charges at the desk', () => {
     const link = screen.getByRole('link', { name: 'Cetak kuitansi PUSAT/2026/000001' });
     expect(link.getAttribute('href')).toBe(`/api/v1/branches/${BRANCH}/circulation/payments/${PAYMENT.id}/receipt`);
     await waitFor(() => expect(screen.queryByText('Tanggungan Rp 1.500')).toBeNull());
+
+    // F9: the slip of this visit holds the payment; the tab opened at once shows the PDF.
+    const tab = { location: { href: '' }, close: vi.fn() };
+    vi.stubGlobal('open', vi.fn(() => tab));
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:slip') }));
+    fireEvent.keyDown(window, { key: 'F9' });
+    expect(await screen.findByText('Slip transaksi dibuka untuk dicetak.', { selector: 'p.text-xl' })).toBeTruthy();
+    const slip = app.fetchMock.mock.calls.find(([url, init]) => String(url).endsWith(`branches/${BRANCH}/circulation/slips`) && init?.method === 'POST');
+    expect(JSON.parse(String(slip?.[1]?.body))).toEqual({ loanIds: [], returnedLoanIds: [], paymentIds: [PAYMENT.id] });
+    expect(tab.location.href).toBe('blob:slip');
   });
 
   it('a blocked member is told why on the card', async () => {

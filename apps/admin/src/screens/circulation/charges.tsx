@@ -1,4 +1,4 @@
-import { MANUAL_CHARGE_KINDS, PAYMENT_METHODS, type ManualChargeKind, type PaymentMethod } from '@altis/shared';
+import { MANUAL_CHARGE_KINDS, PAYMENT_METHODS, type ErrorCode, type ManualChargeKind, type PaymentMethod } from '@altis/shared';
 import type {
   ChargeView,
   MemberChargesResponse,
@@ -6,6 +6,7 @@ import type {
   PaymentListResponse,
   PaymentSummaryResponse,
   PaymentView,
+  SlipBody,
 } from '@altis/shared/api/charges';
 import type { DeskMemberView } from '@altis/shared/api/circulation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
@@ -21,7 +22,8 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLocale, useT, type TKey } from '@/i18n';
 import { holds, holdsAt } from '@/lib/access';
-import { ApiError, api } from '@/lib/api';
+import { ApiError, api, csrfToken, setCsrfToken } from '@/lib/api';
+import { buildSync } from '@/lib/build-sync';
 import { problemText } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
 import { cn } from '@/lib/utils';
@@ -65,6 +67,50 @@ export function receiptHref(branchId: string, paymentId: string): string {
 }
 
 const PRICE = /^\d{1,13}(\.\d{1,2})?$/;
+
+/** The PDF a POST read answers (a slip), as bytes; a refusal (any answer that is not a PDF) as its ApiError. */
+async function postPdf(path: string, body: unknown): Promise<Blob> {
+  const token = csrfToken();
+  const res = await fetch(`/api/v1/${path}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { Accept: 'application/pdf, application/problem+json', 'Content-Type': 'application/json', ...(token === null ? {} : { 'X-CSRF-Token': token }) },
+    body: JSON.stringify(body),
+  });
+  const build = res.headers.get('X-Altis-Build');
+  if (build !== null) buildSync.observe(build);
+  const rotated = res.headers.get('X-CSRF-Token');
+  if (rotated !== null && rotated !== '') setCsrfToken(rotated);
+  if (res.ok && /^application\/pdf\b/i.test(res.headers.get('Content-Type') ?? '')) return res.blob();
+  const problem = (await res.json().catch(() => ({}))) as { code?: string; detail?: string; reason?: string };
+  throw new ApiError(res.status, (problem.code ?? 'INTERNAL') as ErrorCode, {
+    ...(problem.detail === undefined ? {} : { detail: problem.detail }),
+    ...(problem.reason === undefined ? {} : { reason: problem.reason }),
+    problemJson: problem.code !== undefined,
+  });
+}
+
+/**
+ * Prints the transaction slip of a visit (F9): a tab is opened at once (a browser lets a key open one), then shows the
+ * PDF. Resolves when the PDF is shown; rejects with the refusal.
+ */
+export async function printSlip(branchId: string, body: SlipBody): Promise<void> {
+  let tab: Window | null;
+  try {
+    tab = window.open('', '_blank');
+  } catch {
+    tab = null;
+  }
+  try {
+    const blob = await postPdf(`branches/${encodeURIComponent(branchId)}/circulation/slips`, body);
+    const url = URL.createObjectURL(blob);
+    if (tab !== null) tab.location.href = url;
+    else window.open(url, '_blank', 'noopener');
+  } catch (e) {
+    tab?.close();
+    throw e;
+  }
+}
 
 /** The sum of decimal amounts, as a decimal with two places. */
 function sumOf(amounts: readonly string[]): string {
