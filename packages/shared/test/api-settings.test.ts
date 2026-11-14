@@ -265,8 +265,8 @@ describe('AccreditationSettingsBody', () => {
     unknownMemberGroup: { default: 'auto' },
   };
 
-  it('SETTINGS_GROUPS ends with accreditation; the visits group has no screen yet', () => {
-    expect([...SETTINGS_GROUPS]).toEqual(['library', 'email', 'security', 'opac', 'catalog', 'accreditation']);
+  it('SETTINGS_GROUPS ends with accreditation, then the circulation core\'s circulation and members; the visits group has no screen yet', () => {
+    expect([...SETTINGS_GROUPS]).toEqual(['library', 'email', 'security', 'opac', 'catalog', 'accreditation', 'circulation', 'members']);
     expect(SETTINGS_GROUPS as readonly string[]).not.toContain('visits');
   });
 
