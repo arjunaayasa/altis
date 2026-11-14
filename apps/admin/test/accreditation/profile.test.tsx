@@ -328,3 +328,50 @@ describe('Populasi & Sarana', () => {
     expect(app.period()).toMatchObject({ students: 450, classes: 14 });
   });
 });
+
+describe('unsaved changes and the workspace navigation', () => {
+  const UNSAVED = 'Perubahan belum disimpan';
+
+  it('another tab asks first: Batal keeps the tab and what was typed, going on opens the other tab', async () => {
+    const app = open({ tab: 'profil' });
+    const before = dirtyForms.count();
+    fireEvent.change(await screen.findByRole('textbox', { name: NPP }, FIRST), { target: { value: '3301099999' } });
+    await waitFor(() => expect(dirtyForms.count()).toBe(before + 1));
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Indikator' }));
+    const ask = await screen.findByRole('alertdialog', { name: UNSAVED });
+    expect(within(ask).getByText(/belum Anda simpan/)).toBeTruthy();
+    fireEvent.click(within(ask).getByRole('button', { name: 'Batal' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog', { name: UNSAVED })).toBeNull());
+    expect(app.router.state.location.search).toEqual({ tab: 'profil' });
+    await waitFor(() => expect(field('textbox', NPP).value).toBe('3301099999'));
+    // The focus back on the tab it came from does not ask again.
+    expect(screen.queryByRole('alertdialog', { name: UNSAVED })).toBeNull();
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Populasi & Sarana' }));
+    const again = await screen.findByRole('alertdialog', { name: UNSAVED });
+    expect(app.router.state.location.search).toEqual({ tab: 'profil' });
+    fireEvent.click(within(again).getByRole('button', { name: 'Lanjutkan tanpa menyimpan' }));
+    await waitFor(() => expect(app.router.state.location.search).toEqual({ tab: 'populasi' }));
+    expect(await screen.findByRole('spinbutton', { name: 'Siswa' })).toBeTruthy();
+    await waitFor(() => expect(dirtyForms.count()).toBe(before));
+    expect(app.writes()).toEqual([]);
+  });
+
+  it('with nothing typed the tab changes at once; a link out of the workspace asks too while something is typed', async () => {
+    const app = open({ tab: 'populasi' });
+    await screen.findByRole('spinbutton', { name: 'Siswa' }, FIRST);
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Profil' }));
+    await waitFor(() => expect(app.router.state.location.search).toEqual({ tab: 'profil' }));
+    expect(screen.queryByRole('alertdialog', { name: UNSAVED })).toBeNull();
+
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Kepala sekolah' }, FIRST), { target: { value: 'Drs. Budi Santoso' } });
+    await waitFor(() => expect(dirtyForms.count()).toBeGreaterThan(0));
+    fireEvent.click(screen.getAllByRole('link', { name: 'Beranda' })[0]!);
+    const ask = await screen.findByRole('alertdialog', { name: UNSAVED });
+    expect(app.router.state.location.pathname).toBe(`/admin/accreditation/${PERIOD_ID}`);
+    fireEvent.click(within(ask).getByRole('button', { name: 'Lanjutkan tanpa menyimpan' }));
+    await waitFor(() => expect(app.router.state.location.pathname).toBe('/admin'));
+    expect(app.writes()).toEqual([]);
+  });
+});
