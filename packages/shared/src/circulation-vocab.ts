@@ -119,6 +119,60 @@ export const CIRCULATION_WARNINGS = Object.freeze(['member_expires_soon', 'due_c
 
 export type CirculationWarning = (typeof CIRCULATION_WARNINGS)[number];
 
+// ---- holds (Komunitas holds) -----------------------------------------------------------------------------------------
+
+/**
+ * `holds.status`: `waiting` in the queue, `ready` (a copy is kept on the hold shelf until `pickup_until`), then one of
+ * `fulfilled` (the member borrowed a copy of the title), `cancelled` or `expired`.
+ */
+export const HOLD_STATUSES = Object.freeze(['waiting', 'ready', 'fulfilled', 'cancelled', 'expired'] as const);
+
+export type HoldStatus = (typeof HOLD_STATUSES)[number];
+
+/** The statuses of an active hold (one per member per title). */
+export const ACTIVE_HOLD_STATUSES = Object.freeze(['waiting', 'ready'] as const);
+
+/** `holds.close_reason`: why a hold was closed. */
+export const HOLD_CLOSE_REASONS = Object.freeze([
+  'loaned',
+  'cancelled_member',
+  'cancelled_staff',
+  'expired_pickup',
+  'expired_wait',
+  'item_unavailable',
+  'member_archived',
+  'migrated',
+] as const);
+
+export type HoldCloseReason = (typeof HOLD_CLOSE_REASONS)[number];
+
+/** `holds.source`: placed at the desk, by the member on the OPAC, or migrated. */
+export const HOLD_SOURCES = Object.freeze(['desk', 'opac', 'migrated'] as const);
+
+export type HoldSource = (typeof HOLD_SOURCES)[number];
+
+/**
+ * `CIRC_HOLD_REFUSED.meta.reason`, in the order a new hold is checked: holds are switched off (`disabled`), the member
+ * is not active or has expired (`member`), the member type may not hold (`not_allowed`), the member holds as many as
+ * allowed (`limit`), already holds this title (`duplicate`), has a copy of it on loan (`own_loan`), the title has no
+ * copy that may be lent at the pickup branch (`no_copies`), or a copy is on the shelf now (`available`). `closed`: the
+ * hold is no longer active (cancel, mark ready); `not_on_shelf`: the hold has no copy waiting to go back to the shelf.
+ */
+export const HOLD_REFUSALS = Object.freeze([
+  'disabled',
+  'member',
+  'not_allowed',
+  'limit',
+  'duplicate',
+  'own_loan',
+  'no_copies',
+  'available',
+  'closed',
+  'not_on_shelf',
+] as const);
+
+export type HoldRefusal = (typeof HOLD_REFUSALS)[number];
+
 // ---- labels ----------------------------------------------------------------------------------------------------------
 
 /**
@@ -138,4 +192,9 @@ export const CIRCULATION_VOCAB_LISTS = Object.freeze({
   limit_scope: LIMIT_SCOPES,
   renew_refusal: RENEW_REFUSALS,
   circulation_warning: CIRCULATION_WARNINGS,
+  // ---- Komunitas (holds) ----
+  hold_status: HOLD_STATUSES,
+  hold_close_reason: HOLD_CLOSE_REASONS,
+  hold_source: HOLD_SOURCES,
+  hold_refusal: HOLD_REFUSALS,
 });

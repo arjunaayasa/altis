@@ -90,6 +90,8 @@ describe('the community job handlers', () => {
       'reports.housekeeping': ['system.jobs.manage', 'api', false, false, false],
       'accreditation.evaluate': ['accreditation.workspace.read', 'api', true, false, false],
       'accreditation.import_slims_usage': ['accreditation.workspace.manage', 'origin-only', true, true, true],
+      // ---- Komunitas (holds) ----
+      'circulation.holds': ['system.jobs.manage', 'api', false, false, false],
     });
   });
 

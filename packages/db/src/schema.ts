@@ -1370,6 +1370,46 @@ export interface SchemaMigrationsEditionLockTable {
   is_locked: Generated<number>;
 }
 
+// ---- Komunitas (holds) ----
+
+/** A member's hold on a title (0041); queued per record and pickup branch by (`placed_at`, `id`). */
+export interface HoldsTable {
+  id: string;
+  record_id: string;
+  /** The pinned copy, or the copy kept for the member once the hold is `ready`. */
+  item_id: string | null;
+  /** Default 0: 1 when the member wants that one copy. */
+  pinned: Generated<number>;
+  /** null once the hold's history is anonymised. */
+  member_id: string | null;
+  pickup_branch_id: string;
+  /** `HOLD_STATUSES`. */
+  status: string;
+  /** `<member_id>:<record_id>` while `waiting` or `ready` (unique), null once closed. */
+  active_key: string | null;
+  /** The kept copy while `ready` (unique), null otherwise. */
+  trap_item_id: string | null;
+  placed_on: string;
+  placed_at: EpochMs;
+  /** The staff user who placed it, null when the member did. */
+  placed_by: string | null;
+  /** `HOLD_SOURCES`. */
+  source: string;
+  expires_on: string | null;
+  ready_at: EpochMs | null;
+  pickup_until: string | null;
+  closed_at: EpochMs | null;
+  /** `HOLD_CLOSE_REASONS`. */
+  close_reason: string | null;
+  shelf_cleared_at: EpochMs | null;
+  loan_id: string | null;
+  version: Generated<number>;
+  created_at: EpochMs;
+  created_by: string | null;
+  updated_at: EpochMs;
+  updated_by: string | null;
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 
 /** Every table of the database. TABLE_CLASSES (registry.ts) classifies exactly these. */
@@ -1455,6 +1495,8 @@ export interface DB {
   member_events: MemberEventsTable;
   policies: PoliciesTable;
   loans: LoansTable;
+  // ---- Komunitas (holds) ----
+  holds: HoldsTable;
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: SchemaMigrationsEditionTable;
   schema_migrations_edition_lock: SchemaMigrationsEditionLockTable;

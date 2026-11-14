@@ -54,6 +54,8 @@ import {
   useTypeName,
   writeStored,
 } from './common';
+// ---- Komunitas (holds) ----
+import { HoldSlipPrint, MemberHoldsPanel, type HoldSlip } from './holds';
 
 /**
  * Meja Layanan (`/admin/layanan`) and Kembali Cepat (`/admin/layanan/kembali`): the circulation desk, built for a
@@ -108,9 +110,11 @@ interface ReturnRow {
   dueOn: string;
   daysLate: number;
   otherBranch: string | null;
+  /** The member number the copy is kept for on the hold shelf. */
+  keptFor: string | null;
 }
 
-type PanelTab = 'visit' | 'loans' | 'history';
+type PanelTab = 'visit' | 'loans' | 'holds' | 'history';
 
 /** The query key of a member's desk panel at a branch. */
 const deskMemberKey = (branchId: string, memberId: string) => ['circulation', 'desk', branchId, 'member', memberId] as const;
@@ -169,6 +173,8 @@ export function deskRefusal(t: Translate, e: unknown, o: { action: DeskAction; c
     }
     case 'CIRC_LOAN_NOT_OPEN':
       return { title: t(o.action === 'renew' ? 'circulation.problem.closed_elsewhere' : 'circulation.problem.not_on_loan') };
+    case 'CIRC_ITEM_ON_HOLD':
+      return { title: t('holds.problem.item_on_hold') };
     case 'CIRC_RENEW_REFUSED':
       if (e.reason === 'changed') return { title: t('circulation.problem.conflict') };
       if (isRenewRefusal(e.reason)) return { title: t(`vocab.renew_refusal.${e.reason}`) };
@@ -280,6 +286,8 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
   const [sound, setSound] = useState(() => readStored(DESK_SOUND_KEY) !== '0');
   const [extendOpen, setExtendOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [slip, setSlip] = useState<HoldSlip | null>(null);
+  const [printing, setPrinting] = useState(0);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(-1);
   const seq = useRef(0);
@@ -454,10 +462,30 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
             ? t('circulation.feedback.returned_late', { count: done.daysLate })
             : t('circulation.feedback.returned');
       const detail = `${done.record.title} · ${done.item.barcode}`;
-      say(otherBranch !== null || done.daysLate > 0 ? 'warning' : 'success', title, detail);
+      if (done.hold !== undefined) {
+        // The copy is kept for a hold: that is what the desk must do now, whatever else the return says.
+        setSlip({ trap: done.hold, title: done.record.title, barcode: done.item.barcode });
+        say(
+          'warning',
+          t('holds.desk.keep_for', { no: done.hold.memberNo }),
+          [t('holds.desk.keep_detail', { name: done.hold.memberName, date: day(done.hold.pickupUntil), title: done.record.title }), done.daysLate > 0 ? title : ''].join(' ').trim(),
+        );
+      } else {
+        setSlip(null);
+        say(otherBranch !== null || done.daysLate > 0 ? 'warning' : 'success', title, detail);
+      }
       addVisit({ kind: 'return', title: done.record.title, barcode: done.item.barcode, note: done.daysLate > 0 ? t('circulation.due.late', { count: done.daysLate }) : t('circulation.due.on_time') });
       seq.current += 1;
-      const row: ReturnRow = { seq: seq.current, barcode: done.item.barcode, title: done.record.title, memberNo: done.memberNo, dueOn: done.dueOn, daysLate: done.daysLate, otherBranch };
+      const row: ReturnRow = {
+        seq: seq.current,
+        barcode: done.item.barcode,
+        title: done.record.title,
+        memberNo: done.memberNo,
+        dueOn: done.dueOn,
+        daysLate: done.daysLate,
+        otherBranch,
+        keptFor: done.hold?.memberNo ?? null,
+      };
       setReturns((rows) => [row, ...rows].slice(0, 200));
       await refreshPanel();
     } catch (e) {
@@ -625,7 +653,7 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
     focusBox();
   };
 
-  const tabs: PanelTab[] = ['visit', 'loans', ...(canReadLoans ? (['history'] as const) : [])];
+  const tabs: PanelTab[] = ['visit', 'loans', 'holds', ...(canReadLoans ? (['history'] as const) : [])];
 
   // The function keys and Esc work wherever the focus is (also in the scan box, where shortcuts usually rest).
   useEffect(() => {
@@ -872,6 +900,13 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
             <div className="grid min-w-0 flex-1 gap-1">
               <p className="text-xl leading-snug font-semibold">{feedback.title}</p>
               {feedback.detail !== undefined && <p className="text-sm">{feedback.detail}</p>}
+              {slip !== null && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={() => setPrinting((n) => n + 1)}>
+                    {t('holds.action.print_slip')}
+                  </Button>
+                </div>
+              )}
               {offer !== null && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Button type="button" onClick={() => void confirmOffer()}>
@@ -910,6 +945,7 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
                   <TabsList>
                     <TabsTrigger value="visit">{t('circulation.tab.visit', { count: visit.length })}</TabsTrigger>
                     <TabsTrigger value="loans">{t('circulation.tab.loans', { count: member.loans.length })}</TabsTrigger>
+                    <TabsTrigger value="holds">{t('holds.member.tab', { count: member.holds.length })}</TabsTrigger>
                     {canReadLoans && <TabsTrigger value="history">{t('circulation.tab.history')}</TabsTrigger>}
                   </TabsList>
                   <TabsContent value="visit">
@@ -987,6 +1023,19 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
                       </table>
                     </div>
                   </TabsContent>
+                  {branchId !== null && (
+                    <TabsContent value="holds">
+                      <MemberHoldsPanel
+                        member={member}
+                        branchId={branchId}
+                        onChanged={async () => {
+                          await refreshPanel();
+                          focusBox();
+                        }}
+                        onSaid={(tone, text) => say(tone === 'success' ? 'success' : 'error', text)}
+                      />
+                    </TabsContent>
+                  )}
                   {canReadLoans && (
                     <TabsContent value="history" className="flex flex-col gap-2">
                       <LoanHistory query={history} />
@@ -1010,6 +1059,7 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
           onDone={() => say('success', t('circulation.feedback.extended'), t('circulation.feedback.scan_items'))}
         />
       )}
+      <HoldSlipPrint slip={slip} printing={printing} onPrinted={() => setPrinting(0)} />
       <ShortcutsDialog
         open={helpOpen}
         quickReturn={quickReturn}
@@ -1097,6 +1147,11 @@ function MemberCard({
         </div>
       </dl>
       <p className="text-xs text-muted-foreground">{t('circulation.member.limit', { limit: limitText(t, limit) })}</p>
+      {member.counts.holdsReady > 0 && (
+        <Badge tone="info" className="w-fit">
+          {t('holds.member.ready_count', { count: member.counts.holdsReady })}
+        </Badge>
+      )}
       {refusal === 'MEMBER_EXPIRED' && (
         <Alert variant="destructive">
           <CircleAlertIcon aria-hidden="true" />
@@ -1289,6 +1344,7 @@ function ReturnsTable({ rows }: { rows: readonly ReturnRow[] }) {
                   <div className="flex flex-wrap gap-1">
                     {row.daysLate > 0 ? <Badge tone="danger">{t('circulation.due.late', { count: row.daysLate })}</Badge> : <Badge tone="info">{t('circulation.due.on_time')}</Badge>}
                     {row.otherBranch !== null && <Badge tone="warning">{t('circulation.returns.to_branch', { code: row.otherBranch })}</Badge>}
+                    {row.keptFor !== null && <Badge tone="warning">{t('holds.returns.kept', { no: row.keptFor })}</Badge>}
                   </div>
                 </td>
               </tr>

@@ -209,4 +209,7 @@ export type {
   NotLoanableReason,
   RenewRefusal,
 } from './circulation-vocab.js';
+// ---- Komunitas (holds) ----
+export { ACTIVE_HOLD_STATUSES, HOLD_CLOSE_REASONS, HOLD_REFUSALS, HOLD_SOURCES, HOLD_STATUSES } from './circulation-vocab.js';
+export type { HoldCloseReason, HoldRefusal, HoldSource, HoldStatus } from './circulation-vocab.js';
 export type { ReportCell, ReportColumnType, ReportColumnView, ReportParamKind, ReportParamSpec } from './api/reports.js';

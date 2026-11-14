@@ -71,6 +71,8 @@ export const NAV: readonly NavItem[] = Object.freeze([
   // overdue list and the loan rules are library-wide. Anggota: the member list, the member types and the CSV import.
   { to: '/admin/layanan', labelKey: 'nav.circulation.desk', permission: 'circulation.desk.use', anyBranch: true, group: 'circulation' },
   { to: '/admin/layanan/kembali', labelKey: 'nav.circulation.quick_return', permission: 'circulation.desk.use', anyBranch: true, group: 'circulation' },
+  // ---- Komunitas (holds) ----
+  { to: '/admin/layanan/rak-tunggu', labelKey: 'nav.circulation.hold_shelf', permission: 'circulation.desk.use', anyBranch: true, group: 'circulation' },
   { to: '/admin/layanan/terlambat', labelKey: 'nav.circulation.overdue', permission: 'circulation.records.read', group: 'circulation' },
   { to: '/admin/layanan/aturan', labelKey: 'nav.circulation.policies', permission: 'circulation.policies.manage', group: 'circulation' },
   { to: '/admin/anggota', labelKey: 'nav.members.list', permission: 'members.records.read', group: 'members' },

@@ -85,4 +85,8 @@ export const SCHEDULES: readonly ScheduleDef[] = Object.freeze([
   // The reports' daily upkeep at 03:50 (reports/housekeeping: abandoned and expired runs, report files, work folders,
   // the community contexts' orphan uploads), after the catalogue's.
   def({ name: 'reports.housekeeping', expr: '50 3 * * *', jobType: 'reports.housekeeping', permission: 'system.jobs.manage', enabledByDefault: true }),
+  // ---- Komunitas (holds) ----
+  // Every 15 minutes: holds not picked up by their deadline (or waiting past their end) expire, and the kept copy goes
+  // to the next in the queue (circulation/holds-job.ts). Skipped while the clock looks wrong.
+  def({ name: 'circulation.holds', expr: '*/15 * * * *', jobType: 'circulation.holds', permission: 'system.jobs.manage', enabledByDefault: true }),
 ]);
