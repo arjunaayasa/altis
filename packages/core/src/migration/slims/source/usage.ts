@@ -17,9 +17,11 @@ import type { SlimsDbConfig, SlimsRow, SlimsSource, SlimsTableInfo, SplitCheckpo
 // - every member id (SLIMS_USAGE_HASHED) is replaced by its keyed hash: HMAC-SHA256 under a key drawn at random for the
 //   run (kept in the job's sealed secret and dropped with it), cut to 128 bits, as 32 lower-case hex characters. One
 //   member gives the same hash in every table of one run, so the import can tell members apart and group them by type,
-//   and nobody can tell which member it was once the key is gone. An empty id (a guest in the visitor log) stays empty
-//   and NULL stays NULL. Each reader hashes with its own copy of the key, taken when it is opened and wiped when it is
-//   done (the split's call ends, the connection is closed), so the caller may wipe its key at once.
+//   and nobody can tell which member it was once the key is gone. The id is hashed as SLiMS's MySQL tables compare it:
+//   trimmed and without case (`A01` in `member` and `a01` in the visitor log are one member there, so they are one
+//   member here too). An empty id (a guest in the visitor log) stays empty and NULL stays NULL. Each reader hashes with
+//   its own copy of the key, taken when it is opened and wiped when it is done (the split's call ends, the connection
+//   is closed), so the caller may wipe its key at once.
 //
 // The catalogue migration's list (SLIMS_COLUMNS) is a different list and does not change: the member, loan and visitor
 // tables never enter it, so the catalogue migration never stages their rows. `member`, keyed by the hashed id, is read
@@ -67,17 +69,25 @@ const digest = (key: Uint8Array, bytes: Uint8Array): string => createHmac('sha25
 
 /**
  * The keyed hash of a SLiMS member id: `''` for an empty id (a guest) and for one of spaces only; otherwise the hex of
- * the first 16 bytes of HMAC-SHA256(`key`, the id trimmed, as UTF-8). `key` holds at least 16 bytes.
+ * the first 16 bytes of HMAC-SHA256(`key`, the id trimmed and in upper case, as UTF-8). SLiMS's tables compare member
+ * ids without case, so two spellings of one id that differ only in case hash alike. `key` holds at least 16 bytes.
  *
  * @throws TypeError for a shorter key
  */
 export function memberHash(key: Uint8Array, memberId: string): string {
   checkKey(key);
-  const id = memberId.trim();
+  const id = memberId.trim().toUpperCase();
   return id === '' ? '' : digest(key, Buffer.from(id, 'utf8'));
 }
 
 const ASCII_SPACE: ReadonlySet<number> = new Set([0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20]);
+
+/** `bytes` with the ASCII letters a-z in upper case (the only case known for bytes of an unknown single-byte set). */
+function asciiUpper(bytes: Uint8Array): Uint8Array {
+  const out = Uint8Array.from(bytes);
+  for (let i = 0; i < out.length; i += 1) if (out[i]! >= 0x61 && out[i]! <= 0x7a) out[i] = out[i]! - 0x20;
+  return out;
+}
 
 /** The hash of one cell: NULL stays NULL; text, a number and bytes are hashed as the id they hold. */
 function hashCell(key: Uint8Array, cell: SlimsRow[string]): SlimsRow[string] {
@@ -86,12 +96,13 @@ function hashCell(key: Uint8Array, cell: SlimsRow[string]): SlimsRow[string] {
   if (typeof cell === 'number') return memberHash(key, String(cell));
   const text = textCell(cell);
   if (typeof text === 'string') return memberHash(key, text);
-  // Bytes that are not UTF-8 (a latin1 table): hashed as they are, trimmed of ASCII white space.
+  // Bytes that are not UTF-8 (a latin1 table): hashed as they are, trimmed of ASCII white space, ASCII letters in
+  // upper case.
   let from = 0;
   let to = text.byteLength;
   while (from < to && ASCII_SPACE.has(text[from]!)) from += 1;
   while (to > from && ASCII_SPACE.has(text[to - 1]!)) to -= 1;
-  return from === to ? '' : digest(key, text.subarray(from, to));
+  return from === to ? '' : digest(key, asciiUpper(text.subarray(from, to)));
 }
 
 const isUsageTable = (table: string): table is SlimsUsageTable => Object.hasOwn(SLIMS_USAGE_COLUMNS, table);

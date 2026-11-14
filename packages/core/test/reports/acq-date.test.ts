@@ -243,6 +243,29 @@ describe('liveAt: a copy in the stock at a date', () => {
     expect(acquisitionOf(dated)).toEqual({ date: '2025-01-15', basis: 'received' });
     expect(liveAt(dated, '2025-01-17')).toBe(false);
   });
+
+  it('a copy a catalogue import brought in on order without any date is in the stock from the day it arrived', () => {
+    const imported = item({
+      status: 'available',
+      acqDate: null,
+      acqBasis: null,
+      statusTimeline: [
+        { on: '2024-11-05', to: 'on_order' },
+        { on: '2025-02-10', to: 'processing' },
+        { on: '2025-02-12', to: 'available' },
+      ],
+    });
+    expect(acquisitionOf(imported)).toEqual({ date: '2025-02-10', basis: 'received' });
+    expect(liveAt(imported, '2025-01-31')).toBe(false);
+    expect(liveAt(imported, '2025-02-12')).toBe(true);
+    // Still on order, or cancelled before it arrived: never acquired.
+    expect(acquisitionOf(item({ ...imported, status: 'on_order', statusTimeline: [{ on: '2024-11-05', to: 'on_order' }] }))).toBeNull();
+    expect(acquisitionOf(item({ ...imported, status: 'withdrawn', statusTimeline: [{ on: '2024-11-05', to: 'on_order' }, { on: '2025-01-05', to: 'withdrawn' }] }))).toBeNull();
+    // An imported copy that came in available stays undated: in the stock at every date.
+    const undated = item({ ...imported, statusTimeline: [{ on: '2024-11-05', to: 'available' }] });
+    expect(acquisitionOf(undated)).toEqual({ date: null, basis: null });
+    expect(liveAt(undated, '2020-01-01')).toBe(true);
+  });
 });
 
 describe('inStockAt: a title in the stock at a date', () => {
@@ -346,5 +369,18 @@ describe('firstAcq: the first acquisition of a title', () => {
       ],
     });
     expect(firstAcq(record({ items: [late] }))).toBe('2025-01-20');
+  });
+
+  it('a copy imported on order without any date is acquired the day it arrived, so its title is no longer unknown', () => {
+    const imported = item({
+      status: 'available',
+      acqDate: null,
+      acqBasis: null,
+      statusTimeline: [
+        { on: '2024-11-05', to: 'on_order' },
+        { on: '2025-02-10', to: 'available' },
+      ],
+    });
+    expect(firstAcq(record({ items: [imported] }))).toBe('2025-02-10');
   });
 });

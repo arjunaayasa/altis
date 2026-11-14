@@ -112,8 +112,18 @@ function xlsxSheetName(name: string): string {
 }
 
 /**
+ * The text of a cell as SpreadsheetML stores it: a reader turns every `_xHHHH_` into the character U+HHHH, so the
+ * underscore that starts such a sequence in the text itself is written `_x005F_` (the underscore's own escape), and
+ * the text reads back as it was. Overlapping sequences (`_x005F_x000D_`) are each escaped.
+ */
+function escapeXstring(text: string): string {
+  return text.replace(/_(?=x[0-9A-Fa-f]{4}_)/g, '_x005F_');
+}
+
+/**
  * An inline-string cell: the text without the characters XML forbids, then under the formula guard, cut to the
- * 32 767 characters a spreadsheet cell holds (never inside a surrogate pair).
+ * 32 767 characters a spreadsheet cell holds (never inside a surrogate pair), then with its literal `_xHHHH_`
+ * sequences escaped (escapeXstring; the cut counts the text a reader shows, before the escape).
  */
 function textCell(ref: string, text: string, style: string): string {
   let shown = formulaGuard(stripInvalidXmlChars(text));
@@ -121,7 +131,7 @@ function textCell(ref: string, text: string, style: string): string {
     const end = /[\ud800-\udbff]/.test(shown.charAt(CELL_TEXT_MAX - 1)) ? CELL_TEXT_MAX - 1 : CELL_TEXT_MAX;
     shown = shown.slice(0, end);
   }
-  return `<c r="${ref}" t="inlineStr"${style}><is><t xml:space="preserve">${xmlEscape(shown)}</t></is></c>`;
+  return `<c r="${ref}" t="inlineStr"${style}><is><t xml:space="preserve">${xmlEscape(escapeXstring(shown))}</t></is></c>`;
 }
 
 function cellXml(ref: string, type: ReportColumnType, value: unknown): string {

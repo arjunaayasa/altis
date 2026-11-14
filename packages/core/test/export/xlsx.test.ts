@@ -265,6 +265,22 @@ describe('openXlsxWriter: the workbook', () => {
     expect(inline('B6')).toBe('b'.repeat(32_766));
   });
 
+  it('escapes a literal _xHHHH_ in a text so a spreadsheet reads the text back as it was', async () => {
+    const f = files();
+    const texts = ['Baris_x000D_akhir', '_x005F_x000D_', 'a_x41_b _X0041_ _xZZZZ_', '_x0041_x0042_', 'tanpa urutan_x'];
+    const w = await openXlsxWriter(f.path, f.central, { columns: [{ header: 'judul_x0041_', type: 'text' }], sheetName: 'Teks', checkpoint: null });
+    await w.appendRows(texts.map((s) => [s]));
+    await w.finish();
+    const { cells } = sheetCells(partText(await readParts(f.path), 'xl/worksheets/sheet1.xml'));
+    // How a spreadsheet reads the stored text: every _xHHHH_, left to right, is the character U+HHHH.
+    const decode = (s: string): string => s.replace(/_x([0-9A-Fa-f]{4})_/g, (_m, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+    expect(cells.get('A2')!.text).toBe('Baris_x005F_x000D_akhir');
+    expect(decode(cells.get('A1')!.text)).toBe('judul_x0041_');
+    texts.forEach((s, i) => expect(decode(cells.get(`A${i + 2}`)!.text), s).toBe(s));
+    // Text without such a sequence is stored as it is.
+    expect(cells.get('A6')!.text).toBe('tanpa urutan_x');
+  });
+
   it('names the sheet within the rules of a sheet name', async () => {
     for (const [given, expected] of [
       ['Laporan [2026]: koleksi/*?\\ sangat panjang sekali', 'Laporan 2026 koleksi sangat pan'],

@@ -161,6 +161,36 @@ describe.skipIf(!ctx.available)(`collection.ddc_recap with many class numbers ou
   });
 });
 
+// One class number outside DDC written with another case, accents or an invisible character: MySQL and MariaDB group
+// those spellings together (their comparison ignores case and accents) and keep any one of them, PostgreSQL and SQLite
+// keep them apart. Every engine, today and through the scan, counts them under the same one row.
+describe.skipIf(!ctx.available)(`collection.ddc_recap with one class number outside DDC in several spellings [${engineLabel()}]`, () => {
+  let c: CollectionDb;
+
+  beforeAll(async () => {
+    c = await openCollectionDb('report-ddc-spellings', { fixture: false });
+    const spellings = ['Ref', 'REF', 'réf', 'RÉF', 'ref​', 'Lokal'];
+    for (const [k, classification] of spellings.entries()) {
+      await addTitle(c.db, c.branchId, { title: `Rujukan ${k}`, classification, items: [{ barcode: `SPL-${k}` }] });
+    }
+  });
+
+  afterAll(async () => {
+    await c?.close();
+  });
+
+  it('counts every spelling under one upper-case row, the same today and through the scan', async () => {
+    const live = await drain(def, ctxFor(c, def, {}));
+    expect(live.rows.filter((r) => r[0] === 'NON' && r[1] !== label('NON'))).toEqual([
+      ['NON', 'LOKAL', null, 1, 1],
+      ['NON', 'REF', null, 5, 5],
+    ]);
+    expect(mainRowOf(live.rows, 'NON')).toEqual(['NON', label('NON'), null, 6, 6]);
+    const scanned = await drain(def, ctxFor(c, def, { asOf: TODAY }, { today: addDays(TODAY, 1) }));
+    expect(scanned.rows).toEqual([...live.rows, live.totals]);
+  });
+});
+
 function mainRowOf(rows: readonly ReportRow[], main: string): ReportRow | undefined {
   return rows.find((r) => r[0] === main && r[1] === label(main));
 }

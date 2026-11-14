@@ -323,7 +323,8 @@ export async function staffRatios(db: Kysely<DB>, p: Selectable<AccredPeriodsTab
     active,
     librarians: staff.filter((s) => flag(s.is_librarian)).length,
     population,
-    populationPerStaff: population === null || active === 0 ? null : intDiv(population, active),
+    // A population of 0 is no population (as the other population metrics read it): no ratio.
+    populationPerStaff: population === null || population === 0 || active === 0 ? null : intDiv(population, active),
     staffPcs,
     staffPcsPct: staffPcs === null || active === 0 ? null : intDiv(staffPcs * 100, active),
     trainings,
@@ -662,7 +663,7 @@ const REGISTER_METRICS: Readonly<Record<RegisterMetricId, (r: RegisterReads, id:
     const q = await r.ratios();
     const detail = r.detail('staff', { section: 'ratio' });
     const notes: NoteRef[] = [];
-    if (q.population === null) notes.push(note('population_missing'));
+    if (q.population === null || q.population === 0) notes.push(note('population_missing'));
     if (q.active === 0) notes.push(note('staff_missing'));
     if (q.populationPerStaff === null || q.population === null) return register(id, null, { notes, detail });
     return register(id, q.populationPerStaff, { numerator: q.population, denominator: q.active, notes: truncated(), detail });
