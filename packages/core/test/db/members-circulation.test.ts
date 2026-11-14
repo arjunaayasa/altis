@@ -73,13 +73,13 @@ describe.skipIf(!ctx.available)(`members and circulation [${engineLabel()}]`, ()
     await db?.close();
   });
 
-  it('a member number is normalised like a barcode: `b 001` and ` B  001 ` are one number, `B001` another', async () => {
+  it('a member number keeps its shown spaces but is compared without them: `b 001`, ` B  001 ` and `B001` are one number', async () => {
     const first = await member({ memberNo: 'b 001' });
     expect((await getMember(db.h.db, first, NOW)).memberNo).toBe('B 001');
     expect(await fieldErrors(member({ memberNo: ' B  001 ' }))).toEqual([{ path: 'memberNo', code: 'taken' }]);
-    const other = await member({ memberNo: 'B001' });
-    expect(other).not.toBe(first);
+    expect(await fieldErrors(member({ memberNo: 'B001' }))).toEqual([{ path: 'memberNo', code: 'taken' }]);
     expect((await lookupMember(db.h.db, 'b\t 001', NOW)).id).toBe(first);
+    expect((await lookupMember(db.h.db, 'B001', NOW)).id).toBe(first);
     expect(await fieldErrors(member({ memberNo: 'Ä-1' }))).toEqual([{ path: 'memberNo', code: 'invalid' }]);
     const found = await searchMembers(db.h.db, { q: 'b 00', limit: 50 }, NOW);
     expect(found.items.map((m) => m.id)).toEqual([first]);

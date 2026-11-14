@@ -21,7 +21,7 @@ import { createCsvReader, type CsvRow } from '../catalog/csv/reader.js';
 import { createRun, finishRun, getRun } from '../catalog/data/runs.js';
 import type { TxCtx } from '../context.js';
 import { libraryToday, textOrNull, type Db } from './common.js';
-import { memberNoProblem, normalizeMemberNo } from './keys.js';
+import { memberNoDisplay, memberNoProblem, normalizeMemberNo } from './keys.js';
 import { createMember, updateMember } from './members.js';
 
 // The CSV member import (format `csv-members`), synchronous: the file is read, every row checked and (unless it is a dry
@@ -203,14 +203,15 @@ export async function planMemberRows(db: Db, rows: readonly MemberCsvRow[], o: {
   const seen = new Set<string>();
   return rows.map((row): PlannedRow => {
     const c = row.cells;
-    const memberNo = normalizeMemberNo(c.member_no ?? '');
+    const memberNo = memberNoDisplay(c.member_no ?? '');
+    const key = normalizeMemberNo(memberNo);
     const base = { line: row.line, memberNo, name: c.name ?? '', memberType: c.member_type ?? '', className: textOrNull(c.class_name) };
     const refuse = (refusal: MemberImportRefusal, warnings: MemberImportWarning[] = []): PlannedRow => ({ ...base, action: 'refused', refusal, warnings });
     if ((c.member_no ?? '') === '') return refuse('missing_member_no');
     if (memberNoProblem(memberNo) !== null) return refuse('invalid_member_no');
-    if (seen.has(memberNo)) return refuse('duplicate_in_file');
-    seen.add(memberNo);
-    const stored = existing.get(memberNo);
+    if (seen.has(key)) return refuse('duplicate_in_file');
+    seen.add(key);
+    const stored = existing.get(key);
     const upsert = o.mode === 'upsert' && stored !== undefined;
     if (stored !== undefined && !upsert) return refuse('exists');
     if (upsert && (stored.archived_at !== null || stored.anonymized_at !== null)) return refuse('exists');

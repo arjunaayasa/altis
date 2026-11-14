@@ -31,15 +31,15 @@ import {
   writeMemberEvents,
   type Db,
 } from './common.js';
-import { memberNameKey, memberNoProblem, nameKeyWords, normalizeMemberNo } from './keys.js';
+import { memberNameKey, memberNoDisplay, memberNoProblem, nameKeyWords, normalizeMemberNo } from './keys.js';
 import { lockLiveMemberType } from './types.js';
 
 // Members: create, edit (suspend and reactivate are an edit of `status`), extend, archive, read, look up by number,
 // search, and the member's history.
 //
-// - The member number is normalised (keys.ts) and unique on `member_no_key`: a number another member holds (archived
-//   ones included) is `{path: 'memberNo', code: 'taken'}`, checked with a SELECT and again when the write meets the
-//   unique index.
+// - The member number is normalised (keys.ts) and unique on `member_no_key`, which ignores spaces: a number another
+//   member holds (archived ones included) is `{path: 'memberNo', code: 'taken'}`, checked with a SELECT and again when
+//   the write meets the unique index.
 // - Dates are calendar dates in the library's time zone. A new member's `joined_on` = `valid_from` = the typed date or
 //   today; `expires_on` = the typed date, else `valid_from + membership_days` of the type (null when the type never
 //   expires). A member is valid up to and including `expires_on`. Changing the type never changes the dates.
@@ -91,11 +91,12 @@ async function memberNoTaken(db: Db, key: string, exceptId?: string): Promise<bo
   return (await q.executeTakeFirst()) !== undefined;
 }
 
-/** The member number of a body checked: its normal form, and the field error (`invalid`, `taken`) or null. */
-async function checkMemberNo(db: Db, raw: string, exceptId?: string): Promise<{ key: string; error: FieldWarning | null }> {
+/** The member number of a body checked: its shown form, its key, and the field error (`invalid`, `taken`) or null. */
+async function checkMemberNo(db: Db, raw: string, exceptId?: string): Promise<{ display: string; key: string; error: FieldWarning | null }> {
+  const display = memberNoDisplay(raw);
   const key = normalizeMemberNo(raw);
-  if (memberNoProblem(key) !== null) return { key, error: { path: 'memberNo', code: 'invalid' } };
-  return { key, error: (await memberNoTaken(db, key, exceptId)) ? { path: 'memberNo', code: 'taken' } : null };
+  if (memberNoProblem(display) !== null) return { display, key, error: { path: 'memberNo', code: 'invalid' } };
+  return { display, key, error: (await memberNoTaken(db, key, exceptId)) ? { path: 'memberNo', code: 'taken' } : null };
 }
 
 // ---- create ----------------------------------------------------------------------------------------------------------
@@ -134,7 +135,7 @@ export async function createMember(tx: TxCtx, input: MemberBody, o: MemberSaveOp
       .insertInto('members')
       .values({
         id,
-        member_no_display: no.key,
+        member_no_display: no.display,
         member_no_key: no.key,
         member_type_id: b.memberTypeId,
         home_branch_id: b.homeBranchId ?? null,
@@ -220,8 +221,8 @@ export async function updateMember(tx: TxCtx, id: string, input: MemberPatchBody
   if (p.memberNo !== undefined) {
     const no = await checkMemberNo(trx, p.memberNo, id);
     if (no.error !== null) errors.push(no.error);
-    else if (no.key !== before.member_no_key) {
-      set.member_no_display = no.key;
+    else if (no.key !== before.member_no_key || no.display !== before.member_no_display) {
+      set.member_no_display = no.display;
       set.member_no_key = no.key;
       fields.push('memberNo');
     }
