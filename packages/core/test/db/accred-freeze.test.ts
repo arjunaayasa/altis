@@ -293,8 +293,8 @@ describe.skipIf(!ctx.available)(`accreditation freeze and snapshots [${engineLab
   });
 
   describe('the evidence file copy', () => {
-    /** A finished dossier run of `periodId` with a PDF of `content`, finished at `finishedAt`; its id. */
-    async function dossierRun(periodId: string, o: { part?: 'all' | 'request_letter'; finishedAt: number; content: string; format?: 'pdf' | 'zip' }): Promise<string> {
+    /** A finished dossier run of `periodId` with a PDF of `content`, started at `createdAt` (default just before it finished) and finished at `finishedAt`; its id. */
+    async function dossierRun(periodId: string, o: { part?: 'all' | 'request_letter'; createdAt?: number; finishedAt: number; content: string; format?: 'pdf' | 'zip' }): Promise<string> {
       const id = newId(o.finishedAt);
       const format = o.format ?? 'pdf';
       const def = o.part === undefined ? { periodId, zipMode: 'combined' } : { periodId, part: o.part, zipMode: 'combined' };
@@ -315,7 +315,7 @@ describe.skipIf(!ctx.available)(`accreditation freeze and snapshots [${engineLab
           error_code: null,
           job_id: null,
           expires_at: o.finishedAt + 7 * 86_400_000,
-          created_at: o.finishedAt - 1,
+          created_at: o.createdAt ?? o.finishedAt - 1,
           created_by: db.staffId,
           finished_at: o.finishedAt,
         })
@@ -328,13 +328,21 @@ describe.skipIf(!ctx.available)(`accreditation freeze and snapshots [${engineLab
 
     const copy = (snapshotId: string) => copySnapshotDossier(db.h, snapshotId, { dataDir: db.dataDir, storage: db.storage, now: Date.now(), log: silent });
 
-    it('copies the newest whole dossier PDF finished after the results were computed, never a request letter alone', async () => {
+    /** When the evaluation's results became ready: its start plus its duration. */
+    const readyAtOf = async (periodId: string): Promise<number> => {
+      const r = await db.h.db.selectFrom('accred_results').select('payload').where('period_id', '=', periodId).where('indicator_code', '=', '_meta').executeTakeFirstOrThrow();
+      const meta = JSON.parse(r.payload) as { computedAt: number; durationMs: number };
+      return meta.computedAt + meta.durationMs;
+    };
+
+    it('copies the newest whole dossier PDF made once the results were ready, never a request letter alone', async () => {
       const periodId = await answeredPeriod();
       const computedAt = await computedAtOf(periodId);
+      const readyAt = await readyAtOf(periodId);
       await dossierRun(periodId, { finishedAt: computedAt - 1, content: '%PDF-1.4 sebelum perhitungan' });
-      await dossierRun(periodId, { finishedAt: computedAt + 1, content: '%PDF-1.4 berkas bukti lengkap' });
-      await dossierRun(periodId, { part: 'request_letter', finishedAt: computedAt + 2, content: '%PDF-1.4 surat permohonan saja' });
-      await dossierRun(periodId, { finishedAt: computedAt + 3, content: 'PK zip', format: 'zip' });
+      await dossierRun(periodId, { createdAt: readyAt, finishedAt: readyAt + 1, content: '%PDF-1.4 berkas bukti lengkap' });
+      await dossierRun(periodId, { part: 'request_letter', createdAt: readyAt, finishedAt: readyAt + 2, content: '%PDF-1.4 surat permohonan saja' });
+      await dossierRun(periodId, { createdAt: readyAt, finishedAt: readyAt + 3, content: 'PK zip', format: 'zip' });
       await new Promise((resolve) => setTimeout(resolve, 5));
       const { id } = await freeze(periodId);
       expect((await getSnapshot(db.h.db, id)).dossierFileId).toBeNull();
@@ -368,6 +376,28 @@ describe.skipIf(!ctx.available)(`accreditation freeze and snapshots [${engineLab
       expect(await db.h.db.selectFrom('files').select('id').where('owner_id', '=', id).execute()).toHaveLength(1);
     });
 
+    it('a dossier PDF started before the results were ready is never kept, though it finished after they were computed', async () => {
+      const periodId = await answeredPeriod();
+      const readyAt = await readyAtOf(periodId);
+      // Started while the evaluation still ran (its PDF may print the results before it, or half of them), finished after.
+      await dossierRun(periodId, { createdAt: readyAt - 1, finishedAt: readyAt + 2, content: '%PDF-1.4 dibuat saat menghitung' });
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const early = await freeze(periodId);
+      expect(await copy(early.id)).toBeNull();
+
+      // Once a run started after the results were ready exists, that one is kept, even beside a newer early one.
+      const second = await answeredPeriod();
+      const ready = await readyAtOf(second);
+      await dossierRun(second, { createdAt: ready, finishedAt: ready + 1, content: '%PDF-1.4 sesudah siap' });
+      await dossierRun(second, { createdAt: ready - 1, finishedAt: ready + 2, content: '%PDF-1.4 sebelum siap' });
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const { id } = await freeze(second);
+      const fileId = await copy(id);
+      expect(fileId).not.toBeNull();
+      const file = await db.h.db.selectFrom('files').select('sha256').where('id', '=', fileId!).executeTakeFirstOrThrow();
+      expect(file.sha256).toBe(createHash('sha256').update('%PDF-1.4 sesudah siap').digest('hex'));
+    });
+
     it('without a dossier run newer than the results the snapshot keeps no copy', async () => {
       const periodId = await answeredPeriod();
       const computedAt = await computedAtOf(periodId);
@@ -382,8 +412,8 @@ describe.skipIf(!ctx.available)(`accreditation freeze and snapshots [${engineLab
 
     it('a run whose file is gone leaves the snapshot without a copy', async () => {
       const periodId = await answeredPeriod();
-      const computedAt = await computedAtOf(periodId);
-      const runId = await dossierRun(periodId, { finishedAt: computedAt + 1, content: '%PDF-1.4 hilang' });
+      const readyAt = await readyAtOf(periodId);
+      const runId = await dossierRun(periodId, { createdAt: readyAt, finishedAt: readyAt + 1, content: '%PDF-1.4 hilang' });
       await fsp.rm(reportExportPath(db.dataDir, runId, 'pdf'));
       await new Promise((resolve) => setTimeout(resolve, 5));
       const { id } = await freeze(periodId);

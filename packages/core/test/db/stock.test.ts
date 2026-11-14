@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
 import { firstAcq, inStockAt, scanRecordStock, type RecordStockFacts } from '../../src/reports/stock/index.js';
 import { STOCK_ITEM_KEYS, STOCK_TZ, seedStockFixture, stockAt, type StockFixture, type StockItemKey, type StockRecordKey } from '../support/stock-fixture.js';
+import { addTitle } from './report-collection-support.js';
 
 // The stock reader over a real database: the facts of every title (its copies with their acquisition date and status
 // history, its placeholder and public-file marks), read in id order a batch at a time, and the stock at a date they give.
@@ -240,6 +241,25 @@ describe.skipIf(!ctx.available)(`scanRecordStock [${engineLabel()}]`, () => {
     await scanRecordStock(h.db.withPlugin(capture), { tz: STOCK_TZ, after: null, limit: 500 });
     expect(statements.length).toBeGreaterThan(0);
     for (const sql of statements) expect(sql).not.toMatch(/search_/);
+  });
+
+  it('carries the day a title was archived and whether it was merged: a weeded title counts before its archive, a merged one never', async () => {
+    const archived = await addTitle(h.db, fx.branchId, { title: 'Majalah Digital Lama', materialType: 'EBOOK', createdAt: stockAt('2022-01-03'), archivedAt: stockAt('2025-06-01') });
+    const merged = await addTitle(h.db, fx.branchId, { title: 'Majalah Digital Lama (ganda)', materialType: 'EBOOK', createdAt: stockAt('2022-01-04'), archivedAt: stockAt('2025-06-02') });
+    await h.db.updateTable('records').set({ merged_into: archived.recordId }).where('id', '=', merged.recordId).execute();
+    try {
+      const rows = (await scanAll(500)).rows;
+      const archivedRow = rows.find((r) => r.recordId === archived.recordId)!;
+      const mergedRow = rows.find((r) => r.recordId === merged.recordId)!;
+      expect(archivedRow).toMatchObject({ archived: true, archivedOn: '2025-06-01', merged: false });
+      expect(mergedRow).toMatchObject({ archived: true, archivedOn: '2025-06-02', merged: true });
+      expect(rows.find((r) => r.recordId === fx.records.received)).toMatchObject({ archived: false, archivedOn: null, merged: false });
+      expect([inStockAt(archivedRow, '2025-05-31', EBOOK), inStockAt(archivedRow, '2025-06-01', EBOOK)]).toEqual([true, false]);
+      expect(inStockAt(mergedRow, '2025-05-31', EBOOK)).toBe(false);
+    } finally {
+      await h.db.deleteFrom('records').where('id', '=', merged.recordId).execute();
+      await h.db.deleteFrom('records').where('id', '=', archived.recordId).execute();
+    }
   });
 
   it('refuses a batch size outside 1-500', async () => {

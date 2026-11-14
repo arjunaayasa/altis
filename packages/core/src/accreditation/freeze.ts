@@ -28,8 +28,11 @@ import { compactSnapshot, SNAPSHOT_DOSSIER_CONTEXT, SNAPSHOT_DOSSIER_OWNER, SNAP
 //   rolls back. The snapshot keeps the compact values (snapshots.ts) with the estimate, its range, the predicate and
 //   whether the prerequisites are met. Audited `accreditation.period.freeze {snapshotId, hasNote}` (never the note).
 // - After the COMMIT (copySnapshotDossier): the newest evidence file PDF of the whole dossier (never a request letter
-//   alone) of this period that succeeded after the results were computed and before the freeze is copied into the
-//   stored files and named on the snapshot. A copy that fails leaves the snapshot without one, and is logged.
+//   alone) of this period whose run was started once the results were ready and succeeded before the freeze is copied
+//   into the stored files and named on the snapshot. A run started earlier may have printed older results (or results
+//   half rewritten by the evaluation) or annex rows gathered before the last change, so it is never kept; a run started
+//   after it read what the snapshot holds (any change since would have made the results stale). A copy that fails
+//   leaves the snapshot without one, and is logged.
 // - Unfreeze: the first statement is the conditional update `'frozen'` → `'open'`; 0 rows is an unknown period (404)
 //   or one that is open (409 CONFLICT_STALE). The snapshots stay as the period's history. Audited
 //   `accreditation.period.unfreeze`. The route asks for a fresh re-authentication.
@@ -174,15 +177,15 @@ async function sha256Of(p: DataPath, size: number): Promise<string> {
   return hash.digest('hex');
 }
 
-/** The run whose PDF a snapshot keeps: of `periodId`, whole, succeeded after `computedAt` and by `frozenAt`. */
-async function dossierRunOf(h: DbHandle, periodId: string, computedAt: number, frozenAt: number): Promise<{ id: string; size: number | null } | null> {
+/** The run whose PDF a snapshot keeps: of `periodId`, whole, started at or after `readyAt` and succeeded by `frozenAt`. */
+async function dossierRunOf(h: DbHandle, periodId: string, readyAt: number, frozenAt: number): Promise<{ id: string; size: number | null } | null> {
   const runs = await h.db
     .selectFrom('report_runs')
     .select(['id', 'params', 'output_size'])
     .where('report_id', '=', 'accreditation.dossier')
     .where('format', '=', 'pdf')
     .where('status', '=', 'succeeded')
-    .where('finished_at', '>', computedAt)
+    .where('created_at', '>=', readyAt)
     .where('finished_at', '<=', frozenAt)
     .orderBy('finished_at', 'desc')
     .orderBy('id', 'desc')
@@ -220,7 +223,8 @@ export async function copySnapshotDossier(
     if (snapshot.dossier_file_id !== null) return snapshot.dossier_file_id;
     const meta = await readMeta(h.db, snapshot.period_id);
     if (meta === null || meta.status !== 'ready' || meta.computedAt === undefined) return null;
-    const run = await dossierRunOf(h, snapshot.period_id, meta.computedAt, Number(snapshot.created_at));
+    // The results were ready when the evaluation ended: its start plus its duration.
+    const run = await dossierRunOf(h, snapshot.period_id, meta.computedAt + (meta.durationMs ?? 0), Number(snapshot.created_at));
     if (run === null) return null;
 
     const source = reportExportPath(o.dataDir, run.id, 'pdf');

@@ -4,7 +4,7 @@ import { dateField } from '@altis/shared/api/catalog/common';
 import { sql, type RawBuilder, type SqlBool } from 'kysely';
 import { z } from 'zod';
 import { reportClassPrefixField, reportColumn, reportDateRangeField, reportIdField, reportParam } from '../params.js';
-import { liveAt, statusAt, type RecordStockFacts } from '../stock/index.js';
+import { liveAt, statusAt, titleGoneAt, type RecordStockFacts } from '../stock/index.js';
 import type { ReportCtx, ReportRow, TableReport } from '../types.js';
 import {
   allOf,
@@ -136,7 +136,7 @@ async function scanEntries(ctx: ReportCtx, batch: readonly RecordStockFacts[], d
   const statuses = statusesOf(ctx);
   const found: { recordId: string; itemId: string; status: ItemStatus }[] = [];
   for (const r of batch) {
-    if (r.archived) continue;
+    if (titleGoneAt(r, day)) continue;
     for (const i of r.items) {
       if (!liveAt(i, day)) continue;
       const status = statusAt(i, day);

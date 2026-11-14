@@ -58,6 +58,7 @@ export async function scanRecordStock(
     .select([
       'r.id',
       'r.archived_at',
+      'r.merged_into',
       'r.created_at',
       'mt.code_key as material_type_code',
       'r.classification',
@@ -208,6 +209,8 @@ export async function scanRecordStock(
     rows.push({
       recordId: r.id,
       archived: r.archived_at !== null,
+      archivedOn: r.archived_at === null ? null : localDate(o.tz, Number(r.archived_at)),
+      merged: r.merged_into !== null,
       createdOn: inSpan.has(r.id) ? null : localDate(o.tz, Number(r.created_at)),
       materialTypeCode: r.material_type_code ?? null,
       classification: r.classification,

@@ -97,6 +97,15 @@ describe('usageRowTransform', () => {
     expect(transform('loan', { loan_id: 1, member_id: 1042 })['member_id']).toBe(memberHash(KEY, '1042'));
   });
 
+  it('keeps hashing under the key it was made with after the caller wipes its own key', () => {
+    const key = Uint8Array.from(KEY);
+    const own = usageRowTransform(key);
+    key.fill(0);
+    const out = own('member', { member_id: 'M001', member_type_id: 1, expire_date: null });
+    expect(out['member_id']).toBe(memberHash(KEY, 'M001'));
+    expect(out['member_id']).not.toBe(memberHash(new Uint8Array(32), 'M001'));
+  });
+
   it('does not hash the columns of other tables, and refuses a table that is not a usage table', () => {
     expect(transform('mst_member_type', { member_type_id: 1, member_type_name: 'Siswa', loan_limit: 2 })).toEqual({ member_type_id: 1, member_type_name: 'Siswa' });
     expect(transform('item', { item_id: 9, item_code: 'B00001', biblio_id: 1, price: 20000 })).toEqual({ item_code: 'B00001', biblio_id: 1 });

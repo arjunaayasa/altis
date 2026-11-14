@@ -1,5 +1,6 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { decodeBase64Url } from '@altis/crypto';
 import { withTx, type ForeignMysql } from '@altis/db';
 import { runWorkDir, runWorkPath } from '@altis/platform';
 import { newId } from '@altis/shared';
@@ -13,7 +14,9 @@ import { USAGE_SOURCE_NOTE } from '../../src/accreditation/slims-usage/report.js
 import { expiredExportsStep } from '../../src/catalog/runs/housekeeping.js';
 import { getRunView, listRuns } from '../../src/catalog/runs/queries.js';
 import { localStorageDriver } from '../../src/files/serve.js';
+import { openValue, secretAad } from '../../src/crypto/secret-box.js';
 import { requestCancel } from '../../src/jobs/service.js';
+import { memberHash } from '../../src/migration/slims/source/usage.js';
 import { writeSettings } from '../../src/settings/service.js';
 import { fakeForeignMysql, fixtureMysqlTables, type FakeForeignMysql } from '../fixtures/slims-fake.js';
 import { generateSlimsFixture, type FixtureData } from '../support/slims-fixture/generate.js';
@@ -168,6 +171,28 @@ describe.skipIf(!ctx.available)(`SLiMS usage import [${engineLabel()}]`, () => {
     // No statement carried a member id, a name or anything else of the fixture's people.
     const sent = JSON.stringify(server.log);
     for (const value of base.expected.personalValues) expect(sent.includes(value), value).toBe(false);
+  });
+
+  it('a database import hashes the member ids under the run\'s own key, never under a wiped one', async () => {
+    const server = fakeServer(base.data);
+    __setSlimsUsageConnect(server.connect);
+    const started = await t.start(periodId, { source: { kind: 'db', db: DB_CFG } });
+    const sealed = (await t.h.db.selectFrom('jobs').select('secret_param').where('id', '=', started.jobId).executeTakeFirstOrThrow()).secret_param;
+    const opened = decodeBase64Url(openValue(keyring, secretAad('jobs', 'secret_param', started.jobId), sealed!));
+    const runKey = new Uint8Array(Buffer.from((JSON.parse(Buffer.from(opened!).toString('utf8')) as { hashKey: string }).hashKey, 'base64'));
+    // On to the first phase after the members are staged.
+    for (let i = 0; i < 1_000 && ['split', 'members'].includes((await t.payload(started.jobId)).phase ?? 'split'); i += 1) {
+      expect((await t.slice(started.jobId, 0)).outcome).toBe('continued');
+    }
+    const lines = (await fsp.readFile(runWorkPath(t.dataDir, started.runId, 'usage-members.bin'), 'utf8')).split('\n').filter((l) => l !== '');
+    const staged = lines.map((l) => (JSON.parse(l) as [string])[0]);
+    expect(staged.length).toBeGreaterThan(0);
+    const ids = (base.data.rows.get('member') ?? []).map((r) => String(r['member_id'] as string | number).trim()).filter((id) => id !== '');
+    const underRunKey = new Set(ids.map((id) => memberHash(runKey, id)));
+    const underWipedKey = new Set(ids.map((id) => memberHash(new Uint8Array(32), id)));
+    expect(staged.filter((h) => !underRunKey.has(h))).toEqual([]);
+    expect(staged.filter((h) => underWipedKey.has(h))).toEqual([]);
+    expect(await t.runToEnd(started.jobId)).toBe('succeeded');
   });
 
   it('sliced one step at a time, and with a slice replayed after its work files were written but its state was not, the counts stay the same', async () => {

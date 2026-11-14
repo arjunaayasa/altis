@@ -14,7 +14,7 @@ import { reportById } from '../registry.js';
 import type { ReportDefinition } from '../types.js';
 import { CsvPhase } from './csv-phase.js';
 import { renderDocument } from './document-phase.js';
-import { endRun, removeRunFiles, succeedRun } from './finish.js';
+import { endRun, recordedEnd, removeRunFiles, succeedRun } from './finish.js';
 import { writePdf } from './pdf-phase.js';
 import { RowsPhase } from './rows-phase.js';
 import {
@@ -48,7 +48,8 @@ import { XlsxPhase } from './xlsx-phase.js';
 // into `rows.ndjson`, the file from them into `output.part` (with room for twice `rows.ndjson` proven first), then the
 // run's end. A document report renders `output.part` itself (document-phase.ts), one render per slice, then ends. A
 // slice does at least one step and goes on while more than 2 s, and more than 1.5 times its last step, is left of its
-// budget; a PDF layout and a document's render only begin a slice. The end is done as soon as it is reached.
+// budget; a PDF layout and a document's render only begin a slice. The end is done as soon as it is reached; a slice
+// that dies inside it leaves its end recorded in the run, and the next slice finishes from there (finish.ts).
 //
 // Cancel (`ctx.cancelled()`): the run ends `cancelled`, its work folder and its file removed. A failure a retry cannot
 // mend ends the run `failed` at once: REPORT_TOO_LARGE (a report without a count passed its format's limit; the job's
@@ -193,6 +194,12 @@ class ExportSlice {
       if (!started) return { done: true, message: 'run ended' };
     }
     const run = await this.prepare();
+    // An earlier slice recorded the run's end and died before it was done: finish from that end, wherever the file is.
+    const recorded = recordedEnd(this.row, run.stored);
+    if (recorded !== null) {
+      this.cp = { phase: 'finish', state: recorded };
+      return this.succeed(run, recorded);
+    }
     let cp = checkpointOf(run.def, this.payload);
     if (cp === null) {
       await removeTree(reportWorkDir(run.dataDir, run.runId));
