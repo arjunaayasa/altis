@@ -1,3 +1,4 @@
+import type { EvidenceView } from '@altis/shared/api/accreditation';
 import type { ReportRunView } from '@altis/shared/api/reports';
 import { useQueryClient } from '@tanstack/react-query';
 import { DownloadIcon } from 'lucide-react';
@@ -10,14 +11,15 @@ import { isMessageKey } from '@/lib/form-errors';
 import { useApiQuery } from '@/lib/me';
 import { page } from '@/lib/page';
 import { useBytes } from '@/screens/backups/upload';
-import { confirmReauth } from '@/screens/reports/run-history';
+import { confirmReauth, failureText } from '@/screens/reports/run-history';
 
 /**
  * A report run of the Cetak tab (spec §10.9): the document or annex it makes, its status, the job's progress while it
- * runs, its warnings as sentences, and its download.
+ * runs, its warnings as sentences, why it failed in words (the Laporan screen's {@link failureText}), and its download.
  *
  * - The warnings are the codes the export wrote into the run (`component_over_limit:<component>:<bytes>`,
- *   `generated_too_large:<code>`); each is shown as a sentence, an unknown one with its code.
+ *   `generated_too_large:<code>`, `file_missing:<file id>` for an evidence file gone from the storage, named by its
+ *   file name from the period's evidence list); each is shown as a sentence, an unknown one with its code.
  * - A file is a plain same-origin link (the browser downloads it with the session cookie; the server audits each
  *   download). A run holding personal data (the evidence file, the simulation, the staff annex) is downloaded only right
  *   after a password confirmation: a link cannot open the dialog, so its button asks first and then loads the file.
@@ -40,8 +42,22 @@ export function componentLabel(t: Translate, code: string): string {
   return code;
 }
 
+/** How a run's warnings are put in words: sizes, numbers, the component limit, and an evidence file's name by its id. */
+export interface WarningWords {
+  bytes(n: number): string;
+  number(n: number): string;
+  limitMb: number | null;
+  /** The name of the period's evidence file `fileId`; null when the period's evidence list does not hold it. */
+  fileName?(fileId: string): string | null;
+}
+
 /** A run's warning code as a sentence. */
-export function warningText(t: Translate, o: { bytes(n: number): string; number(n: number): string; limitMb: number | null }, code: string): string {
+export function warningText(t: Translate, o: WarningWords, code: string): string {
+  const missing = /^file_missing:(.+)$/.exec(code);
+  if (missing !== null) {
+    const name = o.fileName?.(missing[1]!) ?? null;
+    return name === null ? t('accreditation.print.warning.file_missing_unknown') : t('accreditation.print.warning.file_missing', { name });
+  }
   const over = /^component_over_limit:([^:]+):(\d+)$/.exec(code);
   if (over !== null) {
     const params = { component: componentLabel(t, over[1]!), size: o.bytes(Number(over[2])) };
@@ -112,18 +128,21 @@ export interface RunCardProps {
   run: ReportRunView;
   /** `accreditation.evidence.componentLimitMb`, for the sentence of a component over it (null: not known). */
   limitMb: number | null;
+  /** The period's evidence files, to name a file a warning says is missing (undefined: not read yet). */
+  evidence?: readonly EvidenceView[];
   /** The run's job has ended: read the run again. */
   onEnded(): void;
 }
 
 /** One run as a list item. */
-export function RunCard({ run, limitMb, onEnded }: RunCardProps) {
+export function RunCard({ run, limitMb, evidence, onEnded }: RunCardProps) {
   const t = useT();
   const locale = useLocale();
   const bytes = useBytes();
   const dateTime = useDateTime();
   const number = new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'id-ID');
   const title = runTitle(t, run);
+  const fileName = (fileId: string): string | null => evidence?.find((e) => e.fileId === fileId)?.fileName ?? null;
   return (
     <li data-run-id={run.id} className="grid gap-2 rounded-md border p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -132,10 +151,10 @@ export function RunCard({ run, limitMb, onEnded }: RunCardProps) {
       </div>
       <p className="text-xs text-muted-foreground">{t('accreditation.print.runs.made', { date: dateTime(run.createdAt) })}</p>
       {isActive(run) && run.jobId !== null && <JobProgress jobId={run.jobId} onDone={onEnded} />}
-      {run.status === 'failed' && <p className="text-sm text-destructive">{t('accreditation.print.runs.failed', { code: run.errorCode ?? 'INTERNAL' })}</p>}
+      {run.status === 'failed' && <p className="text-sm text-destructive">{t('accreditation.print.runs.failed', { reason: failureText(t, run.errorCode) })}</p>}
       {run.warnings.map((code) => (
         <p key={code} data-warning={code} className="rounded-md border border-warning-foreground/30 bg-warning px-3 py-2 text-sm text-warning-foreground">
-          {warningText(t, { bytes, number: (n) => number.format(n), limitMb }, code)}
+          {warningText(t, { bytes, number: (n) => number.format(n), limitMb, fileName }, code)}
         </p>
       ))}
       {run.status === 'succeeded' && <RunDownload run={run} title={title} />}
@@ -144,7 +163,7 @@ export function RunCard({ run, limitMb, onEnded }: RunCardProps) {
 }
 
 /** A run just started on this page: read until its job ends. */
-export function StartedRunCard({ runId, limitMb }: { runId: string; limitMb: number | null }) {
+export function StartedRunCard({ runId, limitMb, evidence }: { runId: string; limitMb: number | null; evidence?: readonly EvidenceView[] }) {
   const t = useT();
   const queryClient = useQueryClient();
   const query = useApiQuery<ReportRunView>({ queryKey: reportRunKey(runId), path: `reports/runs/${encodeURIComponent(runId)}` });
@@ -159,6 +178,7 @@ export function StartedRunCard({ runId, limitMb }: { runId: string; limitMb: num
     <RunCard
       run={query.data}
       limitMb={limitMb}
+      evidence={evidence}
       onEnded={() => {
         void queryClient.invalidateQueries({ queryKey: reportRunKey(runId) });
         void queryClient.invalidateQueries({ queryKey: ['reports', 'runs', 'list'] });

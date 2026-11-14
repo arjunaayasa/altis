@@ -6,12 +6,14 @@ import { PlusIcon } from 'lucide-react';
 import type { ComponentType, JSX } from 'react';
 import { PeriodPicker } from '@/components/accreditation/period-picker';
 import { StatusLine } from '@/components/accreditation/status-line';
+import { UnsavedChangesDialog } from '@/components/accreditation/unsaved-changes';
 import { Badge, ProblemAlert } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useT, type TKey } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError } from '@/lib/api';
+import { useUnsavedNavigationQuestion } from '@/lib/dirty-navigation';
 import { useMe } from '@/lib/me';
 import { useRealtime } from '@/lib/realtime';
 import { accreditationEventKeys, instrumentOf, useFormats, useInstruments, usePeriod, usePeriods } from './data';
@@ -40,6 +42,10 @@ import { UsageTab } from './tabs/usage';
  *   Bulanan, Kepatuhan SNP, Cetak, Riwayat.
  *
  * The screen listens on the `accreditation` channel: new results of a period read every period query again.
+ *
+ * A tab shows only while it is open, so another tab, another period or a link out of the workspace unmounts what it
+ * holds. While one of its forms has unsaved changes (Profil, Populasi & Sarana, the usage grid, an open register
+ * dialog), such a navigation first asks "Perubahan belum disimpan" (lib/dirty-navigation.ts).
  */
 
 const BASE = '/admin/accreditation';
@@ -83,6 +89,8 @@ export function AccreditationScreen(): JSX.Element {
   const list = periods.data?.periods;
   const periodId = given ?? list?.[0]?.id ?? '';
   const period = usePeriod(periodId);
+  const unsaved = useUnsavedNavigationQuestion();
+  const unsavedDialog = <UnsavedChangesDialog open={unsaved !== null} onLeave={() => unsaved?.leave()} onStay={() => unsaved?.stay()} />;
 
   // New results of a period: every period query is read again.
   useRealtime(holds(me, 'accreditation.workspace.read') ? ['accreditation'] : [], (e) => {
@@ -128,6 +136,7 @@ export function AccreditationScreen(): JSX.Element {
             {t('shell.loading')}
           </p>
         )}
+        {unsavedDialog}
       </div>
     );
   }
@@ -148,6 +157,7 @@ export function AccreditationScreen(): JSX.Element {
             </Button>
           )}
         </div>
+        {unsavedDialog}
       </div>
     );
   }
@@ -170,7 +180,9 @@ export function AccreditationScreen(): JSX.Element {
       <>
         <PeriodHeader period={p} instrument={instrumentOf(instruments.data, p.instrumentId)} />
         <StatusLine period={p} />
-        <Tabs value={tab} onValueChange={(value) => isAccreditationTab(value) && value !== tab && open(p.id, value)}>
+        {/* Manual activation: a tab opens on a click or Enter/Space, not when it merely gets the focus (an arrow key,
+            or the focus coming back to it when "Perubahan belum disimpan" is answered with Batal). */}
+        <Tabs value={tab} activationMode="manual" onValueChange={(value) => isAccreditationTab(value) && value !== tab && open(p.id, value)}>
           <TabsList aria-label={t('accreditation.tabs')} className="h-auto flex-wrap justify-start">
             {ACCREDITATION_TABS.map((k) => (
               <TabsTrigger key={k} value={k} className="flex-none">
@@ -195,6 +207,7 @@ export function AccreditationScreen(): JSX.Element {
     <div className="flex flex-col gap-6">
       {header}
       {body}
+      {unsavedDialog}
     </div>
   );
 }
