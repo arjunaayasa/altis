@@ -3,6 +3,7 @@ import type {
   CirculationWarningView,
   DeskLoanView,
   DeskMemberSearchResponse,
+  DeskMemberSummary,
   DeskMemberView,
   LoanListResponse,
   LoanResponse,
@@ -60,7 +61,8 @@ import {
  *
  * - **One box.** The scan box takes a member card, an item barcode or a name, by mode: Anggota & pinjam (F2: no member
  *   yet → find the member by number; a member loaded → lend the scanned item), Kembali (F3: return by barcode alone)
- *   and Cari nama (F6: up to ten suggestions while typing; Enter takes the highlighted one). A scanner anywhere on the
+ *   and Cari nama (F6: up to ten suggestions while typing; Enter takes the highlighted one, and always acts on the text
+ *   in the box: before the suggestions of that text have arrived, it searches for it first). A scanner anywhere on the
  *   page counts (`useScannerInput`), and the box takes the focus back after every action and dialog.
  * - **One scan, one transaction.** Each loan, return and renewal is its own request with its own `Idempotency-Key`; a
  *   request that met no server at all keeps its key, so scanning the same barcode again cannot lend twice. Scans that
@@ -307,9 +309,11 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
     return () => clearTimeout(id);
   }, [value]);
   const suggesting = !quickReturn && (mode === 'name' || (mode === 'member' && memberId === null));
+  const searchKey = (q: string) => ['circulation', 'desk', branchId ?? '', 'search', q] as const;
+  const searchFor = (q: string) => api<DeskMemberSearchResponse>('POST', `branches/${encodeURIComponent(branchId!)}/circulation/members/search`, { q });
   const suggestions = useQuery({
-    queryKey: ['circulation', 'desk', branchId ?? '', 'search', query],
-    queryFn: () => api<DeskMemberSearchResponse>('POST', `branches/${encodeURIComponent(branchId!)}/circulation/members/search`, { q: query }),
+    queryKey: searchKey(query),
+    queryFn: () => searchFor(query),
     enabled: me !== undefined && branchId !== null && suggesting && query.length >= 2 && value.trim() !== '',
   });
   const options = suggesting && value.trim() !== '' && query.length >= 2 ? (suggestions.data?.items ?? []) : [];
@@ -526,6 +530,17 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
     }
   };
 
+  /**
+   * The suggestions for exactly `text`, and whether they are the ones on screen (so a highlighted row means something).
+   * The list on screen follows the box a moment late; when it is not yet the list of `text`, the name search asks for
+   * `text` now, and the member box (which looks a number up when nothing is picked) uses none.
+   */
+  const suggestionsFor = async (text: string): Promise<{ items: DeskMemberSummary[]; shown: boolean }> => {
+    if (query === text && suggestions.data !== undefined) return { items: options, shown: true };
+    if (mode !== 'name' || text.length < 2) return { items: [], shown: false };
+    return { items: (await queryClient.fetchQuery({ queryKey: searchKey(text), queryFn: () => searchFor(text) })).items, shown: false };
+  };
+
   /** One scan, with the state of the latest render (see {@link process}). */
   const handle = async (raw: string): Promise<void> => {
     if (branchId === null) return;
@@ -541,7 +556,14 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
         setValue('');
         await giveBack(code);
       } else if (mode === 'name' || memberId === null) {
-        const pick = options[active >= 0 ? active : mode === 'name' ? 0 : -1];
+        let list: { items: DeskMemberSummary[]; shown: boolean };
+        try {
+          list = await suggestionsFor(code);
+        } catch (e) {
+          say('error', deskRefusal(t, e, { action: 'lookup', code, member: null }).title);
+          return;
+        }
+        const pick = list.items[list.shown && active >= 0 ? active : mode === 'name' ? 0 : -1];
         setValue('');
         if (pick !== undefined) await openMember(pick.id);
         else if (mode === 'name') say('error', t('circulation.problem.member_not_found', { no: code }));
