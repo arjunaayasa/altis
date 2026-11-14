@@ -90,7 +90,14 @@ function settingsStore() {
     catalog: structuredClone(CATALOG),
     accreditation: structuredClone(ACCREDITATION),
     // ---- Komunitas (circulation core) ----
-    circulation: { loanVoidMinutes: 10, lost: { useItemPrice: true, processingFeeMinor: 0 } },
+    circulation: {
+      holds: { enabled: true, opac: true, onlyWhenNoneAvailable: true, pickupDays: 3 },
+      loanVoidMinutes: 10,
+      lost: { useItemPrice: true, processingFeeMinor: 0 },
+      block: { unpaidOverMinor: null, overdue: false },
+      fines: { skipClosedDays: true },
+      receipt: { paperMm: 80, footer: { id: null, en: null } },
+    },
     members: { clearance: { prefix: 'BP', profile: { paper: 'A4', city: '', signerTitle: 'Kepala Perpustakaan', signerName: '', signerId: '', bodyText: '' } } },
   };
   const puts: { group: string; body: unknown }[] = [];

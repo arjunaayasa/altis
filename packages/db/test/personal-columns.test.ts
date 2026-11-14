@@ -6,6 +6,7 @@ import { CIRCULATION_TABLES_BY_MIGRATION } from './fixtures/komunitas-members-ci
 // ---- Komunitas (holds) ----
 import { HOLDS_TABLES_BY_MIGRATION } from './fixtures/komunitas-holds-tables.js';
 import { CIRC_CORE_TABLES_BY_MIGRATION } from './fixtures/komunitas-circ-core-tables.js';
+import { CHARGES_TABLES_BY_MIGRATION } from './fixtures/komunitas-charges-tables.js';
 
 // The personal-data dictionary (PERSONAL_COLUMNS): which columns hold personal data, so that public output, events,
 // logs and exports can leave them out or ask for re-authentication. Every registered column must exist; every column of
@@ -137,6 +138,26 @@ const CIRC_CORE_NON_PERSONAL: Record<string, string> = {
   'member_clearances.number_display': 'the letter number the library assigns',
 };
 
+// ---- Komunitas (charges and payments) ----
+const CHARGES_TABLES = Object.values(CHARGES_TABLES_BY_MIGRATION).flat() as TableName[];
+
+/** Text columns of the charges and payments tables holding a code from a fixed list or a value ALTIS computes. */
+const CHARGES_CODE_COLUMNS: Record<string, string> = {
+  'charges.kind': 'a charge kind',
+  'charges.currency': 'a currency code',
+  'charges.status': 'a charge status',
+  'charges.source': 'where the charge came from (desk, system or migrated)',
+  'charge_adjustments.kind': 'an adjustment kind (waive or cancel)',
+  'payments.currency': 'a currency code',
+  'payments.method': 'a payment method code',
+  'payments.source': 'where the payment came from (desk or migrated)',
+};
+
+/** Free-text columns of the charges and payments tables that are not personal data, each with the reason. */
+const CHARGES_NON_PERSONAL: Record<string, string> = {
+  'payments.receipt_no': 'the receipt number the library assigns',
+};
+
 /** The columns of `table` in a primary key, a unique index or a foreign key. */
 function keyColumns(table: TableName): Set<string> {
   const keys = TABLE_KEYS[table];
@@ -233,6 +254,12 @@ describe('PERSONAL_COLUMNS', () => {
       ],
       loans: [{ column: 'override_note', category: 'free_text' }],
       member_clearances: [{ column: 'void_reason', category: 'free_text' }],
+      charges: [{ column: 'description', category: 'free_text' }],
+      charge_adjustments: [{ column: 'reason', category: 'free_text' }],
+      payments: [
+        { column: 'note', category: 'free_text' },
+        { column: 'void_reason', category: 'free_text' },
+      ],
     });
   });
 
@@ -280,6 +307,26 @@ describe('PERSONAL_COLUMNS', () => {
     expect(unclassified).toEqual([]);
     expect(twice).toEqual([]);
     for (const [column, reason] of [...Object.entries(CIRC_CORE_CODE_COLUMNS), ...Object.entries(CIRC_CORE_NON_PERSONAL)]) {
+      expect({ column, isText: text.includes(column) }).toEqual({ column, isText: true });
+      expect(reason.length).toBeGreaterThan(5);
+    }
+  });
+
+  // ---- Komunitas (charges and payments) ----
+  it('classifies every text column of the 4 charges and payments tables that is not a key; no stale exception', () => {
+    expect(CHARGES_TABLES).toEqual(['charges', 'charge_adjustments', 'payments', 'payment_allocations']);
+    const personal = new Set(registered());
+    const text = textColumnsOf(CHARGES_TABLES);
+    const unclassified: string[] = [];
+    const twice: string[] = [];
+    for (const column of text) {
+      const places = [personal.has(column), Object.hasOwn(CHARGES_CODE_COLUMNS, column), Object.hasOwn(CHARGES_NON_PERSONAL, column)].filter(Boolean);
+      if (places.length === 0) unclassified.push(column);
+      if (places.length > 1) twice.push(column);
+    }
+    expect(unclassified).toEqual([]);
+    expect(twice).toEqual([]);
+    for (const [column, reason] of [...Object.entries(CHARGES_CODE_COLUMNS), ...Object.entries(CHARGES_NON_PERSONAL)]) {
       expect({ column, isText: text.includes(column) }).toEqual({ column, isText: true });
       expect(reason.length).toBeGreaterThan(5);
     }

@@ -1,5 +1,7 @@
 import type { RouteDecl } from '../../http/route.js';
 import { CALENDAR_ROUTES } from './calendar.js';
+// ---- Komunitas (charges and payments) ----
+import { CHARGE_ROUTES } from './charges.js';
 import { DESK_ROUTES } from './desk.js';
 // ---- Komunitas (holds) ----
 import { HOLD_ROUTES } from './holds.js';
@@ -16,4 +18,6 @@ export const CIRCULATION_ROUTES: RouteDecl[] = [
   ...HOLD_ROUTES,
   // ---- Komunitas (circulation core) ----
   ...CALENDAR_ROUTES,
+  // ---- Komunitas (charges and payments) ----
+  ...CHARGE_ROUTES,
 ];

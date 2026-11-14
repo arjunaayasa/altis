@@ -28,6 +28,8 @@ import {
   clearancePrefixField,
   loanVoidMinutesField,
   minorAmountField,
+  receiptFooterField,
+  receiptPaperField,
 } from '@altis/shared/api/settings';
 import { z } from 'zod';
 
@@ -111,7 +113,11 @@ export type SettingKey =
   // ---- Komunitas (circulation core) ----
   | 'circulation.loanVoidMinutes'
   | `circulation.lost.${'useItemPrice' | 'processingFeeMinor'}`
-  | `members.clearance.${'prefix' | 'profile'}`;
+  | `members.clearance.${'prefix' | 'profile'}`
+  // ---- Komunitas (charges and payments) ----
+  | `circulation.block.${'unpaidOverMinor' | 'overdue'}`
+  | 'circulation.fines.skipClosedDays'
+  | `circulation.receipt.${'paperMm' | 'footer.id' | 'footer.en'}`;
 
 export interface SettingDef {
   group: SettingsGroup;
@@ -554,6 +560,16 @@ export const SETTINGS: Readonly<Record<SettingKey, SettingDef>> = Object.freeze(
     schema: ClearanceProfile,
     default: seed(ClearanceProfile, { paper: 'A4', city: '', signerTitle: 'Kepala Perpustakaan', signerName: '', signerId: '', bodyText: '' }),
   }),
+  // ---- Komunitas (charges and payments) ----
+  // The optional blocks (both off by default): an unpaid balance above this many minor units blocks loans and
+  // renewals, an overdue loan blocks loans. Overdue fines count only the days the library is open (the loan branch's
+  // calendar). The receipt roll's width (58 or 80 mm) and the receipt's closing line in each language.
+  'circulation.block.unpaidOverMinor': def({ group: 'circulation', schema: minorAmountField.nullable(), default: null }),
+  'circulation.block.overdue': def({ group: 'circulation', schema: z.boolean(), default: false }),
+  'circulation.fines.skipClosedDays': def({ group: 'circulation', schema: z.boolean(), default: true }),
+  'circulation.receipt.paperMm': def({ group: 'circulation', schema: receiptPaperField, default: 80 }),
+  'circulation.receipt.footer.id': def({ group: 'circulation', schema: receiptFooterField, default: null }),
+  'circulation.receipt.footer.en': def({ group: 'circulation', schema: receiptFooterField, default: null }),
 });
 
 /** The registered keys in registry order. */

@@ -1393,6 +1393,99 @@ export interface MemberClearancesTable {
   void_reason: string | null;
 }
 
+// ---- Komunitas (charges and payments) ----
+// Migration 0043: charges (fines and fees), their adjustments, payments with numbered receipts, and allocations.
+
+/** Class data. One sum a member owes; `paid_minor + waived_minor <= amount_minor`, all in minor units of `currency`. */
+export interface ChargesTable {
+  id: string;
+  member_id: string;
+  /** The branch of the loan, or of the desk that booked the charge. */
+  branch_id: string;
+  loan_id: string | null;
+  item_id: string | null;
+  /** `overdue` | `lost` | `damage` | `card` | `manual` | `migrated`. */
+  kind: string;
+  /** Personal data (free text): the line the member sees. */
+  description: string;
+  amount_minor: number;
+  /** Default 0. */
+  paid_minor: Generated<number>;
+  /** Default 0: waived or cancelled. */
+  waived_minor: Generated<number>;
+  currency: string;
+  /** `open` | `settled` | `cancelled`. */
+  status: string;
+  charged_on: string;
+  charged_at: EpochMs;
+  /** Default 0: a migrated charge whose day was not known. */
+  date_unknown: Generated<Flag>;
+  /** `desk` | `system` | `migrated`. */
+  source: string;
+  /** Default 0. */
+  version: Generated<number>;
+  created_at: EpochMs;
+  created_by: string | null;
+  updated_at: EpochMs;
+  updated_by: string | null;
+}
+
+/** Class data. A waive or a cancellation of a charge (CASCADE with it). */
+export interface ChargeAdjustmentsTable {
+  id: string;
+  charge_id: string;
+  /** `waive` | `cancel`. */
+  kind: string;
+  amount_minor: number;
+  /** Personal data (free text). */
+  reason: string;
+  at: EpochMs;
+  by: string | null;
+}
+
+/** Class data. UNIQUE (branch_id, receipt_year, receipt_seq): one payment, its receipt number never reused. */
+export interface PaymentsTable {
+  id: string;
+  member_id: string;
+  /** The branch of the desk that took the payment. */
+  branch_id: string;
+  /** The library's year of the receipt; null for a migrated payment. */
+  receipt_year: number | null;
+  receipt_seq: number | null;
+  /** `<branch code>/<yyyy>/<seq, 6 digits>`. */
+  receipt_no: string | null;
+  amount_minor: number;
+  currency: string;
+  /** `cash` | `transfer` | `other`. */
+  method: string;
+  paid_on: string;
+  paid_at: EpochMs;
+  received_by: string | null;
+  /** Personal data (free text). */
+  note: string | null;
+  voided_at: EpochMs | null;
+  voided_by: string | null;
+  /** Personal data (free text). */
+  void_reason: string | null;
+  /** Default 0. */
+  date_unknown: Generated<Flag>;
+  /** `desk` | `migrated`. */
+  source: string;
+  /** Default 0. */
+  version: Generated<number>;
+  created_at: EpochMs;
+  created_by: string | null;
+  updated_at: EpochMs;
+  updated_by: string | null;
+}
+
+/** Class data. PK (payment_id, charge_id): the part of a payment that went to one charge (CASCADE with the payment). */
+export interface PaymentAllocationsTable {
+  payment_id: string;
+  charge_id: string;
+  amount_minor: number;
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // The runner's tables (class migrator): made by ensureBootstrap (ddl.ts) and migrator.ts, never by a migration.
 
@@ -1567,6 +1660,11 @@ export interface DB {
   calendars: CalendarsTable;
   item_uses: ItemUsesTable;
   member_clearances: MemberClearancesTable;
+  // ---- Komunitas (charges and payments) ----
+  charges: ChargesTable;
+  charge_adjustments: ChargeAdjustmentsTable;
+  payments: PaymentsTable;
+  payment_allocations: PaymentAllocationsTable;
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: SchemaMigrationsEditionTable;
   schema_migrations_edition_lock: SchemaMigrationsEditionLockTable;

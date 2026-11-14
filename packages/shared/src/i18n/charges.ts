@@ -1,0 +1,104 @@
+/**
+ * The shared texts of charges and payments: the waive permission, the audit actions of charges and payments, the two
+ * error codes, the labels of the charge and payment vocabularies (`circulation-vocab.ts`), the lines the system writes
+ * as a charge's description, and the receipt PDF (in the library's language). `CHARGES_ID` is the source of the keys
+ * and `CHARGES_EN` is typed against it; both are spread once into the shared catalogs (`i18n/id.ts`, `i18n/en.ts`).
+ *
+ * No Node built-ins here: the browser bundles this module.
+ */
+
+export const CHARGES_ID = {
+  // ---- perm.<permission> ----
+  'perm.circulation.charges.waive': 'Menghapuskan biaya dan membatalkan pembayaran',
+  // ---- audit.<action> ----
+  'audit.circulation.charge.create': 'Mencatat biaya',
+  'audit.circulation.charge.waive': 'Menghapuskan biaya',
+  'audit.circulation.payment.create': 'Menerima pembayaran',
+  'audit.circulation.payment.void': 'Membatalkan pembayaran',
+  // ---- error.<CODE> ----
+  'error.CIRC_MEMBER_BLOCKED': 'Anggota ini sedang diblokir dari peminjaman.',
+  'error.CIRC_CHARGE_STATE': 'Biaya atau pembayaran ini sudah tidak dapat diubah.',
+  // ---- vocab.<list>.<value> ----
+  'vocab.charge_kind.overdue': 'Denda keterlambatan',
+  'vocab.charge_kind.lost': 'Penggantian eksemplar hilang',
+  'vocab.charge_kind.damage': 'Kerusakan',
+  'vocab.charge_kind.card': 'Kartu anggota',
+  'vocab.charge_kind.manual': 'Biaya lain',
+  'vocab.charge_kind.migrated': 'Biaya dari SLiMS',
+  'vocab.charge_status.open': 'Belum lunas',
+  'vocab.charge_status.settled': 'Lunas',
+  'vocab.charge_status.cancelled': 'Dibatalkan',
+  'vocab.charge_adjustment_kind.waive': 'Dihapuskan',
+  'vocab.charge_adjustment_kind.cancel': 'Dibatalkan',
+  'vocab.payment_method.cash': 'Tunai',
+  'vocab.payment_method.transfer': 'Transfer bank',
+  'vocab.payment_method.other': 'Lainnya',
+  'vocab.member_block_reason.unpaid': 'Tanggungan biaya melebihi batas',
+  'vocab.member_block_reason.overdue': 'Ada pinjaman terlambat',
+  'vocab.charge_state_refusal.settled': 'Biaya sudah lunas',
+  'vocab.charge_state_refusal.cancelled': 'Biaya sudah dibatalkan',
+  'vocab.charge_state_refusal.voided': 'Pembayaran sudah dibatalkan',
+  // ---- charge.text.*: the description and adjustment lines the system writes (in the library's language) ----
+  'charge.text.overdue': 'Terlambat {days} hari: {barcode} {title}',
+  'charge.text.lost': 'Penggantian eksemplar hilang: {barcode} {title}',
+  'charge.text.lost_fee': 'Biaya administrasi eksemplar hilang: {barcode}',
+  'charge.text.item_returned': 'Eksemplar kembali',
+  // ---- receipt.*: the receipt PDF (in the library's language) ----
+  'receipt.title': 'KUITANSI',
+  'receipt.number': 'Nomor',
+  'receipt.date': 'Tanggal',
+  'receipt.branch': 'Cabang',
+  'receipt.member': 'Anggota',
+  'receipt.items': 'Rincian',
+  'receipt.total': 'Jumlah',
+  'receipt.method': 'Cara bayar',
+  'receipt.staff': 'Petugas',
+  'receipt.note': 'Catatan',
+  'receipt.voided': 'DIBATALKAN',
+  'receipt.non_latin': 'teks non-Latin',
+} as const;
+
+export const CHARGES_EN: Record<keyof typeof CHARGES_ID, string> = {
+  'perm.circulation.charges.waive': 'Waive charges and void payments',
+  'audit.circulation.charge.create': 'Booked a charge',
+  'audit.circulation.charge.waive': 'Waived a charge',
+  'audit.circulation.payment.create': 'Took a payment',
+  'audit.circulation.payment.void': 'Voided a payment',
+  'error.CIRC_MEMBER_BLOCKED': 'This member is blocked from borrowing.',
+  'error.CIRC_CHARGE_STATE': 'This charge or payment can no longer be changed.',
+  'vocab.charge_kind.overdue': 'Overdue fine',
+  'vocab.charge_kind.lost': 'Lost item replacement',
+  'vocab.charge_kind.damage': 'Damage',
+  'vocab.charge_kind.card': 'Member card',
+  'vocab.charge_kind.manual': 'Other charge',
+  'vocab.charge_kind.migrated': 'Charge from SLiMS',
+  'vocab.charge_status.open': 'Unpaid',
+  'vocab.charge_status.settled': 'Paid',
+  'vocab.charge_status.cancelled': 'Cancelled',
+  'vocab.charge_adjustment_kind.waive': 'Waived',
+  'vocab.charge_adjustment_kind.cancel': 'Cancelled',
+  'vocab.payment_method.cash': 'Cash',
+  'vocab.payment_method.transfer': 'Bank transfer',
+  'vocab.payment_method.other': 'Other',
+  'vocab.member_block_reason.unpaid': 'Unpaid balance above the limit',
+  'vocab.member_block_reason.overdue': 'Has an overdue loan',
+  'vocab.charge_state_refusal.settled': 'The charge is paid',
+  'vocab.charge_state_refusal.cancelled': 'The charge was cancelled',
+  'vocab.charge_state_refusal.voided': 'The payment was voided',
+  'charge.text.overdue': '{days} days late: {barcode} {title}',
+  'charge.text.lost': 'Lost item replacement: {barcode} {title}',
+  'charge.text.lost_fee': 'Lost item processing fee: {barcode}',
+  'charge.text.item_returned': 'The item came back',
+  'receipt.title': 'RECEIPT',
+  'receipt.number': 'Number',
+  'receipt.date': 'Date',
+  'receipt.branch': 'Branch',
+  'receipt.member': 'Member',
+  'receipt.items': 'Details',
+  'receipt.total': 'Total',
+  'receipt.method': 'Paid by',
+  'receipt.staff': 'Staff',
+  'receipt.note': 'Note',
+  'receipt.voided': 'VOID',
+  'receipt.non_latin': 'non-Latin text',
+};

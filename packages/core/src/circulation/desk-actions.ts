@@ -147,7 +147,7 @@ export async function markLoanLost(tx: TxCtx, input: { branchId: string; loanId:
     itemStatus = 'lost';
   }
   const seam = chargeSeam();
-  await seam.bookOverdue(tx, { loanId: loan.id, until: today });
+  await seam.bookOverdue(tx, { loanId: loan.id, dueOn: loan.due_on, until: today });
   if (loan.member_id !== null && loan.item_id !== null) {
     await seam.bookLost(tx, {
       loanId: loan.id,

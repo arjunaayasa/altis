@@ -114,9 +114,22 @@ const FIELDS: Readonly<Record<SettingsGroupName, FieldMap>> = Object.freeze({
   ],
   // ---- Komunitas (circulation core) ----
   circulation: [
+    // ---- Komunitas (holds) ----
+    [['holds', 'enabled'], 'circulation.holds.enabled'],
+    [['holds', 'opac'], 'circulation.holds.opac'],
+    [['holds', 'onlyWhenNoneAvailable'], 'circulation.holds.onlyWhenNoneAvailable'],
+    [['holds', 'pickupDays'], 'circulation.holds.pickupDays'],
+    // ---- Komunitas (circulation core) ----
     [['loanVoidMinutes'], 'circulation.loanVoidMinutes'],
     [['lost', 'useItemPrice'], 'circulation.lost.useItemPrice'],
     [['lost', 'processingFeeMinor'], 'circulation.lost.processingFeeMinor'],
+    // ---- Komunitas (charges and payments) ----
+    [['block', 'unpaidOverMinor'], 'circulation.block.unpaidOverMinor'],
+    [['block', 'overdue'], 'circulation.block.overdue'],
+    [['fines', 'skipClosedDays'], 'circulation.fines.skipClosedDays'],
+    [['receipt', 'paperMm'], 'circulation.receipt.paperMm'],
+    [['receipt', 'footer', 'id'], 'circulation.receipt.footer.id'],
+    [['receipt', 'footer', 'en'], 'circulation.receipt.footer.en'],
   ],
   members: [
     [['clearance', 'prefix'], 'members.clearance.prefix'],

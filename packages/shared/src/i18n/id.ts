@@ -26,6 +26,8 @@ import { MEMBERS_CIRCULATION_ID } from './members-circulation.js';
 // ---- Komunitas (holds) ----
 import { HOLDS_ID } from './holds.js';
 import { CIRCULATION_CORE_ID } from './circulation-core.js';
+// ---- Komunitas (charges and payments) ----
+import { CHARGES_ID } from './charges.js';
 
 /**
  * The keys that exist only in the test profile (spec §12.5, ruling S28), next to `permissionCatalog`'s test entry and the
@@ -1580,6 +1582,8 @@ const BASE = {
   ...HOLDS_ID,
   // ---- Komunitas (circulation core) ----
   ...CIRCULATION_CORE_ID,
+  // ---- Komunitas (charges and payments) ----
+  ...CHARGES_ID,
 } satisfies Record<string, string>;
 
 /**

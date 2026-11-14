@@ -81,6 +81,7 @@ function deskMember(o: Partial<DeskMemberView> = {}): DeskMemberView {
     loans: [],
     holds: [],
     warnings: [],
+    charges: { balance: '0.00', currency: 'IDR', charges: [], payments: [], blocked: null },
     ...o,
   };
 }
