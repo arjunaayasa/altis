@@ -35,6 +35,8 @@ const K1_MIGRATIONS = ['0030_reports_core', '0031_accreditation', '0032_library_
 
 // ---- Komunitas (members and circulation) ----
 const CIRCULATION_MIGRATIONS = ['0040_members_circulation'];
+// ---- Komunitas (holds) ----
+const HOLDS_MIGRATIONS = ['0041_holds'];
 
 describe('the Phase 2 migrations in the migration map (P2-06)', () => {
   it('appends 0020–0029 in order to the same frozen map; 0029_search_token_version is the last key', () => {
@@ -50,12 +52,13 @@ describe('the Phase 2 migrations in the migration map (P2-06)', () => {
     for (const name of K1_MIGRATIONS) expect(typeof PHASE1_MIGRATIONS[name]?.up).toBe('function');
   });
 
-  it('members and circulation append 0040; 0040_members_circulation is the last key', () => {
+  it('members and circulation append 0040, holds 0041; 0041_holds is the last key', () => {
     const names = Object.keys(PHASE1_MIGRATIONS).sort();
-    expect(names.filter((n) => n >= '0040' && n < '0050')).toEqual(CIRCULATION_MIGRATIONS);
+    expect(names.filter((n) => n >= '0040' && n < '0050')).toEqual([...CIRCULATION_MIGRATIONS, ...HOLDS_MIGRATIONS]);
     // The newest range on this branch (every earlier range sorts before it).
-    expect(names.at(-1)).toBe('0040_members_circulation');
+    expect(names.at(-1)).toBe('0041_holds');
     expect(typeof PHASE1_MIGRATIONS['0040_members_circulation']?.up).toBe('function');
+    expect(typeof PHASE1_MIGRATIONS['0041_holds']?.up).toBe('function');
   });
 });
 
@@ -94,15 +97,15 @@ describe.skipIf(!ctx.available)(`the Phase 2 migrations [${engineLabel()}]`, () 
     return rows.map((r) => String(r.col));
   }
 
-  it('migrates an empty database to 0040, and a second run reports it up to date', async () => {
+  it('migrates an empty database to 0041, and a second run reports it up to date', async () => {
     const first = await runMigrations(h, { appVersion: '0.1.0', dataDir, migrations: PHASE1_MIGRATIONS });
     expect(first.mode).toBe('migrated');
-    const newest = [...CATALOG_MIGRATIONS, ...K1_MIGRATIONS, ...CIRCULATION_MIGRATIONS];
+    const newest = [...CATALOG_MIGRATIONS, ...K1_MIGRATIONS, ...CIRCULATION_MIGRATIONS, ...HOLDS_MIGRATIONS];
     expect(first.applied.slice(-newest.length)).toEqual(newest);
-    expect(first.schemaVersion).toBe('0040');
+    expect(first.schemaVersion).toBe('0041');
     const second = await runMigrations(h, { appVersion: '0.1.0', dataDir, migrations: PHASE1_MIGRATIONS });
-    expect(second).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0040', minCodeVersion: '0.0.0', edition: { mode: 'empty', applied: [] } });
-    expect(await h.db.selectFrom('schema_meta').select('schema_version').execute()).toEqual([{ schema_version: '0040' }]);
+    expect(second).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0041', minCodeVersion: '0.0.0', edition: { mode: 'empty', applied: [] } });
+    expect(await h.db.selectFrom('schema_meta').select('schema_version').execute()).toEqual([{ schema_version: '0041' }]);
   });
 
   it('S14: search_doc has the newest-first indexes (is_public, created_at) and (created_at)', async () => {
@@ -270,6 +273,46 @@ describe.skipIf(!ctx.available)(`the Phase 2 migrations [${engineLabel()}]`, () 
       expect(await h.db.selectFrom('loans').select('id').where('item_id', '=', itemId).execute()).toHaveLength(3);
     } finally {
       await h.db.deleteFrom('loans').where('item_id', '=', itemId).execute();
+    }
+  });
+
+  // ---- Komunitas (holds) ----
+  it('0041: one active hold per member per title and one hold per kept copy; closed holds (keys null) are many', async () => {
+    const recordId = newId();
+    const memberId = newId();
+    const itemId = newId();
+    const hold = (active: boolean, trap: boolean) => ({
+      id: newId(),
+      record_id: recordId,
+      member_id: memberId,
+      pickup_branch_id: newId(),
+      status: active ? 'waiting' : 'cancelled',
+      active_key: active ? `${memberId}:${recordId}` : null,
+      trap_item_id: trap ? itemId : null,
+      placed_on: '2026-01-02',
+      placed_at: 0,
+      source: 'desk',
+      created_at: 0,
+      updated_at: 0,
+    });
+    const refused = (row: ReturnType<typeof hold>) =>
+      h.db
+        .insertInto('holds')
+        .values(row)
+        .execute()
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
+    try {
+      await h.db.insertInto('holds').values([hold(false, false), hold(false, false), hold(true, true)]).execute();
+      const second = await refused(hold(true, false));
+      expect(isDomainError(second) && second.code).toBe('UNIQUE_VIOLATION');
+      const kept = await refused({ ...hold(false, true) });
+      expect(isDomainError(kept) && kept.code).toBe('UNIQUE_VIOLATION');
+      expect(await h.db.selectFrom('holds').select('id').where('record_id', '=', recordId).execute()).toHaveLength(3);
+    } finally {
+      await h.db.deleteFrom('holds').where('record_id', '=', recordId).execute();
     }
   });
 });

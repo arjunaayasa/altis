@@ -20,6 +20,7 @@ import { lockLiveMember, memberNotFound, memberStatusOf, memberValidationFailed,
 import { findLiveMemberByNo, memberQueryWhere } from '../members/members.js';
 import { indexRecords } from '../search/index-records.js';
 import { branchToday, dueDateFor } from './dates.js';
+import { checkKeptCopy, fulfilHoldOnLoan, memberHolds, renewalHeldBack, trapOnReturn } from './holds.js';
 import { resolvePolicy } from './policies.js';
 
 // The circulation desk: lend, return and renew, and the member panel.
@@ -44,6 +45,11 @@ import { resolvePolicy } from './policies.js';
 // never an item status: the item stays `available`, the open loan says it is out.
 //
 // Dates are the loan branch's (dates.ts). A member whose membership ends within 30 days gets `member_expires_soon`.
+//
+// Holds (holds.ts), under the same locks: a copy kept on the hold shelf for another member is not lent
+// (CIRC_ITEM_ON_HOLD, checked after "no open loan"); a loan fulfils the borrower's own hold on the title; a copy
+// returned at its own branch is kept for the first hold in its queue and the return says for whom; a renewal is refused
+// (`hold`) while the title has a waiting hold at the loan's branch.
 
 type LoanRow = Selectable<DB['loans']>;
 type MemberRow = Selectable<DB['members']>;
@@ -83,6 +89,7 @@ function renewRefused(reason: RenewRefusal): DomainError {
     expired: 'Keanggotaan sudah habis / The membership has expired',
     same_day: 'Pinjaman ini dipinjam atau diperpanjang hari ini / This loan was made or renewed today',
     limit: 'Batas perpanjangan sudah tercapai / The renewal limit is reached',
+    hold: 'Judul ini sedang dipesan anggota lain / Another member is waiting for this title',
   };
   return new DomainError('CIRC_RENEW_REFUSED', { detail: text[reason] ?? 'Perpanjangan ditolak / The renewal was refused', meta: { reason } });
 }
@@ -229,6 +236,7 @@ export async function lendItem(tx: TxCtx, input: { branchId: string; memberId: s
       meta: { sameMember, reason: sameMember ? 'same_member' : 'other_member' },
     });
   }
+  await checkKeptCopy(tx, { itemId: itemRow.id, memberId: member.id });
   const ct = await trx.selectFrom('collection_types').select('loanable').where('id', '=', itemRow.collection_type_id).executeTakeFirst();
   if (ct !== undefined && Number(ct.loanable) !== 1) throw notLoanable('collection_type');
 
@@ -305,6 +313,7 @@ export async function lendItem(tx: TxCtx, input: { branchId: string; memberId: s
     }
     throw error;
   }
+  const holdFulfilledId = await fulfilHoldOnLoan(tx, { memberId: member.id, recordId: recordRow.id, itemId: itemRow.id, loanId: id });
   await indexRecords(trx, [recordRow.id], tx.now);
   const warnings: CirculationWarningView[] = [...memberWarnings(member.expires_on, today), ...(due.capped ? [{ code: 'due_capped_by_expiry' as const }] : [])];
   await tx.audit({
@@ -312,9 +321,17 @@ export async function lendItem(tx: TxCtx, input: { branchId: string; memberId: s
     entity: 'loans',
     entityId: id,
     branchId: itemRow.branch_id,
-    meta: { warnings: warnings.map((w) => w.code) },
+    meta: { warnings: warnings.map((w) => w.code), ...(holdFulfilledId === null ? {} : { holdFulfilled: true }) },
   });
-  return { id, version: 0, dueOn: due.dueOn, item, record, ...(warnings.length === 0 ? {} : { warnings }) };
+  return {
+    id,
+    version: 0,
+    dueOn: due.dueOn,
+    item,
+    record,
+    ...(holdFulfilledId === null ? {} : { holdFulfilledId }),
+    ...(warnings.length === 0 ? {} : { warnings }),
+  };
 }
 
 // ---- return ----------------------------------------------------------------------------------------------------------
@@ -363,8 +380,15 @@ export async function returnItem(tx: TxCtx, input: { branchId: string; barcode: 
     warnings.push({ code: 'return_to_branch', branchCode: b?.code_display ?? '?' });
   }
   const member = loan.member_id === null ? undefined : await trx.selectFrom('members').select('member_no_display').where('id', '=', loan.member_id).executeTakeFirst();
+  const hold = await trapOnReturn(tx, { itemId: locked.id, returnBranchId: input.branchId });
   await indexRecords(trx, [locked.record_id], tx.now);
-  await tx.audit({ action: 'circulation.loan.return', entity: 'loans', entityId: loan.id, branchId: input.branchId, meta: { daysLate } });
+  await tx.audit({
+    action: 'circulation.loan.return',
+    entity: 'loans',
+    entityId: loan.id,
+    branchId: input.branchId,
+    meta: { daysLate, ...(hold === null ? {} : { keptForHold: true }) },
+  });
   return {
     id: loan.id,
     version: ok(loan.version) + 1,
@@ -376,6 +400,7 @@ export async function returnItem(tx: TxCtx, input: { branchId: string; barcode: 
     dueOn: loan.due_on,
     returnedOn: today,
     daysLate,
+    ...(hold === null ? {} : { hold }),
     ...(warnings.length === 0 ? {} : { warnings }),
   };
 }
@@ -402,6 +427,7 @@ async function renewOne(tx: TxCtx, loanId: string, branchId: string): Promise<Re
   if (loan.loaned_on === today || loan.last_renewed_on === today) throw renewRefused('same_day');
   const renewals = ok(loan.renewals);
   if (renewals >= ok(loan.renew_limit)) throw renewRefused('limit');
+  if (loan.record_id !== null && (await renewalHeldBack(trx, { recordId: loan.record_id, branchId: loan.branch_id, itemId: loan.item_id }))) throw renewRefused('hold');
 
   const due = await dueDateFor(trx, { loanedOn: today, days: ok(loan.loan_days), expiresOn: member?.expires_on ?? null, branchId: loan.branch_id });
   const updated = await trx
@@ -539,6 +565,7 @@ export async function deskMemberView(db: Db, input: { branchId: string; memberId
   const today = await branchToday(db, input.branchId, now);
   const status: MemberStatus = memberStatusOf({ ...m, anonymized_at: null, archived_at: null }, today);
   const loans = await deskLoans(db, m.id, now);
+  const holds = await memberHolds(db, m.id);
   let borrowRefusal: DeskMemberView['borrowRefusal'] = null;
   if (status === 'suspended') borrowRefusal = 'MEMBER_SUSPENDED';
   else if (status === 'expired') borrowRefusal = 'MEMBER_EXPIRED';
@@ -554,10 +581,11 @@ export async function deskMemberView(db: Db, input: { branchId: string; memberId
     expiresOn: m.expires_on,
     photoFileId: m.photo_file_id,
     notes: m.notes,
-    counts: { openLoans: loans.length, overdue: loans.filter((l) => l.daysLate > 0).length },
+    counts: { openLoans: loans.length, overdue: loans.filter((l) => l.daysLate > 0).length, holdsReady: holds.filter((h) => h.status === 'ready').length },
     canBorrow: borrowRefusal === null,
     borrowRefusal,
     loans,
+    holds,
     warnings: memberWarnings(m.expires_on, today),
   };
 }

@@ -10,6 +10,8 @@ import { catalogSampleRows, type CatalogTable } from '../../../db/test/fixtures/
 import { k1SampleRows, type K1Table } from '../../../db/test/fixtures/komunitas-k1-tables.js';
 // ---- Komunitas (members and circulation) ----
 import { circulationSampleRows, type CirculationTable } from '../../../db/test/fixtures/komunitas-members-circulation-tables.js';
+// ---- Komunitas (holds) ----
+import { holdsSampleRows } from '../../../db/test/fixtures/komunitas-holds-tables.js';
 import { backupTables, tableChecksumFromDb } from '../../src/backup/canonical.js';
 import { createExporter, type ExportCheckpoint } from '../../src/backup/exporter.js';
 import { readManifest, type BackupManifest } from '../../src/backup/manifest.js';
@@ -70,6 +72,12 @@ function k1Rows(): ReturnType<typeof k1SampleRows> {
 function circulationRows(): ReturnType<typeof circulationSampleRows> {
   let n = 0;
   return circulationSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JS${String((n += 1)).padStart(22, '0')}` });
+}
+
+/** The holds sample rows with ids numbered from another fixed prefix. */
+function holdRows(): ReturnType<typeof holdsSampleRows> {
+  let n = 0;
+  return holdsSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JT${String((n += 1)).padStart(22, '0')}` });
 }
 
 /** The same rows, written through Kysely, on any dialect. */
@@ -212,6 +220,8 @@ async function seed(db: Kysely<DB>): Promise<void> {
   for (const t of tableLoadOrder(circulationTables).order as CirculationTable[]) {
     await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(circulation[t]).execute();
   }
+  // ---- Komunitas (holds) ----
+  await db.insertInto('holds').values(holdRows().holds).execute();
 }
 
 /** Runs a whole export of `h` into `dataDir` and returns its manifest. */

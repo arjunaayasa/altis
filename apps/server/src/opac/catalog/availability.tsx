@@ -1,4 +1,4 @@
-import { locationPaths, openLoanDueDates, type LocationPath } from '@altis/core';
+import { keptItems, locationPaths, openLoanDueDates, type LocationPath } from '@altis/core';
 import type { DbHandle } from '@altis/db';
 import { t, type ItemStatus, type Locale } from '@altis/shared';
 import type { RecordData } from '@altis/shared/api/catalog/record-data';
@@ -11,7 +11,8 @@ import { formatDate } from './views/page.js';
 // its barcode and its status label; and the shelf maps of the shelves those items stand on.
 //
 // An item with an open loan keeps its status `available` in the catalogue; this table shows it as on loan, with its due
-// date, and does not count it as available. The borrower is never named.
+// date, and does not count it as available. A copy kept on a hold shelf is shown "Di rak tunggu" and is not counted
+// either. The borrower, and the member a copy is kept for, are never named.
 //
 // The items come from a public load (`loadRecordData` with `publicOnly`): no `withdrawn`, `lost` or archived item ever
 // reaches this file. A location is shown only when every level of its chain is public and live (`isPublic`); otherwise
@@ -36,6 +37,8 @@ export interface AvailabilityRow {
   status: ItemStatus;
   /** The due date of the item's open loan, or null when it is not on loan. */
   dueOn: string | null;
+  /** The copy is kept on a hold shelf for a member. */
+  onHold: boolean;
 }
 
 /** A shelf map to draw. */
@@ -67,6 +70,7 @@ function placeParts(p: LocationPath): string[] {
 export async function loadAvailability(db: Db, d: RecordData, o: { showShelfMap: boolean; dataDir: () => string }): Promise<Availability> {
   const shown = d.items.slice(0, AVAILABILITY_MAX);
   const onLoan = d.items.length === 0 ? new Map<string, string>() : await openLoanDueDates(db, d.items.map((i) => i.id));
+  const kept = d.items.length === 0 ? new Map<string, unknown>() : await keptItems(db, d.items.map((i) => i.id));
   const branchIds = [...new Set(shown.map((i) => i.branchId))];
   const branches = new Map(
     branchIds.length === 0 ? [] : (await db.selectFrom('branches').select(['id', 'name']).where('id', 'in', branchIds).execute()).map((b) => [b.id, b.name]),
@@ -92,6 +96,7 @@ export async function loadAvailability(db: Db, d: RecordData, o: { showShelfMap:
       barcode: i.barcode,
       status: i.status,
       dueOn: onLoan.get(i.id) ?? null,
+      onHold: kept.has(i.id),
     };
   });
 
@@ -120,7 +125,7 @@ export async function loadAvailability(db: Db, d: RecordData, o: { showShelfMap:
     }
   }
 
-  return { rows, total: d.items.length, available: d.items.filter((i) => i.status === 'available' && !onLoan.has(i.id)).length, maps };
+  return { rows, total: d.items.length, available: d.items.filter((i) => i.status === 'available' && !onLoan.has(i.id) && !kept.has(i.id)).length, maps };
 }
 
 /** The colour of a status label (with its text, never the colour alone). */
@@ -172,7 +177,9 @@ export function AvailabilitySection(props: { availability: Availability; locale:
                     <td>{r.callNumber ?? none}</td>
                     <td>{r.barcode}</td>
                     <td>
-                      {r.dueOn === null ? (
+                      {r.dueOn === null && r.onHold ? (
+                        <span class="status status-warn">{opacText(locale, 'detail.on_hold')}</span>
+                      ) : r.dueOn === null ? (
                         <span class={statusClass(r.status)}>{t(locale, `vocab.item_status.${r.status}`)}</span>
                       ) : (
                         <span class="status status-warn">{opacText(locale, 'detail.on_loan', { date: formatDate(locale, Date.parse(`${r.dueOn}T00:00:00Z`), 'UTC') })}</span>

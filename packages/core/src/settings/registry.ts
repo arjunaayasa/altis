@@ -56,7 +56,9 @@ export type SettingsGroup =
   | 'catalog'
   // ---- Komunitas K1 (settings) ----
   | 'accreditation'
-  | 'visits';
+  | 'visits'
+  // ---- Komunitas (holds) ----
+  | 'circulation';
 
 /** Every registered key. The compiler checks {@link SETTINGS} against it both ways (no missing key, no extra one). */
 export type SettingKey =
@@ -97,7 +99,9 @@ export type SettingKey =
   | 'accreditation.k7.processedThresholdPct'
   | 'accreditation.visits.dedupeLegacy'
   | 'accreditation.unknownMemberGroup.default'
-  | 'visits.dedupeMinutes';
+  | 'visits.dedupeMinutes'
+  // ---- Komunitas (holds) ----
+  | `circulation.holds.${'enabled' | 'opac' | 'onlyWhenNoneAvailable' | 'pickupDays'}`;
 
 export interface SettingDef {
   group: SettingsGroup;
@@ -520,6 +524,14 @@ export const SETTINGS: Readonly<Record<SettingKey, SettingDef>> = Object.freeze(
   }),
   // Visits: a member's check-in within this many minutes of an earlier one is a repeat (0 turns the rule off).
   'visits.dedupeMinutes': def({ group: 'visits', schema: visitsDedupeMinutesField, default: 60 }),
+
+  // ---- Komunitas (holds) ----
+  // Holds: open or not (at the desk and, `opac`, for members), refused while a copy is on the shelf
+  // (`onlyWhenNoneAvailable`), and the days a kept copy waits on the hold shelf (`pickupDays`, 1-30).
+  'circulation.holds.enabled': def({ group: 'circulation', schema: z.boolean(), default: true }),
+  'circulation.holds.opac': def({ group: 'circulation', schema: z.boolean(), default: true }),
+  'circulation.holds.onlyWhenNoneAvailable': def({ group: 'circulation', schema: z.boolean(), default: true }),
+  'circulation.holds.pickupDays': def({ group: 'circulation', schema: z.int().min(1).max(30), default: 3 }),
 });
 
 /** The registered keys in registry order. */

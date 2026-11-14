@@ -3,7 +3,8 @@ import { lazyScreen, type shellRoute } from '@/routes';
 
 // The admin routes of Layanan (the circulation desk and its lists): `/admin/layanan` (Meja Layanan; `?member=<id>`
 // opens that member's panel, from the member pages), `/admin/layanan/kembali` (Kembali Cepat, the desk in return mode
-// as a page of its own), `/admin/layanan/terlambat` (the overdue list) and `/admin/layanan/aturan` (the loan rules).
+// as a page of its own), `/admin/layanan/rak-tunggu` (the hold shelf and the queues), `/admin/layanan/terlambat` (the
+// overdue list) and `/admin/layanan/aturan` (the loan rules).
 // A member travels by id only, never by number or name.
 
 /** The search of the desk: the member whose panel it opens (a ULID; anything else is ignored). */
@@ -29,6 +30,12 @@ export function circulationRoutes(shell: typeof shellRoute) {
       getParentRoute: () => shell,
       path: 'layanan/kembali',
       component: lazyScreen(() => import('@/screens/circulation/desk'), 'QuickReturnScreen'),
+    }),
+    // ---- Komunitas (holds) ----
+    createRoute({
+      getParentRoute: () => shell,
+      path: 'layanan/rak-tunggu',
+      component: lazyScreen(() => import('@/screens/circulation/holds'), 'HoldShelfScreen'),
     }),
     createRoute({
       getParentRoute: () => shell,

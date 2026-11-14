@@ -3,6 +3,8 @@ import { TABLE_COLUMNS, TABLE_KEYS, type ColumnSpec } from '../src/columns.js';
 import { PERSONAL_COLUMNS, isPersonalColumn, personalLogKeys, type PersonalCategory, type TableName } from '../src/registry.js';
 import { K1_TABLES_BY_MIGRATION } from './fixtures/komunitas-k1-tables.js';
 import { CIRCULATION_TABLES_BY_MIGRATION } from './fixtures/komunitas-members-circulation-tables.js';
+// ---- Komunitas (holds) ----
+import { HOLDS_TABLES_BY_MIGRATION } from './fixtures/komunitas-holds-tables.js';
 
 // The personal-data dictionary (PERSONAL_COLUMNS): which columns hold personal data, so that public output, events,
 // logs and exports can leave them out or ask for re-authentication. Every registered column must exist; every column of
@@ -103,6 +105,16 @@ const CIRCULATION_NON_PERSONAL: Record<string, string> = {
   'policies.code_display': 'a loan rule code chosen by the library',
   'policies.name': 'the name of a loan rule',
   'loans.stat_class_name': 'the class a loan is counted in for statistics, kept after anonymisation',
+};
+
+// ---- Komunitas (holds) ----
+const HOLDS_TABLES = Object.values(HOLDS_TABLES_BY_MIGRATION).flat() as TableName[];
+
+/** Text columns of the holds table holding a status or a code from a fixed list; it has no free text. */
+const HOLDS_CODE_COLUMNS: Record<string, string> = {
+  'holds.status': 'a hold status',
+  'holds.source': 'where the hold was placed (desk, OPAC or migrated)',
+  'holds.close_reason': 'a hold close reason code',
 };
 
 /** The columns of `table` in a primary key, a unique index or a foreign key. */
@@ -221,6 +233,15 @@ describe('PERSONAL_COLUMNS', () => {
       expect({ column, isText: text.includes(column) }).toEqual({ column, isText: true });
       expect(reason.length).toBeGreaterThan(5);
     }
+  });
+
+  // ---- Komunitas (holds) ----
+  it('the holds table has no personal column: every text column that is not a key is a code', () => {
+    expect(HOLDS_TABLES).toEqual(['holds']);
+    const personal = new Set(registered());
+    const text = textColumnsOf(HOLDS_TABLES);
+    expect(text.filter((c) => personal.has(c))).toEqual([]);
+    expect([...text].sort()).toEqual(Object.keys(HOLDS_CODE_COLUMNS).sort());
   });
 
   it('a member: every column a person could be recognised by is registered; the number, type and dates are not', () => {

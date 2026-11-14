@@ -133,6 +133,7 @@ export function ItemStatusBadge({ status, circulation }: { status: ItemStatus; c
   const t = useT();
   const day = useCalendarDate();
   if (circulation.state === 'on_loan') return <Badge tone="warning">{t('circulation.item.on_loan', { date: day(circulation.dueOn) })}</Badge>;
+  if (circulation.state === 'on_hold') return <Badge tone="warning">{t('holds.item.on_hold', { date: day(circulation.pickupUntil) })}</Badge>;
   return <Badge tone={status === 'available' ? 'info' : 'neutral'}>{t(`vocab.item_status.${status}`)}</Badge>;
 }
 

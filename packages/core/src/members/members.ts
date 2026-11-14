@@ -14,6 +14,7 @@ import {
   type MemberView,
 } from '@altis/shared/api/members';
 import { sql, type Expression, type Selectable, type SqlBool, type Transaction, type Updateable } from 'kysely';
+import { closeMemberHolds } from '../circulation/holds.js';
 import type { TxCtx } from '../context.js';
 import {
   libraryToday,
@@ -341,6 +342,8 @@ export async function archiveMember(tx: TxCtx, id: string, version: number): Pro
     .where('version', '=', version)
     .executeTakeFirst();
   if (Number(updated.numUpdatedRows) !== 1) throw memberStale();
+  // The member's active holds are cancelled (a kept copy goes to the next in its queue).
+  await closeMemberHolds(tx, id);
   await writeMemberEvents(tx, id, [{ type: 'archived' }]);
   await tx.audit({ action: 'members.member.archive', entity: 'members', entityId: id, meta: {} });
   return { id, version: version + 1 };
