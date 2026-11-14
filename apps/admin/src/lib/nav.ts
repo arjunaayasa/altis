@@ -73,9 +73,14 @@ export const NAV: readonly NavItem[] = Object.freeze([
   { to: '/admin/layanan/kembali', labelKey: 'nav.circulation.quick_return', permission: 'circulation.desk.use', anyBranch: true, group: 'circulation' },
   { to: '/admin/layanan/terlambat', labelKey: 'nav.circulation.overdue', permission: 'circulation.records.read', group: 'circulation' },
   { to: '/admin/layanan/aturan', labelKey: 'nav.circulation.policies', permission: 'circulation.policies.manage', group: 'circulation' },
+  // ---- Komunitas K2 (visits) ----
+  { to: '/admin/layanan/kunjungan', labelKey: 'nav.circulation.visits', permission: 'visits.records.read', group: 'circulation' },
+  { to: '/admin/layanan/buku-tamu', labelKey: 'nav.circulation.stations', permission: 'visits.stations.manage', anyBranch: true, group: 'circulation' },
   { to: '/admin/anggota', labelKey: 'nav.members.list', permission: 'members.records.read', group: 'members' },
   { to: '/admin/anggota/tipe', labelKey: 'nav.members.types', permission: 'members.types.manage', group: 'members' },
   { to: '/admin/anggota/impor', labelKey: 'nav.members.import', permission: 'members.import.run', group: 'members' },
+  // ---- Komunitas K2 (members extended) ----
+  { to: '/admin/anggota/kartu', labelKey: 'nav.members.cards', permission: 'members.records.read', group: 'members' },
   // The edition's own items (ruling R2, edition/index.ts), after the community ones: none in the community edition.
   ...editionNav,
 ] satisfies NavItem[]);

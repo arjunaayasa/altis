@@ -23,6 +23,7 @@ import { useApiQuery, useMe } from '@/lib/me';
 import { changedFields, isFieldProblem, isStale, optionalText, putFieldErrors, serverIssues, zodIssues } from '@/screens/catalog/masters/master-table';
 import { DueBadge, MemberStatusBadge, limitText, useCalendarDate, useMemberTypes, useTypeName } from '@/screens/circulation/common';
 import { ExtendDialog, SuspendDialog, refreshMembers, useMember } from './common';
+import { MemberPhotoPanel, MemberPrivacyPanel, RestoreButton } from './member-extras';
 
 /**
  * A member: Anggota baru (`/admin/anggota/baru`) and the member's page (`/admin/anggota/$memberId`).
@@ -461,6 +462,8 @@ export function MemberDetailScreen() {
               </Button>
             </>
           )}
+          {/* ---- Komunitas K2 (members extended) ---- */}
+          {canManage && m.archived && m.status !== 'anonymized' && <RestoreButton member={m} onDone={setNotice} />}
         </div>
       </div>
       <RefetchProblem query={member} />
@@ -492,6 +495,8 @@ export function MemberDetailScreen() {
           </TabsContent>
         </Tabs>
         <aside aria-label={t('members.summary')} className="flex h-fit flex-col gap-3 rounded-lg border bg-card p-4 text-sm">
+          {/* ---- Komunitas K2 (members extended): the photo ---- */}
+          {m.status !== 'anonymized' && <MemberPhotoPanel member={m} canManage={canManage && live} onDone={setNotice} />}
           <dl className="grid gap-2">
             <div>
               <dt className="text-muted-foreground">{t('members.col.status')}</dt>
@@ -523,6 +528,8 @@ export function MemberDetailScreen() {
               <dd>{sourceText(t, m.source)}</dd>
             </div>
           </dl>
+          {/* ---- Komunitas K2 (members extended): the member's own data and anonymisation ---- */}
+          <MemberPrivacyPanel member={m} onDone={setNotice} />
         </aside>
       </div>
       <ExtendDialog memberId={m.id} open={dialog === 'extend'} onClose={() => setDialog(null)} onDone={() => setNotice(t('members.extended'))} />

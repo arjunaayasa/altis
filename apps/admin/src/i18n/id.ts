@@ -1232,6 +1232,10 @@ export const ADMIN_ID = {
   'nav.members.list': 'Daftar Anggota',
   'nav.members.types': 'Tipe Anggota',
   'nav.members.import': 'Impor Anggota',
+  // ---- Komunitas K2 (members extended and visits) ----
+  'nav.circulation.visits': 'Kunjungan',
+  'nav.circulation.stations': 'Perangkat Buku Tamu',
+  'nav.members.cards': 'Cetak Kartu',
   // The screens of reports and accreditation, members and circulation: one file per area (i18n/reports,
   // i18n/accreditation, i18n/komunitas), joined in i18n/komunitas/index.ts.
   ...KOMUNITAS_ID,

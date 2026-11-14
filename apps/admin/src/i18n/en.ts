@@ -1170,5 +1170,9 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'nav.members.list': 'Members',
   'nav.members.types': 'Member Types',
   'nav.members.import': 'Import Members',
+  // ---- Komunitas K2 (members extended and visits) ----
+  'nav.circulation.visits': 'Visits',
+  'nav.circulation.stations': 'Guestbook Stations',
+  'nav.members.cards': 'Print Cards',
   ...KOMUNITAS_EN,
 };
