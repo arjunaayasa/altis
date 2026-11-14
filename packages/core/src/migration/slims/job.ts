@@ -33,6 +33,11 @@ import { itemsStage } from './stages/items.js';
 import { mastersStage } from './stages/masters.js';
 import { recordsStage } from './stages/records.js';
 import { relationsStage } from './stages/relations.js';
+// ---- Komunitas (SLiMS members and circulation) ----
+import { circulationStage, liveCirculationCount } from './stages/circulation.js';
+import { membersStage } from './stages/members.js';
+import { staffStage } from './stages/staff.js';
+import { visitsStage } from './stages/visits.js';
 
 // The SLiMS migration job `catalog.migrate_slims` and how a migration starts (Phase 2 spec §11.1–§11.3, §12.6;
 // plan Task 23; decisions D2-25, D2-26; preflight S3, S13, M15).
@@ -70,7 +75,7 @@ import { relationsStage } from './stages/relations.js';
 /** One migration at a time per installation (§11.2). */
 export const SLIMS_MIGRATION_UNIQUE_KEY = 'catalog.migrate_slims';
 
-/** The stages of a migration run in their order (§11.3); the middle eight are Tasks 37's and 38's. */
+/** The stages of a migration run in their order: the catalogue's, then members, staff, visits and circulation. */
 export const SLIMS_STAGES: readonly SlimsStage[] = Object.freeze([
   slimsSplitStage,
   slimsAnalyzeStage,
@@ -78,6 +83,11 @@ export const SLIMS_STAGES: readonly SlimsStage[] = Object.freeze([
   recordsStage,
   relationsStage,
   itemsStage,
+  // ---- Komunitas (SLiMS members and circulation) ----
+  membersStage,
+  staffStage,
+  visitsStage,
+  circulationStage,
   attachmentsStage,
   coversStage,
   contentStage,
@@ -218,6 +228,9 @@ export interface SlimsStartInput {
   catalogMode?: 'append' | 'sync';
   /** Skip the catalogue stages (a real run: after a sync dry run that found no change). */
   skipCatalog?: boolean;
+  // ---- Komunitas (SLiMS members and circulation) ----
+  /** The member, visit and circulation options (each one's default when absent). */
+  people?: SlimsRunSettings['people'];
 }
 
 /**
@@ -231,7 +244,7 @@ export interface SlimsStartInput {
 export async function checkSlimsAdoption(
   db: Db,
   o: { fromRunId: string; userId: string | null; cli?: boolean; now: number; sourceKind: 'db' | 'dump' | null; db: SlimsDbTarget | null },
-): Promise<{ settings: SlimsRunSettings; optionsText: string; catalogChanges: number | null }> {
+): Promise<{ settings: SlimsRunSettings; optionsText: string; catalogChanges: number | null; memberNoCollisions: number | null }> {
   const run = await getRun(db, o.fromRunId);
   const notFound = fieldError('fromRunId', 'not_found');
   if (
@@ -262,7 +275,48 @@ export async function checkSlimsAdoption(
       throw fieldError('source', 'mismatch');
     }
   }
-  return { settings, optionsText: run.options, catalogChanges: catalogChangesOf(run.summary) };
+  return { settings, optionsText: run.options, catalogChanges: catalogChangesOf(run.summary), memberNoCollisions: countOf(run.summary, 'memberNoCollisions') };
+}
+
+/** A count `name` of a stored summary: a non-negative integer, or null when the summary has none. */
+function countOf(summary: string, name: string): number | null {
+  try {
+    const n = (JSON.parse(summary) as Record<string, unknown> | null)?.[name];
+    return typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+// ---- Komunitas (SLiMS members and circulation) ----
+
+/**
+ * The prechecks of the member and circulation stages on a real run: a dry run taken over that found member numbers
+ * colliding once normalised refuses it (they must be changed in SLiMS first: an old card would open the wrong member);
+ * a `replace` of circulation is refused while ALTIS lends, takes holds or charges on its own.
+ *
+ * @throws DomainError 422 `MIGRATION_PRECHECK_FAILED {reason: 'member_no_collision', count}`, 409
+ *   `MIGRATION_CIRCULATION_LIVE {count}`
+ */
+async function checkPeople(trx: Transaction<DB>, input: SlimsStartInput, adopted: { memberNoCollisions: number | null } | null): Promise<void> {
+  const collisions = adopted?.memberNoCollisions ?? 0;
+  if (collisions > 0) {
+    throw new DomainError('MIGRATION_PRECHECK_FAILED', {
+      detail:
+        `Uji kering menemukan ${collisions} nomor anggota SLiMS yang bertabrakan setelah dinormalkan (member_no_collision); ubah nomornya di SLiMS lebih dulu / ` +
+        `The dry run found ${collisions} SLiMS member numbers that collide once normalised (member_no_collision); change them in SLiMS first`,
+      meta: { reason: 'member_no_collision', count: collisions },
+    });
+  }
+  if (input.people?.circulationMode === 'replace') {
+    const live = await liveCirculationCount(trx);
+    if (live > 0) {
+      throw new DomainError('MIGRATION_CIRCULATION_LIVE', {
+        detail: `ALTIS sudah mencatat ${live} baris sirkulasi sendiri / ALTIS already holds ${live} circulation rows of its own`,
+        meta: { count: live },
+      });
+    }
+  }
 }
 
 /** `catalogChanges` of a stored summary: a non-negative integer, or null when the summary has none. */
@@ -316,7 +370,7 @@ export async function startSlimsMigration(
   const trx = tx.trx;
   const branch = await trx.selectFrom('branches').select('id').where('id', '=', input.branchId).where('archived_at', 'is', null).executeTakeFirst();
   if (branch === undefined) throw fieldError('branchId', 'not_found');
-  let adopted: { settings: SlimsRunSettings; optionsText: string; catalogChanges: number | null } | null = null;
+  let adopted: { settings: SlimsRunSettings; optionsText: string; catalogChanges: number | null; memberNoCollisions: number | null } | null = null;
   const skipCatalog = input.skipCatalog === true;
   if (skipCatalog && !input.dryRun && input.fromRunId === null) throw fieldError('skipCatalog', 'dry_run_required');
   if (input.fromRunId !== null) {
@@ -330,6 +384,7 @@ export async function startSlimsMigration(
     });
   }
   if (skipCatalog && !input.dryRun) checkSkipCatalog(adopted);
+  if (!input.dryRun) await checkPeople(trx, input, adopted);
   if (!input.dryRun) {
     const libraryName = String((await readSettings(trx, ['library.name'], []))['library.name']);
     await assertTargetEmpty(trx, { allowNonEmpty: input.allowNonEmpty, confirmLibraryName: input.confirmLibraryName, libraryName });
@@ -352,6 +407,7 @@ export async function startSlimsMigration(
     adoptedFrom: input.fromRunId,
     catalogMode: input.catalogMode ?? 'append',
     skipCatalog,
+    ...(input.people === undefined ? {} : { people: input.people }),
   };
   const runId = await createRun(tx, { kind: 'migration', dryRun: input.dryRun, format: null, options: settings });
   // A database source and an adopted dump start at `analyze` (S3: no split).
@@ -385,7 +441,14 @@ export async function startSlimsMigration(
     action: 'catalog.migration.start',
     entity: 'catalog_runs',
     entityId: runId,
-    meta: { dryRun: input.dryRun, sourceKind, priceMode: input.priceMode, sourceName: input.sourceName, adoptedFrom: input.fromRunId },
+    meta: {
+      dryRun: input.dryRun,
+      sourceKind,
+      priceMode: input.priceMode,
+      sourceName: input.sourceName,
+      adoptedFrom: input.fromRunId,
+      ...(input.people === undefined ? {} : { membersMode: input.people.membersMode ?? 'append', circulationMode: input.people.circulationMode ?? 'append' }),
+    },
   });
   return { runId, jobId: queued.id, endedRunIds };
 }

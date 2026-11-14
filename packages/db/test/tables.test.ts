@@ -124,6 +124,8 @@ import {
   CHARGES_UNIQUE,
   chargesSampleRows,
 } from './fixtures/komunitas-charges-tables.js';
+// ---- Komunitas (SLiMS members and circulation) ----
+import { SLIMS_PEOPLE_INDEXES, SLIMS_PEOPLE_TABLES_BY_MIGRATION } from './fixtures/komunitas-slims-people-tables.js';
 import { MIGRATION_NAME, runMigrations } from '../src/migrator.js';
 import { PHASE1_MIGRATIONS } from '../src/migrations/index.js';
 import { SECRET_COLUMNS, SETTINGS_SCOPE_CLASS, TABLE_CLASSES, type SettingsScope, type TableName } from '../src/registry.js';
@@ -238,6 +240,8 @@ const TABLES_BY_MIGRATION: Record<string, TableName[]> = {
   ...MEMBER_AREA_TABLES_BY_MIGRATION,
   // ---- Komunitas (charges and payments) ----
   ...CHARGES_TABLES_BY_MIGRATION,
+  // ---- Komunitas (SLiMS members and circulation): a column and an index only ----
+  ...(SLIMS_PEOPLE_TABLES_BY_MIGRATION as Record<string, TableName[]>),
 };
 
 /** The created_by of the tables the runner makes itself (ensureBootstrap, ruling R27). */
@@ -388,6 +392,8 @@ const EXPECTED_INDEXES: IndexFacts[] = [
   ...MEMBER_AREA_INDEXES,
   // ---- Komunitas (charges and payments) ----
   ...CHARGES_INDEXES,
+  // ---- Komunitas (SLiMS members and circulation) ----
+  ...SLIMS_PEOPLE_INDEXES,
 ].sort((a, b) => a.table.localeCompare(b.table) || a.name.localeCompare(b.name));
 
 /** The full-text indexes, which {@link indexes} leaves out (an expression index has no column list on PostgreSQL). */
@@ -793,7 +799,8 @@ describe('the table-class registry and the Phase 1 migration list (spec §6.5)',
     expect(k1).toEqual(Object.keys(K1_TABLES_BY_MIGRATION));
     expect(k1.at(-1)).toBe('0033_catalog_accred_fields');
     // Komunitas, members and circulation: one migration, 0040, in its range 0040–0049.
-    // Holds: 0041, after it; the circulation core 0042; visits 0043; the member area 0044; charges 0045.
+    // Holds: 0041, after it; the circulation core 0042; visits 0043; the member area 0044; charges 0045; the SLiMS
+    // migration's subject key 0046 (a column and an index only).
     const circulation = MIGRATION_NAMES.filter((name) => name >= '0040' && name < '0050');
     expect(circulation).toEqual([
       ...Object.keys(CIRCULATION_TABLES_BY_MIGRATION),
@@ -802,8 +809,9 @@ describe('the table-class registry and the Phase 1 migration list (spec §6.5)',
       ...Object.keys(VISITS_TABLES_BY_MIGRATION),
       ...Object.keys(MEMBER_AREA_TABLES_BY_MIGRATION),
       ...Object.keys(CHARGES_TABLES_BY_MIGRATION),
+      ...Object.keys(SLIMS_PEOPLE_TABLES_BY_MIGRATION),
     ]);
-    expect(circulation.at(-1)).toBe('0045_charges');
+    expect(circulation.at(-1)).toBe('0046_migration_subject');
     for (const [name, m] of Object.entries(PHASE1_MIGRATIONS)) {
       expect(name).toMatch(MIGRATION_NAME);
       expect(typeof m.up).toBe('function');
