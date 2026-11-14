@@ -30,6 +30,8 @@ import { OPAC_CATALOG_ROUTES } from './opac/catalog/index.js';
 import { OPAC_ROUTES } from './opac/routes.js';
 import { VISITS_ROUTES } from './api/visits/index.js';
 import { VISIT_STATION_ROUTES } from './opac/visits/routes.js';
+// ---- Komunitas (member area) ----
+import { AKUN_ROUTES } from './opac/akun/routes.js';
 
 // Every route the app serves (spec §4.6, decision D4), in the order of the plan's route catalog. createApp mounts
 // these and refuses to start when a Hono route has no declaration here. An edition appends its own routes here
@@ -101,6 +103,9 @@ export const ALL_ROUTES: RouteDecl[] = defineRoutes([
   // ---- Komunitas K2 (visits): the guestbook station's pages (`/kunjungan`) ----
   ...VISIT_STATION_ROUTES,
   ...OPAC_ROUTES,
+  // ---- Komunitas (member area) ----
+  // The OPAC member area (`/akun`, opac/akun/routes.tsx), after the OPAC's own routes.
+  ...AKUN_ROUTES,
   // Test build profile only (S28): none in a production build.
   ...testOnlyRoutes(),
 ]);

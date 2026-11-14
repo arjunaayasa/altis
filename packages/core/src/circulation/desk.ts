@@ -577,7 +577,7 @@ async function renewOne(tx: TxCtx, loanId: string, branchId: string): Promise<Re
       renewals: renewals + 1,
       last_renewed_on: today,
       updated_at: tx.now,
-      updated_by: tx.actor.id,
+      updated_by: tx.actor.type === 'staff' ? tx.actor.id : null, // a member's own renewal leaves no staff trail
       version: eb('version', '+', 1),
     }))
     .where('id', '=', loanId)

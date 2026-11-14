@@ -242,6 +242,9 @@ async function seed(db: Kysely<DB>): Promise<void> {
   for (const t of Object.keys(visits) as VisitsTableName[]) {
     await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(visits[t]).execute();
   }
+  // ---- Komunitas (member area): a bookmark of a sample member, a type list of a sample attachment ----
+  await db.insertInto('member_bookmarks').values({ member_id: circulation.members[0]!.id, record_id: '01JU0000000000000000000001', created_at: 1767225600000 }).execute();
+  await db.insertInto('attachment_member_types').values({ attachment_id: rows.attachments[0]!.id, member_type_id: '01JU0000000000000000000002' }).execute();
 }
 
 /** The circulation core sample rows with ids numbered from another fixed prefix. */

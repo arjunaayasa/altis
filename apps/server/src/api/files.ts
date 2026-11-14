@@ -8,6 +8,7 @@ import {
   createUpload,
   fileResponseHeaders,
   localStorageDriver,
+  memberMayOpenFile,
   prepareUpload,
   uploadContext,
   uploadOwner,
@@ -24,6 +25,8 @@ import {
 } from '@altis/shared/api/files';
 import { z } from 'zod';
 import { problemResponse } from '../http/problem.js';
+// ---- Komunitas (member area) ----
+import { resolveMemberAuth } from '../http/member-auth.js';
 import { route, type RouteContext, type RouteDecl } from '../http/route.js';
 import { validationFailed } from '../http/validate.js';
 import { byteRange } from '../http/range.js';
@@ -248,6 +251,8 @@ const filesGet = route({
   method: 'GET',
   path: '/files/:id',
   public: true,
+  // ---- Komunitas (member area): an attachment of access `members` opens to a signed-in member of a listed type ----
+  member: 'optional',
   maintenance: 'allow',
   idempotency: 'none',
   audit: null,
@@ -264,7 +269,16 @@ const filesGet = route({
     if (row.context === SNAPSHOT_DOSSIER_CONTEXT) throw new DomainError('NOT_FOUND');
     const access = await catalogFileAccess(rc.db.db, row);
     if (access === 'never') throw new DomainError('NOT_FOUND');
-    if (access !== 'public') {
+    // ---- Komunitas (member area) ----
+    // A members' attachment file without a staff session: only the member session (`altis_msid`, read here and nowhere
+    // else on this route) of a member whose type the attachment lists; to anyone else it does not exist.
+    let member = false;
+    if (access === 'staff' && row.access === 'members' && rc.auth === null) {
+      const m = await resolveMemberAuth(rc.c, { db: rc.db, services: rc.services, now: rc.now, touch: false });
+      member = m !== null && (await memberMayOpenFile(rc.db.db, row, m.memberTypeId));
+      if (!member) throw new DomainError('NOT_FOUND');
+    }
+    if (access !== 'public' && !member) {
       if (rc.auth === null) throw new DomainError(access === 'unpublished' ? 'NOT_FOUND' : 'AUTH_REQUIRED');
       if (rc.auth.stage !== 'full') throw new DomainError('AUTH_MFA_REQUIRED');
     }

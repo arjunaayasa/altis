@@ -81,7 +81,7 @@ describe('planN1', { timeout: 60_000 }, () => {
   it('0.1.0-test → 0.2.0-test on mysql80: the prefix 9001_test_expand, its DDL statement faulted, doctor ok expected', async () => {
     const plan = await planN1(LEVEL1, LEVEL2, 'mysql80');
     expect(plan.base).toEqual(RELEASE_MIGRATIONS);
-    expect(plan.base.at(-1)).toBe('0043_visits');
+    expect(plan.base.at(-1)).toBe('0044_member_area');
     expect(plan.prefixes).toEqual([
       { migration: '9001_test_expand', migrations: ['9001_test_expand'], ddl: 1, contract: null, runs: [null, 'migrate-ddl:1'], stop: null, expect: 'ok' },
     ]);
@@ -122,7 +122,7 @@ describe('planN1', { timeout: 60_000 }, () => {
     expect(await usageError(planN1(LEVEL2, { ...LEVEL3, schemaLatest: '9001' }, 'mysql80'))).toMatch(/^N1_MISMATCH/);
     expect(await usageError(planN1(LEVEL2, { ...LEVEL3, minCodeVersionAfter: '0.0.0' }, 'mysql80'))).toMatch(/^N1_MISMATCH/);
     // N−1's schema is not one N's migrations hold.
-    expect(await usageError(planN1({ ...LEVEL1, schemaLatest: '0044' }, LEVEL2, 'mysql80'))).toMatch(/^N1_MISMATCH/);
+    expect(await usageError(planN1({ ...LEVEL1, schemaLatest: '0045' }, LEVEL2, 'mysql80'))).toMatch(/^N1_MISMATCH/);
   });
 
   it('the fixture levels follow the release build (fixtureLevelOf)', () => {

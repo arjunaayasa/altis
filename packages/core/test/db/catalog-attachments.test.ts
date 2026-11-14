@@ -165,6 +165,7 @@ describe.skipIf(!ctx.available)(`catalog attachments [${engineLabel()}]`, () => 
         readCount: 0,
         sortOrder: 0,
         version: 0,
+        memberTypeIds: [],
       });
       expect(await fileRow(fileId)).toEqual({ owner_type: 'attachments', owner_id: view.id, access: 'public', status: 'ok' });
       // The record's public representation changed: changed_at moves, its version stays (the editor keeps its own).

@@ -150,6 +150,7 @@ describe.skipIf(!ctx.available)(`attachments API [${engineLabel()}]`, () => {
         readCount: 0,
         sortOrder: 0,
         version: 0,
+        memberTypeIds: [],
       },
     ]);
     const file = await h.db.selectFrom('files').select(['owner_type', 'owner_id', 'access']).where('id', '=', fileId).executeTakeFirstOrThrow();
