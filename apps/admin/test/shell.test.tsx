@@ -268,6 +268,23 @@ describe('navigation and language', () => {
     ]);
   });
 
+  it('the menu marks one item: the page’s own, else the closest one above it', async () => {
+    const marked = async (path: string): Promise<(string | null)[]> => {
+      const { view } = setup(signedIn({ permissions: systemRolePermissions('super_admin'), superAdmin: true }), path);
+      await waitFor(() => within(mainNav()).getByRole('link', { name: 'Kembali Cepat' }));
+      const links = within(mainNav())
+        .getAllByRole('link')
+        .filter((a) => a.getAttribute('aria-current') === 'page')
+        .map((a) => a.textContent);
+      view.unmount();
+      return links;
+    };
+    expect(await marked('/admin/layanan/kembali')).toEqual(['Kembali Cepat']);
+    expect(await marked('/admin/layanan?member=01J0000000000000000000000A')).toEqual(['Meja Layanan']);
+    expect(await marked('/admin/anggota/tipe')).toEqual(['Tipe Anggota']);
+    expect(await marked('/admin/anggota/01J0000000000000000000000A')).toEqual(['Daftar Anggota']);
+  });
+
   it('a super admin sees Konfigurasi Sistem', async () => {
     setup(signedIn({ permissions: systemRolePermissions('super_admin'), superAdmin: true }));
     await screen.findByText('Selamat datang, Ani.');
