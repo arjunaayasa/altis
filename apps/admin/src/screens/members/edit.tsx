@@ -24,6 +24,8 @@ import { changedFields, isFieldProblem, isStale, optionalText, putFieldErrors, s
 import { DueBadge, MemberStatusBadge, limitText, useCalendarDate, useMemberTypes, useTypeName } from '@/screens/circulation/common';
 import { ExtendDialog, SuspendDialog, refreshMembers, useMember } from './common';
 import { MemberCustomPanel, MemberPhotoPanel, MemberPrivacyPanel, RestoreButton } from './member-extras';
+// ---- Komunitas (member area) ----
+import { MemberPasswordDialog } from './password';
 
 /**
  * A member: Anggota baru (`/admin/anggota/baru`) and the member's page (`/admin/anggota/$memberId`).
@@ -383,7 +385,7 @@ export function MemberDetailScreen() {
   const { memberId = '' } = useParams({ strict: false }) as { memberId?: string };
   const member = useMember(memberId);
   const [tab, setTab] = useState<DetailTab>('data');
-  const [dialog, setDialog] = useState<'extend' | 'suspend' | 'reactivate' | 'archive' | null>(null);
+  const [dialog, setDialog] = useState<'extend' | 'suspend' | 'reactivate' | 'archive' | 'password' | null>(null);
   const [notice, setNotice] = useState<string | null>(location.state.created === true ? t('members.created') : null);
   const canManage = holds(me, 'members.records.manage');
   const canLoans = holds(me, 'circulation.records.read');
@@ -459,6 +461,10 @@ export function MemberDetailScreen() {
               )}
               <Button variant="outline" onClick={() => setDialog('archive')}>
                 {t('members.action.archive')}
+              </Button>
+              {/* Komunitas (member area) */}
+              <Button variant="outline" onClick={() => setDialog('password')}>
+                {t('members.password.open')}
               </Button>
             </>
           )}
@@ -550,6 +556,7 @@ export function MemberDetailScreen() {
       </div>
       <ExtendDialog memberId={m.id} open={dialog === 'extend'} onClose={() => setDialog(null)} onDone={() => setNotice(t('members.extended'))} />
       <SuspendDialog member={m} open={dialog === 'suspend'} onClose={() => setDialog(null)} onDone={() => setNotice(t('members.suspended'))} />
+      <MemberPasswordDialog member={m} open={dialog === 'password'} onClose={() => setDialog(null)} onDone={setNotice} />
       {dialog === 'reactivate' && (
         <ConfirmDialog
           open

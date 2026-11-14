@@ -121,7 +121,12 @@ export type SettingKey =
   | `visits.${'fromDesk' | 'fromOnline' | 'askPurpose'}`
   | `visits.station.${'showPhoto' | 'welcome.id' | 'welcome.en'}`
   | `privacy.${'loans' | 'visits'}.anonymizeAfterYears`
-  | 'privacy.members.anonymizeArchivedAfterYears';
+  | 'privacy.members.anonymizeArchivedAfterYears'
+  // ---- Komunitas (member area) ----
+  | 'members.password.minLength'
+  | 'members.opac.enabled'
+  | `members.session.${'idleMinutes' | 'absoluteHours'}`
+  | 'circulation.renew.opac';
 
 export interface SettingDef {
   group: SettingsGroup;
@@ -580,6 +585,15 @@ export const SETTINGS: Readonly<Record<SettingKey, SettingDef>> = Object.freeze(
   'privacy.loans.anonymizeAfterYears': def({ group: 'privacy', schema: anonymizeYearsField, default: 5 }),
   'privacy.visits.anonymizeAfterYears': def({ group: 'privacy', schema: anonymizeYearsField, default: 2 }),
   'privacy.members.anonymizeArchivedAfterYears': def({ group: 'privacy', schema: anonymizeYearsField, default: null }),
+  // ---- Komunitas (member area) ----
+  // The OPAC member area: the shortest member password (6-64), whether members may sign in at all, how long a member
+  // session lasts without activity (5-120 minutes) and at most (1-24 hours), and whether members may renew their loans
+  // online (their type must allow it too).
+  'members.password.minLength': def({ group: 'members', schema: z.int().min(6).max(64), default: 8 }),
+  'members.opac.enabled': def({ group: 'members', schema: z.boolean(), default: true }),
+  'members.session.idleMinutes': def({ group: 'members', schema: z.int().min(5).max(120), default: 20 }),
+  'members.session.absoluteHours': def({ group: 'members', schema: z.int().min(1).max(24), default: 8 }),
+  'circulation.renew.opac': def({ group: 'circulation', schema: z.boolean(), default: true }),
 });
 
 /** The registered keys in registry order. */

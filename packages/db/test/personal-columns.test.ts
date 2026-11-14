@@ -7,6 +7,8 @@ import { CIRCULATION_TABLES_BY_MIGRATION } from './fixtures/komunitas-members-ci
 import { HOLDS_TABLES_BY_MIGRATION } from './fixtures/komunitas-holds-tables.js';
 import { CIRC_CORE_TABLES_BY_MIGRATION } from './fixtures/komunitas-circ-core-tables.js';
 import { VISITS_TABLES_BY_MIGRATION } from './fixtures/komunitas-visits-tables.js';
+// ---- Komunitas (member area) ----
+import { MEMBER_AREA_TABLES_BY_MIGRATION } from './fixtures/komunitas-member-area-tables.js';
 
 // The personal-data dictionary (PERSONAL_COLUMNS): which columns hold personal data, so that public output, events,
 // logs and exports can leave them out or ask for re-authentication. Every registered column must exist; every column of
@@ -325,6 +327,13 @@ describe('PERSONAL_COLUMNS', () => {
       expect({ column, isText: text.includes(column) }).toEqual({ column, isText: true });
       expect(reason.length).toBeGreaterThan(5);
     }
+  });
+
+  // ---- Komunitas (member area) ----
+  it('the member area tables (bookmarks, attachment member types) hold keys and dates only', () => {
+    const tables = Object.values(MEMBER_AREA_TABLES_BY_MIGRATION).flat() as TableName[];
+    expect(tables).toEqual(['member_bookmarks', 'attachment_member_types']);
+    expect(textColumnsOf(tables)).toEqual([]);
   });
 
   it('a member: every column a person could be recognised by is registered; the number, type and dates are not', () => {

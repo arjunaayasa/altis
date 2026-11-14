@@ -32,6 +32,7 @@ function attachment(o: Partial<AttachmentView>): AttachmentView {
     readCount: 12,
     sortOrder: 0,
     version: 3,
+    memberTypeIds: [],
     ...o,
   };
 }

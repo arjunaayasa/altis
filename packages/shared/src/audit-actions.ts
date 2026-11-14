@@ -203,6 +203,15 @@ export const AUDIT_ACTIONS = Object.freeze([
   'visits.station.revoke',
   // written with the station as the actor when a station is activated with its code
   'visits.station.activated',
+  // ---- Komunitas (member area) ----
+  // staff setting a member's OPAC password, and what a member does in the OPAC member area (`login_locked`: once when a
+  // sign-in bucket first fills up in its window). A member's renewals, holds and cancellations use the circulation
+  // actions above with a member actor.
+  'members.member.password_set',
+  'members.self.password_change',
+  'members.self.password_reset',
+  'members.self.data_export',
+  'members.self.login_locked',
 ] as const);
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

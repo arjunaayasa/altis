@@ -176,8 +176,11 @@ export const ATTACHMENT_KINDS = Object.freeze(['file', 'url'] as const);
 
 export type AttachmentKind = (typeof ATTACHMENT_KINDS)[number];
 
-/** Who may open an attachment: everyone (the OPAC) or staff only. */
-export const ATTACHMENT_ACCESS = Object.freeze(['public', 'staff'] as const);
+/**
+ * Who may open an attachment: everyone (the OPAC), staff only, or (the member area) members signed in to the OPAC,
+ * of the types the attachment lists (none listed: every member).
+ */
+export const ATTACHMENT_ACCESS = Object.freeze(['public', 'staff', 'members'] as const);
 
 export type AttachmentAccess = (typeof ATTACHMENT_ACCESS)[number];
 

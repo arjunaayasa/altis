@@ -194,6 +194,12 @@ const SAMPLE: Record<SettingKey, unknown> = {
   'privacy.loans.anonymizeAfterYears': 3,
   'privacy.visits.anonymizeAfterYears': 1,
   'privacy.members.anonymizeArchivedAfterYears': 10,
+  // ---- Komunitas (member area) ----
+  'members.password.minLength': 10,
+  'members.opac.enabled': false,
+  'members.session.idleMinutes': 30,
+  'members.session.absoluteHours': 4,
+  'circulation.renew.opac': false,
 };
 
 /** Every key of scope `instance` (machine state of this installation, kept by a restore), in registry order; all are in group `system`. */
@@ -319,8 +325,19 @@ describe('SETTINGS registry', () => {
       'circulation.loanVoidMinutes',
       'circulation.lost.useItemPrice',
       'circulation.lost.processingFeeMinor',
+      // ---- Komunitas (member area) ----
+      'circulation.renew.opac',
     ]);
-    expect(groupKeys('members')).toEqual(['members.clearance.prefix', 'members.clearance.profile', 'members.card.profile']);
+    expect(groupKeys('members')).toEqual([
+      'members.clearance.prefix',
+      'members.clearance.profile',
+      'members.card.profile',
+      // ---- Komunitas (member area) ----
+      'members.password.minLength',
+      'members.opac.enabled',
+      'members.session.idleMinutes',
+      'members.session.absoluteHours',
+    ]);
     expect(groupKeys('privacy')).toEqual([
       'privacy.loans.anonymizeAfterYears',
       'privacy.visits.anonymizeAfterYears',

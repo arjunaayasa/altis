@@ -1,6 +1,7 @@
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { assertOutsideTx } from '@altis/db';
 import { DomainError } from '@altis/shared';
+import { bcryptVerify, isBcryptHash } from './bcrypt.js';
 
 // Staff password hashing (spec §7.1): scrypt N=2^15, r=8, p=1, keylen 32, salt 16 bytes, maxmem 64 MiB, stored in
 // the PHC string format
@@ -19,6 +20,10 @@ import { DomainError } from '@altis/shared';
 // Never call the hasher inside a database transaction (Global Constraints, S18): hash or verify first, then open the
 // transaction with the result. On SQLite a transaction holds the process's only connection. hash, verify and
 // verifyDummy enforce it (assertOutsideTx): inside a withTx callback they reject with a TypeError before any scrypt.
+//
+// Komunitas (member area): verify also takes the bcrypt hash of a member migrated from SLiMS (`$2a$`, `$2b$`, `$2y$`,
+// cost 4-12, crypto/bcrypt.ts), in the same queue and with the password as typed (PHP hashed the bytes it received,
+// never normalised); needsRehash is true for it, so the member's next sign-in stores a scrypt hash instead.
 
 /** The scrypt parameters of new hashes (spec §7.1). `maxmem` also bounds what a stored string may ask for. */
 export const SCRYPT = Object.freeze({ N: 32768, r: 8, p: 1, keylen: 32, saltBytes: 16, maxmem: 67108864 } as const);
@@ -184,6 +189,8 @@ export function createPasswordHasher(o: PasswordHasherOptions = {}): PasswordHas
 
     verify: async (pw, phc) => {
       outsideTx('verify');
+      // ---- Komunitas (member area): a migrated SLiMS password ----
+      if (isBcryptHash(phc)) return limit(() => bcryptVerify(pw, phc));
       const parsed = parse(phc);
       // A malformed string costs nothing: it cannot belong to anyone (the caller's dummy path covers unknown users).
       if (parsed === undefined) return false;

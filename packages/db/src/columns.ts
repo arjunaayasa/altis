@@ -4,7 +4,7 @@ import type { TableName } from './registry.js';
 export type { ColumnKind } from './ddl.js';
 
 // The column registry (decision C11): every column of every table, in table-definition order, and every table's
-// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0029; Komunitas K1: 0030–0033; members and circulation: 0040; holds: 0041; circulation core: 0042; visits: 0043) and the runner's own tables (ddl.ts ensureBootstrap,
+// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0029; Komunitas K1: 0030–0033; members and circulation: 0040; holds: 0041; circulation core: 0042; visits: 0043; member area: 0044) and the runner's own tables (ddl.ts ensureBootstrap,
 // migrator.ts). Backup and restore read it for the canonical row (registry column order), the per-version checks of
 // an archive's rows (columnsAt) and the length checks against the code's DDL; restore's read-only pre-pass reads the
 // unique keys (S5c) and the load order follows the foreign keys (order.ts).
@@ -125,6 +125,8 @@ const M0041 = '0041_holds';
 const M0042 = '0042_circulation_core';
 // ---- Komunitas K2 (visits) ----
 const M0043 = '0043_visits';
+// ---- Komunitas (member area) ----
+const M0044 = '0044_member_area';
 
 /** `archived_at` + `version`, then the trail columns (Phase 2 spec §2.2 "arsip+ver, jejak"). */
 function archivedTrail(since: string): ColumnSpec[] {
@@ -1241,6 +1243,9 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
       nul(t.ulid('created_by')),
     ),
   ),
+  // ---- Komunitas (member area) ----
+  member_bookmarks: frozen(added(M0044, t.ulid('member_id'), t.ulid('record_id'), t.timestamp('created_at'))),
+  attachment_member_types: frozen(added(M0044, t.ulid('attachment_id'), t.ulid('member_type_id'))),
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping (made by the runner, like the two above) ----
   schema_migrations_edition: frozen(added(RUNNER_TABLES_SINCE, t.key191('name'), t.varchar('timestamp', 64))),
   schema_migrations_edition_lock: frozen(added(RUNNER_TABLES_SINCE, t.key191('id'), t.int('is_locked'))),
@@ -1377,6 +1382,11 @@ export const TABLE_KEYS: Readonly<Record<TableName, TableKeySpec>> = Object.free
   // ---- Komunitas K2 (visits): no foreign keys (a station and a visit point at a branch, a room and a member by id) ----
   visit_stations: keys(['id'], { unique: [['token_hash']] }),
   visits: keys(['id'], { unique: [['day_key']] }),
+  // ---- Komunitas (member area) ----
+  member_bookmarks: keys(['member_id', 'record_id'], { fks: [{ column: 'member_id', table: 'members', refColumn: 'id' }] }),
+  attachment_member_types: keys(['attachment_id', 'member_type_id'], {
+    fks: [{ column: 'attachment_id', table: 'attachments', refColumn: 'id' }],
+  }),
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: keys(['name']),
   schema_migrations_edition_lock: keys(['id']),

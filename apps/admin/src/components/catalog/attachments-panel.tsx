@@ -15,6 +15,8 @@ import { ApiError, api } from '@/lib/api';
 import { fieldErrorKey, problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { uploadFile, type UploadOptions } from '@/lib/upload';
+// ---- Komunitas (member area) ----
+import { useMemberTypes, useTypeName } from '@/screens/circulation/common';
 
 /**
  * The attachments of a record in the record editor (Phase 2 spec §8, §13; plan Task 18): the list
@@ -125,6 +127,40 @@ function AccessSelect({ id, value, onChange, invalid, describedBy }: { id: strin
   );
 }
 
+// ---- Komunitas (member area) ----
+/** The member types an attachment for signed-in members lists (none ticked: every signed-in member). */
+function MemberTypesPicker({ value, onChange }: { value: readonly string[]; onChange(v: string[]): void }) {
+  const t = useT();
+  const typeName = useTypeName();
+  const types = useMemberTypes();
+  const legend = useId();
+  if (types.isError) return <p className="text-sm text-muted-foreground sm:col-span-2">{t('catalog.attachments.member_types_unreadable')}</p>;
+  return (
+    <fieldset className="grid gap-1 sm:col-span-2" aria-describedby={`${legend}-hint`}>
+      <legend className="mb-1 text-sm font-medium">{t('catalog.attachments.field.member_types')}</legend>
+      <p id={`${legend}-hint`} className="text-xs text-muted-foreground">
+        {t('catalog.attachments.member_types_hint')}
+      </p>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {(types.data?.items ?? []).map((mt) => (
+          <label key={mt.id} className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={value.includes(mt.id)}
+              onChange={(e) => onChange(e.target.checked ? [...value, mt.id] : value.filter((id) => id !== mt.id))}
+            />
+            {typeName(mt)}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+/** Whether two lists hold the same ids. */
+const sameIds = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((id) => b.includes(id));
+
 /** Where an attachment opens, or null for a link that is not http(s) (S4). */
 function hrefOf(a: AttachmentView): string | null {
   if (a.kind === 'file') return a.fileId === null ? null : `/files/${encodeURIComponent(a.fileId)}`;
@@ -201,6 +237,7 @@ function EditAttachment({ attachment: a, onDone, onCancel }: { attachment: Attac
   const [title, setTitle] = useState(a.title);
   const [description, setDescription] = useState(a.description ?? '');
   const [access, setAccess] = useState<AttachmentAccess>(a.access);
+  const [memberTypeIds, setMemberTypeIds] = useState<string[]>(a.memberTypeIds ?? []);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -215,6 +252,7 @@ function EditAttachment({ attachment: a, onDone, onCancel }: { attachment: Attac
     if (title !== a.title) body.title = title;
     if ((description === '' ? null : description) !== a.description) body.description = description === '' ? null : description;
     if (access !== a.access) body.access = access;
+    if (access === 'members' && (access !== a.access || !sameIds(memberTypeIds, a.memberTypeIds ?? []))) body.memberTypeIds = memberTypeIds;
     setBusy(true);
     try {
       if (Object.keys(body).length > 1) await api('PATCH', `catalog/attachments/${encodeURIComponent(a.id)}`, body);
@@ -238,6 +276,7 @@ function EditAttachment({ attachment: a, onDone, onCancel }: { attachment: Attac
         <Field id={ids.access} label={t('catalog.attachments.field.access')} error={fieldError(errors.access)}>
           {(c) => <AccessSelect id={c.id} value={access} onChange={setAccess} invalid={c['aria-invalid'] === true} describedBy={c['aria-describedby']} />}
         </Field>
+        {access === 'members' && <MemberTypesPicker value={memberTypeIds} onChange={setMemberTypeIds} />}
         <Field id={ids.description} label={t('catalog.attachments.field.description')} error={fieldError(errors.description)} className="sm:col-span-2">
           {(c) => <textarea {...c} className={TEXTAREA_CLASS} value={description} onChange={(e) => setDescription(e.target.value)} />}
         </Field>
@@ -266,6 +305,7 @@ function AddAttachment({ recordId, onAdded }: { recordId: string; onAdded(): Pro
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [access, setAccess] = useState<AttachmentAccess>('public');
+  const [memberTypeIds, setMemberTypeIds] = useState<string[]>([]);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [problem, setProblem] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ phase: 'hashing' | 'uploading'; percent: number } | null>(null);
@@ -289,7 +329,7 @@ function AddAttachment({ recordId, onAdded }: { recordId: string; onAdded(): Pro
     if (kind === 'url' && !isHttpUrl(url.trim())) found.url = url.trim() === '' ? 'required' : 'invalid_url';
     setErrors(found);
     if (Object.keys(found).length > 0) return;
-    const common = { title, ...(description === '' ? {} : { description }), access };
+    const common = { title, ...(description === '' ? {} : { description }), access, ...(access === 'members' ? { memberTypeIds } : {}) };
     setBusy(true);
     try {
       let body: AttachmentCreateBody;
@@ -354,6 +394,7 @@ function AddAttachment({ recordId, onAdded }: { recordId: string; onAdded(): Pro
       <Field id={ids.access} label={t('catalog.attachments.field.access')} error={fieldError(errors.access)}>
         {(c) => <AccessSelect id={c.id} value={access} onChange={setAccess} invalid={c['aria-invalid'] === true} describedBy={c['aria-describedby']} />}
       </Field>
+      {access === 'members' && <MemberTypesPicker value={memberTypeIds} onChange={setMemberTypeIds} />}
       <Field id={ids.description} label={t('catalog.attachments.field.description')} error={fieldError(errors.description)} className="sm:col-span-2">
         {(c) => <textarea {...c} className={TEXTAREA_CLASS} disabled={busy} value={description} onChange={(e) => setDescription(e.target.value)} />}
       </Field>

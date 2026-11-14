@@ -16,7 +16,7 @@ import type { Transaction } from 'kysely';
  * station (`visit_station`, whose activation is audited) the station's id.
  */
 export interface Actor {
-  type: 'staff' | 'system' | 'cli' | 'anonymous' | 'visit_station';
+  type: 'staff' | 'system' | 'cli' | 'anonymous' | 'visit_station' | 'member';
   id: string | null;
   /** The client IP (P15), or null when there is no request. */
   ip: string | null;

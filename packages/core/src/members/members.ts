@@ -51,6 +51,8 @@ async function saveMemberCustom(tx: TxCtx, id: string, values: Record<string, un
   }
   await writeCustomValues(tx.trx, 'members', id, parsed.data, defs, { now: tx.now, actor: tx.actor.id });
 }
+// ---- Komunitas (member area) ----
+import { revokeMemberSessions } from './area/sessions.js';
 
 // Members: create, edit (suspend and reactivate are an edit of `status`), extend, archive, read, look up by number,
 // search, and the member's history.
@@ -305,6 +307,8 @@ export async function updateMember(tx: TxCtx, id: string, input: MemberPatchBody
   const rest = fields.filter((f) => f !== 'status' && f !== 'statusNote');
   if (rest.length > 0 || (events.length === 0 && fields.length > 0)) events.push({ type: o.eventType ?? 'updated', meta: { fields: events.length === 0 ? fields : rest } });
   await writeMemberEvents(tx, id, events);
+  // ---- Komunitas (member area): a new member number or a suspension ends the member's OPAC sessions ----
+  if (set.member_no_key !== undefined || (toStatus === 'suspended' && fromStatus !== 'suspended')) await revokeMemberSessions(trx, id);
   if ((o.mode ?? 'interactive') === 'interactive') await tx.audit({ action: 'members.member.update', entity: 'members', entityId: id, meta: { fields } });
   return { id, version: p.version + 1 };
 }
@@ -366,6 +370,8 @@ export async function archiveMember(tx: TxCtx, id: string, version: number): Pro
   if (Number(updated.numUpdatedRows) !== 1) throw memberStale();
   // The member's active holds are cancelled (a kept copy goes to the next in its queue).
   await closeMemberHolds(tx, id);
+  // ---- Komunitas (member area): an archived member's OPAC sessions end ----
+  await revokeMemberSessions(trx, id);
   await writeMemberEvents(tx, id, [{ type: 'archived' }]);
   await tx.audit({ action: 'members.member.archive', entity: 'members', entityId: id, meta: {} });
   return { id, version: version + 1 };
