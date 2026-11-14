@@ -6,7 +6,7 @@ import { z } from 'zod';
 import type { AccredSettings } from '../../settings/accreditation.js';
 import { reportFieldErrors } from '../runs/service.js';
 import type { ItemStockFacts, RecordStockFacts } from '../stock/index.js';
-import { liveAt } from '../stock/index.js';
+import { liveAt, titleGoneAt } from '../stock/index.js';
 import type { ReportCtx, ReportRow } from '../types.js';
 
 // What the collection reports share: the day a report reads the stock at, its cursors, its labels, and the rules of
@@ -171,7 +171,7 @@ export function inScope(i: ItemStockFacts, s: ItemScope): boolean {
  * without any copy counts (with no copies) only when the scope does not restrict copies.
  */
 export function stockCopies(r: RecordStockFacts, day: string, electronic: ReadonlySet<string>, s: ItemScope): ItemStockFacts[] | null {
-  if (r.archived) return null;
+  if (titleGoneAt(r, day)) return null;
   if (r.items.length === 0) {
     if (scopesItems(s)) return null;
     const counted = (r.materialTypeCode !== null && electronic.has(r.materialTypeCode)) || r.hasPublicFile;

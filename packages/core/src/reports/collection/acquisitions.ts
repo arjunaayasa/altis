@@ -1,7 +1,7 @@
 import { ACQ_SOURCES, ddcClassOf, type MessageKey } from '@altis/shared';
 import { z } from 'zod';
 import { reportColumn, reportIdField, reportParam, reportYearField } from '../params.js';
-import { firstAcq, type RecordStockFacts } from '../stock/index.js';
+import { acquisitionOf, firstAcq, type RecordStockFacts } from '../stock/index.js';
 import type { ReportColumn, ReportCtx, ReportRow, TableReport } from '../types.js';
 import { chunks, label, masterName, moneyCell, textParam, titleCell, vocabLabel } from './common.js';
 import { scanAggregate, scanList, type ListEntry } from './stock-agg.js';
@@ -11,9 +11,10 @@ import { scanAggregate, scanList, type ListEntry } from './stock-agg.js';
 // time a migration ran is never an acquisition date, so a copy without any of them is in the row "tanpa tanggal", never
 // in the year of the migration. Counted in titles, a title is in the year of its first acquisition (an undated copy
 // makes it undated; a title without copies, electronic or with a public file, by its creation); in copies, each copy in
-// its own year. Ordered copies are never acquisitions: a title with only ordered copies is in no row. Withdrawn and
-// lost copies were acquired and count in their year; archived records do not count. With `detailYear`, the copies
-// acquired in that year with where their date comes from.
+// its own year. Ordered copies are never acquisitions: a title with only ordered copies, or orders cancelled before
+// they arrived, is in no row, and a copy made here on order counts from the day it arrived (stock.ts). Withdrawn and
+// lost copies were acquired and count in their year, and so do archived (weeded) titles; a title merged into another
+// does not count. With `detailYear`, the copies acquired in that year with where their date comes from.
 //
 // Every answer needs the acquisition date of every copy, so the report always reads the stock scan: the matrix keeps
 // its counts per year in the cursor and answers its rows when the scan ends; the detail answers its copies as it finds
@@ -95,11 +96,14 @@ function addBatch(acc: AcqAcc, batch: readonly RecordStockFacts[], f: AcqFilters
     row[column]! += n;
   };
   for (const r of batch) {
-    if (r.archived) continue;
+    if (r.merged) continue;
     const column = classColumn(r);
     const considered = f.acqSource === null ? r.items : r.items.filter((i) => i.acqSource === f.acqSource);
     if (f.unit === 'items') {
-      for (const i of considered) if (i.status !== 'on_order') put(column, i.acqDate);
+      for (const i of considered) {
+        const acquired = acquisitionOf(i);
+        if (acquired !== null) put(column, acquired.date);
+      }
       continue;
     }
     if (r.items.length === 0) {
@@ -108,7 +112,7 @@ function addBatch(acc: AcqAcc, batch: readonly RecordStockFacts[], f: AcqFilters
       if (f.acqSource === null && counted) put(column, r.createdOn);
       continue;
     }
-    const acquired = considered.filter((i) => i.status !== 'on_order');
+    const acquired = considered.filter((i) => acquisitionOf(i) !== null);
     if (acquired.length === 0) continue;
     const first = firstAcq({ ...r, items: acquired });
     put(column, first === 'unknown' ? null : first);
@@ -138,11 +142,14 @@ function matrixRows(ctx: ReportCtx, acc: AcqAcc, f: AcqFilters): ReportRow[] {
 async function detailEntries(ctx: ReportCtx, batch: readonly RecordStockFacts[], f: AcqFilters, year: number): Promise<ListEntry[]> {
   const prefix = `${year}-`;
   const found = batch.flatMap((r) =>
-    r.archived
+    r.merged
       ? []
-      : r.items
-          .filter((i) => i.status !== 'on_order' && (f.acqSource === null || i.acqSource === f.acqSource) && i.acqDate !== null && i.acqDate.startsWith(prefix))
-          .map((i) => ({ r, i })),
+      : r.items.flatMap((i) => {
+          const acquired = acquisitionOf(i);
+          return acquired !== null && acquired.date !== null && acquired.date.startsWith(prefix) && (f.acqSource === null || i.acqSource === f.acqSource)
+            ? [{ r, i, acquired }]
+            : [];
+        }),
   );
   if (found.length === 0) return [];
   const shown = new Map<string, { barcode: string; title: string; collectionType: string; supplier: string | null }>();
@@ -157,7 +164,7 @@ async function detailEntries(ctx: ReportCtx, batch: readonly RecordStockFacts[],
       .execute();
     for (const x of rows) shown.set(x.id, { barcode: x.barcode_display, title: titleCell(x), collectionType: masterName(ctx, x), supplier: x.supplier });
   }
-  return found.flatMap(({ r, i }) => {
+  return found.flatMap(({ r, i, acquired }) => {
     const s = shown.get(i.itemId);
     if (s === undefined) return [];
     const row: ReportRow = [
@@ -165,8 +172,8 @@ async function detailEntries(ctx: ReportCtx, batch: readonly RecordStockFacts[],
       s.title,
       ddcClassOf(r.classification, r.callNumber).main,
       s.collectionType,
-      i.acqDate,
-      i.acqBasis === null ? null : label(ctx, `report.acq_basis.${i.acqBasis}` as MessageKey),
+      acquired.date,
+      acquired.basis === null ? null : label(ctx, `report.acq_basis.${acquired.basis}` as MessageKey),
       moneyCell(i.price),
       vocabLabel(ctx, 'acq_source', i.acqSource),
       s.supplier,

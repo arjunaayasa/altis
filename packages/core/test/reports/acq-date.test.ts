@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { acqDateOf, firstAcq, inStockAt, liveAt, lostAt, statusAt, type AcqInput, type ItemStockFacts, type RecordStockFacts } from '../../src/reports/stock/index.js';
+import { acqDateOf, acquisitionOf, firstAcq, inStockAt, liveAt, lostAt, statusAt, withdrawnAt, type AcqInput, type ItemStockFacts, type RecordStockFacts } from '../../src/reports/stock/index.js';
 
 // The acquisition date of a copy and the stock at a date. A copy's acquisition date is the first known of: its
 // receiving date, the date it was entered in the source system, its record's creation time when the copy was migrated
@@ -52,6 +52,8 @@ function record(o: Partial<RecordStockFacts> = {}): RecordStockFacts {
   return {
     recordId: 'rec-1',
     archived: false,
+    archivedOn: null,
+    merged: false,
     createdOn: '2023-05-01',
     materialTypeCode: 'BUKU',
     classification: null,
@@ -172,6 +174,75 @@ describe('liveAt: a copy in the stock at a date', () => {
     expect(liveAt(i, '2026-01-04')).toBe(true);
     expect(liveAt(i, '2026-01-05')).toBe(false);
   });
+
+  it('a copy weeded in the source system before its migration is withdrawn at every date before the run, as a lost one is lost', () => {
+    // Entered 2015-03-01, weeded in SLiMS, migrated on 2026-01-02 as withdrawn (archived at the migration's own time).
+    const weeded = item({ status: 'withdrawn', acqDate: '2015-03-01', acqBasis: 'input_on', archivedOn: '2026-01-02', statusTimeline: [{ on: '2026-01-02', to: 'withdrawn' }] });
+    expect(statusAt(weeded, '2023-12-31')).toBe('withdrawn');
+    expect(withdrawnAt(weeded, '2023-12-31')).toBe(true);
+    expect(liveAt(weeded, '2023-12-31')).toBe(false);
+    expect(liveAt(weeded, '2015-03-01')).toBe(false);
+    const lost = item({ status: 'lost', acqDate: '2015-03-01', acqBasis: 'input_on', statusTimeline: [{ on: '2026-01-02', to: 'lost' }] });
+    expect(liveAt(lost, '2023-12-31')).toBe(false);
+  });
+
+  it('an archive date earlier than the history says when the copy left; a copy without history leaves on its archive date', () => {
+    const i = item({ status: 'withdrawn', acqDate: '2019-08-01', archivedOn: '2025-02-01', statusTimeline: [{ on: '2026-01-02', to: 'withdrawn' }] });
+    expect(liveAt(i, '2023-12-31')).toBe(true);
+    expect(liveAt(i, '2025-02-01')).toBe(false);
+    const bare = item({ status: 'withdrawn', acqDate: '2019-08-01', archivedOn: '2025-02-01', statusTimeline: [] });
+    expect(liveAt(bare, '2025-01-31')).toBe(true);
+    expect(liveAt(bare, '2025-02-01')).toBe(false);
+  });
+
+  it('a copy withdrawn and brought back is out of the stock in between', () => {
+    const i = item({
+      acqDate: '2020-01-10',
+      statusTimeline: [
+        { on: '2020-01-10', to: 'available' },
+        { on: '2024-05-01', to: 'withdrawn' },
+        { on: '2024-09-01', to: 'processing' },
+      ],
+    });
+    expect(liveAt(i, '2024-04-30')).toBe(true);
+    expect(liveAt(i, '2024-06-30')).toBe(false);
+    expect(liveAt(i, '2024-09-01')).toBe(true);
+  });
+
+  it('an order cancelled straight from on order was never in the stock', () => {
+    const cancelled = item({
+      status: 'withdrawn',
+      acqDate: '2025-03-01',
+      acqBasis: 'item_created',
+      archivedOn: '2025-05-01',
+      statusTimeline: [
+        { on: '2025-03-01', to: 'on_order' },
+        { on: '2025-05-01', to: 'withdrawn' },
+      ],
+    });
+    expect(acquisitionOf(cancelled)).toBeNull();
+    expect(liveAt(cancelled, '2025-04-01')).toBe(false);
+    expect(liveAt(cancelled, '2025-06-01')).toBe(false);
+  });
+
+  it('a copy ordered here and received later without a receiving date is in the stock from the day it arrived', () => {
+    const late = item({
+      status: 'available',
+      acqDate: '2024-12-10',
+      acqBasis: 'item_created',
+      statusTimeline: [
+        { on: '2024-12-10', to: 'on_order' },
+        { on: '2025-01-20', to: 'available' },
+      ],
+    });
+    expect(acquisitionOf(late)).toEqual({ date: '2025-01-20', basis: 'received' });
+    expect(liveAt(late, '2024-12-31')).toBe(false);
+    expect(liveAt(late, '2025-01-20')).toBe(true);
+    // A receiving date entered for it stays its date.
+    const dated = item({ ...late, acqDate: '2025-01-15', acqBasis: 'received' });
+    expect(acquisitionOf(dated)).toEqual({ date: '2025-01-15', basis: 'received' });
+    expect(liveAt(dated, '2025-01-17')).toBe(false);
+  });
 });
 
 describe('inStockAt: a title in the stock at a date', () => {
@@ -183,6 +254,23 @@ describe('inStockAt: a title in the stock at a date', () => {
 
   it('an archived title never', () => {
     expect(inStockAt(record({ archived: true, items: [item()] }), '2030-01-01', EBOOK)).toBe(false);
+  });
+
+  it('a title weeded and archived later is in the stock at the dates before its archive', () => {
+    const copy = item({ status: 'withdrawn', acqDate: '2018-05-01', archivedOn: '2025-03-01', statusTimeline: [{ on: '2018-05-01', to: 'available' }, { on: '2025-03-01', to: 'withdrawn' }] });
+    const r = record({ archived: true, archivedOn: '2025-03-02', items: [copy] });
+    expect(inStockAt(r, '2023-12-31', EBOOK)).toBe(true);
+    expect(inStockAt(r, '2025-03-01', EBOOK)).toBe(false);
+    expect(inStockAt(r, '2030-01-01', EBOOK)).toBe(false);
+    // An electronic title without copies, archived on 2025-06-01.
+    const ebook = record({ materialTypeCode: 'EBOOK', createdOn: '2022-01-01', archived: true, archivedOn: '2025-06-01' });
+    expect(inStockAt(ebook, '2025-05-31', EBOOK)).toBe(true);
+    expect(inStockAt(ebook, '2025-06-01', EBOOK)).toBe(false);
+  });
+
+  it('a title merged into another never counts, not even before the merge', () => {
+    const r = record({ materialTypeCode: 'EBOOK', createdOn: '2022-01-01', archived: true, archivedOn: '2025-06-01', merged: true });
+    expect(inStockAt(r, '2023-12-31', EBOOK)).toBe(false);
   });
 
   it('a title whose only copy is ordered never, even though the record has items', () => {
@@ -229,5 +317,34 @@ describe('firstAcq: the first acquisition of a title', () => {
   it('a title without copies: its creation date, or unknown', () => {
     expect(firstAcq(record({ createdOn: '2024-11-20' }))).toBe('2024-11-20');
     expect(firstAcq(record({ createdOn: null }))).toBe('unknown');
+  });
+
+  it('an order cancelled before it arrived is no acquisition', () => {
+    const cancelled = item({
+      itemId: 'item-1',
+      status: 'withdrawn',
+      acqDate: '2025-03-01',
+      acqBasis: 'item_created',
+      archivedOn: '2025-05-01',
+      statusTimeline: [
+        { on: '2025-03-01', to: 'on_order' },
+        { on: '2025-05-01', to: 'withdrawn' },
+      ],
+    });
+    expect(firstAcq(record({ items: [cancelled] }))).toBe('unknown');
+    expect(firstAcq(record({ items: [cancelled, item({ itemId: 'item-2', acqDate: '2025-08-01' })] }))).toBe('2025-08-01');
+  });
+
+  it('a copy ordered here is acquired the day it arrived, not the day it was ordered', () => {
+    const late = item({
+      status: 'available',
+      acqDate: '2024-12-10',
+      acqBasis: 'item_created',
+      statusTimeline: [
+        { on: '2024-12-10', to: 'on_order' },
+        { on: '2025-01-20', to: 'available' },
+      ],
+    });
+    expect(firstAcq(record({ items: [late] }))).toBe('2025-01-20');
   });
 });

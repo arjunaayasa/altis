@@ -347,6 +347,134 @@ describe.skipIf(!ctx.available)(`accreditation collection provider [${engineLabe
       }
     });
 
+    /** Replaces the history of copy `itemId` by `entries` (local dates in the fixture's time zone). */
+    async function history(itemId: string, entries: readonly { on: string; type: 'created' | 'migrated' | 'status' | 'archived'; to: string }[]): Promise<void> {
+      await h.db.deleteFrom('item_events').where('item_id', '=', itemId).execute();
+      for (const e of entries) {
+        await h.db
+          .insertInto('item_events')
+          .values({
+            id: newId(stockAt(e.on)),
+            item_id: itemId,
+            at: stockAt(e.on),
+            type: e.type,
+            from_status: null,
+            to_status: e.to,
+            from_location_id: null,
+            to_location_id: null,
+            actor_type: 'staff',
+            actor_id: null,
+            meta: JSON.stringify({ fields: ['status'] }),
+          })
+          .execute();
+      }
+    }
+
+    async function removeTitles(titles: readonly { recordId: string; itemIds: string[] }[]): Promise<void> {
+      for (const t of titles) {
+        await h.db.deleteFrom('item_events').where('item_id', 'in', t.itemIds).execute();
+        await h.db.deleteFrom('items').where('id', 'in', t.itemIds).execute();
+        await h.db.deleteFrom('records').where('id', '=', t.recordId).execute();
+      }
+    }
+
+    async function k6Values(): Promise<{ start: number | null; added: AccredMetricValue }> {
+      const values = (await run(await metricCtx(periodId), ['collection.titles_window_start', 'collection.title_additions_3y_pct'])).values;
+      return { start: values.get('collection.titles_window_start')!.value, added: values.get('collection.title_additions_3y_pct')! };
+    }
+
+    it('a title weeded in 2025 and archived after its copy still counts in the stock of 2023-12-31', async () => {
+      const weeded = await addTitle(h.db, branchId, {
+        title: 'Kimia Kurikulum Lama',
+        classification: '540',
+        createdAt: stockAt('2018-05-02'),
+        archivedAt: stockAt('2025-03-02'),
+        items: [{ barcode: 'WED-0001', status: 'withdrawn', receivedDate: '2018-05-01', createdAt: stockAt('2018-05-02'), archivedAt: stockAt('2025-03-01') }],
+      });
+      try {
+        await history(weeded.itemIds[0]!, [
+          { on: '2018-05-02', type: 'created', to: 'available' },
+          { on: '2025-03-01', type: 'archived', to: 'withdrawn' },
+        ]);
+        const { start, added } = await k6Values();
+        expect(start).toBe(9);
+        expect([added.numerator, added.denominator, added.table]).toEqual([
+          4,
+          9,
+          [
+            ['2023-12-31', 9],
+            [2024, 2],
+            [2025, 2],
+            [2026, 0],
+          ],
+        ]);
+        // Not in the stock at D, after its archive.
+        expect((await value(periodId, 'collection.titles')).value).toBe(9);
+      } finally {
+        await removeTitles([weeded]);
+      }
+    });
+
+    it('a copy weeded in SLiMS before the migration is not in the stock of 2023-12-31', async () => {
+      const migratedAt = stockAt('2025-09-01', '09:00');
+      const weeded = await addTitle(h.db, branchId, {
+        title: 'Sejarah Lama',
+        classification: '959',
+        createdAt: stockAt('2015-03-02'),
+        items: [{ barcode: 'WED-0002', status: 'withdrawn', inputOn: '2015-03-01', createdAt: migratedAt, archivedAt: migratedAt, event: 'migrated' }],
+      });
+      try {
+        const { start, added } = await k6Values();
+        expect(start).toBe(8);
+        expect(added.table).toEqual([
+          ['2023-12-31', 8],
+          [2024, 2],
+          [2025, 2],
+          [2026, 0],
+        ]);
+      } finally {
+        await removeTitles([weeded]);
+      }
+    });
+
+    it('an order cancelled before it arrived is no addition; a copy ordered in 2024 and received in 2025 is an addition of 2025', async () => {
+      const cancelled = await addTitle(h.db, branchId, {
+        title: 'Fisika Kelas XII',
+        classification: '530',
+        createdAt: stockAt('2025-03-01'),
+        items: [{ barcode: 'ORD-0002', status: 'withdrawn', createdAt: stockAt('2025-03-01'), archivedAt: stockAt('2025-05-01') }],
+      });
+      const late = await addTitle(h.db, branchId, {
+        title: 'Geografi Kelas X',
+        classification: '910',
+        createdAt: stockAt('2024-12-10'),
+        items: [{ barcode: 'ORD-0003', status: 'available', createdAt: stockAt('2024-12-10') }],
+      });
+      try {
+        await history(cancelled.itemIds[0]!, [
+          { on: '2025-03-01', type: 'created', to: 'on_order' },
+          { on: '2025-05-01', type: 'archived', to: 'withdrawn' },
+        ]);
+        await history(late.itemIds[0]!, [
+          { on: '2024-12-10', type: 'created', to: 'on_order' },
+          { on: '2025-01-20', type: 'status', to: 'available' },
+        ]);
+        const { start, added } = await k6Values();
+        expect(start).toBe(8);
+        expect([added.numerator, added.table]).toEqual([
+          5,
+          [
+            ['2023-12-31', 8],
+            [2024, 2],
+            [2025, 3],
+            [2026, 0],
+          ],
+        ]);
+      } finally {
+        await removeTitles([cancelled, late]);
+      }
+    });
+
     it('the printed titles by DDC class: the e-book is left out', async () => {
       const v = await value(periodId, 'collection.ddc_printed_recap');
       expect(v.value).toBe(8);

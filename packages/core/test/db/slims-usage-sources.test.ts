@@ -360,6 +360,20 @@ describe('openUsageDbSource', () => {
     for (const { sql, params } of server.log) expect(leaks(Buffer.from(JSON.stringify([sql, params]))), sql).toEqual([]);
   });
 
+  it('hashes every row under the key it was opened with, though the caller wipes its key as soon as the source is open', async () => {
+    const server = fakeForeignMysql(fixtureMysqlTables(data));
+    const key = Uint8Array.from(KEY);
+    const source = await openUsageDbSource(CFG, { hashKey: key, connect: server.connect });
+    key.fill(0);
+    const { rows } = await readAll(source, 'member');
+    await source.close();
+    const ids = (data.rows.get('member') ?? []).map((r) => String(r['member_id'] as string | number).trim()).filter((id) => id !== '');
+    expect(rows.length).toBe(ids.length);
+    expect(new Set(rows.map((r) => r['member_id']))).toEqual(new Set(ids.map((id) => memberHash(KEY, id))));
+    const underWipedKey = new Set(ids.map((id) => memberHash(new Uint8Array(32), id)));
+    expect(rows.filter((r) => underWipedKey.has(r['member_id'] as string))).toEqual([]);
+  });
+
   it('pages member by its position, never by its id: the cursor is a number and holds no member id', async () => {
     const server = fakeForeignMysql(fixtureMysqlTables(data));
     const source = await openUsageDbSource(CFG, { hashKey: KEY, connect: server.connect });
