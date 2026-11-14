@@ -21,6 +21,7 @@ const PREFIXES: Readonly<Record<keyof typeof KOMUNITAS_AREAS_ID, readonly string
   settings: ['accreditation.settings.'],
   members: ['members.'],
   circulation: ['circulation.'],
+  circCore: ['circulation.', 'members.clearance.'],
   placeholder: ['komunitas.placeholder.'],
 };
 
@@ -28,7 +29,7 @@ describe('the reports and accreditation admin copy', () => {
   const areas = Object.keys(KOMUNITAS_AREAS_ID) as (keyof typeof KOMUNITAS_AREAS_ID)[];
 
   it('is one file per area, in a fixed order, plus the placeholder texts', () => {
-    expect(areas).toEqual(['reports', 'accreditation', 'workspace', 'registers', 'usage', 'print', 'settings', 'members', 'circulation', 'placeholder']);
+    expect(areas).toEqual(['reports', 'accreditation', 'workspace', 'registers', 'usage', 'print', 'settings', 'members', 'circulation', 'circCore', 'placeholder']);
     expect(Object.keys(KOMUNITAS_AREAS_EN)).toEqual(areas);
   });
 

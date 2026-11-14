@@ -42,7 +42,7 @@ describe('item statuses and transitions (§2.5)', () => {
     expect([...ITEM_STATUSES]).toEqual(['on_order', 'processing', 'available', 'not_for_loan', 'repair', 'missing', 'lost', 'withdrawn']);
   });
 
-  it('ITEM_TRANSITIONS is the §2.5 table, plus available → lost (an item its borrower declares lost)', () => {
+  it('ITEM_TRANSITIONS is the item status table, plus available → lost (an item its borrower declares lost)', () => {
     expect(ITEM_TRANSITIONS).toEqual({
       on_order: ['processing', 'available', 'withdrawn'],
       processing: ['available', 'not_for_loan', 'withdrawn'],

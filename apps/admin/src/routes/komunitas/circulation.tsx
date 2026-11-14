@@ -40,5 +40,16 @@ export function circulationRoutes(shell: typeof shellRoute) {
       path: 'layanan/aturan',
       component: lazyScreen(() => import('@/screens/circulation/policies'), 'PoliciesScreen'),
     }),
+    // ---- Komunitas (circulation core): Baca di Tempat (the desk in read-in-place mode) and the calendar ----
+    createRoute({
+      getParentRoute: () => shell,
+      path: 'layanan/baca',
+      component: lazyScreen(() => import('@/screens/circulation/desk'), 'InLibraryScreen'),
+    }),
+    createRoute({
+      getParentRoute: () => shell,
+      path: 'layanan/kalender',
+      component: lazyScreen(() => import('@/screens/circulation/calendar'), 'CalendarScreen'),
+    }),
   ];
 }

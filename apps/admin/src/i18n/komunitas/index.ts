@@ -4,6 +4,7 @@ import { ACCREDITATION_REGISTERS_EN, ACCREDITATION_REGISTERS_ID } from '../accre
 import { ACCREDITATION_USAGE_EN, ACCREDITATION_USAGE_ID } from '../accreditation/usage';
 import { ACCREDITATION_WORKSPACE_EN, ACCREDITATION_WORKSPACE_ID } from '../accreditation/workspace';
 import { REPORTS_EN, REPORTS_ID } from '../reports';
+import { CIRC_CORE_EN, CIRC_CORE_ID } from './circ-core';
 import { CIRCULATION_EN, CIRCULATION_ID } from './circulation';
 import { MEMBERS_EN, MEMBERS_ID } from './members';
 import { KOMUNITAS_SETTINGS_EN, KOMUNITAS_SETTINGS_ID } from './settings';
@@ -65,6 +66,8 @@ export const KOMUNITAS_AREAS_ID = Object.freeze({
   settings: KOMUNITAS_SETTINGS_ID,
   members: MEMBERS_ID,
   circulation: CIRCULATION_ID,
+  // ---- Komunitas (circulation core) ----
+  circCore: CIRC_CORE_ID,
   placeholder: PLACEHOLDER_ID,
 });
 
@@ -79,6 +82,8 @@ export const KOMUNITAS_AREAS_EN: { readonly [A in keyof typeof KOMUNITAS_AREAS_I
   settings: KOMUNITAS_SETTINGS_EN,
   members: MEMBERS_EN,
   circulation: CIRCULATION_EN,
+  // ---- Komunitas (circulation core) ----
+  circCore: CIRC_CORE_EN,
   placeholder: PLACEHOLDER_EN,
 });
 
@@ -93,6 +98,7 @@ export const KOMUNITAS_ID = {
   ...KOMUNITAS_SETTINGS_ID,
   ...MEMBERS_ID,
   ...CIRCULATION_ID,
+  ...CIRC_CORE_ID,
   ...PLACEHOLDER_ID,
 } as const;
 
@@ -107,5 +113,6 @@ export const KOMUNITAS_EN: Record<keyof typeof KOMUNITAS_ID, string> = {
   ...KOMUNITAS_SETTINGS_EN,
   ...MEMBERS_EN,
   ...CIRCULATION_EN,
+  ...CIRC_CORE_EN,
   ...PLACEHOLDER_EN,
 };

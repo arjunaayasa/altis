@@ -71,11 +71,17 @@ export const NAV: readonly NavItem[] = Object.freeze([
   // overdue list and the loan rules are library-wide. Anggota: the member list, the member types and the CSV import.
   { to: '/admin/layanan', labelKey: 'nav.circulation.desk', permission: 'circulation.desk.use', anyBranch: true, group: 'circulation' },
   { to: '/admin/layanan/kembali', labelKey: 'nav.circulation.quick_return', permission: 'circulation.desk.use', anyBranch: true, group: 'circulation' },
+  // ---- Komunitas (circulation core): read in place at a desk ----
+  { to: '/admin/layanan/baca', labelKey: 'nav.circulation.in_library', permission: 'circulation.desk.use', anyBranch: true, group: 'circulation' },
   { to: '/admin/layanan/terlambat', labelKey: 'nav.circulation.overdue', permission: 'circulation.records.read', group: 'circulation' },
   { to: '/admin/layanan/aturan', labelKey: 'nav.circulation.policies', permission: 'circulation.policies.manage', group: 'circulation' },
+  // ---- Komunitas (circulation core): the library calendar (read at the desk too; changed with the rules) ----
+  { to: '/admin/layanan/kalender', labelKey: 'nav.circulation.calendar', permission: 'circulation.policies.manage', group: 'circulation' },
   { to: '/admin/anggota', labelKey: 'nav.members.list', permission: 'members.records.read', group: 'members' },
   { to: '/admin/anggota/tipe', labelKey: 'nav.members.types', permission: 'members.types.manage', group: 'members' },
   { to: '/admin/anggota/impor', labelKey: 'nav.members.import', permission: 'members.import.run', group: 'members' },
+  // ---- Komunitas (circulation core): numbered clearance letters ----
+  { to: '/admin/anggota/bebas-pustaka', labelKey: 'nav.members.clearances', permission: 'members.records.manage', group: 'members' },
   // The edition's own items (ruling R2, edition/index.ts), after the community ones: none in the community edition.
   ...editionNav,
 ] satisfies NavItem[]);

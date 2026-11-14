@@ -63,19 +63,25 @@ const REPORTS_SECTIONS: [string, string][] = [
   ['/admin/accreditation', 'accreditation.workspace.read'],
 ];
 
-/** Layanan: the desk and quick return (granted per branch), the overdue list and the loan rules. */
+/**
+ * Layanan: the desk, quick return and read in place (granted per branch), the overdue list, the loan rules and the
+ * calendar.
+ */
 const CIRCULATION_SECTIONS: [string, string][] = [
   ['/admin/layanan', 'circulation.desk.use'],
   ['/admin/layanan/kembali', 'circulation.desk.use'],
+  ['/admin/layanan/baca', 'circulation.desk.use'],
   ['/admin/layanan/terlambat', 'circulation.records.read'],
   ['/admin/layanan/aturan', 'circulation.policies.manage'],
+  ['/admin/layanan/kalender', 'circulation.policies.manage'],
 ];
 
-/** Anggota: the member list, the member types and the CSV import. */
+/** Anggota: the member list, the member types, the CSV import and the clearance letters. */
 const MEMBERS_SECTIONS: [string, string][] = [
   ['/admin/anggota', 'members.records.read'],
   ['/admin/anggota/tipe', 'members.types.manage'],
   ['/admin/anggota/impor', 'members.import.run'],
+  ['/admin/anggota/bebas-pustaka', 'members.records.manage'],
 ];
 
 const sectionsOf = (m: FullMe) => visibleNavSections(m).map((s) => [s.group, paths(s.items)]);
@@ -154,10 +160,10 @@ describe('visibleNav', () => {
     ]);
   });
 
-  it('the desk permission held at one branch only shows Meja Layanan and Kembali Cepat; a global grant elsewhere does not', () => {
+  it('the desk permission held at one branch only shows Meja Layanan, Kembali Cepat and Baca di Tempat; a global grant elsewhere does not', () => {
     expect(sectionsOf(me({ permissions: [], branchPermissions: { B1: ['circulation.desk.use'] } }))).toEqual([
       [null, ['/admin']],
-      ['circulation', ['/admin/layanan', '/admin/layanan/kembali']],
+      ['circulation', ['/admin/layanan', '/admin/layanan/kembali', '/admin/layanan/baca']],
       ['system', ['/admin/about']],
     ]);
     // Only the desk is granted per branch: another permission held at a branch opens no menu item.

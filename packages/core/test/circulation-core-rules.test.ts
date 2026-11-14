@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { closedBy, closedDatesIn, computeDueDate, countOpenDays, ruleCloses, type ClosedDayRule } from '../src/circulation/calendars.js';
+import { buildClearancePdf } from '../src/circulation/clearances.js';
 import { pickPolicy, rankPolicies, type PolicyDimensions } from '../src/circulation/policies.js';
 
 // The pure rules of the circulation core: which loan rule wins (a truth table over every pair of dimension patterns,
@@ -111,5 +112,20 @@ describe('the library calendar', () => {
     expect(countOpenDays(closed, '2026-11-13', '2026-11-20')).toBe(6); // Sunday 15 November is not counted
     expect(countOpenDays(closed, '2026-11-13', '2026-11-13')).toBe(0);
     expect(countOpenDays(closed, '2026-11-13', '2026-11-10')).toBe(0);
+  });
+});
+
+describe('the clearance letter PDF', () => {
+  const letter = { id: 'L1', number: 'BP/2026/0007', issuedOn: '2026-06-15', purpose: 'graduation' as const, memberNo: 'A001', name: 'Budi Santoso', className: '9A', institution: null, voided: false };
+  const profile = { paper: 'A4' as const, city: 'Bandung', signerTitle: 'Kepala Perpustakaan', signerName: 'Dra. Contoh', signerId: 'NIP. 1', bodyText: '' };
+  const refused = [{ memberId: 'M2', memberNo: 'A002', name: 'Citra', className: '9A', refusals: ['open_loans' as const] }];
+
+  it('one page per letter on a sheet or a receipt roll, then a page of the members refused', () => {
+    for (const paper of ['A4', 'A5', '58', '80'] as const) {
+      const pdf = buildClearancePdf({ letters: [letter, { ...letter, id: 'L2', number: 'BP/2026/0008' }], refused, paper, profile, library: { name: 'Perpustakaan SMA Contoh', address: 'Jl. Contoh 1' }, locale: 'id' });
+      const text = Buffer.from(pdf).toString('latin1');
+      expect(text.startsWith('%PDF-'), paper).toBe(true);
+      expect(text.match(/\/Type\s*\/Page\b/g)?.length, paper).toBeGreaterThanOrEqual(3);
+    }
   });
 });
