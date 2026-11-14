@@ -5,12 +5,14 @@ import path from 'node:path';
 import { PHASE1_MIGRATIONS, runMigrations, withTx, type TableName } from '@altis/db';
 import { DomainError, newId } from '@altis/shared';
 import type { MigrationSummary } from '@altis/shared/api/catalog/migration';
+import type { MemberBody } from '@altis/shared/api/members';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
 import { tableChecksumFromDb } from '../../src/backup/canonical.js';
 import { legacyTarget } from '../../src/catalog/data/legacy-map.js';
 import { updateItem } from '../../src/catalog/items/service.js';
 import type { CatalogJobDeps } from '../../src/catalog/jobs-deps.js';
+import { lendItem, returnItem } from '../../src/circulation/desk.js';
 import { updateRecord } from '../../src/catalog/records/service.js';
 import { txCtx, type Actor, type CoreLogger } from '../../src/context.js';
 import type { KeyringEntry } from '../../src/crypto/secret-box.js';
@@ -20,6 +22,7 @@ import { createJobRegistry } from '../../src/jobs/registry.js';
 import { runSlice } from '../../src/jobs/slice.js';
 import { __setSlimsSourceFactory, __setSlimsStages } from '../../src/migration/slims/factory.js';
 import { startSlimsMigration, type SlimsStartInput } from '../../src/migration/slims/job.js';
+import { createMember } from '../../src/members/members.js';
 import { slimsJobs } from '../../src/migration/slims/jobs.js';
 import { writeSettings } from '../../src/settings/service.js';
 import { wipeCatalog } from '../support/search-corpus.js';
@@ -38,7 +41,9 @@ import { mutateCatalogAfterFirstRun, type CatalogMutationExpected } from '../sup
 //   dry run writes no row and counts the 10 changes; the sync follows SLiMS for the rows no one edited in ALTIS (the
 //   status through the item lifecycle, with history rows `migrated {via: 'sync'}`), archives the copies and the title
 //   whose source rows are gone, keeps the title that still has a live copy, leaves the two edited rows as they are with
-//   `edited_in_altis` naming the differing fields, and reconciles with no difference.
+//   `edited_in_altis` naming the differing fields, and reconciles with no difference;
+// - a copy out on loan keeps its status and stays live while SLiMS weeds or deletes it, and the first re-sync after its
+//   return follows SLiMS.
 
 const ctx = testDbContext();
 const keyring: KeyringEntry[] = [{ kid: 'k1', key: randomBytes(32).toString('base64url'), active: true }];
@@ -58,6 +63,18 @@ function withEntryDates(data: FixtureData): FixtureData {
     (data.rows.get('item') ?? []).map((r) => (Object.hasOwn(ENTRY_DATES, Number(r['item_id'])) ? { ...r, input_date: ENTRY_DATES[Number(r['item_id'])]! } : r)),
   );
   return { ...data, rows };
+}
+
+/** The changed source changed once more: title 101 renamed with a new ISBN, copy 34 (in repair) declared lost. */
+function later(data: FixtureData): FixtureData {
+  const m = mutateCatalogAfterFirstRun(withEntryDates(data)).data;
+  const rows = new Map(m.rows);
+  rows.set(
+    'biblio',
+    (m.rows.get('biblio') ?? []).map((r) => (r['biblio_id'] === 101 ? { ...r, title: 'Sejarah Desa Pesisir: edisi kedua', isbn_issn: '978-602-03-3345-1' } : r)),
+  );
+  rows.set('item', (m.rows.get('item') ?? []).map((r) => (r['item_id'] === 34 ? { ...r, item_status_id: 'HL' } : r)));
+  return { ...m, rows };
 }
 
 /** Every table a sync dry run must leave as it is. */
@@ -126,18 +143,7 @@ describe.skipIf(!ctx.available)(`SLiMS catalogue re-sync [${engineLabel()}]`, ()
       },
     }).dump;
     mutation = expected!;
-    laterDump = generateSlimsFixture(SLIMS_FIXTURE_SEED, {
-      transform: (data) => {
-        const m = mutateCatalogAfterFirstRun(withEntryDates(data)).data;
-        const rows = new Map(m.rows);
-        rows.set(
-          'biblio',
-          (m.rows.get('biblio') ?? []).map((r) => (r['biblio_id'] === 101 ? { ...r, title: 'Sejarah Desa Pesisir: edisi kedua', isbn_issn: '978-602-03-3345-1' } : r)),
-        );
-        rows.set('item', (m.rows.get('item') ?? []).map((r) => (r['item_id'] === 34 ? { ...r, item_status_id: 'HL' } : r)));
-        return { ...m, rows };
-      },
-    }).dump;
+    laterDump = generateSlimsFixture(SLIMS_FIXTURE_SEED, { transform: later }).dump;
     __setSlimsSourceFactory(null);
     __setSlimsStages(null);
   }, 120_000);
@@ -155,6 +161,7 @@ describe.skipIf(!ctx.available)(`SLiMS catalogue re-sync [${engineLabel()}]`, ()
     await h.db.deleteFrom('page_translations').execute();
     await h.db.deleteFrom('pages').execute();
     await wipeCatalog(h);
+    for (const table of ['loans', 'member_events', 'members'] as const) await h.db.deleteFrom(table).execute();
     for (const table of ['migration_map', 'migration_archive', 'catalog_runs', 'suppliers', 'jobs'] as const) await h.db.deleteFrom(table).execute();
     for (const table of ['material_types', 'languages', 'collection_types'] as const) await h.db.deleteFrom(table).where('id', 'not in', seeds[table]).execute();
     await h.db.deleteFrom('settings').where('key', 'in', ['catalog.sru.servers', 'catalog.barcode.patterns']).execute();
@@ -502,5 +509,70 @@ describe.skipIf(!ctx.available)(`SLiMS catalogue re-sync [${engineLabel()}]`, ()
     expect(sync.rows.filter((r) => r[2] === 'status_guard').map((r) => `${r[0]}:${r[1]}:${r[3]}`)).toEqual(['item:34:repair -> lost']);
     const now = await createdAts();
     for (const [id, at] of Object.entries(created)) expect([id, now[id]]).toEqual([id, at]);
+  }, 600_000);
+  it('a copy out on loan keeps its status and stays live while SLiMS weeds or deletes it; the first re-sync after its return follows SLiMS', async () => {
+    // The catalogue as the test above left it. Two copies no one edited, available and live, are lent at the desk.
+    const free: number[] = [];
+    for (let id = 1; free.length < 2 && id <= 60; id += 1) {
+      const it = await item(id);
+      if (it.status === 'available' && it.updated_by === null && it.archived_at === null) free.push(id);
+    }
+    const [gone, weeded] = free as [number, number];
+    const siswa = (await h.db.selectFrom('member_types').select('id').where('code_key', '=', 'SISWA').executeTakeFirstOrThrow()).id;
+    const body = { memberNo: 'SINKRON-1', memberTypeId: siswa, name: 'Peminjam Sinkron' } as MemberBody;
+    const reader = await withTx(h, (trx) => createMember(txCtx(trx, NOW, staff), body));
+    const barcodes = new Map<number, string>();
+    for (const id of free) barcodes.set(id, (await item(id)).barcode_key);
+    const due = new Map<number, string>();
+    for (const id of free) {
+      const loan = await withTx(h, (trx) => lendItem(txCtx(trx, NOW, staff), { branchId, memberId: reader.id, barcode: barcodes.get(id)! }));
+      due.set(id, loan.dueOn);
+    }
+    const eventsBefore = { gone: (await events(gone)).length, weeded: (await events(weeded)).length };
+
+    // SLiMS deletes one copy and weeds the other.
+    const changed = generateSlimsFixture(SLIMS_FIXTURE_SEED, {
+      transform: (data) => {
+        const m = later(data);
+        const rows = new Map(m.rows);
+        rows.set(
+          'item',
+          (m.rows.get('item') ?? []).flatMap((r) => (r['item_id'] === gone ? [] : r['item_id'] === weeded ? [{ ...r, item_status_id: 'W' }] : [r])),
+        );
+        return { ...m, rows };
+      },
+    }).dump;
+    const report = (e: Ended, code: string) => e.rows.filter((r) => r[2] === code).map((r) => `${r[0]}:${r[1]}:${r[3]}`);
+
+    // The dry run reports both copies kept, and counts no change: the sync would write nothing for them.
+    const dry = await migrate(changed, { dryRun: true, sync: true });
+    expect(report(dry, 'source_missing_on_loan')).toEqual([`item:${gone}:due_on=${due.get(gone)!}`]);
+    expect(report(dry, 'status_on_loan')).toEqual([`item:${weeded}:available -> withdrawn`]);
+    expect(dry.summary.catalogChanges).toBe(0);
+
+    const sync = await migrate(changed, { sync: true });
+    expectReconciled(sync.summary);
+    expect(report(sync, 'source_missing_on_loan')).toEqual([`item:${gone}:due_on=${due.get(gone)!}`]);
+    expect(report(sync, 'status_on_loan')).toEqual([`item:${weeded}:available -> withdrawn`]);
+    expect(report(sync, 'source_missing')).toEqual([]);
+    for (const id of free) {
+      const it = await item(id);
+      expect([id, it.status, it.archived_at]).toEqual([id, 'available', null]);
+    }
+    expect([(await events(gone)).length, (await events(weeded)).length]).toEqual([eventsBefore.gone, eventsBefore.weeded]);
+    const open = await h.db.selectFrom('loans').select('open_item_id').where('member_id', '=', reader.id).execute();
+    expect(open.map((r) => r.open_item_id).sort()).toEqual([await itemOf(gone), await itemOf(weeded)].sort());
+
+    // Both copies come back at the desk; the next re-sync follows SLiMS.
+    for (const id of free) await withTx(h, (trx) => returnItem(txCtx(trx, NOW, staff), { branchId, barcode: barcodes.get(id)! }));
+    const after = await migrate(changed, { sync: true });
+    expectReconciled(after.summary);
+    expect(report(after, 'source_missing')).toEqual([`item:${gone}:withdrawn`]);
+    expect(report(after, 'source_missing_on_loan')).toEqual([]);
+    expect(report(after, 'status_on_loan')).toEqual([]);
+    for (const id of free) {
+      const it = await item(id);
+      expect([id, it.status, it.archived_at !== null]).toEqual([id, 'withdrawn', true]);
+    }
   }, 600_000);
 });
