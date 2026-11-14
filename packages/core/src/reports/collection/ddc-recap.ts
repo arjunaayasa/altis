@@ -41,6 +41,9 @@ import { scanAggregate } from './stock-agg.js';
 //
 // Today's recap groups the current rows by classification and call number in SQL and folds the groups into classes;
 // another day's recap reads the stock scan and carries its counts per class in the cursor. Both end in the same rows.
+// MySQL and MariaDB compare those text columns without case or accents, so one SQL group there may hold several
+// spellings of a class number outside DDC (`Ref`, `REF`, `Réf`) and keep any one of them; a class number outside DDC
+// is therefore counted under one folded key (nonDdcKey), the same on every engine and in both forms.
 // So that the cursor stays small, at most NON_TOKEN_ROWS_MAX class numbers outside DDC get a row of their own (the
 // first ones in order); the others share one row, "Nomor kelas lain".
 
@@ -84,10 +87,26 @@ const DdcAccSchema: z.ZodType<DdcAcc> = z.strictObject({
 
 const emptyAcc = (): DdcAcc => ({ t: [0, 0], g: [], a: {}, o: {} });
 
+/** The longest folded key kept: the width of a classification. */
+const NON_KEY_MAX = 64;
+
+/**
+ * The key a class number outside DDC is counted and printed under: compatibility forms decomposed, accents and
+ * invisible format characters dropped, upper case. Every spelling a case- and accent-blind comparison puts in one
+ * group gets one key, so the rows do not depend on which spelling the database kept. A fold that would read as a DDC
+ * class, leave nothing or grow past the width of a classification keeps the token as it is.
+ */
+export function nonDdcKey(token: string): string {
+  const folded = token.normalize('NFKD').replace(/[\p{M}\p{Cf}]/gu, '').toUpperCase().normalize('NFC');
+  if (folded === '' || folded === token || folded.length > NON_KEY_MAX) return token;
+  const c = ddcClassOf(folded, null);
+  return c.main === 'NON' && c.token === folded ? folded : token;
+}
+
 /** The atom a class is counted under. */
 function atomOf(c: DdcClass, divisions: boolean): string {
   if (c.main === '2X') return '2X';
-  if (c.main === 'NON') return `NON:${c.token}`;
+  if (c.main === 'NON') return `NON:${nonDdcKey(c.token)}`;
   return divisions && c.division !== null ? ddcDivisionKey(c.division) : c.main;
 }
 
