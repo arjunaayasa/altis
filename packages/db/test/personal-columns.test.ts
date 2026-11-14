@@ -255,7 +255,7 @@ describe('PERSONAL_COLUMNS', () => {
       loans: [{ column: 'override_note', category: 'free_text' }],
       member_clearances: [{ column: 'void_reason', category: 'free_text' }],
       charges: [{ column: 'description', category: 'free_text' }],
-      charge_adjustments: [{ column: 'reason', category: 'free_text' }],
+      charge_adjustments: [{ column: 'reason_text', category: 'free_text' }],
       payments: [
         { column: 'note', category: 'free_text' },
         { column: 'void_reason', category: 'free_text' },
