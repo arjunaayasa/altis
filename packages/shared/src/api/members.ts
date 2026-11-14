@@ -5,9 +5,10 @@
  * - Every maximum equals its column width. Bodies are strict at every depth; a query reads text.
  * - Personal data never travels in a URL: searching (by number, name, identity number or e-mail) and the lookup by
  *   member number are POST reads (`mode: 'read'`, no idempotency), never a query string.
- * - A member number travels as typed or scanned; the server normalises it like an item barcode (strip CR, LF and TAB,
- *   trim, one space for each run of spaces, ASCII letters upper case; 1-64 characters of 0x20-0x7E), so `b 001`,
- *   ` B  001 ` and `B 001` are one number. A taken number is the field error `{path: 'memberNo', code: 'taken'}`.
+ * - A member number travels as typed or scanned; the server shows it normalised like an item barcode (strip CR, LF and
+ *   TAB, trim, one space for each run of spaces, ASCII letters upper case; 1-64 characters of 0x20-0x7E) and compares
+ *   it without any space, so `b 001`, ` B  001 `, `B 001` and `B001` are one number. A taken number is the field error
+ *   `{path: 'memberNo', code: 'taken'}`.
  * - Suspending and reactivating are a `PATCH` of `status` (a suspension needs `statusNote`: `{path: 'statusNote', code:
  *   'required'}`); the member's history records `suspended` or `reactivated`.
  * - Every `store` route answers `StoreResponse` (`{id, version}`); screens read the view again with GET. A stale

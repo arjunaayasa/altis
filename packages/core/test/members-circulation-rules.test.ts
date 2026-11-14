@@ -2,16 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { dueDateFor } from '../src/circulation/dates.js';
 import { pickPolicy, policyScopeKey } from '../src/circulation/policies.js';
 import { parseDateCell, parseGenderCell, readMemberCsv } from '../src/members/import.js';
-import { memberNameKey, memberNoProblem, normalizeMemberNo } from '../src/members/keys.js';
+import { memberNameKey, memberNoDisplay, memberNoProblem, normalizeMemberNo } from '../src/members/keys.js';
 
 // The pure rules of members and circulation: member number and name keys, loan rule resolution, the due date, and the
 // CSV member file's reading.
 
 describe('member keys', () => {
-  it('a member number is normalised like a barcode: CR/LF/TAB gone, trimmed, one inner space, upper case', () => {
-    expect(normalizeMemberNo(' b  001\r\n')).toBe('B 001');
+  it('a member number is shown like a barcode and compared without spaces, so `b 001` and `B001` collide', () => {
+    expect(memberNoDisplay(' b  001\r\n')).toBe('B 001');
+    expect(normalizeMemberNo(' b  001\r\n')).toBe('B001');
     expect(normalizeMemberNo('b\t001')).toBe('B001');
-    expect(normalizeMemberNo('b 001')).not.toBe(normalizeMemberNo('B001'));
+    expect(normalizeMemberNo('b 001')).toBe(normalizeMemberNo('B001'));
+    expect(normalizeMemberNo('B 0 0 1')).toBe('B001');
     expect(memberNoProblem('B 001')).toBeNull();
     expect(memberNoProblem('')).toBe('invalid');
     expect(memberNoProblem('X'.repeat(65))).toBe('invalid');
