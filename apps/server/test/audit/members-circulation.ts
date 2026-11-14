@@ -14,5 +14,5 @@ export const MEMBERS_CIRCULATION_AUDIT_SCRIPTS: Readonly<Record<string, AreaAudi
   circulation: CIRCULATION,
 });
 
-/** While true, a script that is still null lists its actions as pending. */
-export const MEMBERS_CIRCULATION_PENDING_ALLOWED: boolean = true;
+/** While true, a script that is still null lists its actions as pending; both scripts are written, so every action is covered. */
+export const MEMBERS_CIRCULATION_PENDING_ALLOWED: boolean = false;
