@@ -1,5 +1,5 @@
 import fsp from 'node:fs/promises';
-import { reportExportPath } from '@altis/platform';
+import { reportExportPath, reportWorkDir } from '@altis/platform';
 import { withTx } from '@altis/db';
 import { newId, isDomainError, t, type MessageKey } from '@altis/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -142,6 +142,56 @@ describe.skipIf(!ctx.available)(`accreditation evidence ZIPs [${engineLabel()}]`
     const again = await fsp.readFile(reportExportPath(db.dataDir, id, 'zip'));
     expect(streamEntries(again).map((e) => e.name)).toEqual(streamEntries(once.bytes).map((e) => e.name));
     expect(again.equals(once.bytes)).toBe(true);
+  });
+
+  it('a last slice that dies after recording its end, before or after it moved the ZIP into place, is finished by the next slice with that same file', async () => {
+    const { id, jobId } = await startDoc(db, 'accreditation.dossier', periodId, { format: 'zip' });
+    const workDir = reportWorkDir(db.dataDir, id);
+    const kept = `${workDir}.kept`;
+    // Slice by slice, keeping the checkpoint and the work folder each slice starts from.
+    let before = '';
+    let outcome: string | undefined;
+    for (let i = 0; i < 2_000 && outcome !== 'succeeded'; i += 1) {
+      before = (await db.h.db.selectFrom('jobs').select('payload').where('id', '=', jobId).executeTakeFirstOrThrow()).payload;
+      await fsp.rm(kept, { recursive: true, force: true });
+      if (await fsp.stat(workDir).then(() => true, () => false)) await fsp.cp(workDir, kept, { recursive: true });
+      outcome = (await drive(db, jobId, { budgetMs: 3_200, maxSlices: 1 }))[0];
+      expect(['continued', 'succeeded']).toContain(outcome);
+    }
+    const done = await db.h.db.selectFrom('report_runs').selectAll().where('id', '=', id).executeTakeFirstOrThrow();
+    expect(done.status).toBe('succeeded');
+    const file = reportExportPath(db.dataDir, id, 'zip');
+    const bytes = await fsp.readFile(file);
+    expect(JSON.parse(before)).toMatchObject({ phase: 'write' });
+
+    /** Puts the run and its job back as the last slice left them had it died once the run's end was recorded. */
+    const diedAfterRecording = async (): Promise<void> => {
+      await db.h.db.updateTable('report_runs').set({ status: 'running', output_name: null, finished_at: null, expires_at: null }).where('id', '=', id).execute();
+      await db.h.db
+        .updateTable('jobs')
+        .set({ status: 'queued', payload: before, run_at: 0, finished_at: null, lock_token: null, locked_by: null, locked_until: null })
+        .where('id', '=', jobId)
+        .execute();
+      await fsp.rm(workDir, { recursive: true, force: true });
+      await fsp.cp(kept, workDir, { recursive: true });
+      await fsp.rm(`${workDir}/output.part`, { force: true });
+    };
+    const expectFinished = async (): Promise<void> => {
+      expect(await drive(db, jobId, { budgetMs: 3_200 })).toEqual(['succeeded']);
+      const run = await db.h.db.selectFrom('report_runs').selectAll().where('id', '=', id).executeTakeFirstOrThrow();
+      expect(run).toMatchObject({ status: 'succeeded', row_count: done.row_count, output_name: `${id}.zip`, output_size: done.output_size, error_code: null });
+      expect((await fsp.readFile(file)).equals(bytes)).toBe(true);
+      expect(await fsp.stat(workDir).then(() => true, () => false)).toBe(false);
+    };
+
+    // Died after the ZIP was moved into place: the next slice finds it there.
+    await diedAfterRecording();
+    await expectFinished();
+    // Died before the move: the next slice moves the finished `output.part`.
+    await diedAfterRecording();
+    await fsp.rename(file, `${workDir}/output.part`);
+    await expectFinished();
+    await fsp.rm(kept, { recursive: true, force: true });
   });
 
   it('writes one ZIP per component inside one ZIP, each with its sheets and its files', async () => {

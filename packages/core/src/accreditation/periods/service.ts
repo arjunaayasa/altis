@@ -17,7 +17,7 @@ import { instrumentById } from '../instruments/index.js';
 import { AccredMetaPayload } from '../types.js';
 import { parsePeriodBody, periodFieldErrors, periodNotFound, periodSpanRefused, periodStale } from './errors.js';
 import { assertInstrumentFits, assertSchoolLevelFits } from './instruments-view.js';
-import { catalogSyncedAt, lastUsageImport, latest, overlappingChange, periodLastChange, sharedLastChange, spansOverlap } from './last-change.js';
+import { catalogSyncedAt, lastUsageImport, latest, overlappingChange, periodLastChange, readSpanOf, sharedLastChange, spansOverlap } from './last-change.js';
 import { lockOpenPeriod } from './lock.js';
 import { assertProfilePhotos, copiedProfile, firstProfile, mergeProfile, profileJson, readProfile } from './profile.js';
 import { periodSpan, spanMonths } from './span.js';
@@ -154,8 +154,9 @@ export async function listPeriods(db: Db): Promise<PeriodListResponse> {
     rows.map((r) => r.id),
   );
   const periods = rows.map((row) => {
-    // Every live period is in `rows`: the overlapping ones' latest change is read from them.
-    const overlapping = latest(...rows.filter((o) => spansOverlap(o, row)).map((o) => Number(o.updated_at)));
+    // Every live period is in `rows`: the latest change of those overlapping the days this one reads is read from them.
+    const read = readSpanOf(row);
+    const overlapping = latest(...rows.filter((o) => spansOverlap(o, read)).map((o) => Number(o.updated_at)));
     return summaryOf(row, computed.get(row.id) ?? null, latest(periodLastChange(row, overlapping), shared));
   });
   return { periods };

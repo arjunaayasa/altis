@@ -209,8 +209,11 @@ export class UsageTable implements ResolvedUsage {
 }
 
 /**
- * The usage of `span` (its months, and the span rows that lie inside it), with the member-type mapping as it is now.
- * `o.dedupe` (default: the setting that removes repeats from imported visits) decides which visits a SLiMS row counts.
+ * The usage of `span` (its months, and the span rows that lie inside them), with the member-type mapping as it is now.
+ * A month cell is stored over its whole month, so a span that starts or ends inside a month (a free-date period) still
+ * reads the rows of that first and last month: the rows are read from the first day of its first month to the last day
+ * of its last month. `o.dedupe` (default: the setting that removes repeats from imported visits) decides which visits a
+ * SLiMS row counts.
  */
 export async function loadUsageTable(db: Kysely<DB>, span: { from: string; to: string }, settings: AccredSettings, o: { dedupe?: boolean } = {}): Promise<UsageTable> {
   const rows = await db
@@ -218,8 +221,8 @@ export async function loadUsageTable(db: Kysely<DB>, span: { from: string; to: s
     .select(['source', 'metric', 'span_from', 'span_to', 'group_key', 'value'])
     .where('source', 'in', SOURCES)
     .where('branch_key', '=', '')
-    .where('span_from', '>=', span.from)
-    .where('span_to', '<=', span.to)
+    .where('span_from', '>=', `${monthOf(span.from)}-01`)
+    .where('span_to', '<=', endOfMonth(monthOf(span.to)))
     .execute();
   const mapRows = await db.selectFrom('usage_group_map').select(['group_key', 'accred_group']).execute();
   const mapped = new Map<string, AccredGroup | null>(mapRows.map((r) => [r.group_key, isGroup(r.accred_group) ? r.accred_group : null]));

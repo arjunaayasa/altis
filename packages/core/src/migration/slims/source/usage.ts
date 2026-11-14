@@ -18,7 +18,8 @@ import type { SlimsDbConfig, SlimsRow, SlimsSource, SlimsTableInfo, SplitCheckpo
 //   run (kept in the job's sealed secret and dropped with it), cut to 128 bits, as 32 lower-case hex characters. One
 //   member gives the same hash in every table of one run, so the import can tell members apart and group them by type,
 //   and nobody can tell which member it was once the key is gone. An empty id (a guest in the visitor log) stays empty
-//   and NULL stays NULL.
+//   and NULL stays NULL. Each reader hashes with its own copy of the key, taken when it is opened and wiped when it is
+//   done (the split's call ends, the connection is closed), so the caller may wipe its key at once.
 //
 // The catalogue migration's list (SLIMS_COLUMNS) is a different list and does not change: the member, loan and visitor
 // tables never enter it, so the catalogue migration never stages their rows. `member`, keyed by the hashed id, is read
@@ -95,15 +96,8 @@ function hashCell(key: Uint8Array, cell: SlimsRow[string]): SlimsRow[string] {
 
 const isUsageTable = (table: string): table is SlimsUsageTable => Object.hasOwn(SLIMS_USAGE_COLUMNS, table);
 
-/**
- * The transform both readers apply to every row of a usage table: only the columns of SLIMS_USAGE_COLUMNS (those the
- * row has, in that order), the member id replaced by memberHash. Returns a new row; the input is left as it was.
- *
- * @throws TypeError for a key shorter than 16 bytes, and (from the returned function) for a table that is not a usage
- *   table
- */
-export function usageRowTransform(key: Uint8Array): (table: string, row: SlimsRow) => SlimsRow {
-  checkKey(key);
+/** The row transform over `key` itself (not a copy): the caller owns `key` and wipes it when the transform is done. */
+function transformWith(key: Uint8Array): (table: string, row: SlimsRow) => SlimsRow {
   return (table, row) => {
     if (!isUsageTable(table)) throw new TypeError('usageRowTransform: not a table the usage import reads');
     const out = projectRow(row, SLIMS_USAGE_COLUMNS[table]);
@@ -112,6 +106,19 @@ export function usageRowTransform(key: Uint8Array): (table: string, row: SlimsRo
     }
     return out;
   };
+}
+
+/**
+ * The transform both readers apply to every row of a usage table: only the columns of SLIMS_USAGE_COLUMNS (those the
+ * row has, in that order), the member id replaced by memberHash. Returns a new row; the input is left as it was. The
+ * transform hashes with a copy of `key` taken now: wiping `key` afterwards does not change it.
+ *
+ * @throws TypeError for a key shorter than 16 bytes, and (from the returned function) for a table that is not a usage
+ *   table
+ */
+export function usageRowTransform(key: Uint8Array): (table: string, row: SlimsRow) => SlimsRow {
+  checkKey(key);
+  return transformWith(Uint8Array.from(key));
 }
 
 /** What openUsageDbSource is opened with: the run's hash key, and the connection's options. */
@@ -124,17 +131,37 @@ export interface OpenUsageDbSourceOptions {
 
 /**
  * The SLiMS database as the usage import reads it (see the module comment): only the usage tables, with only their
- * usage columns and exact row counts, rows hashed as they are read.
+ * usage columns and exact row counts, rows hashed as they are read. The source hashes with its own copy of
+ * `o.hashKey`, wiped when it is closed: the caller may wipe its key as soon as this answers.
  *
  * @throws TypeError for a hash key shorter than 16 bytes (before connecting)
  * @throws DomainError `MIGRATION_SOURCE_UNREACHABLE` as openDbSource
  */
 export async function openUsageDbSource(cfg: SlimsDbConfig, o: OpenUsageDbSourceOptions): Promise<SlimsSource> {
-  const transform = usageRowTransform(o.hashKey);
-  const options: OpenDbSourceOptions = { tables: SLIMS_USAGE_COLUMNS, transform, secretColumns: SLIMS_USAGE_HASHED };
+  checkKey(o.hashKey);
+  const key = Uint8Array.from(o.hashKey);
+  const options: OpenDbSourceOptions = { tables: SLIMS_USAGE_COLUMNS, transform: transformWith(key), secretColumns: SLIMS_USAGE_HASHED };
   if (o.connectTimeoutMs !== undefined) options.connectTimeoutMs = o.connectTimeoutMs;
   if (o.connect !== undefined) options.connect = o.connect;
-  return openDbSource(cfg, options);
+  let source: SlimsSource;
+  try {
+    source = await openDbSource(cfg, options);
+  } catch (error) {
+    key.fill(0);
+    throw error;
+  }
+  return {
+    kind: source.kind,
+    tables: () => source.tables(),
+    rows: (table, after, limit) => source.rows(table, after, limit),
+    async close() {
+      try {
+        await source.close();
+      } finally {
+        key.fill(0);
+      }
+    },
+  };
 }
 
 /** What splitUsageDump is called with: splitDump's options (its seams included) and the run's hash key. */
@@ -150,9 +177,14 @@ export type SplitUsageDumpOptions = Omit<SplitDumpOptions, 'tables' | 'transform
  */
 export async function splitUsageDump(o: SplitUsageDumpOptions): Promise<{ done: boolean; checkpoint: SplitCheckpoint; tables: SlimsTableInfo[] }> {
   const { hashKey, ...split } = o;
-  const transform = usageRowTransform(hashKey);
-  const result = await splitDump({ ...split, tables: SLIMS_USAGE_COLUMNS, transform });
-  return { ...result, tables: result.tables.filter((t) => !(OPTIONAL_TABLES.has(t.name) && t.columns.length === 0 && t.rows === 0)) };
+  checkKey(hashKey);
+  const key = Uint8Array.from(hashKey);
+  try {
+    const result = await splitDump({ ...split, tables: SLIMS_USAGE_COLUMNS, transform: transformWith(key) });
+    return { ...result, tables: result.tables.filter((t) => !(OPTIONAL_TABLES.has(t.name) && t.columns.length === 0 && t.rows === 0)) };
+  } finally {
+    key.fill(0);
+  }
 }
 
 /** The rows splitUsageDump staged in `stagingDir` (its last `tables`): only the usage tables and columns are served. */

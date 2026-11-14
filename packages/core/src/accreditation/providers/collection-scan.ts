@@ -4,7 +4,7 @@ import type { Kysely } from 'kysely';
 import { z } from 'zod';
 import { decodeCursor, encodeCursor, isFiction, isReference, SCAN_MARGIN_MS, SCHOOL_LOCAL_WORKS } from '../../reports/collection/common.js';
 import { reportFieldErrors } from '../../reports/runs/service.js';
-import { firstAcq, inStockAt, liveAt, scanRecordStock, STOCK_SCAN_MAX_LIMIT, type ItemStockFacts, type RecordStockFacts } from '../../reports/stock/index.js';
+import { acquisitionOf, firstAcq, inStockAt, liveAt, scanRecordStock, STOCK_SCAN_MAX_LIMIT, type ItemStockFacts, type RecordStockFacts } from '../../reports/stock/index.js';
 import type { ReportCtx } from '../../reports/types.js';
 import type { AccredSettings } from '../../settings/accreditation.js';
 import type { AccredMetricId } from '../metric-ids.js';
@@ -244,9 +244,12 @@ function countsWithoutCopies(r: RecordStockFacts, rules: PassRules): boolean {
   return (r.materialTypeCode !== null && rules.electronic.has(r.materialTypeCode)) || r.hasPublicFile;
 }
 
-/** The day title `r` was first acquired when that lies in `[from, to]`, else null (not an addition there). */
+/**
+ * The day title `r` was first acquired when that lies in `[from, to]`, else null (not an addition there). A title
+ * archived later (weeded) was still added then; a title merged into another is that one's duplicate, never added.
+ */
 function addedIn(r: RecordStockFacts, from: string, to: string, rules: PassRules): string | null {
-  if (r.archived) return null;
+  if (r.merged) return null;
   if (r.items.length === 0 && !countsWithoutCopies(r, rules)) return null;
   const first = firstAcq(r);
   return first !== 'unknown' && first >= from && first <= to ? first : null;
@@ -316,7 +319,10 @@ function visit(c: CollectionCounters, batch: readonly RecordStockFacts[], days: 
     }
     if (c.referenceKinds !== undefined && r.referenceKind !== null) keepKind(c.referenceKinds, r.referenceKind);
     if (c.serials !== undefined && r.materialTypeCode === SERIAL_MATERIAL_TYPE) {
-      const recent = r.items.some((i) => i.status !== 'on_order' && i.acqDate !== null && i.acqDate >= days.serialFrom && i.acqDate <= D);
+      const recent = r.items.some((i) => {
+        const acquired = acquisitionOf(i)?.date ?? null;
+        return acquired !== null && acquired >= days.serialFrom && acquired <= D;
+      });
       if (recent) c.serials += 1;
     }
   }

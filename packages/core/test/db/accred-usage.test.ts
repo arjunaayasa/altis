@@ -9,7 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
 import { annexL14Report } from '../../src/accreditation/annexes/l14.js';
 import { annexUsageMonthlyReport } from '../../src/accreditation/annexes/usage-monthly.js';
-import { lastChangeOf } from '../../src/accreditation/periods/index.js';
+import { getPeriod, lastChangeOf, listPeriods } from '../../src/accreditation/periods/index.js';
 import { getUsageGrid, getUsageGroups, putUsageCells, putUsageGroups, resolveUsage } from '../../src/accreditation/usage/index.js';
 import { txCtx, type Actor, type TxCtx } from '../../src/context.js';
 import type { ReportCtx, ReportRow, TableReport } from '../../src/reports/types.js';
@@ -353,6 +353,22 @@ describe.skipIf(!ctx.available)(`accreditation monthly usage [${engineLabel()}]`
       expect(list[0]).toMatch(/^update ["`]accred_periods["`] set ["`]version["`] = ["`]version["`] where/);
     });
 
+    it('a cell removed through the previous school year makes the next one stale: its reading interest reads that year', async () => {
+      const next = await period();
+      const previous = await period({ startsOn: '2024-07-01', endsOn: '2025-06-30' });
+      await put(previous, [{ metric: 'visits', month: '2024-09', groupKey: '', value: 30 }], NOW - 100);
+      // The next year was computed after that cell was written.
+      const meta = { status: 'ready', startedAt: NOW - 50, jobId: newId(NOW), computedAt: NOW - 50, durationMs: 1 };
+      await h.db.insertInto('accred_results').values({ period_id: next, indicator_code: '_meta', payload: JSON.stringify(meta), computed_at: NOW - 50 }).execute();
+      expect((await getPeriod(h.db, next, NOW)).stale).toBe(false);
+
+      await put(previous, [{ metric: 'visits', month: '2024-09', groupKey: '', value: null }], NOW);
+      expect(await manualRows()).toEqual([]);
+      expect(await lastChangeOf(h.db, next)).toBe(NOW);
+      expect((await getPeriod(h.db, next, NOW)).stale).toBe(true);
+      expect((await listPeriods(h.db)).periods.find((p) => p.id === next)).toMatchObject({ stale: true });
+    });
+
     it('removing the only cell still moves the last change of the period forward', async () => {
       const id = await period();
       await put(id, [{ metric: 'visits', month: '2025-08', groupKey: '', value: 3 }], NOW - 100);
@@ -467,6 +483,28 @@ describe.skipIf(!ctx.available)(`accreditation monthly usage [${engineLabel()}]`
       expect(cell('members_active', '2025-08', '')).toBeUndefined();
       expect(cell('loans', null, '')).toBeUndefined();
       expect(grid.lastImport).toEqual({ runId, finishedAt: NOW - 300, cutoverOn: '2026-01-15' });
+    });
+
+    it('a period with free dates reads its first and last months, which start and end inside them', async () => {
+      const id = await period({ startsOn: '2025-03-10', endsOn: '2026-03-09' });
+      await h.db.updateTable('accred_periods').set({ kind: 'custom', instrument_id: 'general-stats' }).where('id', '=', id).execute();
+      await put(id, [
+        { metric: 'visits', month: '2025-03', groupKey: '', value: 77 },
+        { metric: 'visits', month: '2025-04', groupKey: '', value: 55 },
+        { metric: 'visits', month: '2026-03', groupKey: '', value: 12 },
+      ]);
+      await slims('loans', '2025-03', '', 9);
+      const grid = await getUsageGrid(h.db, id, await loadAccredSettings(h.db));
+      const total = (metric: string, month: string) => grid.cells.find((c) => c.metric === metric && c.month === month && c.groupKey === '');
+      expect(grid.months[0]).toBe('2025-03');
+      expect(grid.months[grid.months.length - 1]).toBe('2026-03');
+      expect(total('visits', '2025-03')).toMatchObject({ value: 77, source: 'manual' });
+      expect(total('visits', '2025-04')).toMatchObject({ value: 55, source: 'manual' });
+      expect(total('visits', '2026-03')).toMatchObject({ value: 12, source: 'manual' });
+      expect(total('loans', '2025-03')).toMatchObject({ value: 9, source: 'slims' });
+      // The resolved table the metrics and the annexes read, too.
+      const usage = await resolved({ from: '2025-03-10', to: '2026-03-09' });
+      expect([usage.cell('visits', '2025-03', 'total').value, usage.cell('visits', '2026-03', 'total').value]).toEqual([77, 12]);
     });
 
     it('an unknown period → NOT_FOUND; without rows the grid has no unmapped group and no import', async () => {
