@@ -30,6 +30,9 @@ export const UPLOAD_CONTEXT_NAMES = [
   // usage statistics import stays staged for its job.
   'accreditation.evidence',
   'accreditation.slims_dump',
+  // ---- Komunitas (members and circulation) ----
+  // The CSV file of a member import stays staged for the import.
+  'members.import',
 ] as const;
 
 export type UploadContextName = (typeof UPLOAD_CONTEXT_NAMES)[number];

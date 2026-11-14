@@ -184,6 +184,23 @@ describe('ERROR_CODES', () => {
     MIGRATION_PRECHECK_FAILED: 422,
   };
 
+  // ---- Komunitas (members and circulation) ----
+  // Members, then the desk, in this order. Field errors stay VALIDATION_FAILED.
+  const membersCirculation: Record<string, number> = {
+    MEMBER_IN_USE: 409,
+    MEMBER_TYPE_IN_USE: 409,
+    MEMBER_EXPIRED: 409,
+    MEMBER_SUSPENDED: 409,
+    MEMBER_IMPORT_FORMAT: 422,
+    CIRC_NO_POLICY: 422,
+    CIRC_NOT_LOANABLE: 409,
+    CIRC_ITEM_ON_LOAN: 409,
+    CIRC_LIMIT_REACHED: 409,
+    CIRC_OTHER_BRANCH: 409,
+    CIRC_LOAN_NOT_OPEN: 409,
+    CIRC_RENEW_REFUSED: 409,
+  };
+
   const expected: Record<ErrorCode, number> = {
     ...phase1a,
     ...phase1b,
@@ -192,22 +209,24 @@ describe('ERROR_CODES', () => {
     ...phase2,
     ...k1EditionLane,
     ...komunitasK1,
+    ...membersCirculation,
   } as Record<ErrorCode, number>;
 
-  it('registers exactly the Phase 1a, 1b, 1c, 1d, 2 and Komunitas K1 codes (edition lane, then reports and accreditation) with their HTTP status', () => {
+  it('registers exactly the Phase 1a, 1b, 1c, 1d, 2 and Komunitas codes (edition lane, reports and accreditation, members and circulation) with their HTTP status', () => {
     expect(Object.keys(ERROR_CODES).sort()).toEqual(Object.keys(expected).sort());
     for (const [code, status] of Object.entries(expected)) {
       expect(ERROR_CODES[code as ErrorCode].status, code).toBe(status);
     }
   });
 
-  it('keeps the 19 Phase 1a codes unchanged, and appends the 1b, the 1c, the 1d, the Phase 2 and then the Komunitas K1 codes (edition lane, then reports and accreditation) after them in order', () => {
+  it('keeps the 19 Phase 1a codes unchanged, and appends the 1b, the 1c, the 1d, the Phase 2 and then the Komunitas codes (edition lane, reports and accreditation, members and circulation) after them in order', () => {
     expect(Object.keys(phase1a)).toHaveLength(19);
     expect(Object.keys(phase1b)).toHaveLength(38);
     expect(Object.keys(phase1c)).toHaveLength(40);
     expect(Object.keys(phase1d)).toHaveLength(13);
     expect(Object.keys(phase2)).toHaveLength(13);
     expect(Object.keys(komunitasK1)).toHaveLength(7);
+    expect(Object.keys(membersCirculation)).toHaveLength(12);
     expect(Object.keys(ERROR_CODES)).toEqual([
       ...Object.keys(phase1a),
       ...Object.keys(phase1b),
@@ -216,6 +235,7 @@ describe('ERROR_CODES', () => {
       ...Object.keys(phase2),
       ...Object.keys(k1EditionLane),
       ...Object.keys(komunitasK1),
+      ...Object.keys(membersCirculation),
     ]);
     for (const [code, status] of Object.entries(phase1a)) {
       expect(ERROR_CODES[code as ErrorCode].status, code).toBe(status);

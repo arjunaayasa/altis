@@ -1,7 +1,7 @@
 import type { ColumnType, Generated } from 'kysely';
 
 // The Kysely database interface: one entry per table, written by hand to match the migrations
-// (src/migrations/0001_* … 0009_*, Phase 2's 0020_* … 0029_*, Komunitas K1's 0030_* … 0033_*) and the runner's own tables (ddl.ts ensureBootstrap, migrator.ts). columns.ts
+// (src/migrations/0001_* … 0009_*, Phase 2's 0020_* … 0029_*, Komunitas K1's 0030_* … 0033_*, members and circulation's 0040_*) and the runner's own tables (ddl.ts ensureBootstrap, migrator.ts). columns.ts
 // (TABLE_COLUMNS, TABLE_KEYS) describes the same tables column by column; its drift test checks both against the
 // catalog.
 //
@@ -1158,6 +1158,175 @@ export interface LibraryDocumentsTable extends ArchivedTrail {
   file_id: string | null;
 }
 
+// ---- Komunitas (members and circulation) ----
+// Migration 0040: member types, members and their events, the loan rules and the loans. Every text column of a unique
+// key is key191() (binary); `open_item_id` is a ulid(). Codes ALTIS writes from fixed lists are `string`; dates are
+// `YYYY-MM-DD` in the time zone of the branch concerned; money is in the currency's minor unit.
+
+/** Class data. UNIQUE (code_key). */
+export interface MemberTypesTable extends ArchivedTrail {
+  id: string;
+  code_display: string;
+  code_key: string;
+  name_id: string;
+  name_en: string | null;
+  /** `ACCRED_GROUPS`: the population group the type's members count in. */
+  accred_group: string;
+  /** null: a membership of this type never expires. */
+  membership_days: number | null;
+  /** The most open loans a member may hold: null = no limit, 0 = may not borrow. */
+  loan_limit: number | null;
+  /** Default 1. */
+  holds_allowed: Generated<Flag>;
+  /** Default 2. */
+  holds_limit: Generated<number>;
+  /** Default 1. */
+  online_renewal: Generated<Flag>;
+  sort_order: Generated<number>;
+}
+
+/** Class data. UNIQUE (member_no_key). The personal columns are registered in PERSONAL_COLUMNS. */
+export interface MembersTable extends ArchivedTrail {
+  id: string;
+  member_no_display: string;
+  /** The member number normalised like an item barcode (1-64 characters). */
+  member_no_key: string;
+  member_type_id: string;
+  home_branch_id: string | null;
+  /** `active` | `suspended` (expired, archived and anonymised are read from the dates). */
+  status: string;
+  status_note: string | null;
+  name: string;
+  /** NFKD without diacritics, lower case, single spaces, at most 191 characters: sort and search. */
+  name_key: string;
+  /** `female` | `male`, never filled in by default. */
+  gender: string | null;
+  birth_date: string | null;
+  identity_no: string | null;
+  institution: string | null;
+  class_name: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  postal_code: string | null;
+  mailing_address: string | null;
+  notes: string | null;
+  photo_file_id: string | null;
+  /** Default `id`. */
+  locale: Generated<string>;
+  joined_on: string;
+  valid_from: string;
+  /** null: never expires; valid up to and including this date. */
+  expires_on: string | null;
+  password_hash: string | null;
+  /** Default 0. */
+  must_reset_password: Generated<Flag>;
+  /** Default 0. */
+  session_version: Generated<number>;
+  last_login_at: EpochMs | null;
+  anonymized_at: EpochMs | null;
+  /** `manual`, `import:<runId>` or `slims:<member_id>`. */
+  source: string | null;
+}
+
+/** Class data. `member_id` references members (ON DELETE CASCADE). */
+export interface MemberEventsTable {
+  id: string;
+  member_id: string;
+  at: EpochMs;
+  /** `MEMBER_EVENT_TYPES`. */
+  type: string;
+  actor_type: string;
+  actor_id: string | null;
+  /** JSON: field names, and for `extended` the dates `{from, to}`; never a personal value. */
+  meta: string;
+}
+
+/** Class data. UNIQUE (code_key), UNIQUE (scope_key); an archived rule's `scope_key` is `~<id>`. */
+export interface PoliciesTable extends ArchivedTrail {
+  id: string;
+  code_display: string;
+  code_key: string;
+  name: string;
+  /** null: every member type. */
+  member_type_id: string | null;
+  /** null: every collection type. */
+  collection_type_id: string | null;
+  /** null: every material type. */
+  material_type_id: string | null;
+  /** Always null in this edition (every branch). */
+  branch_id: string | null;
+  /** `<member type|*>/<collection type|*>/<material type|*>/<branch|*>` (at most 120 characters). */
+  scope_key: string;
+  /** Default 1. */
+  loanable: Generated<Flag>;
+  /** 0-365; 0 = due the same day. */
+  loan_days: number;
+  /** The most open loans a member may hold under this rule; null = no limit. */
+  loan_limit: number | null;
+  /** Default 0. */
+  renew_limit: Generated<number>;
+  /** Default 0. */
+  fine_per_day_minor: Generated<number>;
+  fine_cap_minor: number | null;
+  /** Default 0. */
+  grace_days: Generated<number>;
+  currency: string;
+}
+
+/** Class data. UNIQUE (open_item_id): one open loan per item. */
+export interface LoansTable {
+  id: string;
+  /** null only for a closed migrated loan whose item is gone. */
+  item_id: string | null;
+  /** The item's id while the loan is open, null once it is closed. */
+  open_item_id: string | null;
+  record_id: string | null;
+  /** null once the loan is anonymised. */
+  member_id: string | null;
+  /** The branch of the item when it was lent: the branch every date of the loan is computed in. */
+  branch_id: string;
+  policy_id: string | null;
+  loaned_on: string;
+  loaned_at: EpochMs;
+  due_on: string;
+  /** Default 0. */
+  renewals: Generated<number>;
+  last_renewed_on: string | null;
+  returned_on: string | null;
+  returned_at: EpochMs | null;
+  return_branch_id: string | null;
+  /** `LOAN_OUTCOMES`; null while open. */
+  outcome: string | null;
+  /** The rule's terms, copied when the loan was made. */
+  loan_days: number;
+  renew_limit: number;
+  grace_days: number;
+  fine_per_day_minor: number;
+  fine_cap_minor: number | null;
+  currency: string;
+  /** Comma-separated override reasons. */
+  overrides: string | null;
+  /** Personal data (free text). */
+  override_note: string | null;
+  loaned_by: string | null;
+  returned_by: string | null;
+  /** `desk` | `migrated`. */
+  source: string;
+  stat_ddc: string | null;
+  stat_material_type_id: string | null;
+  stat_collection_type_id: string | null;
+  stat_location_id: string | null;
+  stat_member_type_id: string | null;
+  stat_accred_group: string | null;
+  stat_class_name: string | null;
+  version: Generated<number>;
+  created_at: EpochMs;
+  created_by: string | null;
+  updated_at: EpochMs;
+  updated_by: string | null;
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // The runner's tables (class migrator): made by ensureBootstrap (ddl.ts) and migrator.ts, never by a migration.
 
@@ -1280,6 +1449,12 @@ export interface DB {
   library_partnerships: LibraryPartnershipsTable;
   library_budgets: LibraryBudgetsTable;
   library_documents: LibraryDocumentsTable;
+  // ---- Komunitas (members and circulation) ----
+  member_types: MemberTypesTable;
+  members: MembersTable;
+  member_events: MemberEventsTable;
+  policies: PoliciesTable;
+  loans: LoansTable;
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: SchemaMigrationsEditionTable;
   schema_migrations_edition_lock: SchemaMigrationsEditionLockTable;

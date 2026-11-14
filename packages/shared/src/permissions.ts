@@ -6,6 +6,7 @@
 /**
  * The 19 permissions of Phase 1, all of global scope, in the order of spec §13.4; then the 10 of Phase 2 (its spec
  * §12.1), in that spec's order; then the community edition's reports and accreditation keys, all global.
+ * The members and circulation keys follow: the desk's per branch, the others global.
  */
 export const PERMISSIONS = Object.freeze([
   'system.settings.read',
@@ -45,6 +46,17 @@ export const PERMISSIONS = Object.freeze([
   'reports.statistics.read',
   'accreditation.workspace.read',
   'accreditation.workspace.manage',
+  // ---- Komunitas (members and circulation) ----
+  // Members: reading them and their history, managing them (create, edit, extend, suspend, archive), the member types,
+  // and the CSV member import. Circulation: the desk (lend, return, renew; at a branch), the loan rules, and the loan
+  // records of every member (history, overdue list).
+  'members.records.read',
+  'members.records.manage',
+  'members.types.manage',
+  'members.import.run',
+  'circulation.desk.use',
+  'circulation.policies.manage',
+  'circulation.records.read',
 ] as const);
 
 /** A catalog key. The second member exists only in the test profile (spec §12.5): see {@link permissionCatalog}. */
@@ -54,7 +66,7 @@ export type Permission = (typeof PERMISSIONS)[number] | 'test.branch.manage';
 export type PermissionScope = 'global' | 'branch';
 
 /** The module of a permission: its key's first segment. */
-export type PermissionModule = 'system' | 'test' | 'catalog' | 'opac' | 'reports' | 'accreditation';
+export type PermissionModule = 'system' | 'test' | 'catalog' | 'opac' | 'reports' | 'accreditation' | 'members' | 'circulation';
 
 export interface PermissionDef {
   key: Permission;
@@ -69,9 +81,15 @@ type Profile = 'test' | 'production';
  * The branch-scoped keys of Phase 2 (its spec §12.1, decision D2-02): locations and items belong to a branch, and a
  * global role grants them at every branch (`can()` of Phase 1). Every other production key is global.
  */
-const BRANCH_SCOPED: ReadonlySet<string> = new Set(['catalog.locations.manage', 'catalog.items.manage']);
+const BRANCH_SCOPED: ReadonlySet<string> = new Set([
+  'catalog.locations.manage',
+  'catalog.items.manage',
+  // ---- Komunitas (members and circulation) ----
+  // The desk works at a branch (its routes are `branches/:branchId/circulation/...`).
+  'circulation.desk.use',
+]);
 
-/** The module of a production key: its prefix (`system`, `catalog`, `opac`, `reports` or `accreditation`). */
+/** The module of a production key: its prefix (`system`, `catalog`, `opac`, `reports`, `accreditation`, `members` or `circulation`). */
 function moduleOf(key: (typeof PERMISSIONS)[number]): PermissionModule {
   return key.slice(0, key.indexOf('.')) as PermissionModule;
 }

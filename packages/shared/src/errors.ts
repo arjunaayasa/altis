@@ -323,6 +323,34 @@ export const ERROR_CODES = Object.freeze({
   ACCRED_RESULTS_STALE: Object.freeze({ status: 409 }),
   /** A migration precheck refused the run; `meta {reason, count}` (`catalog_changed`: the catalogue differs). */
   MIGRATION_PRECHECK_FAILED: Object.freeze({ status: 422 }),
+
+  // ---- Komunitas (members and circulation) ----
+  // Field errors stay VALIDATION_FAILED with errors[{path, code}] (`taken`, `isbn_not_barcode`, `branch_scope_not_available`, ...).
+
+  /** The member cannot be archived: open loans or an unpaid balance; `meta {openLoans, balanceMinor}`. */
+  MEMBER_IN_USE: Object.freeze({ status: 409 }),
+  /** The member type cannot be archived: live members have it; `meta {count}`. */
+  MEMBER_TYPE_IN_USE: Object.freeze({ status: 409 }),
+  /** The membership has expired (valid up to and including `meta.expiresOn`). */
+  MEMBER_EXPIRED: Object.freeze({ status: 409 }),
+  /** The member is suspended. */
+  MEMBER_SUSPENDED: Object.freeze({ status: 409 }),
+  /** The member import file cannot be read as the declared format; `meta {reason}`. */
+  MEMBER_IMPORT_FORMAT: Object.freeze({ status: 422 }),
+  /** No loan rule applies to this member and item. */
+  CIRC_NO_POLICY: Object.freeze({ status: 422 }),
+  /** The item may not be lent; `meta {reason: status | collection_type | policy, status?}`. */
+  CIRC_NOT_LOANABLE: Object.freeze({ status: 409 }),
+  /** The item is already on loan; `meta {sameMember}`. */
+  CIRC_ITEM_ON_LOAN: Object.freeze({ status: 409 }),
+  /** The member holds as many open loans as allowed; `meta {scope: member_type | policy, limit}`. */
+  CIRC_LIMIT_REACHED: Object.freeze({ status: 409 }),
+  /** The item belongs to another branch than the desk's; `meta {branchCode}`. */
+  CIRC_OTHER_BRANCH: Object.freeze({ status: 409 }),
+  /** The item has no open loan (it was returned already, or another desk closed the loan). */
+  CIRC_LOAN_NOT_OPEN: Object.freeze({ status: 409 }),
+  /** The loan cannot be renewed; `meta {reason}` (RENEW_REFUSALS). */
+  CIRC_RENEW_REFUSED: Object.freeze({ status: 409 }),
 });
 
 export type ErrorCode = keyof typeof ERROR_CODES;

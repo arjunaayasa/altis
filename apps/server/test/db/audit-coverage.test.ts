@@ -48,6 +48,7 @@ import { appPrecheck, createAppOps } from '../../src/services.js';
 import { createAgent, type Agent, type AgentReply } from '../agent.js';
 import { PHASE2_AUDIT_SCRIPTS, PHASE2_PENDING_ALLOWED, type AuditBrowser, type AuditScriptContext } from '../audit/catalog.js';
 import { K1_PENDING_ALLOWED, KOMUNITAS_AUDIT_SCRIPTS } from '../audit/komunitas.js';
+import { MEMBERS_CIRCULATION_AUDIT_SCRIPTS, MEMBERS_CIRCULATION_PENDING_ALLOWED } from '../audit/members-circulation.js';
 import { captureIo } from '../cli-support.js';
 import { NEW_PASSWORD, PERSONA_PASSWORD, seedJob, seedUser, stagedArchive, totpCode, type SeedContext } from '../matrix-fixtures.js';
 import { seedStaff, sessionCookieFor, sessionCsrfFor } from '../support-auth.js';
@@ -999,14 +1000,21 @@ describe('audit coverage: the Phase 2 scripts own every Phase 2 action, once', (
 // The community actions, one script per area (../audit/komunitas.ts), run after the catalogue's on the same
 // installation with the same checks; a script still null lists its actions as pending while K1_PENDING_ALLOWED.
 
-/** The community actions: AUDIT_ACTIONS from the first action of reports and accreditation to the end. */
-const K1_ACTIONS: readonly AuditAction[] = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('reports.run.start'));
+/** The community actions: AUDIT_ACTIONS from the first action of reports and accreditation to the members' first. */
+const K1_ACTIONS: readonly AuditAction[] = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('reports.run.start'), AUDIT_ACTIONS.indexOf('members.member.create'));
 
-/** Every script the installation runs: the catalogue's, then the community's. */
-const AUDIT_SCRIPTS = { ...PHASE2_AUDIT_SCRIPTS, ...KOMUNITAS_AUDIT_SCRIPTS };
+// ---- Komunitas (members and circulation) ----
+/** The members and circulation actions: AUDIT_ACTIONS from the first member action to the end. */
+const MEMBERS_CIRCULATION_ACTIONS: readonly AuditAction[] = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('members.member.create'));
+
+/** Every script the installation runs: the catalogue's, the community's, then the members and circulation scripts. */
+const AUDIT_SCRIPTS = { ...PHASE2_AUDIT_SCRIPTS, ...KOMUNITAS_AUDIT_SCRIPTS, ...MEMBERS_CIRCULATION_AUDIT_SCRIPTS };
 
 /** Whether the null script of `area` may list its actions as pending. */
-const pendingAllowed = (area: string): boolean => (Object.hasOwn(KOMUNITAS_AUDIT_SCRIPTS, area) ? K1_PENDING_ALLOWED : PHASE2_PENDING_ALLOWED);
+const pendingAllowed = (area: string): boolean => {
+  if (Object.hasOwn(MEMBERS_CIRCULATION_AUDIT_SCRIPTS, area)) return MEMBERS_CIRCULATION_PENDING_ALLOWED;
+  return Object.hasOwn(KOMUNITAS_AUDIT_SCRIPTS, area) ? K1_PENDING_ALLOWED : PHASE2_PENDING_ALLOWED;
+};
 
 describe('audit coverage: the community scripts own every community action, once', () => {
   it('the seven areas list the 18 actions between them, each in exactly one, under names of their own', () => {
@@ -1016,6 +1024,18 @@ describe('audit coverage: the community scripts own every community action, once
     const owned = Object.values(KOMUNITAS_AUDIT_SCRIPTS).flatMap((s) => [...s.actions]);
     expect(new Set(owned).size).toBe(owned.length);
     expect([...owned].sort()).toEqual([...K1_ACTIONS].sort());
+  });
+});
+
+describe('audit coverage: the members and circulation scripts own every members and circulation action, once', () => {
+  it('the two areas list the 15 actions between them, each in exactly one, under names of their own', () => {
+    expect(MEMBERS_CIRCULATION_ACTIONS).toHaveLength(15);
+    expect(Object.keys(MEMBERS_CIRCULATION_AUDIT_SCRIPTS)).toEqual(['members', 'circulation']);
+    const others = { ...PHASE2_AUDIT_SCRIPTS, ...KOMUNITAS_AUDIT_SCRIPTS };
+    expect(Object.keys(MEMBERS_CIRCULATION_AUDIT_SCRIPTS).filter((area) => Object.hasOwn(others, area))).toEqual([]);
+    const owned = Object.values(MEMBERS_CIRCULATION_AUDIT_SCRIPTS).flatMap((s) => [...s.actions]);
+    expect(new Set(owned).size).toBe(owned.length);
+    expect([...owned].sort()).toEqual([...MEMBERS_CIRCULATION_ACTIONS].sort());
   });
 });
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TABLE_COLUMNS, TABLE_KEYS, type ColumnSpec } from '../src/columns.js';
 import { PERSONAL_COLUMNS, isPersonalColumn, personalLogKeys, type PersonalCategory, type TableName } from '../src/registry.js';
 import { K1_TABLES_BY_MIGRATION } from './fixtures/komunitas-k1-tables.js';
+import { CIRCULATION_TABLES_BY_MIGRATION } from './fixtures/komunitas-members-circulation-tables.js';
 
 // The personal-data dictionary (PERSONAL_COLUMNS): which columns hold personal data, so that public output, events,
 // logs and exports can leave them out or ask for re-authentication. Every registered column must exist; every column of
@@ -72,18 +73,55 @@ const K1_NON_PERSONAL: Record<string, string> = {
   'library_documents.issued_by': 'the office or role that issued a document',
 };
 
+// ---- Komunitas (members and circulation) ----
+const CIRCULATION_TABLES = Object.values(CIRCULATION_TABLES_BY_MIGRATION).flat() as TableName[];
+
+/** Text columns of the members and circulation tables holding a status, a code from a fixed list, or a value ALTIS computes. */
+const CIRCULATION_CODE_COLUMNS: Record<string, string> = {
+  'member_types.accred_group': 'a population group code',
+  'members.status': 'a member status',
+  'members.locale': 'a language code',
+  'members.source': 'where the row came from: manual, an import run id or the key of the source system',
+  'member_events.type': 'a member event type',
+  'member_events.actor_type': 'the kind of actor',
+  'member_events.meta': 'field names and the dates of an extension, never a personal value',
+  'policies.currency': 'a currency code',
+  'loans.outcome': 'a loan outcome code',
+  'loans.currency': 'a currency code',
+  'loans.overrides': 'a list of override reason codes',
+  'loans.source': 'where the loan came from (desk or migrated)',
+  'loans.stat_ddc': 'a classification key for statistics',
+  'loans.stat_accred_group': 'a population group code',
+};
+
+/** Free-text columns of the members and circulation tables that are not personal data, each with the reason. */
+const CIRCULATION_NON_PERSONAL: Record<string, string> = {
+  'member_types.code_display': 'a member type code chosen by the library',
+  'member_types.name_id': 'the name of a member type',
+  'member_types.name_en': 'the name of a member type',
+  'members.member_no_display': 'the member number the library assigns, replaced when a member is anonymised',
+  'policies.code_display': 'a loan rule code chosen by the library',
+  'policies.name': 'the name of a loan rule',
+  'loans.stat_class_name': 'the class a loan is counted in for statistics, kept after anonymisation',
+};
+
 /** The columns of `table` in a primary key, a unique index or a foreign key. */
 function keyColumns(table: TableName): Set<string> {
   const keys = TABLE_KEYS[table];
   return new Set([...keys.pk, ...keys.unique.flat(), ...keys.fks.map((f) => f.column)]);
 }
 
-/** The text columns of the K1 tables that are not keys, as `table.column`. */
-function k1TextColumns(): string[] {
-  return K1_TABLES.flatMap((table) => {
+/** The text columns of `tables` that are not keys, as `table.column`. */
+function textColumnsOf(tables: readonly TableName[]): string[] {
+  return tables.flatMap((table) => {
     const keys = keyColumns(table);
     return TABLE_COLUMNS[table].filter((c) => TEXT_KINDS.has(c.kind) && !keys.has(c.name)).map((c) => `${table}.${c.name}`);
   });
+}
+
+/** The text columns of the K1 tables that are not keys, as `table.column`. */
+function k1TextColumns(): string[] {
+  return textColumnsOf(K1_TABLES);
 }
 
 /** `table.column` of every registered personal column. */
@@ -123,7 +161,7 @@ describe('PERSONAL_COLUMNS', () => {
     }
   });
 
-  it('holds the Komunitas K1 entries: supplier contacts, staff accounts, accreditation staff, answer notes and the period profile', () => {
+  it('holds the Komunitas entries: supplier contacts, staff accounts, accreditation staff, answer notes, the period profile, members and loan notes', () => {
     expect(PERSONAL_COLUMNS).toEqual({
       suppliers: [
         { column: 'contact_name', category: 'identity' },
@@ -143,7 +181,57 @@ describe('PERSONAL_COLUMNS', () => {
       ],
       accred_answers: [{ column: 'note', category: 'free_text' }],
       accred_periods: [{ column: 'profile', category: 'identity', jsonPaths: ['schoolHead', 'libraryHead', 'libraryHeadId', 'phone', 'email'] }],
+      members: [
+        { column: 'status_note', category: 'free_text' },
+        { column: 'name', category: 'identity' },
+        { column: 'name_key', category: 'identity' },
+        { column: 'gender', category: 'identity' },
+        { column: 'birth_date', category: 'identity' },
+        { column: 'identity_no', category: 'identity' },
+        { column: 'institution', category: 'identity' },
+        { column: 'class_name', category: 'identity' },
+        { column: 'email', category: 'contact' },
+        { column: 'phone', category: 'contact' },
+        { column: 'address', category: 'contact' },
+        { column: 'postal_code', category: 'contact' },
+        { column: 'mailing_address', category: 'contact' },
+        { column: 'notes', category: 'free_text' },
+        { column: 'photo_file_id', category: 'photo' },
+        { column: 'password_hash', category: 'credential' },
+      ],
+      loans: [{ column: 'override_note', category: 'free_text' }],
     });
+  });
+
+  // ---- Komunitas (members and circulation) ----
+  it('classifies every text column of the 5 members and circulation tables that is not a key; no stale exception', () => {
+    expect(CIRCULATION_TABLES).toEqual(['member_types', 'members', 'member_events', 'policies', 'loans']);
+    const personal = new Set(registered());
+    const text = textColumnsOf(CIRCULATION_TABLES);
+    const unclassified: string[] = [];
+    const twice: string[] = [];
+    for (const column of text) {
+      const places = [personal.has(column), Object.hasOwn(CIRCULATION_CODE_COLUMNS, column), Object.hasOwn(CIRCULATION_NON_PERSONAL, column)].filter(Boolean);
+      if (places.length === 0) unclassified.push(column);
+      if (places.length > 1) twice.push(column);
+    }
+    expect(unclassified).toEqual([]);
+    expect(twice).toEqual([]);
+    for (const [column, reason] of [...Object.entries(CIRCULATION_CODE_COLUMNS), ...Object.entries(CIRCULATION_NON_PERSONAL)]) {
+      expect({ column, isText: text.includes(column) }).toEqual({ column, isText: true });
+      expect(reason.length).toBeGreaterThan(5);
+    }
+  });
+
+  it('a member: every column a person could be recognised by is registered; the number, type and dates are not', () => {
+    for (const column of ['name', 'name_key', 'identity_no', 'class_name', 'email', 'phone', 'address', 'photo_file_id', 'password_hash', 'birth_date']) {
+      expect({ column, personal: isPersonalColumn('members', column) }).toEqual({ column, personal: true });
+    }
+    for (const column of ['member_no_display', 'member_no_key', 'member_type_id', 'status', 'expires_on']) {
+      expect({ column, personal: isPersonalColumn('members', column) }).toEqual({ column, personal: false });
+    }
+    expect(isPersonalColumn('loans', 'override_note')).toBe(true);
+    expect(isPersonalColumn('loans', 'stat_class_name')).toBe(false);
   });
 
   it('classifies every text column of the 14 K1 tables that is not a key: personal, a code, or named as not personal', () => {
