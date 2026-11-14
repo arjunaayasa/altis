@@ -12,5 +12,11 @@ export function accreditationSettingsRoutes(shell: typeof shellRoute) {
       path: 'settings/accreditation',
       component: lazyScreen(() => import('@/screens/settings/accreditation'), 'AccreditationSettingsScreen'),
     }),
+    // ---- Komunitas (circulation core) ----
+    createRoute({
+      getParentRoute: () => shell,
+      path: 'settings/circulation',
+      component: lazyScreen(() => import('@/screens/settings/circulation'), 'CirculationSettingsScreen'),
+    }),
   ];
 }

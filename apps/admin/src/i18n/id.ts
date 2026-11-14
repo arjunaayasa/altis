@@ -1232,6 +1232,11 @@ export const ADMIN_ID = {
   'nav.members.list': 'Daftar Anggota',
   'nav.members.types': 'Tipe Anggota',
   'nav.members.import': 'Impor Anggota',
+  // ---- Komunitas (circulation core) (nav) ----
+  'nav.circulation.in_library': 'Baca di Tempat',
+  'nav.circulation.calendar': 'Kalender',
+  'nav.members.clearances': 'Surat Bebas Pustaka',
+  'settings.tab.circulation': 'Sirkulasi',
   // The screens of reports and accreditation, members and circulation: one file per area (i18n/reports,
   // i18n/accreditation, i18n/komunitas), joined in i18n/komunitas/index.ts.
   ...KOMUNITAS_ID,

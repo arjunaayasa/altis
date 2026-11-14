@@ -147,6 +147,10 @@ export const PROBLEM_REASONS: Readonly<Partial<Record<ErrorCode, readonly string
   CIRC_ITEM_ON_LOAN: Object.freeze(['same_member', 'other_member']),
   CIRC_LIMIT_REACHED: Object.freeze(['member_type', 'policy']),
   CIRC_RENEW_REFUSED: Object.freeze(['changed', 'suspended', 'expired', 'same_day', 'limit', 'hold', 'blocked', 'not_online']),
+  // ---- Komunitas (circulation core) ----
+  // An item recorded lost that is scanned back (the desk offers to take it back), and why a loan cannot be voided.
+  CIRC_LOAN_NOT_OPEN: Object.freeze(['lost_item']),
+  CIRC_VOID_REFUSED: Object.freeze(['too_late', 'other_staff', 'renewed', 'charged']),
 });
 
 /** The 5xx codes whose `reason` is sent (S7): all the others keep it out, as R53 says. */
