@@ -67,10 +67,10 @@ const LOAN: LoanResponse = {
   record: { id: RECORD_ID, title: 'Laskar Pelangi' },
 };
 
-function start(routes: Record<string, FakeHandler>) {
+function start(routes: Record<string, FakeHandler>, path = '/admin/layanan') {
   return startApp({
     me: adminMe(),
-    path: '/admin/layanan',
+    path,
     routes: {
       'GET branches': () => ({ items: [BRANCH_VIEW] }),
       'POST branches/:branchId/circulation/members/search': () => ({ items: [] }),
@@ -186,6 +186,38 @@ describe('Meja Layanan', () => {
     expect(await screen.findByText('Anggota dimuat: Siti Badriah')).toBeTruthy();
     expect(screen.queryByText('Anggota dimuat: Siti Aminah')).toBeNull();
     expect(app.requests.filter((r) => r.path.endsWith('/members/search')).map((r) => r.body)).toContainEqual({ q: 'Siti B' });
+  });
+
+  it('an item scanned while the member panel loads waits for it; a scan while a dialog is open is said, not lost in silence', async () => {
+    let release = (): void => undefined;
+    const loaded = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const app = start(
+      {
+        'GET branches/:branchId/circulation/members/:memberId': async () => {
+          await loaded;
+          return deskMember();
+        },
+        'POST branches/:branchId/circulation/loans': () => LOAN,
+      },
+      `/admin/layanan?member=${MEMBER_ID}`,
+    );
+    await scan('B0001');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(app.writes()).toEqual([]);
+    release();
+    expect(await screen.findByText(/^Dipinjam: Laskar Pelangi — jatuh tempo/, { selector: 'p.text-xl' })).toBeTruthy();
+    expect(app.writes()).toEqual([`POST branches/${BRANCH}/circulation/loans`]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pintasan (?)' }));
+    await screen.findByRole('dialog');
+    const target = document.activeElement ?? document.body;
+    for (const key of ['B', '0', '0', '0', '2', 'Enter']) fireEvent.keyDown(target, { key });
+    expect(
+      await screen.findByText('Pindaian B0002 tidak diproses karena ada jendela yang terbuka. Tutup jendela itu, lalu pindai lagi.', { selector: 'p.text-xl' }),
+    ).toBeTruthy();
+    expect(app.writes()).toEqual([`POST branches/${BRANCH}/circulation/loans`]);
   });
 
   it('F3 switches to returns by barcode alone; a late return says how late', async () => {

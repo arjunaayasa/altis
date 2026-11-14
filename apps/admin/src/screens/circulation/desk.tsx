@@ -63,7 +63,9 @@ import {
  *   yet → find the member by number; a member loaded → lend the scanned item), Kembali (F3: return by barcode alone)
  *   and Cari nama (F6: up to ten suggestions while typing; Enter takes the highlighted one, and always acts on the text
  *   in the box: before the suggestions of that text have arrived, it searches for it first). A scanner anywhere on the
- *   page counts (`useScannerInput`), and the box takes the focus back after every action and dialog.
+ *   page counts (`useScannerInput`), and the box takes the focus back after every action and dialog. An item scanned
+ *   while the member's panel is still loading waits for it; a scan while a dialog is open is not processed and the desk
+ *   says so.
  * - **One scan, one transaction.** Each loan, return and renewal is its own request with its own `Idempotency-Key`; a
  *   request that met no server at all keeps its key, so scanning the same barcode again cannot lend twice. Scans that
  *   come faster than the server answers wait in line, in order; none is dropped.
@@ -296,9 +298,10 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
     }
   }, [quickReturn, search.member]);
 
+  const fetchPanel = (branch: string, id: string) => api<DeskMemberView>('GET', `branches/${encodeURIComponent(branch)}/circulation/members/${encodeURIComponent(id)}`);
   const memberQuery = useQuery({
     queryKey: deskMemberKey(branchId ?? '', memberId ?? ''),
-    queryFn: () => api<DeskMemberView>('GET', `branches/${encodeURIComponent(branchId!)}/circulation/members/${encodeURIComponent(memberId!)}`),
+    queryFn: () => fetchPanel(branchId!, memberId!),
     enabled: me !== undefined && branchId !== null && memberId !== null,
   });
   const member = memberId === null ? null : (memberQuery.data ?? null);
@@ -405,21 +408,32 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
     }
   };
 
-  const lend = async (barcode: string): Promise<void> => {
-    if (branchId === null || member === null) return;
-    const body = { memberId: member.id, barcode };
+  /** The panel of the member `id`: the one on screen, else (still loading) the one the server answers; null when it cannot be read. */
+  const panelOf = async (id: string): Promise<DeskMemberView | null> => {
+    if (member !== null && member.id === id) return member;
+    if (branchId === null) return null;
+    try {
+      return await queryClient.fetchQuery({ queryKey: deskMemberKey(branchId, id), queryFn: () => fetchPanel(branchId, id) });
+    } catch {
+      return null;
+    }
+  };
+
+  const lend = async (panel: DeskMemberView, barcode: string): Promise<void> => {
+    if (branchId === null) return;
+    const body = { memberId: panel.id, barcode };
     try {
       const loan = await api<LoanResponse>('POST', `branches/${encodeURIComponent(branchId)}/circulation/loans`, body, { idempotencyKey: keyFor('desk-loan', body) });
       settle();
       const notes = warningTexts(t, day, loan.warnings, loan.dueOn);
-      const limit = member.type.loanLimit;
-      const next = limit === null ? t('circulation.feedback.scan_next') : t('circulation.feedback.loan_count', { count: member.counts.openLoans + 1, limit });
+      const limit = panel.type.loanLimit;
+      const next = limit === null ? t('circulation.feedback.scan_next') : t('circulation.feedback.loan_count', { count: panel.counts.openLoans + 1, limit });
       addVisit({ kind: 'loan', title: loan.record.title, barcode: loan.item.barcode, note: t('circulation.visit.due', { date: day(loan.dueOn) }) });
       say(notes.length > 0 ? 'warning' : 'success', t('circulation.feedback.lent', { title: loan.record.title, date: day(loan.dueOn) }), [...notes, next].join(' '));
       await refreshPanel();
     } catch (e) {
       settle(e);
-      const refusal = deskRefusal(t, e, { action: 'loan', code: barcode, member });
+      const refusal = deskRefusal(t, e, { action: 'loan', code: barcode, member: panel });
       addVisit({ kind: 'refused', title: refusal.title, barcode, note: t('circulation.visit.refused') });
       if (refusal.offer !== undefined) setOffer(refusal.offer);
       say(refusal.offer !== undefined ? 'warning' : 'error', refusal.title, refusal.offer === undefined ? undefined : t('circulation.offer.hint'));
@@ -570,7 +584,9 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
         else await lookup(code);
       } else {
         setValue('');
-        await lend(code);
+        const panel = await panelOf(memberId);
+        if (panel === null) say('error', t('circulation.problem.scan_no_member', { code }));
+        else await lend(panel, code);
       }
     } finally {
       setBusy(false);
@@ -593,7 +609,10 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
 
   useScannerInput({
     onScan: (code) => {
-      if (dialogOpen) return;
+      if (dialogOpen) {
+        say('error', t('circulation.problem.scan_dialog_open', { code }));
+        return;
+      }
       void process(code);
     },
     minLength: 3,
