@@ -348,7 +348,7 @@ describe.skipIf(!ctx.available)(`accreditation collection provider [${engineLabe
     });
 
     /** Replaces the history of copy `itemId` by `entries` (local dates in the fixture's time zone). */
-    async function history(itemId: string, entries: readonly { on: string; type: 'created' | 'migrated' | 'status' | 'archived'; to: string }[]): Promise<void> {
+    async function history(itemId: string, entries: readonly { on: string; type: 'created' | 'imported' | 'migrated' | 'status' | 'archived'; to: string }[]): Promise<void> {
       await h.db.deleteFrom('item_events').where('item_id', '=', itemId).execute();
       for (const e of entries) {
         await h.db
@@ -517,6 +517,36 @@ describe.skipIf(!ctx.available)(`accreditation collection provider [${engineLabe
         ]);
       } finally {
         await removeTitles([cancelled, late]);
+      }
+    });
+
+    it('a copy a catalogue import brought in on order and that arrived in 2025 is an addition of 2025, not missing from both sides', async () => {
+      const imported = await addTitle(h.db, branchId, {
+        title: 'Ekonomi Kelas XI',
+        classification: '330',
+        createdAt: stockAt('2024-11-05'),
+        items: [{ barcode: 'IMP-0001', status: 'available', createdAt: stockAt('2024-11-05'), event: 'imported' }],
+      });
+      try {
+        await history(imported.itemIds[0]!, [
+          { on: '2024-11-05', type: 'imported', to: 'on_order' },
+          { on: '2025-02-10', type: 'status', to: 'available' },
+        ]);
+        const { start, added } = await k6Values();
+        expect(start).toBe(8);
+        expect([added.numerator, added.denominator, added.table]).toEqual([
+          5,
+          8,
+          [
+            ['2023-12-31', 8],
+            [2024, 2],
+            [2025, 3],
+            [2026, 0],
+          ],
+        ]);
+        expect((await value(periodId, 'collection.titles')).value).toBe(10);
+      } finally {
+        await removeTitles([imported]);
       }
     });
 
