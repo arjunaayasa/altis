@@ -1,0 +1,81 @@
+/* "Cetak" of a report's preview (screens/reports/preview-table.tsx). While the browser prints a report, the page puts
+   a copy of the preview table at the end of <body> (`.report-print-copy`) and marks <html> with data-print="report";
+   the print then holds that copy only: the shell, the filters and the buttons are left out, and the table's header row
+   repeats on every page. The copy is never shown on screen. A plain stylesheet (no Tailwind), loaded with the report
+   page's chunk; its print rules apply only under the mark, so another page's print is untouched. */
+
+.report-print-copy {
+  display: none;
+}
+
+@page report-portrait {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+@page report-landscape {
+  size: A4 landscape;
+  margin: 12mm;
+}
+
+@media print {
+  html[data-print='report'] body > *:not(.report-print-copy) {
+    display: none !important;
+  }
+
+  html[data-print='report'] .report-print-copy {
+    display: block;
+    color: #000;
+    background: #fff;
+    font-size: 9pt;
+    page: report-portrait;
+  }
+
+  html[data-print='report'] .report-print-copy[data-orientation='landscape'] {
+    page: report-landscape;
+  }
+
+  html[data-print='report'] .report-print-header {
+    margin-bottom: 4mm;
+  }
+
+  html[data-print='report'] .report-print-header h1 {
+    margin: 1mm 0;
+    font-size: 13pt;
+    font-weight: 600;
+  }
+
+  html[data-print='report'] .report-print-header p {
+    margin: 0.5mm 0;
+  }
+
+  html[data-print='report'] .report-print-copy div {
+    overflow: visible !important;
+    border: 0 !important;
+  }
+
+  html[data-print='report'] .report-print-copy table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  html[data-print='report'] .report-print-copy thead {
+    display: table-header-group;
+  }
+
+  html[data-print='report'] .report-print-copy tfoot {
+    display: table-row-group;
+  }
+
+  html[data-print='report'] .report-print-copy th,
+  html[data-print='report'] .report-print-copy td {
+    border: 0.5pt solid #777;
+    padding: 1mm 1.5mm;
+    color: #000;
+    background: transparent;
+  }
+
+  html[data-print='report'] .report-print-copy tr {
+    break-inside: avoid;
+  }
+}
