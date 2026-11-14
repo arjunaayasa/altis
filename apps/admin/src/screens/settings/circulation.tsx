@@ -14,6 +14,8 @@ import { useT, type TKey } from '@/i18n';
 import { ApiError } from '@/lib/api';
 import { useDirtyGuard } from '@/lib/dirty-forms';
 import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, saveSettings, type SaveOutcome } from './library';
+// ---- Komunitas (charges and payments) ----
+import { FinesSettingsForm, HoldsSettingsForm } from './charges';
 
 /**
  * Pengaturan › Sirkulasi (`/admin/settings/circulation`): two groups on one page.
@@ -23,6 +25,8 @@ import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, saveSett
  *   currency, typed here as a decimal).
  * - `members`, its clearance letters (`PUT settings/members`): the number prefix (`BP/2026/0001`) and the letter
  *   profile: paper, place, who signs (title, name, staff number) and the statement (empty: the built-in sentence).
+ *
+ * - `circulation` again: fines, blocks and receipts, and holds (charges.tsx).
  *
  * Each form sends only what changed and reads its group again after saving (library.tsx's frame).
  */
@@ -198,6 +202,9 @@ export function CirculationSettingsScreen() {
   return (
     <SettingsPage>
       <SettingsLoader group="circulation">{(view, canManage) => <CirculationForm initial={view} canManage={canManage} />}</SettingsLoader>
+      {/* ---- Komunitas (charges and payments) ---- */}
+      <SettingsLoader group="circulation">{(view, canManage) => <FinesSettingsForm initial={view} canManage={canManage} />}</SettingsLoader>
+      <SettingsLoader group="circulation">{(view, canManage) => <HoldsSettingsForm initial={view} canManage={canManage} />}</SettingsLoader>
       <SettingsLoader group="members">{(view, canManage) => <ClearanceForm initial={view} canManage={canManage} />}</SettingsLoader>
     </SettingsPage>
   );

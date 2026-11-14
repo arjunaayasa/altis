@@ -19,11 +19,12 @@ import type { Db } from '../members/common.js';
 /** What the circulation core asks of the charges module. */
 export interface CirculationChargeSeam {
   /**
-   * Books the overdue fine of the loan `loanId` for the days late up to `until` (its return, a late renewal, or the day
-   * it was declared lost), from the terms the loan copied (fine per day, cap, grace days) and the calendar of the loan's
-   * branch (calendars.ts `lateDays`); 0 days or a rule without fines books nothing.
+   * Books the overdue fine of the loan `loanId` for the days late after `dueOn` (the due date the loan had before the
+   * action: a renewal has moved it already) up to `until` (its return, a late renewal, or the day it was declared
+   * lost), from the terms the loan copied (fine per day, cap, grace days) and the calendar of the loan's branch
+   * (calendars.ts `lateDays`); 0 days or a rule without fines books nothing.
    */
-  bookOverdue(tx: TxCtx, input: { loanId: string; until: string }): Promise<void>;
+  bookOverdue(tx: TxCtx, input: { loanId: string; dueOn: string; until: string }): Promise<void>;
   /** Books the replacement charge of a loan closed as lost, and the processing fee as a charge of its own when > 0. */
   bookLost(
     tx: TxCtx,

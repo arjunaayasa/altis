@@ -70,6 +70,9 @@ export const PERMISSIONS = Object.freeze([
   'visits.records.read',
   'visits.records.manage',
   'visits.stations.manage',
+  // ---- Komunitas (charges and payments) ----
+  // Waiving a charge and voiding a payment, at a branch (taking payments and booking a charge by hand is the desk's).
+  'circulation.charges.waive',
 ] as const);
 
 /** A catalog key. The second member exists only in the test profile (spec §12.5): see {@link permissionCatalog}. */
@@ -106,6 +109,8 @@ const BRANCH_SCOPED: ReadonlySet<string> = new Set([
   // Visits and guestbook stations belong to a branch (`branches/:branchId/visits/...`).
   'visits.records.manage',
   'visits.stations.manage',
+  // ---- Komunitas (charges and payments) ----
+  'circulation.charges.waive',
 ]);
 
 /** The module of a production key: its prefix (`system`, `catalog`, `opac`, `reports`, `accreditation`, `members` or `circulation`). */

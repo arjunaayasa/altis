@@ -221,6 +221,12 @@ describe('ERROR_CODES', () => {
     VISIT_ACTIVATION_INVALID: 422,
   };
 
+  // ---- Komunitas (charges and payments) ----
+  const charges: Record<string, number> = {
+    CIRC_MEMBER_BLOCKED: 409,
+    CIRC_CHARGE_STATE: 409,
+  };
+
   const expected: Record<ErrorCode, number> = {
     ...phase1a,
     ...phase1b,
@@ -233,6 +239,7 @@ describe('ERROR_CODES', () => {
     ...holds,
     ...circulationCore,
     ...membersVisits,
+    ...charges,
   } as Record<ErrorCode, number>;
 
   it('registers exactly the Phase 1a, 1b, 1c, 1d, 2 and Komunitas codes (edition lane, reports and accreditation, members and circulation) with their HTTP status', () => {
@@ -264,6 +271,7 @@ describe('ERROR_CODES', () => {
       ...Object.keys(holds),
       ...Object.keys(circulationCore),
       ...Object.keys(membersVisits),
+      ...Object.keys(charges),
     ]);
     for (const [code, status] of Object.entries(phase1a)) {
       expect(ERROR_CODES[code as ErrorCode].status, code).toBe(status);

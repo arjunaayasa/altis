@@ -112,6 +112,18 @@ import {
   MEMBER_AREA_UNIQUE,
   memberAreaSampleRows,
 } from './fixtures/komunitas-member-area-tables.js';
+// ---- Komunitas (charges and payments) ----
+import {
+  CHARGES_CLASSES,
+  CHARGES_COLUMNS,
+  CHARGES_DEFAULTS,
+  CHARGES_FOREIGN_KEYS,
+  CHARGES_INDEXES,
+  CHARGES_PRIMARY_KEYS,
+  CHARGES_TABLES_BY_MIGRATION,
+  CHARGES_UNIQUE,
+  chargesSampleRows,
+} from './fixtures/komunitas-charges-tables.js';
 import { MIGRATION_NAME, runMigrations } from '../src/migrator.js';
 import { PHASE1_MIGRATIONS } from '../src/migrations/index.js';
 import { SECRET_COLUMNS, SETTINGS_SCOPE_CLASS, TABLE_CLASSES, type SettingsScope, type TableName } from '../src/registry.js';
@@ -190,6 +202,8 @@ const EXPECTED_CLASSES = {
   ...VISITS_CLASSES,
   // ---- Komunitas (member area) ----
   ...MEMBER_AREA_CLASSES,
+  // ---- Komunitas (charges and payments) ----
+  ...CHARGES_CLASSES,
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping, made by the runner ----
   schema_migrations_edition: 'migrator',
   schema_migrations_edition_lock: 'migrator',
@@ -222,6 +236,8 @@ const TABLES_BY_MIGRATION: Record<string, TableName[]> = {
   ...VISITS_TABLES_BY_MIGRATION,
   // ---- Komunitas (member area) ----
   ...MEMBER_AREA_TABLES_BY_MIGRATION,
+  // ---- Komunitas (charges and payments) ----
+  ...CHARGES_TABLES_BY_MIGRATION,
 };
 
 /** The created_by of the tables the runner makes itself (ensureBootstrap, ruling R27). */
@@ -283,6 +299,8 @@ const EXPECTED_PRIMARY_KEYS: Record<TableName, string[]> = {
   ...VISITS_PRIMARY_KEYS,
   // ---- Komunitas (member area) ----
   ...MEMBER_AREA_PRIMARY_KEYS,
+  // ---- Komunitas (charges and payments) ----
+  ...CHARGES_PRIMARY_KEYS,
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: ['name'],
   schema_migrations_edition_lock: ['id'],
@@ -368,6 +386,8 @@ const EXPECTED_INDEXES: IndexFacts[] = [
   ...VISITS_INDEXES,
   // ---- Komunitas (member area) ----
   ...MEMBER_AREA_INDEXES,
+  // ---- Komunitas (charges and payments) ----
+  ...CHARGES_INDEXES,
 ].sort((a, b) => a.table.localeCompare(b.table) || a.name.localeCompare(b.name));
 
 /** The full-text indexes, which {@link indexes} leaves out (an expression index has no column list on PostgreSQL). */
@@ -404,6 +424,8 @@ const EXPECTED_FOREIGN_KEYS: ForeignKeyFacts[] = [
   ...VISITS_FOREIGN_KEYS,
   // ---- Komunitas (member area) ----
   ...MEMBER_AREA_FOREIGN_KEYS,
+  // ---- Komunitas (charges and payments) ----
+  ...CHARGES_FOREIGN_KEYS,
 ].sort((a, b) => a.table.localeCompare(b.table) || a.column.localeCompare(b.column));
 
 type MigratorTable =
@@ -700,6 +722,8 @@ const EXPECTED_COLUMNS: Record<Phase1Table, Record<string, string>> = {
   ...VISITS_COLUMNS,
   // ---- Komunitas (member area) ----
   ...MEMBER_AREA_COLUMNS,
+  // ---- Komunitas (charges and payments) ----
+  ...CHARGES_COLUMNS,
 };
 
 /**
@@ -769,7 +793,7 @@ describe('the table-class registry and the Phase 1 migration list (spec §6.5)',
     expect(k1).toEqual(Object.keys(K1_TABLES_BY_MIGRATION));
     expect(k1.at(-1)).toBe('0033_catalog_accred_fields');
     // Komunitas, members and circulation: one migration, 0040, in its range 0040–0049.
-    // Holds: 0041, after it; the circulation core 0042; visits 0043; the member area 0044.
+    // Holds: 0041, after it; the circulation core 0042; visits 0043; the member area 0044; charges 0045.
     const circulation = MIGRATION_NAMES.filter((name) => name >= '0040' && name < '0050');
     expect(circulation).toEqual([
       ...Object.keys(CIRCULATION_TABLES_BY_MIGRATION),
@@ -777,8 +801,9 @@ describe('the table-class registry and the Phase 1 migration list (spec §6.5)',
       ...Object.keys(CIRC_CORE_TABLES_BY_MIGRATION),
       ...Object.keys(VISITS_TABLES_BY_MIGRATION),
       ...Object.keys(MEMBER_AREA_TABLES_BY_MIGRATION),
+      ...Object.keys(CHARGES_TABLES_BY_MIGRATION),
     ]);
-    expect(circulation.at(-1)).toBe('0044_member_area');
+    expect(circulation.at(-1)).toBe('0045_charges');
     for (const [name, m] of Object.entries(PHASE1_MIGRATIONS)) {
       expect(name).toMatch(MIGRATION_NAME);
       expect(typeof m.up).toBe('function');
@@ -1365,6 +1390,8 @@ function sampleRows(): { [T in RoundTripTable]: Selectable<DB[T]>[] } {
       recordIds: [newId(), newId()],
       memberTypeIds: [newId(), newId()],
     }),
+    // ---- Komunitas (charges and payments) ----
+    ...chargesSampleRows({ branchId, staffId }),
   };
 }
 
@@ -1426,6 +1453,8 @@ const DEFAULTS: { [T in RoundTripTable]: { [K in GeneratedKeys<DB[T]>]: SelectTy
   ...VISITS_DEFAULTS,
   // ---- Komunitas (member area) ----
   ...MEMBER_AREA_DEFAULTS,
+  // ---- Komunitas (charges and payments) ----
+  ...CHARGES_DEFAULTS,
 };
 
 /** One row of each table the runner fills itself, typed by `DB`: their keys are the columns the type declares. */
@@ -1742,6 +1771,8 @@ describe.skipIf(!ctx.available)(`Phase 1 tables [${engineLabel()}]`, () => {
         ...VISITS_UNIQUE,
         // ---- Komunitas (member area) ----
         ...MEMBER_AREA_UNIQUE,
+    // ---- Komunitas (charges and payments) ----
+    ...CHARGES_UNIQUE,
       ].sort(),
     );
   });

@@ -140,6 +140,9 @@ describe('reason (PROBLEM_REASONS, S30)', () => {
       // Komunitas (circulation core)
       CIRC_LOAN_NOT_OPEN: ['lost_item'],
       CIRC_VOID_REFUSED: ['too_late', 'other_staff', 'renewed', 'charged'],
+      // Komunitas (charges and payments)
+      CIRC_MEMBER_BLOCKED: ['unpaid', 'overdue'],
+      CIRC_CHARGE_STATE: ['settled', 'cancelled', 'voided'],
     });
   });
 

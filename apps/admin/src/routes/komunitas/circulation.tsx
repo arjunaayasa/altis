@@ -69,5 +69,11 @@ export function circulationRoutes(shell: typeof shellRoute) {
       path: 'layanan/buku-tamu',
       component: lazyScreen(() => import('@/screens/visits/visits'), 'StationsScreen'),
     }),
+    // ---- Komunitas (charges and payments): Denda & Pembayaran ----
+    createRoute({
+      getParentRoute: () => shell,
+      path: 'layanan/denda',
+      component: lazyScreen(() => import('@/screens/circulation/charges'), 'ChargesScreen'),
+    }),
   ];
 }

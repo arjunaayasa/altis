@@ -15,6 +15,8 @@ import {
 } from '@altis/shared/api/members';
 import { sql, type Expression, type Selectable, type SqlBool, type Transaction, type Updateable } from 'kysely';
 import { closeMemberHolds } from '../circulation/holds.js';
+// ---- Komunitas (charges and payments) ----
+import { memberBalances } from '../circulation/charge-views.js';
 import type { TxCtx } from '../context.js';
 import {
   libraryToday,
@@ -64,7 +66,7 @@ import { revokeMemberSessions } from './area/sessions.js';
 //   today; `expires_on` = the typed date, else `valid_from + membership_days` of the type (null when the type never
 //   expires). A member is valid up to and including `expires_on`. Changing the type never changes the dates.
 // - Every write locks the member first (lockLiveMember), compares `version` and bumps it. Archiving a member with open
-//   loans is 409 MEMBER_IN_USE `{openLoans, balanceMinor}` (no fines in this edition yet: the balance is 0).
+//   loans or an unpaid balance is 409 MEMBER_IN_USE `{openLoans, balanceMinor}`.
 // - Each write records its history (`member_events`: `created` or `imported`, `updated` with the field names,
 //   `suspended`, `reactivated`, `extended` with the old and new expiry, `archived`) and, in `interactive` mode, audits
 //   `members.member.*` with the field names only.
@@ -346,7 +348,7 @@ export async function extendMember(tx: TxCtx, id: string, input: MemberExtendBod
 }
 
 /**
- * Archives a member without open loans (`archived_at = now`, version + 1), history `archived`, audit
+ * Archives a member without open loans and without an unpaid balance (`archived_at = now`, version + 1), history `archived`, audit
  * `members.member.archive`. The member's data stays (deleting is anonymisation, later work).
  *
  * @throws DomainError NOT_FOUND (none, or archived already); CONFLICT_STALE; MEMBER_IN_USE `{openLoans, balanceMinor}`
@@ -355,10 +357,17 @@ export async function archiveMember(tx: TxCtx, id: string, version: number): Pro
   const { trx } = tx;
   await lockedMember(trx, id, version);
   const openLoans = await openLoanCount(trx, id);
+  const balanceMinor = (await memberBalances(trx, [id])).get(id) ?? 0;
   if (openLoans > 0) {
     throw new DomainError('MEMBER_IN_USE', {
       detail: `Anggota ini masih meminjam ${openLoans} eksemplar; kembalikan dahulu / This member still has ${openLoans} open loan(s); return them first`,
-      meta: { openLoans, balanceMinor: 0 },
+      meta: { openLoans, balanceMinor },
+    });
+  }
+  if (balanceMinor > 0) {
+    throw new DomainError('MEMBER_IN_USE', {
+      detail: 'Anggota ini masih punya tanggungan biaya; lunasi atau hapuskan dahulu / This member still owes a balance; settle or waive it first',
+      meta: { openLoans, balanceMinor },
     });
   }
   const updated = await trx

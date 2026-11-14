@@ -236,4 +236,25 @@ export {
 export type { CardField, CardSheet, MemberBulkAction, MemberBulkRefusal, VisitPurpose, VisitSource } from './visits-vocab.js';
 export { QR_MAX_VERSION, qrMatrix } from './qr.js';
 export type { QrMatrix } from './qr.js';
+// ---- Komunitas (charges and payments) ----
+export {
+  CHARGE_ADJUSTMENT_KINDS,
+  CHARGE_KINDS,
+  CHARGE_SOURCES,
+  CHARGE_STATE_REFUSALS,
+  CHARGE_STATUSES,
+  MANUAL_CHARGE_KINDS,
+  MEMBER_BLOCK_REASONS,
+  PAYMENT_METHODS,
+} from './circulation-vocab.js';
+export type {
+  ChargeAdjustmentKind,
+  ChargeKind,
+  ChargeSource,
+  ChargeStateRefusal,
+  ChargeStatus,
+  ManualChargeKind,
+  MemberBlockReason,
+  PaymentMethod,
+} from './circulation-vocab.js';
 export type { ReportCell, ReportColumnType, ReportColumnView, ReportParamKind, ReportParamSpec } from './api/reports.js';

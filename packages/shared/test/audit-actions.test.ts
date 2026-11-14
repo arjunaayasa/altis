@@ -197,6 +197,9 @@ const MEMBER_AREA = [
   'members.self.login_locked',
 ];
 
+/** Charges and payments, appended after the circulation core in this order: 4 actions. */
+const CHARGES = ['circulation.charge.create', 'circulation.charge.waive', 'circulation.payment.create', 'circulation.payment.void'];
+
 describe('AUDIT_ACTIONS', () => {
   it('is exactly the Phase 1b list followed by the 18 actions of Phase 1c, the 5 of Phase 1d, the 30 of Phase 2, the 18 of reports and accreditation, then the 15 of members and circulation, in order', () => {
     expect(PHASE_1C).toHaveLength(18);
@@ -206,8 +209,9 @@ describe('AUDIT_ACTIONS', () => {
     expect(MEMBERS_CIRCULATION).toHaveLength(15);
     expect(CIRCULATION_CORE).toHaveLength(8);
     expect(MEMBERS_VISITS).toHaveLength(13);
-    expect([...AUDIT_ACTIONS]).toEqual([...PHASE_1B, ...PHASE_1C, ...PHASE_1D, ...PHASE_2, ...KOMUNITAS_K1, ...MEMBERS_CIRCULATION, ...HOLDS, ...CIRCULATION_CORE, ...MEMBERS_VISITS, ...MEMBER_AREA]);
     expect(MEMBER_AREA).toHaveLength(5);
+    expect(CHARGES).toHaveLength(4);
+    expect([...AUDIT_ACTIONS]).toEqual([...PHASE_1B, ...PHASE_1C, ...PHASE_1D, ...PHASE_2, ...KOMUNITAS_K1, ...MEMBERS_CIRCULATION, ...HOLDS, ...CIRCULATION_CORE, ...MEMBERS_VISITS, ...MEMBER_AREA, ...CHARGES]);
   });
 
   it('every action is dotted lower-case and fits audit_log.action (64)', () => {

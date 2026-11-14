@@ -200,6 +200,13 @@ const SAMPLE: Record<SettingKey, unknown> = {
   'members.session.idleMinutes': 30,
   'members.session.absoluteHours': 4,
   'circulation.renew.opac': false,
+  // ---- Komunitas (charges and payments) ----
+  'circulation.block.unpaidOverMinor': 1_000_000,
+  'circulation.block.overdue': true,
+  'circulation.fines.skipClosedDays': false,
+  'circulation.receipt.paperMm': 58,
+  'circulation.receipt.footer.id': 'Terima kasih',
+  'circulation.receipt.footer.en': 'Thank you',
 };
 
 /** Every key of scope `instance` (machine state of this installation, kept by a restore), in registry order; all are in group `system`. */
@@ -327,6 +334,13 @@ describe('SETTINGS registry', () => {
       'circulation.lost.processingFeeMinor',
       // ---- Komunitas (member area) ----
       'circulation.renew.opac',
+      // ---- Komunitas (charges and payments) ----
+      'circulation.block.unpaidOverMinor',
+      'circulation.block.overdue',
+      'circulation.fines.skipClosedDays',
+      'circulation.receipt.paperMm',
+      'circulation.receipt.footer.id',
+      'circulation.receipt.footer.en',
     ]);
     expect(groupKeys('members')).toEqual([
       'members.clearance.prefix',

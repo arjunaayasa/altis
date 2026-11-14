@@ -37,6 +37,8 @@ import { circulationCore } from './0042_circulation_core.js';
 import { visits } from './0043_visits.js';
 // ---- Komunitas (member area) ----
 import { memberArea } from './0044_member_area.js';
+// ---- Komunitas (charges and payments) ----
+import { charges } from './0045_charges.js';
 
 /**
  * The Phase 1 tables (spec §6.5), their indexes and the columns added since, keyed by migration name (= file stem). All of them are expand-only
@@ -90,6 +92,8 @@ export const PHASE1_MIGRATIONS: Readonly<Record<string, AltisMigration>> = Objec
   '0043_visits': visits,
   // ---- Komunitas (member area) ----
   '0044_member_area': memberArea,
+  // ---- Komunitas (charges and payments) ----
+  '0045_charges': charges,
 });
 
 // ---------------------------------------------------------------------------------------------------------------

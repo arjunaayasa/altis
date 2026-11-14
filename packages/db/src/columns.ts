@@ -4,7 +4,7 @@ import type { TableName } from './registry.js';
 export type { ColumnKind } from './ddl.js';
 
 // The column registry (decision C11): every column of every table, in table-definition order, and every table's
-// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0029; Komunitas K1: 0030–0033; members and circulation: 0040; holds: 0041; circulation core: 0042; visits: 0043; member area: 0044) and the runner's own tables (ddl.ts ensureBootstrap,
+// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0029; Komunitas K1: 0030–0033; members and circulation: 0040; holds: 0041; circulation core: 0042; visits: 0043; member area: 0044; charges and payments: 0045) and the runner's own tables (ddl.ts ensureBootstrap,
 // migrator.ts). Backup and restore read it for the canonical row (registry column order), the per-version checks of
 // an archive's rows (columnsAt) and the length checks against the code's DDL; restore's read-only pre-pass reads the
 // unique keys (S5c) and the load order follows the foreign keys (order.ts).
@@ -127,6 +127,8 @@ const M0042 = '0042_circulation_core';
 const M0043 = '0043_visits';
 // ---- Komunitas (member area) ----
 const M0044 = '0044_member_area';
+// ---- Komunitas (charges and payments) ----
+const M0045 = '0045_charges';
 
 /** `archived_at` + `version`, then the trail columns (Phase 2 spec §2.2 "arsip+ver, jejak"). */
 function archivedTrail(since: string): ColumnSpec[] {
@@ -1246,6 +1248,59 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
   // ---- Komunitas (member area) ----
   member_bookmarks: frozen(added(M0044, t.ulid('member_id'), t.ulid('record_id'), t.timestamp('created_at'))),
   attachment_member_types: frozen(added(M0044, t.ulid('attachment_id'), t.ulid('member_type_id'))),
+  // ---- Komunitas (charges and payments) ----
+  charges: frozen([
+    ...added(
+      M0045,
+      t.id(),
+      t.ulid('member_id'),
+      t.ulid('branch_id'),
+      nul(t.ulid('loan_id')),
+      nul(t.ulid('item_id')),
+      t.varchar('kind', 16),
+      t.varchar('description', 191),
+      t.bigint('amount_minor'),
+      t.bigint('paid_minor'),
+      t.bigint('waived_minor'),
+      t.char('currency', 3),
+      t.varchar('status', 16),
+      t.date('charged_on'),
+      t.timestamp('charged_at'),
+      t.bool('date_unknown'),
+      t.varchar('source', 16),
+      t.int('version'),
+    ),
+    ...trail(M0045),
+  ]),
+  charge_adjustments: frozen(
+    added(M0045, t.id(), t.ulid('charge_id'), t.varchar('kind', 16), t.bigint('amount_minor'), t.varchar('reason_text', 191), t.timestamp('at'), nul(t.ulid('by'))),
+  ),
+  payments: frozen([
+    ...added(
+      M0045,
+      t.id(),
+      t.ulid('member_id'),
+      t.ulid('branch_id'),
+      nul(t.smallint('receipt_year')),
+      nul(t.int('receipt_seq')),
+      nul(t.varchar('receipt_no', 64)),
+      t.bigint('amount_minor'),
+      t.char('currency', 3),
+      t.varchar('method', 16),
+      t.date('paid_on'),
+      t.timestamp('paid_at'),
+      nul(t.ulid('received_by')),
+      nul(t.varchar('note', 191)),
+      nul(t.timestamp('voided_at')),
+      nul(t.ulid('voided_by')),
+      nul(t.varchar('void_reason', 191)),
+      t.bool('date_unknown'),
+      t.varchar('source', 16),
+      t.int('version'),
+    ),
+    ...trail(M0045),
+  ]),
+  payment_allocations: frozen(added(M0045, t.ulid('payment_id'), t.ulid('charge_id'), t.bigint('amount_minor'))),
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping (made by the runner, like the two above) ----
   schema_migrations_edition: frozen(added(RUNNER_TABLES_SINCE, t.key191('name'), t.varchar('timestamp', 64))),
   schema_migrations_edition_lock: frozen(added(RUNNER_TABLES_SINCE, t.key191('id'), t.int('is_locked'))),
@@ -1387,6 +1442,11 @@ export const TABLE_KEYS: Readonly<Record<TableName, TableKeySpec>> = Object.free
   attachment_member_types: keys(['attachment_id', 'member_type_id'], {
     fks: [{ column: 'attachment_id', table: 'attachments', refColumn: 'id' }],
   }),
+  // ---- Komunitas (charges and payments): a charge owns its adjustments, a payment its allocations ----
+  charges: keys(['id']),
+  charge_adjustments: keys(['id'], { fks: [{ column: 'charge_id', table: 'charges', refColumn: 'id' }] }),
+  payments: keys(['id'], { unique: [['branch_id', 'receipt_year', 'receipt_seq']] }),
+  payment_allocations: keys(['payment_id', 'charge_id'], { fks: [{ column: 'payment_id', table: 'payments', refColumn: 'id' }] }),
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: keys(['name']),
   schema_migrations_edition_lock: keys(['id']),

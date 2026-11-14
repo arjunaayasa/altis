@@ -372,6 +372,11 @@ export const ERROR_CODES = Object.freeze({
   VISIT_STATION_UNPAIRED: Object.freeze({ status: 401 }),
   /** The activation code is wrong, used already or expired. */
   VISIT_ACTIVATION_INVALID: Object.freeze({ status: 422 }),
+  // ---- Komunitas (charges and payments) ----
+  /** The member is blocked from borrowing or renewing; `meta {reason: unpaid | overdue}` (MEMBER_BLOCK_REASONS). */
+  CIRC_MEMBER_BLOCKED: Object.freeze({ status: 409 }),
+  /** The charge is no longer open, or the payment was voided already; `meta {status}` (CHARGE_STATE_REFUSALS). */
+  CIRC_CHARGE_STATE: Object.freeze({ status: 409 }),
 });
 
 export type ErrorCode = keyof typeof ERROR_CODES;

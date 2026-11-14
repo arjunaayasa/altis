@@ -2,6 +2,8 @@ import { addDays, diffDays, isUlid, localDate, type LoanOutcome } from '@altis/s
 import type { LoanListItem, LoanListQuery, LoanListResponse } from '@altis/shared/api/circulation';
 import { sql, type SqlBool } from 'kysely';
 import { libraryTimeZone, memberValidationFailed, type Db } from '../members/common.js';
+// ---- Komunitas (charges and payments) ----
+import { FinePreviewer } from './fines.js';
 
 // The loan list (`GET circulation/loans`): a member's open loans and history, an item's loans, and the overdue list.
 //
@@ -9,7 +11,8 @@ import { libraryTimeZone, memberValidationFailed, type Db } from '../members/com
 //   first (cursor `<returnedAt>.<id>`).
 // - Overdue = open and due before today in the time zone of the loan's branch. The library's branches are few, so the
 //   condition is written per branch (`branch = b AND due_on < today_b`); `minDaysLate` moves each branch's bound back.
-// - Days late: today for an open loan, the return day for a closed one (0 when on time).
+// - Days late: today for an open loan, the return day for a closed one (0 when on time). An overdue open loan has the
+//   preview of its running fine (fines.ts).
 
 function badCursor(): never {
   throw memberValidationFailed([{ path: 'cursor', code: 'invalid' }]);
@@ -46,6 +49,10 @@ export async function listLoans(db: Db, q: LoanListQuery, now: number): Promise<
       'l.outcome',
       'l.renewals',
       'l.renew_limit',
+      'l.fine_per_day_minor',
+      'l.fine_cap_minor',
+      'l.grace_days',
+      'l.currency',
       'l.open_item_id',
       'l.item_id',
       'l.record_id',
@@ -92,12 +99,27 @@ export async function listLoans(db: Db, q: LoanListQuery, now: number): Promise<
   const rows = await query.limit(q.limit + 1).execute();
   const page = rows.slice(0, q.limit);
 
-  const items: LoanListItem[] = page.map((r) => {
+  const fines = await FinePreviewer.open(db);
+  const items: LoanListItem[] = [];
+  for (const r of page) {
     const open = r.open_item_id !== null;
     const today = todays.get(r.branch_id) ?? fallbackToday;
     const until = open ? today : (r.returned_on ?? today);
     const daysLate = Math.max(0, diffDays(r.due_on, until));
-    return {
+    const finePreview = !open
+      ? null
+      : await fines.preview(
+          {
+            branchId: r.branch_id,
+            dueOn: r.due_on,
+            currency: r.currency,
+            finePerDayMinor: Number(r.fine_per_day_minor),
+            fineCapMinor: r.fine_cap_minor === null ? null : Number(r.fine_cap_minor),
+            graceDays: Number(r.grace_days),
+          },
+          today,
+        );
+    items.push({
       id: r.id,
       version: Number(r.version),
       state: open ? 'open' : 'closed',
@@ -116,8 +138,9 @@ export async function listLoans(db: Db, q: LoanListQuery, now: number): Promise<
         r.member_id === null || r.member_no_display === null
           ? null
           : { id: r.member_id, memberNo: r.member_no_display, name: r.member_name ?? '', className: r.class_name, typeId: r.member_type_id ?? '' },
-    };
-  });
+      finePreview,
+    });
+  }
   const last = page[page.length - 1];
   const nextCursor = rows.length > q.limit && last !== undefined ? `${closed ? Number(last.returned_at) : last.due_on}.${last.id}` : null;
   return { items, nextCursor };
