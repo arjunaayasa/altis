@@ -143,6 +143,28 @@ export const AUDIT_ACTIONS = Object.freeze([
   'accreditation.slims_usage.finish',
   // the bulk edit of records
   'catalog.record.bulk_update',
+  // ---- Komunitas (members and circulation) ----
+  // `meta` holds field names, counts and reason names only, never a personal value.
+  // members (a status change, suspending or reactivating, is an update)
+  'members.member.create',
+  'members.member.update',
+  'members.member.archive',
+  'members.member.extend',
+  // member types
+  'members.type.create',
+  'members.type.update',
+  'members.type.archive',
+  // the CSV member import (`finish` is written when the import ends)
+  'members.import.start',
+  'members.import.finish',
+  // the desk
+  'circulation.loan.create',
+  'circulation.loan.return',
+  'circulation.loan.renew',
+  // loan rules
+  'circulation.policy.create',
+  'circulation.policy.update',
+  'circulation.policy.archive',
 ] as const);
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

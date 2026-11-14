@@ -1159,5 +1159,16 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'jobs.schedule.reports.housekeeping': 'Daily report file upkeep',
   'jobs.message.reports.housekeeping.date_jobs_postponed': 'Date-based jobs postponed: the system clock jumped',
   'jobs.message.reports.export.warnings': 'Finished with warnings; see the export list for details',
+
+  // ---- Members and desk circulation (nav) ----
+  'nav.group.circulation': 'Circulation',
+  'nav.group.members': 'Members',
+  'nav.circulation.desk': 'Service Desk',
+  'nav.circulation.quick_return': 'Quick Return',
+  'nav.circulation.overdue': 'Overdue & Due Soon',
+  'nav.circulation.policies': 'Loan Rules',
+  'nav.members.list': 'Members',
+  'nav.members.types': 'Member Types',
+  'nav.members.import': 'Import Members',
   ...KOMUNITAS_EN,
 };

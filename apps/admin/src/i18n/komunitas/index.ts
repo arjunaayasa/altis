@@ -4,9 +4,11 @@ import { ACCREDITATION_REGISTERS_EN, ACCREDITATION_REGISTERS_ID } from '../accre
 import { ACCREDITATION_USAGE_EN, ACCREDITATION_USAGE_ID } from '../accreditation/usage';
 import { ACCREDITATION_WORKSPACE_EN, ACCREDITATION_WORKSPACE_ID } from '../accreditation/workspace';
 import { REPORTS_EN, REPORTS_ID } from '../reports';
+import { CIRCULATION_EN, CIRCULATION_ID } from './circulation';
+import { MEMBERS_EN, MEMBERS_ID } from './members';
 import { KOMUNITAS_SETTINGS_EN, KOMUNITAS_SETTINGS_ID } from './settings';
 
-// The admin copy of reports and accreditation: one file per area, each owned by the task that builds its screens,
+// The admin copy of reports and accreditation, members and circulation: one file per area, each owned by the task that builds its screens,
 // joined here and spread once into ADMIN_ID/ADMIN_EN (i18n/id.ts, i18n/en.ts), so that no later task edits those
 // shared files. Keys start with `reports.` or `accreditation.` (admin-only families), never with a shared family such
 // as `report.` or `accred.`, which come from @altis/shared through the same useT().
@@ -61,6 +63,8 @@ export const KOMUNITAS_AREAS_ID = Object.freeze({
   usage: ACCREDITATION_USAGE_ID,
   print: ACCREDITATION_PRINT_ID,
   settings: KOMUNITAS_SETTINGS_ID,
+  members: MEMBERS_ID,
+  circulation: CIRCULATION_ID,
   placeholder: PLACEHOLDER_ID,
 });
 
@@ -73,6 +77,8 @@ export const KOMUNITAS_AREAS_EN: { readonly [A in keyof typeof KOMUNITAS_AREAS_I
   usage: ACCREDITATION_USAGE_EN,
   print: ACCREDITATION_PRINT_EN,
   settings: KOMUNITAS_SETTINGS_EN,
+  members: MEMBERS_EN,
+  circulation: CIRCULATION_EN,
   placeholder: PLACEHOLDER_EN,
 });
 
@@ -85,6 +91,8 @@ export const KOMUNITAS_ID = {
   ...ACCREDITATION_USAGE_ID,
   ...ACCREDITATION_PRINT_ID,
   ...KOMUNITAS_SETTINGS_ID,
+  ...MEMBERS_ID,
+  ...CIRCULATION_ID,
   ...PLACEHOLDER_ID,
 } as const;
 
@@ -97,5 +105,7 @@ export const KOMUNITAS_EN: Record<keyof typeof KOMUNITAS_ID, string> = {
   ...ACCREDITATION_USAGE_EN,
   ...ACCREDITATION_PRINT_EN,
   ...KOMUNITAS_SETTINGS_EN,
+  ...MEMBERS_EN,
+  ...CIRCULATION_EN,
   ...PLACEHOLDER_EN,
 };

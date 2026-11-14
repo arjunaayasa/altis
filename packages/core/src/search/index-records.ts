@@ -11,6 +11,7 @@ import { isDomainError } from '@altis/shared';
 import { sql, type Transaction } from 'kysely';
 import { loadCustomDefs, readCustomValues, type CustomFieldDef } from '../catalog/data/custom-fields.js';
 import { locationPaths } from '../catalog/data/locations.js';
+import { openLoanDueDates } from '../circulation/availability.js';
 import { buildSearchDoc, customSearchTexts, type SearchDoc, type SearchDocSource } from './doc.js';
 
 // The synchronous index (Phase 2 spec §4.1, D2-07): every write path of the catalogue calls indexRecords with the ids it
@@ -161,7 +162,12 @@ async function loadDocs(trx: Transaction<DB>, ids: readonly string[], defs: Inde
     .orderBy('record_id')
     .orderBy('id')
     .execute();
-  const items = groupBy(itemRows, 'record_id');
+  // An item on loan keeps its status; the open loan says it is out (facet `av`).
+  const onLoan = itemRows.length === 0 ? new Map<string, string>() : await openLoanDueDates(trx, itemRows.map((i) => i.id));
+  const items = groupBy(
+    itemRows.map((i) => ({ ...i, on_loan: onLoan.has(i.id) })),
+    'record_id',
+  );
   const locationIds = [...new Set(itemRows.map((i) => i.location_id).filter((id): id is string => id !== null))];
   const locations = locationIds.length === 0 ? new Map() : await locationPaths(trx, locationIds);
   const attachments = groupBy(

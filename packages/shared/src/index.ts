@@ -173,4 +173,40 @@ export type { DdcClass, DdcMain, DdcRowKey } from './ddc.js';
 // The types of the report and accreditation contracts the domain code shares (types only: the Zod schemas are imported
 // as `@altis/shared/api/reports` and `@altis/shared/api/accreditation`, so the root pulls no Zod in).
 export type { AnswerLetter, NoteRef, PrerequisitesView, SnpOutcome } from './api/accreditation.js';
+// ---- Komunitas (members and circulation) ----
+// The member and circulation vocabularies (no Zod: the API contracts are imported as `@altis/shared/api/members` and
+// `@altis/shared/api/circulation`).
+export {
+  CIRCULATION_VOCAB_LISTS,
+  CIRCULATION_WARNINGS,
+  GENDERS,
+  LIMIT_SCOPES,
+  LOAN_OUTCOMES,
+  LOAN_STATES,
+  MEMBER_EVENT_TYPES,
+  MEMBER_IMPORT_FORMATS,
+  MEMBER_IMPORT_MODES,
+  MEMBER_IMPORT_REFUSALS,
+  MEMBER_IMPORT_WARNINGS,
+  MEMBER_STATUSES,
+  MEMBER_STORED_STATUSES,
+  NOT_LOANABLE_REASONS,
+  RENEW_REFUSALS,
+} from './circulation-vocab.js';
+export type {
+  CirculationWarning,
+  Gender,
+  LimitScope,
+  LoanOutcome,
+  LoanState,
+  MemberEventType,
+  MemberImportFormat,
+  MemberImportMode,
+  MemberImportRefusal,
+  MemberImportWarning,
+  MemberStatus,
+  MemberStoredStatus,
+  NotLoanableReason,
+  RenewRefusal,
+} from './circulation-vocab.js';
 export type { ReportCell, ReportColumnType, ReportColumnView, ReportParamKind, ReportParamSpec } from './api/reports.js';

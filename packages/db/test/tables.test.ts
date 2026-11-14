@@ -51,6 +51,19 @@ import {
   K1_UNIQUE,
   k1SampleRows,
 } from './fixtures/komunitas-k1-tables.js';
+// ---- Komunitas (members and circulation) ----
+import {
+  CIRCULATION_CLASSES,
+  CIRCULATION_COLUMNS,
+  CIRCULATION_DEFAULTS,
+  CIRCULATION_FOREIGN_KEYS,
+  CIRCULATION_INDEXES,
+  CIRCULATION_PRIMARY_KEYS,
+  CIRCULATION_SEEDED_TABLES,
+  CIRCULATION_TABLES_BY_MIGRATION,
+  CIRCULATION_UNIQUE,
+  circulationSampleRows,
+} from './fixtures/komunitas-members-circulation-tables.js';
 import { MIGRATION_NAME, runMigrations } from '../src/migrator.js';
 import { PHASE1_MIGRATIONS } from '../src/migrations/index.js';
 import { SECRET_COLUMNS, SETTINGS_SCOPE_CLASS, TABLE_CLASSES, type SettingsScope, type TableName } from '../src/registry.js';
@@ -62,7 +75,8 @@ import { withTx } from '../src/tx.js';
 // ALTIS_TEST_DB (default sqlite); see tools/test/test-db.ts. Phase 2 (catalog, Task 1) adds the 27 tables of
 // 0020–0025, three columns of 0026 and the seeds of 0027 through fixtures/catalog-tables.ts. Komunitas K1 adds the 14
 // tables of 0030–0032 (reports and accreditation) and the columns and index of 0033 through
-// fixtures/komunitas-k1-tables.ts.
+// fixtures/komunitas-k1-tables.ts; members and circulation the 5 tables of 0040 through
+// fixtures/komunitas-members-circulation-tables.ts.
 
 const ctx = testDbContext();
 
@@ -118,6 +132,8 @@ const EXPECTED_CLASSES = {
   ...CATALOG_CLASSES,
   // ---- Komunitas K1 (tables) ----
   ...K1_CLASSES,
+  // ---- Komunitas (members and circulation) ----
+  ...CIRCULATION_CLASSES,
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping, made by the runner ----
   schema_migrations_edition: 'migrator',
   schema_migrations_edition_lock: 'migrator',
@@ -140,6 +156,8 @@ const TABLES_BY_MIGRATION: Record<string, TableName[]> = {
   ...CATALOG_TABLES_BY_MIGRATION,
   // ---- Komunitas K1 (tables) ----
   ...K1_TABLES_BY_MIGRATION,
+  // ---- Komunitas (members and circulation) ----
+  ...CIRCULATION_TABLES_BY_MIGRATION,
 };
 
 /** The created_by of the tables the runner makes itself (ensureBootstrap, ruling R27). */
@@ -191,6 +209,8 @@ const EXPECTED_PRIMARY_KEYS: Record<TableName, string[]> = {
   ...CATALOG_PRIMARY_KEYS,
   // ---- Komunitas K1 (tables) ----
   ...K1_PRIMARY_KEYS,
+  // ---- Komunitas (members and circulation) ----
+  ...CIRCULATION_PRIMARY_KEYS,
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: ['name'],
   schema_migrations_edition_lock: ['id'],
@@ -266,6 +286,8 @@ const EXPECTED_INDEXES: IndexFacts[] = [
   ...CATALOG_INDEXES,
   // ---- Komunitas K1 (tables) ----
   ...K1_INDEXES,
+  // ---- Komunitas (members and circulation) ----
+  ...CIRCULATION_INDEXES,
 ].sort((a, b) => a.table.localeCompare(b.table) || a.name.localeCompare(b.name));
 
 /** The full-text indexes, which {@link indexes} leaves out (an expression index has no column list on PostgreSQL). */
@@ -292,6 +314,8 @@ const EXPECTED_FOREIGN_KEYS: ForeignKeyFacts[] = [
   ...CATALOG_FOREIGN_KEYS,
   // ---- Komunitas K1 (tables) ----
   ...K1_FOREIGN_KEYS,
+  // ---- Komunitas (members and circulation) ----
+  ...CIRCULATION_FOREIGN_KEYS,
 ].sort((a, b) => a.table.localeCompare(b.table) || a.column.localeCompare(b.column));
 
 type MigratorTable =
@@ -578,6 +602,8 @@ const EXPECTED_COLUMNS: Record<Phase1Table, Record<string, string>> = {
   ...CATALOG_COLUMNS,
   // ---- Komunitas K1 (tables) ----
   ...K1_COLUMNS,
+  // ---- Komunitas (members and circulation) ----
+  ...CIRCULATION_COLUMNS,
 };
 
 /**
@@ -646,6 +672,10 @@ describe('the table-class registry and the Phase 1 migration list (spec §6.5)',
     const k1 = MIGRATION_NAMES.filter((name) => name >= '0030' && name < '0040');
     expect(k1).toEqual(Object.keys(K1_TABLES_BY_MIGRATION));
     expect(k1.at(-1)).toBe('0033_catalog_accred_fields');
+    // Komunitas, members and circulation: one migration, 0040, in its range 0040–0049.
+    const circulation = MIGRATION_NAMES.filter((name) => name >= '0040' && name < '0050');
+    expect(circulation).toEqual(Object.keys(CIRCULATION_TABLES_BY_MIGRATION));
+    expect(circulation.at(-1)).toBe('0040_members_circulation');
     for (const [name, m] of Object.entries(PHASE1_MIGRATIONS)) {
       expect(name).toMatch(MIGRATION_NAME);
       expect(typeof m.up).toBe('function');
@@ -1214,6 +1244,8 @@ function sampleRows(): { [T in RoundTripTable]: Selectable<DB[T]>[] } {
     ...catalogSampleRows({ branchId, staffId }),
     // ---- Komunitas K1 (tables) ----
     ...k1SampleRows({ branchId, staffId }),
+    // ---- Komunitas (members and circulation) ----
+    ...circulationSampleRows({ branchId, staffId }),
   };
 }
 
@@ -1265,6 +1297,8 @@ const DEFAULTS: { [T in RoundTripTable]: { [K in GeneratedKeys<DB[T]>]: SelectTy
   ...CATALOG_DEFAULTS,
   // ---- Komunitas K1 (tables) ----
   ...K1_DEFAULTS,
+  // ---- Komunitas (members and circulation) ----
+  ...CIRCULATION_DEFAULTS,
 };
 
 /** One row of each table the runner fills itself, typed by `DB`: their keys are the columns the type declares. */
@@ -1510,6 +1544,8 @@ describe.skipIf(!ctx.available)(`Phase 1 tables [${engineLabel()}]`, () => {
     // Phase 2 (catalog), Task 1: the seed rows of 0027 are catalog-seed.test.ts's; the round trips below start from
     // empty tables.
     for (const t of ['material_types', 'languages', 'collection_types'] as const) await db.deleteFrom(t).execute();
+    // Komunitas (members and circulation): the seeded member types and general loan rule, likewise.
+    for (const t of CIRCULATION_SEEDED_TABLES) await db.deleteFrom(t).execute();
   });
 
   afterAll(async () => {
@@ -1569,6 +1605,8 @@ describe.skipIf(!ctx.available)(`Phase 1 tables [${engineLabel()}]`, () => {
         ...CATALOG_UNIQUE,
         // ---- Komunitas K1 (tables) ----
         ...K1_UNIQUE,
+        // ---- Komunitas (members and circulation) ----
+        ...CIRCULATION_UNIQUE,
       ].sort(),
     );
   });

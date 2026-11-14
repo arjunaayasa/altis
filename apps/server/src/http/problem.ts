@@ -138,6 +138,15 @@ export const PROBLEM_REASONS: Readonly<Partial<Record<ErrorCode, readonly string
   // ---- Komunitas K1 (catalogue re-sync) ----
   // A real SLiMS migration run that skips the catalogue follows a sync dry run that found catalogue changes.
   MIGRATION_PRECHECK_FAILED: Object.freeze(['catalog_changed']),
+  // ---- Komunitas (members and circulation) ----
+  // The desk tells the cases of a refused loan or renewal apart by these words (the numbers are in the detail).
+  // A scanned "barcode" that is a member number: the desk offers to switch to that member.
+  NOT_FOUND: Object.freeze(['member_no']),
+  MEMBER_IMPORT_FORMAT: Object.freeze(['empty', 'header', 'unreadable', 'too_many_rows']),
+  CIRC_NOT_LOANABLE: Object.freeze(['status', 'collection_type', 'policy']),
+  CIRC_ITEM_ON_LOAN: Object.freeze(['same_member', 'other_member']),
+  CIRC_LIMIT_REACHED: Object.freeze(['member_type', 'policy']),
+  CIRC_RENEW_REFUSED: Object.freeze(['changed', 'suspended', 'expired', 'same_day', 'limit', 'hold', 'blocked', 'not_online']),
 });
 
 /** The 5xx codes whose `reason` is sent (S7): all the others keep it out, as R53 says. */

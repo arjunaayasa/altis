@@ -148,8 +148,11 @@ describe('the accreditation vocabularies', () => {
       period_status: PERIOD_STATUSES,
       ddc_main: DDC_MAINS,
     });
+    // Right after the catalogue's lists; the members and circulation lists follow them (circulation-vocab.test.ts).
     const names = Object.keys(VOCAB_LISTS);
-    expect(names.slice(-Object.keys(ACCREDITATION_VOCAB_LISTS).length)).toEqual(Object.keys(ACCREDITATION_VOCAB_LISTS));
+    const first = names.indexOf('accred_group');
+    expect(names.slice(first, first + Object.keys(ACCREDITATION_VOCAB_LISTS).length)).toEqual(Object.keys(ACCREDITATION_VOCAB_LISTS));
+    expect(names[first + Object.keys(ACCREDITATION_VOCAB_LISTS).length]).toBe('member_status');
     for (const [list, values] of Object.entries(ACCREDITATION_VOCAB_LISTS)) {
       expect((VOCAB_LISTS as Record<string, readonly string[]>)[list], list).toBe(values);
       expect(Object.isFrozen(values), list).toBe(true);

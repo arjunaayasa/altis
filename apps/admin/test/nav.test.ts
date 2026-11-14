@@ -10,7 +10,7 @@ import { NAV, NAV_GROUPS, visibleNav, visibleNavSections } from '@/lib/nav';
 
 type FullMe = Extract<MeResponse, { authenticated: true }>;
 
-function me(o: { permissions: readonly Permission[]; superAdmin?: boolean }): FullMe {
+function me(o: { permissions: readonly Permission[]; superAdmin?: boolean; branchPermissions?: Record<string, Permission[]> }): FullMe {
   return {
     authenticated: true,
     csrfToken: 'csrf',
@@ -18,7 +18,7 @@ function me(o: { permissions: readonly Permission[]; superAdmin?: boolean }): Fu
     mustChangePassword: false,
     user: { id: 'u1', username: 'ani', name: 'Ani', email: null, locale: null, totpEnabled: false, mfaRequired: false },
     permissions: [...o.permissions],
-    branchPermissions: {},
+    branchPermissions: o.branchPermissions ?? {},
     superAdmin: o.superAdmin ?? false,
     reauthUntil: null,
     library: { name: 'Perpustakaan Arsya', locale: 'id' },
@@ -63,22 +63,41 @@ const REPORTS_SECTIONS: [string, string][] = [
   ['/admin/accreditation', 'accreditation.workspace.read'],
 ];
 
+/** Layanan: the desk and quick return (granted per branch), the overdue list and the loan rules. */
+const CIRCULATION_SECTIONS: [string, string][] = [
+  ['/admin/layanan', 'circulation.desk.use'],
+  ['/admin/layanan/kembali', 'circulation.desk.use'],
+  ['/admin/layanan/terlambat', 'circulation.records.read'],
+  ['/admin/layanan/aturan', 'circulation.policies.manage'],
+];
+
+/** Anggota: the member list, the member types and the CSV import. */
+const MEMBERS_SECTIONS: [string, string][] = [
+  ['/admin/anggota', 'members.records.read'],
+  ['/admin/anggota/tipe', 'members.types.manage'],
+  ['/admin/anggota/impor', 'members.import.run'],
+];
+
 const sectionsOf = (m: FullMe) => visibleNavSections(m).map((s) => [s.group, paths(s.items)]);
 
 describe('NAV', () => {
-  it('lists the shell sections with their permissions: Beranda, Katalog, OPAC and Sistem, then the Laporan block at the end', () => {
+  it('lists the shell sections with their permissions: Beranda, Katalog, OPAC and Sistem, then the Laporan, Layanan and Anggota blocks at the end', () => {
     expect(NAV.map((item) => [item.to, item.permission ?? null])).toEqual([
       ['/admin', null],
       ...CATALOG_SECTIONS,
       ['/admin/opac/pages', 'opac.pages.manage'],
       ...SYSTEM_SECTIONS,
       ...REPORTS_SECTIONS,
+      ...CIRCULATION_SECTIONS,
+      ...MEMBERS_SECTIONS,
     ]);
     for (const item of NAV) expect(item.labelKey).toMatch(/^nav\./);
   });
 
-  it('NAV_GROUPS orders catalog, reports, opac, system; Beranda alone is ungrouped, every Phase 1 section is system', () => {
-    expect([...NAV_GROUPS]).toEqual(['catalog', 'reports', 'opac', 'system']);
+  it('NAV_GROUPS orders catalog, circulation, members, reports, opac, system; Beranda alone is ungrouped, every Phase 1 section is system', () => {
+    expect([...NAV_GROUPS]).toEqual(['catalog', 'circulation', 'members', 'reports', 'opac', 'system']);
+    expect(NAV.filter((item) => item.group === 'circulation').map((item) => item.to)).toEqual(CIRCULATION_SECTIONS.map(([to]) => to));
+    expect(NAV.filter((item) => item.group === 'members').map((item) => item.to)).toEqual(MEMBERS_SECTIONS.map(([to]) => to));
     expect(NAV.filter((item) => item.group === 'reports').map((item) => [item.to, item.labelKey])).toEqual([
       ['/admin/reports', 'nav.reports.reports'],
       ['/admin/accreditation', 'nav.reports.accreditation'],
@@ -130,6 +149,27 @@ describe('visibleNav', () => {
       '/admin/about',
       '/admin/reports',
       '/admin/accreditation',
+      ...CIRCULATION_SECTIONS.map(([to]) => to),
+      ...MEMBERS_SECTIONS.map(([to]) => to),
+    ]);
+  });
+
+  it('the desk permission held at one branch only shows Meja Layanan and Kembali Cepat; a global grant elsewhere does not', () => {
+    expect(sectionsOf(me({ permissions: [], branchPermissions: { B1: ['circulation.desk.use'] } }))).toEqual([
+      [null, ['/admin']],
+      ['circulation', ['/admin/layanan', '/admin/layanan/kembali']],
+      ['system', ['/admin/about']],
+    ]);
+    // Only the desk is granted per branch: another permission held at a branch opens no menu item.
+    expect(sectionsOf(me({ permissions: [], branchPermissions: { B1: ['catalog.items.manage'] } }))).toEqual([
+      [null, ['/admin']],
+      ['system', ['/admin/about']],
+    ]);
+    expect(sectionsOf(me({ permissions: ['members.records.read', 'circulation.records.read'] }))).toEqual([
+      [null, ['/admin']],
+      ['circulation', ['/admin/layanan/terlambat']],
+      ['members', ['/admin/anggota']],
+      ['system', ['/admin/about']],
     ]);
   });
 
@@ -173,12 +213,14 @@ describe('visibleNav', () => {
     ]);
   });
 
-  it('a super admin sees the four groups catalog, reports, opac, system in that order, with every item', () => {
+  it('a super admin sees the six groups catalog, circulation, members, reports, opac, system in that order, with every item', () => {
     const sections = visibleNavSections(me({ permissions: systemRolePermissions('super_admin'), superAdmin: true }));
-    expect(sections.map((s) => s.group)).toEqual([null, 'catalog', 'reports', 'opac', 'system']);
+    expect(sections.map((s) => s.group)).toEqual([null, 'catalog', 'circulation', 'members', 'reports', 'opac', 'system']);
     expect(sections.flatMap((s) => paths(s.items))).toEqual([
       '/admin',
       ...CATALOG_SECTIONS.map(([to]) => to),
+      ...CIRCULATION_SECTIONS.map(([to]) => to),
+      ...MEMBERS_SECTIONS.map(([to]) => to),
       ...REPORTS_SECTIONS.map(([to]) => to),
       '/admin/opac/pages',
       ...SYSTEM_SECTIONS.map(([to]) => to),

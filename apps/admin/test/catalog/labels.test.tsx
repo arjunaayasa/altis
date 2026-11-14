@@ -64,6 +64,7 @@ function itemDetail(o: Partial<ItemDetail> & Pick<ItemDetail, 'id' | 'barcode'>)
     custom: {},
     loanable: true,
     selfService: false,
+    circulation: { state: null },
     archived: false,
     createdAt: 1,
     updatedAt: null,

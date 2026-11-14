@@ -11,6 +11,7 @@
  */
 
 import { ACCREDITATION_VOCAB_LISTS } from './accreditation-vocab.js';
+import { CIRCULATION_VOCAB_LISTS } from './circulation-vocab.js';
 
 const hasOwn = (o: object, key: string): boolean => Object.prototype.hasOwnProperty.call(o, key);
 
@@ -346,6 +347,9 @@ export const RUN_KINDS = Object.freeze([
   // ---- Komunitas K1 (runs) ----
   // The read-only import of SLiMS usage statistics into an accreditation period.
   'slims_usage',
+  // ---- Komunitas (members and circulation) ----
+  // The CSV import of members.
+  'member_import',
 ] as const);
 
 export type RunKind = (typeof RUN_KINDS)[number];
@@ -412,6 +416,8 @@ export const VOCAB_LISTS = Object.freeze({
   body_format: BODY_FORMATS,
   // ---- Komunitas K1 (vocabularies) ----
   ...ACCREDITATION_VOCAB_LISTS,
+  // ---- Komunitas (members and circulation) ----
+  ...CIRCULATION_VOCAB_LISTS,
 });
 
 export type VocabList = keyof typeof VOCAB_LISTS;
