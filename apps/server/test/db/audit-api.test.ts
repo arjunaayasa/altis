@@ -17,7 +17,8 @@ import { seedStaff, sessionCookieFor } from '../support-auth.js';
 //   the rows through the one CSV exporter (every cell quoted, a formula start prefixed with `'`: B6), streamed in
 //   batches of at most 1000 rows read by `seq` (M16), as `audit-<from>-<to>.csv` (M33);
 // - `GET audit/verify`: the hash chain's state;
-// - `system.audit.read` alone cannot export.
+// - `system.audit.read` alone cannot export; the export holds staff names and IP addresses, so it also needs a
+//   re-authentication within 5 minutes.
 
 /** Every batch auditBatches yields (its row count), through a wrapper around the real generator. */
 /** The batches auditBatches yielded; `hold`, when set, is awaited before each batch is yielded. */
@@ -63,10 +64,13 @@ function appAt(log = recordingLogger()) {
   });
 }
 
-/** A signed-in staff user holding exactly `permissions` (one custom global role). */
-async function staffWith(username: string, permissions: ('system.audit.read' | 'system.audit.export')[]) {
+/**
+ * A signed-in staff user holding exactly `permissions` (one custom global role), whose session confirmed its password
+ * at NOW unless `reauth` is false.
+ */
+async function staffWith(username: string, permissions: ('system.audit.read' | 'system.audit.export')[], o: { reauth?: boolean } = {}) {
   const user = await seedStaff(h, { username, roles: [{ permissions }], now: NOW });
-  const token = await sessionCookieFor(h, user.id, { now: NOW });
+  const token = await sessionCookieFor(h, user.id, { now: NOW, reauthAt: o.reauth === false ? null : NOW });
   return { id: user.id, cookie: `${SID}=${token}` };
 }
 
@@ -490,6 +494,26 @@ describe.skipIf(!ctx.available)(`audit API [${engineLabel()}]`, () => {
       expect(res.headers.get('content-type')).toMatch(/^application\/problem\+json/);
       expect(await auditRows('audit.export')).toEqual([]);
       expect(await auditRows('authz.denied')).toHaveLength(1);
+    });
+
+    it('the file holds staff names: without a password confirmation in the last 5 minutes → 401 AUTH_REAUTH_REQUIRED, nothing read or audited', async () => {
+      const app = appAt();
+      await append([entry({ actorType: 'cli' })]);
+      const stale = await staffWith('auditor_lama', ['system.audit.read', 'system.audit.export'], { reauth: false });
+      const res = await createAgent(app, { peer: IP, headers: { cookie: stale.cookie } }).get(EXPORT);
+      expect([res.status, (res.json as { code: string }).code]).toEqual([401, 'AUTH_REAUTH_REQUIRED']);
+      expect(spy.batches).toEqual([]);
+      expect(await auditRows('audit.export')).toEqual([]);
+
+      // A confirmation 5 minutes and 1 second ago no longer counts; one made now does.
+      const old = await sessionCookieFor(h, stale.id, { now: NOW, reauthAt: NOW - 301 * SEC });
+      const late = await createAgent(app, { peer: IP, headers: { cookie: `${SID}=${old}` } }).get(EXPORT);
+      expect([late.status, (late.json as { code: string }).code]).toEqual([401, 'AUTH_REAUTH_REQUIRED']);
+      const fresh = await sessionCookieFor(h, stale.id, { now: NOW, reauthAt: NOW });
+      const ok = await rawGet(app, EXPORT, `${SID}=${fresh}`);
+      expect(ok.status).toBe(200);
+      await bodyText(ok);
+      expect(await auditRows('audit.export')).toHaveLength(1);
     });
 
     it('T23: HEAD is not answered (404) and writes no audit.export entry; nothing is read', async () => {
