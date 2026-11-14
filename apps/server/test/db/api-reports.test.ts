@@ -17,6 +17,7 @@ import { seedStaff, sessionCookieFor, sessionCsrfFor } from '../support-auth.js'
 // permission themselves, so the per-definition rules are tested here:
 // - the catalogue lists the definitions whose permission the user holds;
 // - the preview pages a table report, refuses a document and a parameter the definition refuses, and writes no audit;
+//   an accreditation annex is previewed in Indonesian whatever the requester reads, as it is exported;
 // - a run starts on the route that fits its definition (a personal report behind a fresh re-authentication, a document
 //   on neither), refuses an export over its format's row limit and parameters too big to store, stores an
 //   accreditation annex in Indonesian whatever the requester reads, and audits its start without parameter values;
@@ -203,6 +204,68 @@ describe.skipIf(!ctx.available)(`reports API [${engineLabel()}]`, () => {
       expect(cursor).toBeNull();
       expect(seen).toEqual(Array.from({ length: 450 }, (_, i) => i + 1));
       expect(await auditCount()).toBe(before);
+    });
+
+    it('an accreditation annex is previewed in Indonesian for a user reading English, as its export is written', async () => {
+      const english = await signedIn('english_preview', { permissions: ['accreditation.workspace.read'], locale: 'en' });
+      const periodId = newId();
+      const trail = { created_at: NOW, created_by: null, updated_at: NOW, updated_by: null, archived_at: null };
+      await h.db
+        .insertInto('accred_periods')
+        .values({
+          id: periodId,
+          branch_id: null,
+          name: 'Periode pratinjau',
+          kind: 'school_year',
+          starts_on: '2025-07-01',
+          ends_on: '2026-06-30',
+          instrument_id: 'test-sch',
+          status: 'open',
+          frozen_at: null,
+          frozen_by: null,
+          profile: '{}',
+          students: null,
+          teachers: null,
+          edu_staff: null,
+          classes: null,
+          population_served: null,
+          teachers_using: null,
+          user_pcs: null,
+          staff_pcs: null,
+          ict_devices: null,
+          scanners: null,
+          floor_m2: null,
+          bandwidth_mbps: null,
+          hours_per_week: null,
+          services: null,
+          external_website_url: null,
+          ...trail,
+        })
+        .execute();
+      await h.db
+        .insertInto('library_activities')
+        .values({
+          id: newId(),
+          branch_id: null,
+          kind: 'promotion',
+          title: 'Pekan literasi',
+          held_on: '2026-01-10',
+          ended_on: null,
+          participants: 40,
+          partner: null,
+          uses_library_facility: 0,
+          external_speaker: 0,
+          description: null,
+          version: 0,
+          ...trail,
+        })
+        .execute();
+
+      const res = await preview(english, 'accreditation.annex.activities', { params: { periodId } });
+      expect(res.status, res.text).toBe(200);
+      const body = res.json as { rows: unknown[][] };
+      expect(body.rows).toEqual([[MESSAGES.id['vocab.activity_kind.promotion'], 'Pekan literasi', '2026-01-10', 40, null]]);
+      expect(MESSAGES.id['vocab.activity_kind.promotion']).not.toBe(MESSAGES.en['vocab.activity_kind.promotion']);
     });
 
     it('refuses a user without the report’s permission (403), an unknown report (404), a bad parameter and a document (422)', async () => {
