@@ -1,6 +1,6 @@
 import { can, loadAccredSettings, previewReport, readSettings, reportById, reportCatalogEntry, visibleReports, type ReportDefinition } from '@altis/core';
 import { DomainError, resolveLocale, type Locale, type Permission } from '@altis/shared';
-import { ReportPreviewBody, type ReportCatalogResponse, type ReportPreviewResponse } from '@altis/shared/api/reports';
+import { ReportPreviewBody, reportOutputLocale, type ReportCatalogResponse, type ReportPreviewResponse } from '@altis/shared/api/reports';
 import { z } from 'zod';
 import { route, type RouteContext, type RouteDecl } from '../../http/route.js';
 
@@ -14,7 +14,9 @@ import { route, type RouteContext, type RouteDecl } from '../../http/route.js';
 //                                     permission); a read-only POST (`mode: read`, no audit) that runs outside a
 //                                     transaction (`tx: 'self'`), so no transaction stays open while the report reads.
 //                                     One keyset page; an unknown report 404, a document 422 `not_previewable`, a
-//                                     report that scans the stock of a large library 422 `export_only`.
+//                                     report that scans the stock of a large library 422 `export_only`. The rows
+//                                     are written in the language the definition's output is in (outputLocaleOf):
+//                                     an accreditation annex in Indonesian, whatever the user reads, as its export.
 
 const ReportParams = z.strictObject({ reportId: z.string().min(1).max(64) });
 
@@ -36,6 +38,16 @@ export function definitionOf(id: string): ReportDefinition {
 export async function uiLocaleOf(rc: RouteContext<unknown, unknown, unknown>): Promise<Locale> {
   const library = (await readSettings(rc.db.db, ['library.locale'], []))['library.locale'] as string;
   return resolveLocale(rc.auth?.user.locale ?? null, library);
+}
+
+/**
+ * The language a definition's output is written in, in a preview as in an export: an accreditation definition (an
+ * annex or a document) always in Indonesian, whatever the requester reads, since that is the language of the files
+ * handed to the assessors; any other in the requester's UI language. The rule is the shared one the admin screen
+ * also labels and prints a preview by (`reportOutputLocale`).
+ */
+export async function outputLocaleOf(rc: RouteContext<unknown, unknown, unknown>, def: ReportDefinition): Promise<Locale> {
+  return reportOutputLocale(def.module, await uiLocaleOf(rc));
 }
 
 const reportsCatalog = route({
@@ -71,7 +83,7 @@ const reportsPreview = route({
     const db = rc.db.db;
     const tz = (await readSettings(db, ['library.timezone'], []))['library.timezone'] as string;
     const body: ReportPreviewResponse = await previewReport(db, def, rc.body, {
-      locale: await uiLocaleOf(rc),
+      locale: await outputLocaleOf(rc, def),
       tz,
       now: rc.now,
       settings: await loadAccredSettings(db),

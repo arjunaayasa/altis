@@ -170,7 +170,7 @@ const CATALOG: Readonly<Record<string, string>> = {
   // ---- 1b: audit ----
   'audit.list': 'GET /api/v1/audit | P:system.audit.read | - | - | read | deny | none | null | - | -',
   'audit.verify': 'GET /api/v1/audit/verify | P:system.audit.read | - | - | read | deny | none | null | - | -',
-  'audit.export': 'GET /api/v1/audit/export | P:system.audit.export | - | - | system | deny | none | audit.export | - | -',
+  'audit.export': 'GET /api/v1/audit/export | P:system.audit.export | - | reauth | system | deny | none | audit.export | - | -',
   // ---- 1c: the cron call ----
   'cron.run': 'POST /_cron | pub | - | - | system | restore-allow | none | null | self | bearer',
   // ---- 1c: jobs and schedules ----
