@@ -1,3 +1,4 @@
+import { DEFAULT_CARD_PROFILE } from '@altis/shared/api/member-ops';
 import type { SettingsView } from '@altis/shared/api/settings';
 import type { SystemConfigView } from '@altis/shared/api/system-config';
 import type { QueryKey } from '@tanstack/react-query';
@@ -76,6 +77,10 @@ const SETTINGS: SettingsView = {
     visits: { dedupeLegacy: true },
     unknownMemberGroup: { default: 'auto' },
   },
+  // ---- Komunitas K2: members, visits and privacy (their screens have their own tests) ----
+  members: { card: { profile: DEFAULT_CARD_PROFILE } },
+  visits: { dedupeMinutes: 60, fromDesk: true, fromOnline: true, askPurpose: false, station: { showPhoto: false, welcome: { id: null, en: null } } },
+  privacy: { loans: { anonymizeAfterYears: 5 }, visits: { anonymizeAfterYears: 2 }, members: { anonymizeArchivedAfterYears: null } },
 };
 
 const SYSTEM: SystemConfigView = {
