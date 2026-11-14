@@ -1410,6 +1410,21 @@ export interface HoldsTable {
   updated_by: string | null;
 }
 
+// ---- Komunitas (member area) ----
+
+/** A title a member marked on the OPAC (0042); PK (`member_id`, `record_id`). */
+export interface MemberBookmarksTable {
+  member_id: string;
+  record_id: string;
+  created_at: EpochMs;
+}
+
+/** A member type that may open an attachment of access `members` (0042); none listed: every signed-in member. */
+export interface AttachmentMemberTypesTable {
+  attachment_id: string;
+  member_type_id: string;
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 
 /** Every table of the database. TABLE_CLASSES (registry.ts) classifies exactly these. */
@@ -1497,6 +1512,9 @@ export interface DB {
   loans: LoansTable;
   // ---- Komunitas (holds) ----
   holds: HoldsTable;
+  // ---- Komunitas (member area) ----
+  member_bookmarks: MemberBookmarksTable;
+  attachment_member_types: AttachmentMemberTypesTable;
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: SchemaMigrationsEditionTable;
   schema_migrations_edition_lock: SchemaMigrationsEditionLockTable;

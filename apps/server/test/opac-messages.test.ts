@@ -16,8 +16,8 @@ const SAME_IN_BOTH: readonly string[] = [];
 describe('the OPAC message areas', () => {
   const areas = Object.entries(OPAC_MESSAGE_AREAS);
 
-  it('are the five areas, in a fixed order', () => {
-    expect(areas.map(([name]) => name)).toEqual(['shell', 'pages', 'search', 'detail', 'oai']);
+  it('are the areas, in a fixed order (the member area last)', () => {
+    expect(areas.map(([name]) => name)).toEqual(['shell', 'pages', 'search', 'detail', 'oai', 'akun']);
   });
 
   it.each(areas)('%s: id and en have the same keys, each with the area prefix', (name, messages) => {

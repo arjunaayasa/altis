@@ -25,6 +25,8 @@ import { COLLECTION_REPORTS_ID } from './k1/collection-reports.js';
 import { MEMBERS_CIRCULATION_ID } from './members-circulation.js';
 // ---- Komunitas (holds) ----
 import { HOLDS_ID } from './holds.js';
+// ---- Komunitas (member area) ----
+import { MEMBER_AREA_ID } from './member-area.js';
 
 /**
  * The keys that exist only in the test profile (spec §12.5, ruling S28), next to `permissionCatalog`'s test entry and the
@@ -1577,6 +1579,9 @@ const BASE = {
   // ---- Komunitas (holds) ----
   // Audit actions, error codes and vocabularies of holds and the hold shelf (i18n/holds.ts).
   ...HOLDS_ID,
+  // ---- Komunitas (member area) ----
+  // Audit actions, the members' attachment access and the member password-reset mail (i18n/member-area.ts).
+  ...MEMBER_AREA_ID,
 } satisfies Record<string, string>;
 
 /**

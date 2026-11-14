@@ -17,6 +17,7 @@ import {
   housekeepingJobs,
   installMigrateKind,
   mailJobs,
+  memberResetMailJob, // Komunitas (member area)
   migrateKind,
   recordRun,
   releaseAdoptJob, // 1d Task 27
@@ -323,6 +324,7 @@ export function jobHandlers(deps: JobHandlerDeps = {}): JobHandler<any>[] {
     needsRuntime((rt) => backupPrepareDownloadJob(() => prepareDownloadDeps(rt()))), // 1c Task 21
     ...(deps.housekeeping === undefined ? [] : housekeepingJobs({ dataDir: deps.housekeeping.dataDir })), // 1c Task 18
     ...(deps.housekeeping === undefined ? [] : mailJobs(deps.housekeeping)), // 1c Task 18
+    ...(deps.housekeeping === undefined ? [] : [memberResetMailJob(deps.housekeeping)]), // Komunitas (member area)
     ...testJobHandlers(),
     ...(deps.diagnostics === undefined ? [] : diagnosticsJobs(deps.diagnostics)), // 1c Task 23
     ...(deps.diagnostics === undefined ? [] : releaseJobs(deps.diagnostics)), // 1d Task 27

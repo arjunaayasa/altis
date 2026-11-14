@@ -2,6 +2,7 @@ import { SETTINGS, sha256hex, type SettingKey, type SettingsCache } from '@altis
 import type { DbHandle } from '@altis/db';
 import {
   ACCENTS,
+  AKUN_CSS,
   BASE_CSS,
   DETAIL_CSS,
   OPAC_CSS,
@@ -151,10 +152,10 @@ describe('@altis/opac-theme', () => {
   });
 
   // ---- Phase 2 (catalog): Task 3 (S16) ----
-  it('S16: OPAC_CSS is the join of the per-owner modules in a fixed order: base, shell, pages, search, detail', () => {
-    expect(OPAC_CSS_MODULES).toEqual([BASE_CSS, SHELL_CSS, PAGES_CSS, SEARCH_CSS, DETAIL_CSS]);
+  it('S16: OPAC_CSS is the join of the per-owner modules in a fixed order: base, shell, pages, search, detail, akun', () => {
+    expect(OPAC_CSS_MODULES).toEqual([BASE_CSS, SHELL_CSS, PAGES_CSS, SEARCH_CSS, DETAIL_CSS, AKUN_CSS]);
     expect(Object.isFrozen(OPAC_CSS_MODULES)).toBe(true);
-    expect(OPAC_CSS).toBe(joinOpacCss([BASE_CSS, SHELL_CSS, PAGES_CSS, SEARCH_CSS, DETAIL_CSS]));
+    expect(OPAC_CSS).toBe(joinOpacCss([BASE_CSS, SHELL_CSS, PAGES_CSS, SEARCH_CSS, DETAIL_CSS, AKUN_CSS]));
     expect(OPAC_CSS.startsWith(BASE_CSS)).toBe(true);
     // An empty module adds nothing (not even a line break); the others are joined by one.
     expect(joinOpacCss(['a{}', '', 'b{}', ''])).toBe('a{}\nb{}');

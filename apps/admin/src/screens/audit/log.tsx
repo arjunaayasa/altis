@@ -42,7 +42,7 @@ type Delimiter = 'comma' | 'semicolon';
 /** The entity kinds of Phase 1 (suggestions only: the filter takes any text, later phases add kinds). */
 const ENTITIES = ['staff_users', 'roles', 'branches', 'settings', 'audit_log'] as const;
 
-const ACTOR_TYPES = ['system', 'cli', 'anonymous'] as const;
+const ACTOR_TYPES = ['system', 'cli', 'anonymous', 'member'] as const; // 'member': Komunitas (member area)
 
 /** `YYYY-MM-DD` as a date input gives it; empty is no bound. */
 const DAY = z.union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]);

@@ -109,6 +109,9 @@ export const TABLE_CLASSES: Readonly<Record<TableName, TableClass>> = Object.fre
   loans: 'data',
   // ---- Komunitas (holds) ----
   holds: 'data',
+  // ---- Komunitas (member area) ----
+  member_bookmarks: 'data',
+  attachment_member_types: 'data',
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping, made by the runner on every run ----
   schema_migrations_edition: 'migrator',
   schema_migrations_edition_lock: 'migrator',

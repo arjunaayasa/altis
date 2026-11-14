@@ -236,6 +236,50 @@ describe('defineRoutes', () => {
   });
 });
 
+// ---- Komunitas (member area) ----
+// A member-area route reads the member session instead of the staff one: `member` only with `public: true`,
+// `session: 'none'` and a path at or under /akun (besides an `optional` GET /files/:id); `form` only on a non-GET member
+// route without an idempotency store. Such a route may be a non-GET `session: 'none'` route.
+describe('the member area: `member` and `form` in the route contract', () => {
+  const akun = (over: Partial<Record<keyof RouteDecl, unknown>> = {}): RouteDecl =>
+    page({ id: 'akun.x', path: '/akun/x', member: 'required', ...over });
+
+  it('accepts member pages and forms, and the members-only file route', () => {
+    expect(reasonOf([akun()])).toBe('accepted');
+    expect(reasonOf([akun({ path: '/akun', member: 'optional' })])).toBe('accepted');
+    expect(reasonOf([akun({ method: 'POST', form: true, mode: 'write', body: z.strictObject({ recordId: z.string() }) })])).toBe('accepted');
+    expect(reasonOf([akun({ method: 'POST', form: true, tx: 'self', audit: null, alsoAudits: ['circulation.hold.create'] })])).toBe('accepted');
+    expect(reasonOf([page({ id: 'files', path: '/files/:id', session: undefined, member: 'optional' })])).toBe('accepted');
+  });
+
+  it.each<[string, Partial<Record<keyof RouteDecl, unknown>>, string]>([
+    ['a path outside /akun', { path: '/katalog/x' }, 'member_decl_invalid'],
+    ['a path that only starts like /akun', { path: '/akunx' }, 'member_decl_invalid'],
+    ['a staff session read', { session: 'optional' }, 'member_decl_invalid'],
+    ['a permission route', { public: undefined, session: undefined, permission: 'members.records.read' }, 'member_decl_invalid'],
+    ['an unknown member value', { member: 'maybe' }, 'invalid_value'],
+    ['a form on a GET', { form: true }, 'form_decl_invalid'],
+    ['a form that stores its response', { method: 'POST', form: true, idempotency: 'store' }, 'form_decl_invalid'],
+    ['a form that is not true', { method: 'POST', form: 'yes' }, 'invalid_value'],
+  ])('refuses %s', (_name, over, reason) => {
+    expect(reasonOf([akun(over)])).toBe(`ROUTE_DECL_INVALID:akun.x:${reason}`);
+  });
+
+  it('refuses a form without `member`, and `member: required` on /files/:id', () => {
+    expect(reasonOf([page({ id: 'f', method: 'POST', path: '/akun/f', form: true })])).toBe('ROUTE_DECL_INVALID:f:form_decl_invalid');
+    expect(reasonOf([page({ id: 'files', path: '/files/:id', session: undefined, member: 'required' })])).toBe('ROUTE_DECL_INVALID:files:member_decl_invalid');
+  });
+
+  it('every /akun route of ALL_ROUTES is a member route: public, session none, never the staff session', () => {
+    const akunRoutes = ALL_ROUTES.filter((d) => d.path === '/akun' || d.path.startsWith('/akun/'));
+    expect(akunRoutes.length).toBeGreaterThan(20);
+    for (const d of akunRoutes) {
+      expect([d.id, d.public, d.session, d.member !== undefined]).toEqual([d.id, true, 'none', true]);
+      if (d.method !== 'GET') expect([d.id, d.form, d.idempotency]).toEqual([d.id, true, 'none']);
+    }
+  });
+});
+
 describe('Phase 2: a cookieless read-only POST at run time (Task 2)', () => {
   const base = { state: { phase: 'ready' as const }, version: '0.1.0', buildId: 'b', log: recordingLogger() };
   /** What the test routes' handlers saw. */

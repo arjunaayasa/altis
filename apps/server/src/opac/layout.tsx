@@ -142,6 +142,10 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
             <a class="brand" href={frame?.homeHref ?? '/'}>
               {libraryName ?? t(locale, 'opac.home.title')}
             </a>
+            {/* Komunitas (member area): a static link; the page never reads a member session for it. */}
+            <a class="akun-link" href="/akun">
+              {opacText(locale, 'akun.header.link')}
+            </a>
             <nav class="lang" aria-label={t(locale, 'opac.lang.switch')}>
               {LOCALES.map((l) => (
                 <a href={frame?.langHrefs[l] ?? `?lang=${l}`} hreflang={l} lang={l} aria-current={l === locale ? 'true' : undefined}>

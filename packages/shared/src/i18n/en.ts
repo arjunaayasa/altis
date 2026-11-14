@@ -13,6 +13,8 @@ import { COLLECTION_REPORTS_EN } from './k1/collection-reports.js';
 import { MEMBERS_CIRCULATION_EN } from './members-circulation.js';
 // ---- Komunitas (holds) ----
 import { HOLDS_EN } from './holds.js';
+// ---- Komunitas (member area) ----
+import { MEMBER_AREA_EN } from './member-area.js';
 
 const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   // ---- error.<CODE> ---------------------------------------------------------------------------------------
@@ -1525,6 +1527,8 @@ const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   ...MEMBERS_CIRCULATION_EN,
   // ---- Komunitas (holds) ----
   ...HOLDS_EN,
+  // ---- Komunitas (member area) ----
+  ...MEMBER_AREA_EN,
 };
 
 /** Spread in only under the test profile, like the Indonesian one (see `id.ts`). */

@@ -13,7 +13,9 @@ import type { AppEnv } from './request-id.js';
 
 // 1c Task 15: `altis_ops` (spec §9.4) holds the token of an exclusive operation (http/ops-auth.ts issueOpsCookie), which
 // opens the `opsAuth` routes without a session (a restore past its point of no return has no tables to hold one).
-export type AuthCookie = 'altis_sid' | 'altis_rm' | 'altis_dev' | 'altis_csrf' | 'altis_ops';
+// Komunitas (member area): `altis_msid` holds the session of a member signed in to the OPAC member area
+// (http/member-auth.ts); only the routes declared with `member` read it.
+export type AuthCookie = 'altis_sid' | 'altis_rm' | 'altis_dev' | 'altis_csrf' | 'altis_ops' | 'altis_msid';
 
 /** `altis_rm` lives 30 days (spec §7.1). */
 export const REMEMBER_MAX_AGE_S = 2_592_000;

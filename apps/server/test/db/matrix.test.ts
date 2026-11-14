@@ -202,7 +202,8 @@ const CATALOG: Readonly<Record<string, string>> = {
   'files.uploads.complete': 'POST /api/v1/files/uploads/:id/complete | pub+s | - | - | system | deny | none | null | self | -',
   'files.uploads.delete': 'DELETE /api/v1/files/uploads/:id | pub+s | - | - | system | deny | none | null | self | -',
   // Phase 2 (L10): `allow`, as every OPAC route whose covers, images and media it serves (spec §12.3).
-  'files.get': 'GET /files/:id | pub | - | - | read | allow | none | null | - | -',
+  // Komunitas (member area): `member: optional`, for an attachment of access `members`.
+  'files.get': 'GET /files/:id | pub | - | - | read | allow | none | null | - | member:optional',
   // ---- 1c: backups (`backups.restore` audits nothing itself: the op writes `backup.restore` when it ends, C25) ----
   'backups.list': 'GET /api/v1/backups | P:system.backup.read | - | - | read | deny | none | null | - | -',
   'backups.create': 'POST /api/v1/backups | P:system.backup.create | - | - | system | deny | none | backup.create | self | -',
@@ -294,6 +295,9 @@ function catalogRow(d: RouteDecl): string {
     d.rawBody === undefined ? null : 'rawBody',
     d.alsoAudits === undefined ? null : `also:${d.alsoAudits.join(',')}`,
     d.ipLimits === undefined ? null : `ip:${d.ipLimits.join(',')}`,
+    // ---- Komunitas (member area): the member session a route reads, and an HTML form body ----
+    d.member === undefined ? null : `member:${d.member}`,
+    d.form === true ? 'form' : null,
   ].filter((x): x is string => x !== null);
   return [
     `${d.method} ${d.path}`,

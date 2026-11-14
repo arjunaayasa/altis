@@ -45,6 +45,13 @@ export interface DetailExtras {
   availability: Availability;
   /** The live custom field definitions (their types and option labels). */
   customDefs: readonly CustomFieldDef[];
+  // ---- Komunitas (member area) ----
+  /**
+   * The member links of the page: "Pesan judul ini" when members may place holds online and the record has copies,
+   * "Tandai" when members may sign in; the attachments of access `members` (listed "khusus anggota", opened through
+   * the member area). The page itself never reads a member session: these are plain links to `/akun`.
+   */
+  member?: { hold: boolean; bookmark: boolean; attachments: readonly { id: string; title: string; kind: string; mime: string | null }[] };
 }
 
 /** The title with its subtitle (`Title: subtitle`), its trailing ISBD punctuation dropped. */
@@ -325,10 +332,11 @@ export function viewerPath(recordId: string, attachmentId: string): string {
   return `/katalog/${encodeURIComponent(recordId)}/lampiran/${encodeURIComponent(attachmentId)}`;
 }
 
-function Attachments(props: { d: RecordData; locale: Locale; keep: Keep }) {
+function Attachments(props: { d: RecordData; locale: Locale; keep: Keep; members?: DetailExtras['member'] }) {
   const { d, locale, keep } = props;
   const list = d.attachments.filter((a) => a.access === 'public').slice(0, ATTACHMENTS_MAX);
-  if (list.length === 0) return null;
+  const forMembers = (props.members?.attachments ?? []).slice(0, Math.max(0, ATTACHMENTS_MAX - list.length));
+  if (list.length === 0 && forMembers.length === 0) return null;
   return (
     <Section id="lampiran" title={opacText(locale, 'detail.attachments')}>
       <ul class="attachment-list">
@@ -352,8 +360,31 @@ function Attachments(props: { d: RecordData; locale: Locale; keep: Keep }) {
             </li>
           );
         })}
+        {/* Komunitas (member area): an attachment for signed-in members, opened through the member area. */}
+        {forMembers.map((a) => (
+          <li>
+            <span class="attachment-title">{a.title}</span>{' '}
+            <span class="attachment-kind">{t(locale, `vocab.attachment_media.${attachmentMedia(a.kind, a.mime)}`)}</span>{' '}
+            <span class="attachment-members">({opacText(locale, 'akun.detail.members_only')})</span>{' '}
+            <a href={keep(`/akun/lampiran/${encodeURIComponent(a.id)}`)}>{opacText(locale, 'akun.detail.sign_in_to_open')}</a>
+          </li>
+        ))}
       </ul>
     </Section>
+  );
+}
+
+// ---- Komunitas (member area) ----
+/** "Pesan judul ini" and "Tandai": GET links to the member area's confirmation pages (they carry its CSRF token). */
+function MemberActions(props: { id: string; member: DetailExtras['member']; locale: Locale; keep: Keep }) {
+  const { member, locale, keep } = props;
+  if (member === undefined || (!member.hold && !member.bookmark)) return null;
+  const id = encodeURIComponent(props.id);
+  return (
+    <p class="record-actions" aria-label={opacText(locale, 'akun.detail.actions')}>
+      {member.hold ? <a href={keep(`/akun/reservasi/baru?cantuman=${id}`)}>{opacText(locale, 'akun.detail.hold')}</a> : null}
+      {member.bookmark ? <a href={keep(`/akun/penanda/baru?cantuman=${id}`)}>{opacText(locale, 'akun.detail.bookmark')}</a> : null}
+    </p>
   );
 }
 
@@ -387,6 +418,7 @@ function RecordView(props: { d: RecordData; extras: DetailExtras; locale: Locale
           </h1>
           {d.responsibility === undefined || d.responsibility.trim() === '' ? null : <p class="record-responsibility">{d.responsibility}</p>}
           <Agents d={d} locale={locale} keep={keep} />
+          <MemberActions id={d.id} member={extras.member} locale={locale} keep={keep} />
         </div>
       </header>
       <TextSection id="ringkasan" title={opacText(locale, 'detail.summary')} text={d.summary} />
@@ -396,7 +428,7 @@ function RecordView(props: { d: RecordData; extras: DetailExtras; locale: Locale
       <Subjects d={d} locale={locale} keep={keep} />
       <Relations d={d} locale={locale} keep={keep} />
       <CustomFields d={d} defs={extras.customDefs} locale={locale} />
-      <Attachments d={d} locale={locale} keep={keep} />
+      <Attachments d={d} locale={locale} keep={keep} {...(extras.member === undefined ? {} : { members: extras.member })} />
       <CitationsSection data={d} locale={locale} lang={lang} />
     </article>
   );
