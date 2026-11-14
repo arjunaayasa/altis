@@ -277,6 +277,43 @@ export const CHARGE_STATE_REFUSALS = Object.freeze(['settled', 'cancelled', 'voi
 
 export type ChargeStateRefusal = (typeof CHARGE_STATE_REFUSALS)[number];
 
+// ---- Komunitas (notices) ----
+
+/** `notices.kind`: the e-mails the library sends members (one per member, kind and day). */
+export const NOTICE_KINDS = Object.freeze(['due_soon', 'overdue', 'hold_ready'] as const);
+
+export type NoticeKind = (typeof NOTICE_KINDS)[number];
+
+/** The kinds staff may send by hand (from the desk or the overdue list). */
+export const MANUAL_NOTICE_KINDS = Object.freeze(['overdue', 'due_soon'] as const);
+
+export type ManualNoticeKind = (typeof MANUAL_NOTICE_KINDS)[number];
+
+/** `notices.status`: waiting, claimed by a sender, sent, failed (tried again while attempts allow), or not sent. */
+export const NOTICE_STATUSES = Object.freeze(['queued', 'sending', 'sent', 'failed', 'skipped'] as const);
+
+export type NoticeStatus = (typeof NOTICE_STATUSES)[number];
+
+/**
+ * `notices.reason`: why a notice was skipped (no address, no SMTP server saved, the member archived or anonymised, the
+ * library switched the kind off, nothing left to tell: the loans were returned or the hold is no longer ready) or why
+ * its last attempt failed (the SMTP stage, or `error` for anything else).
+ */
+export const NOTICE_REASONS = Object.freeze([
+  'no_email',
+  'smtp_not_configured',
+  'member_inactive',
+  'setting_off',
+  'resolved',
+  'smtp_connect',
+  'smtp_tls',
+  'smtp_auth',
+  'smtp_send',
+  'error',
+] as const);
+
+export type NoticeReason = (typeof NOTICE_REASONS)[number];
+
 // ---- labels ----------------------------------------------------------------------------------------------------------
 
 /**
@@ -315,4 +352,8 @@ export const CIRCULATION_VOCAB_LISTS = Object.freeze({
   payment_method: PAYMENT_METHODS,
   member_block_reason: MEMBER_BLOCK_REASONS,
   charge_state_refusal: CHARGE_STATE_REFUSALS,
+  // ---- Komunitas (notices) ----
+  notice_kind: NOTICE_KINDS,
+  notice_status: NOTICE_STATUSES,
+  notice_reason: NOTICE_REASONS,
 });

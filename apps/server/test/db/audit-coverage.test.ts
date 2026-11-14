@@ -1005,13 +1005,18 @@ describe('audit coverage: the Phase 2 scripts own every Phase 2 action, once', (
 /** The community actions: AUDIT_ACTIONS from the first action of reports and accreditation to the members' first. */
 const K1_ACTIONS: readonly AuditAction[] = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('reports.run.start'), AUDIT_ACTIONS.indexOf('members.member.create'));
 
-// ---- Komunitas (members and circulation) ----
-/** The members and circulation actions: AUDIT_ACTIONS from the first member action to the member tools' first. */
-const MEMBERS_CIRCULATION_ACTIONS: readonly AuditAction[] = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('members.member.create'), AUDIT_ACTIONS.indexOf('members.member.restore'));
-
 // ---- Komunitas K2 (members extended and visits) ----
-/** The member tools, visits and privacy actions: AUDIT_ACTIONS from the member tools' first action to the end. */
-const MEMBERS_VISITS_ACTIONS: readonly AuditAction[] = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('members.member.restore'));
+/** The member tools, visits and privacy actions: AUDIT_ACTIONS from the member tools' first action to the station's activation. */
+const MEMBERS_VISITS_ACTIONS: readonly AuditAction[] = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('members.member.restore'), AUDIT_ACTIONS.indexOf('visits.station.activated') + 1);
+
+// ---- Komunitas (members and circulation) ----
+/**
+ * The members and circulation actions: AUDIT_ACTIONS from the first member action to the end, without the member tools,
+ * visits and privacy block (the circulation areas that came after it append their actions at the end).
+ */
+const MEMBERS_CIRCULATION_ACTIONS: readonly AuditAction[] = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('members.member.create')).filter(
+  (action) => !MEMBERS_VISITS_ACTIONS.includes(action),
+);
 
 /** Every script the installation runs: the catalogue's, the community's, then the members and circulation scripts. */
 const AUDIT_SCRIPTS = { ...PHASE2_AUDIT_SCRIPTS, ...KOMUNITAS_AUDIT_SCRIPTS, ...MEMBERS_CIRCULATION_AUDIT_SCRIPTS, ...MEMBERS_VISITS_AUDIT_SCRIPTS };
@@ -1035,10 +1040,11 @@ describe('audit coverage: the community scripts own every community action, once
 });
 
 describe('audit coverage: the members and circulation scripts own every members and circulation action, once', () => {
-  it('the six areas list the 37 actions between them, each in exactly one, under names of their own', () => {
-    // Members and circulation 15, holds 5, then the circulation core (8), the member area (5) and charges and payments (4).
-    expect(MEMBERS_CIRCULATION_ACTIONS).toHaveLength(37);
-    expect(Object.keys(MEMBERS_CIRCULATION_AUDIT_SCRIPTS)).toEqual(['members', 'circulation', 'holds', 'circ-core', 'member-area', 'charges']);
+  it('the seven areas list the 39 actions between them, each in exactly one, under names of their own', () => {
+    // Members and circulation 15, holds 5, then the circulation core (8), the member area (5), charges and payments (4)
+    // and the notices (2).
+    expect(MEMBERS_CIRCULATION_ACTIONS).toHaveLength(39);
+    expect(Object.keys(MEMBERS_CIRCULATION_AUDIT_SCRIPTS)).toEqual(['members', 'circulation', 'holds', 'circ-core', 'member-area', 'charges', 'notices']);
     const others = { ...PHASE2_AUDIT_SCRIPTS, ...KOMUNITAS_AUDIT_SCRIPTS };
     expect(Object.keys(MEMBERS_CIRCULATION_AUDIT_SCRIPTS).filter((area) => Object.hasOwn(others, area))).toEqual([]);
     const owned = Object.values(MEMBERS_CIRCULATION_AUDIT_SCRIPTS).flatMap((s) => [...s.actions]);

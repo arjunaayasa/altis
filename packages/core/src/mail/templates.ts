@@ -5,7 +5,14 @@ import { t, type Locale } from '@altis/shared';
 // settings), and `{name}` placeholders are filled from `vars`.
 
 // ---- Komunitas (member area): `member_password_reset` ----
-export type MailKind = 'password_reset' | 'email_test' | 'member_password_reset';
+// ---- Komunitas (notices): the three member notices ----
+export type MailKind =
+  | 'password_reset'
+  | 'email_test'
+  | 'member_password_reset'
+  | 'circulation_due_soon'
+  | 'circulation_overdue'
+  | 'circulation_hold_ready';
 
 /** A library's own wording of a mail; null, undefined or blank means the catalog text. */
 export interface MailOverride {

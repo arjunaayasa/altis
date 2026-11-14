@@ -6,6 +6,8 @@ import { DESK_ROUTES } from './desk.js';
 // ---- Komunitas (holds) ----
 import { HOLD_ROUTES } from './holds.js';
 import { LOAN_LIST_ROUTES } from './loans.js';
+// ---- Komunitas (notices) ----
+import { NOTICE_ROUTES } from './notices.js';
 import { POLICY_ROUTES } from './policies.js';
 
 // The circulation API (one list per area): the desk at a branch, the loan list, the loan rules, the holds. Joined into ALL_ROUTES
@@ -20,4 +22,6 @@ export const CIRCULATION_ROUTES: RouteDecl[] = [
   ...CALENDAR_ROUTES,
   // ---- Komunitas (charges and payments) ----
   ...CHARGE_ROUTES,
+  // ---- Komunitas (notices) ----
+  ...NOTICE_ROUTES,
 ];

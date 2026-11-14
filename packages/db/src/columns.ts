@@ -4,7 +4,7 @@ import type { TableName } from './registry.js';
 export type { ColumnKind } from './ddl.js';
 
 // The column registry (decision C11): every column of every table, in table-definition order, and every table's
-// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0029; Komunitas K1: 0030–0033; members and circulation: 0040; holds: 0041; circulation core: 0042; visits: 0043; member area: 0044; charges and payments: 0045) and the runner's own tables (ddl.ts ensureBootstrap,
+// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0029; Komunitas K1: 0030–0033; members and circulation: 0040; holds: 0041; circulation core: 0042; visits: 0043; member area: 0044; charges and payments: 0045; notices: 0046) and the runner's own tables (ddl.ts ensureBootstrap,
 // migrator.ts). Backup and restore read it for the canonical row (registry column order), the per-version checks of
 // an archive's rows (columnsAt) and the length checks against the code's DDL; restore's read-only pre-pass reads the
 // unique keys (S5c) and the load order follows the foreign keys (order.ts).
@@ -129,6 +129,8 @@ const M0043 = '0043_visits';
 const M0044 = '0044_member_area';
 // ---- Komunitas (charges and payments) ----
 const M0045 = '0045_charges';
+// ---- Komunitas (notices) ----
+const M0046 = '0046_notices';
 
 /** `archived_at` + `version`, then the trail columns (Phase 2 spec §2.2 "arsip+ver, jejak"). */
 function archivedTrail(since: string): ColumnSpec[] {
@@ -1301,6 +1303,26 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
     ...trail(M0045),
   ]),
   payment_allocations: frozen(added(M0045, t.ulid('payment_id'), t.ulid('charge_id'), t.bigint('amount_minor'))),
+  // ---- Komunitas (notices) ----
+  notices: frozen(
+    added(
+      M0046,
+      t.id(),
+      t.ulid('member_id'),
+      t.varchar('kind', 16),
+      t.key191('ref_key'),
+      t.varchar('channel', 16),
+      t.varchar('status', 16),
+      nul(t.varchar('reason', 32)),
+      nul(t.text('loan_ids')),
+      nul(t.ulid('hold_id')),
+      t.smallint('attempts'),
+      nul(t.ulid('job_id')),
+      nul(t.timestamp('claimed_at')),
+      t.timestamp('created_at'),
+      nul(t.timestamp('sent_at')),
+    ),
+  ),
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping (made by the runner, like the two above) ----
   schema_migrations_edition: frozen(added(RUNNER_TABLES_SINCE, t.key191('name'), t.varchar('timestamp', 64))),
   schema_migrations_edition_lock: frozen(added(RUNNER_TABLES_SINCE, t.key191('id'), t.int('is_locked'))),
@@ -1447,6 +1469,8 @@ export const TABLE_KEYS: Readonly<Record<TableName, TableKeySpec>> = Object.free
   charge_adjustments: keys(['id'], { fks: [{ column: 'charge_id', table: 'charges', refColumn: 'id' }] }),
   payments: keys(['id'], { unique: [['branch_id', 'receipt_year', 'receipt_seq']] }),
   payment_allocations: keys(['payment_id', 'charge_id'], { fks: [{ column: 'payment_id', table: 'payments', refColumn: 'id' }] }),
+  // ---- Komunitas (notices) ----
+  notices: keys(['id'], { unique: [['ref_key']] }),
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: keys(['name']),
   schema_migrations_edition_lock: keys(['id']),

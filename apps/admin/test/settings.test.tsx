@@ -25,7 +25,7 @@ afterEach(() => {
 const LIBRARY: LibrarySettings = { name: 'Perpustakaan Arsya', type: 'sekolah', address: null, timezone: 'Asia/Jakarta', locale: 'id' };
 const EMAIL: EmailSettings = {
   senderName: 'Pustaka Arsya',
-  templates: { passwordReset: { id: { subject: null, body: null }, en: { subject: null, body: null } } },
+  templates: { passwordReset: { id: { subject: null, body: null }, en: { subject: null, body: null } }, circulationDueSoon: { id: { subject: null, body: null }, en: { subject: null, body: null } }, circulationOverdue: { id: { subject: null, body: null }, en: { subject: null, body: null } }, circulationHoldReady: { id: { subject: null, body: null }, en: { subject: null, body: null } } },
 };
 const SECURITY: SecuritySettings = { passwordMinLength: 10, sessionIdleMinutes: 30 };
 const OPAC: OpacSettings = {
@@ -99,6 +99,7 @@ function settingsStore() {
       block: { unpaidOverMinor: null, overdue: false },
       fines: { skipClosedDays: true },
       receipt: { paperMm: 80, footer: { id: null, en: null } },
+      notices: { dueSoonDays: 2, overdueEveryDays: 7, overdueMax: 3, holdReady: true },
     },
     // ---- Komunitas K2: members (clearance and card), visits and privacy ----
     members: {
