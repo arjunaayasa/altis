@@ -122,7 +122,7 @@ describe('planN1', { timeout: 60_000 }, () => {
     expect(await usageError(planN1(LEVEL2, { ...LEVEL3, schemaLatest: '9001' }, 'mysql80'))).toMatch(/^N1_MISMATCH/);
     expect(await usageError(planN1(LEVEL2, { ...LEVEL3, minCodeVersionAfter: '0.0.0' }, 'mysql80'))).toMatch(/^N1_MISMATCH/);
     // N−1's schema is not one N's migrations hold.
-    expect(await usageError(planN1({ ...LEVEL1, schemaLatest: '0042' }, LEVEL2, 'mysql80'))).toMatch(/^N1_MISMATCH/);
+    expect(await usageError(planN1({ ...LEVEL1, schemaLatest: '0043' }, LEVEL2, 'mysql80'))).toMatch(/^N1_MISMATCH/);
   });
 
   it('the fixture levels follow the release build (fixtureLevelOf)', () => {
