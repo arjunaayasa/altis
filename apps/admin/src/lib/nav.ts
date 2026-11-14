@@ -75,6 +75,8 @@ export const NAV: readonly NavItem[] = Object.freeze([
   { to: '/admin/layanan/rak-tunggu', labelKey: 'nav.circulation.hold_shelf', permission: 'circulation.desk.use', anyBranch: true, group: 'circulation' },
   // ---- Komunitas (circulation core): read in place at a desk ----
   { to: '/admin/layanan/baca', labelKey: 'nav.circulation.in_library', permission: 'circulation.desk.use', anyBranch: true, group: 'circulation' },
+  // ---- Komunitas (charges and payments): open balances, the daily cash summary, the payments ----
+  { to: '/admin/layanan/denda', labelKey: 'nav.circulation.charges', permission: 'circulation.records.read', group: 'circulation' },
   { to: '/admin/layanan/terlambat', labelKey: 'nav.circulation.overdue', permission: 'circulation.records.read', group: 'circulation' },
   { to: '/admin/layanan/aturan', labelKey: 'nav.circulation.policies', permission: 'circulation.policies.manage', group: 'circulation' },
   // ---- Komunitas (circulation core): the library calendar (read at the desk too; changed with the rules) ----

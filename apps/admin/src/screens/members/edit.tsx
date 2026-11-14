@@ -23,6 +23,8 @@ import { useApiQuery, useMe } from '@/lib/me';
 import { changedFields, isFieldProblem, isStale, optionalText, putFieldErrors, serverIssues, zodIssues } from '@/screens/catalog/masters/master-table';
 import { DueBadge, MemberStatusBadge, limitText, useCalendarDate, useMemberTypes, useTypeName } from '@/screens/circulation/common';
 import { ExtendDialog, SuspendDialog, refreshMembers, useMember } from './common';
+// ---- Komunitas (charges and payments) ----
+import { MemberChargesTab } from '@/screens/circulation/charges';
 
 /**
  * A member: Anggota baru (`/admin/anggota/baru`) and the member's page (`/admin/anggota/$memberId`).
@@ -369,7 +371,7 @@ export function MemberCreateScreen() {
   );
 }
 
-type DetailTab = 'data' | 'loans' | 'history' | 'events';
+type DetailTab = 'data' | 'loans' | 'history' | 'charges' | 'events';
 
 export function MemberDetailScreen() {
   const t = useT();
@@ -484,6 +486,11 @@ export function MemberDetailScreen() {
                 {t('members.tab.history')}
               </TabsTrigger>
             )}
+            {canLoans && (
+              <TabsTrigger value="charges" className={WRAPPING_TABS.trigger}>
+                {t('charges.member_page.tab')}
+              </TabsTrigger>
+            )}
             <TabsTrigger value="events" className={WRAPPING_TABS.trigger}>
               {t('members.tab.events')}
             </TabsTrigger>
@@ -499,6 +506,11 @@ export function MemberDetailScreen() {
           {canLoans && (
             <TabsContent value="history">
               <MemberLoans memberId={m.id} state="closed" />
+            </TabsContent>
+          )}
+          {canLoans && (
+            <TabsContent value="charges">
+              <MemberChargesTab memberId={m.id} />
             </TabsContent>
           )}
           <TabsContent value="events">
