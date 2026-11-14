@@ -1,6 +1,7 @@
-import { diffDays, type MemberStatus } from '@altis/shared';
+import { diffDays, type ItemStatus, type MemberStatus } from '@altis/shared';
 import type { MeResponse } from '@altis/shared/api/auth';
 import type { BranchListResponse, BranchView } from '@altis/shared/api/branches';
+import type { ItemCirculation } from '@altis/shared/api/catalog/items';
 import type { MemberTypeListResponse, MemberTypeRef, MemberTypeView } from '@altis/shared/api/members';
 import { useCallback, useMemo, useState } from 'react';
 import { Badge } from '@/components/form-field';
@@ -124,6 +125,17 @@ export function dueState(t: Translate, dueOn: string, daysLate: number, today: s
 }
 
 /** The badge of {@link dueState}. */
+/**
+ * An item's status as the catalogue shows it: "Dipinjam, kembali <tanggal>" while it is out on loan (a lent item keeps
+ * the status `available`), else its status.
+ */
+export function ItemStatusBadge({ status, circulation }: { status: ItemStatus; circulation: ItemCirculation }) {
+  const t = useT();
+  const day = useCalendarDate();
+  if (circulation.state === 'on_loan') return <Badge tone="warning">{t('circulation.item.on_loan', { date: day(circulation.dueOn) })}</Badge>;
+  return <Badge tone={status === 'available' ? 'info' : 'neutral'}>{t(`vocab.item_status.${status}`)}</Badge>;
+}
+
 export function DueBadge({ dueOn, daysLate }: { dueOn: string; daysLate: number }) {
   const t = useT();
   const state = dueState(t, dueOn, daysLate);

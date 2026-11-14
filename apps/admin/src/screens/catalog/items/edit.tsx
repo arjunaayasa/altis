@@ -15,6 +15,7 @@ import { ApiError, api, type FieldError } from '@/lib/api';
 import { useDirtyGuard } from '@/lib/dirty-forms';
 import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
+import { ItemStatusBadge } from '@/screens/circulation/common';
 import { ItemHistory } from './history';
 import {
   ItemFields,
@@ -282,8 +283,10 @@ function ItemPage({ item, reload }: { item: ItemDetail; reload(): Promise<ItemVi
           </div>
         </dl>
         <div className="flex flex-wrap gap-2">
-          <Badge tone={item.status === 'available' ? 'info' : 'neutral'}>{t(`vocab.item_status.${item.status}`)}</Badge>
-          <Badge tone={item.loanable ? 'info' : 'warning'}>{t(item.loanable ? 'catalog.items.loanable' : 'catalog.items.not_loanable')}</Badge>
+          <ItemStatusBadge status={item.status} circulation={item.circulation} />
+          {item.circulation.state === null && (
+            <Badge tone={item.loanable ? 'info' : 'warning'}>{t(item.loanable ? 'catalog.items.loanable' : 'catalog.items.not_loanable')}</Badge>
+          )}
           {item.selfService && <Badge>{t('catalog.items.self_service')}</Badge>}
           {item.archived && <Badge tone="danger">{t('catalog.items.archived')}</Badge>}
         </div>

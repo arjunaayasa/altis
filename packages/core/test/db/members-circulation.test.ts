@@ -2,7 +2,8 @@ import { addDays } from '@altis/shared';
 import type { MemberBody } from '@altis/shared/api/members';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDbContext } from '../../../../tools/test/test-db.js';
-import { updateItem } from '../../src/catalog/items/index.js';
+import { getItem, listItems, updateItem } from '../../src/catalog/items/index.js';
+import { recordDetail } from '../../src/catalog/records/index.js';
 import {
   archiveMember,
   archivePolicy,
@@ -24,8 +25,8 @@ import {
 import { DAY, NOW, failure, fieldErrors, openItemsDb, seedItem, seedRecord, type ItemsDb } from './catalog-items-support.js';
 
 // Members and desk circulation on the engine picked by ALTIS_TEST_DB: member numbers (normalised, unique), expiry and
-// suspension, the loan rules, lend/return/renew with their refusals, the one-open-loan key, the overdue list, the
-// archive guard and the CSV member import.
+// suspension, the loan rules, lend/return/renew with their refusals, the one-open-loan key, the catalogue's view of an
+// item out on loan, the overdue list, the archive guard and the CSV member import.
 
 const ctx = testDbContext();
 
@@ -125,6 +126,27 @@ describe.skipIf(!ctx.available)(`members and circulation [${engineLabel()}]`, ()
     expect(await available(book.recordId)).toBe(true);
     expect(await failure(giveBack(book.barcode))).toMatchObject({ code: 'CIRC_LOAN_NOT_OPEN' });
     expect((await lend(other, book.barcode, NOW + 10 * DAY)).dueOn).toBe(addDays(TODAY, 17));
+  });
+
+  it('the catalogue shows an item out on loan: its view and list row say on_loan with the due date, its record counts it not available', async () => {
+    const reader = await member();
+    const book = await item();
+    seq += 1;
+    const shelved = await seedItem(db, book.recordId, { barcode: `BK-${seq}` });
+    const loan = await lend(reader, book.barcode);
+    const out = { state: 'on_loan', dueOn: loan.dueOn, loanId: loan.id };
+    expect(await getItem(db.h.db, book.id)).toMatchObject({ status: 'available', circulation: out });
+    expect((await getItem(db.h.db, shelved)).circulation).toEqual({ state: null });
+    const rows = (await listItems(db.h.db, { recordId: book.recordId, limit: 50 })).items;
+    expect(Object.fromEntries(rows.map((r) => [r.id, [r.status, r.circulation]]))).toEqual({
+      [book.id]: ['available', out],
+      [shelved]: ['available', { state: null }],
+    });
+    expect((await recordDetail(db.h.db, book.recordId)).itemCounts).toEqual({ total: 2, available: 1 });
+
+    await giveBack(book.barcode);
+    expect((await getItem(db.h.db, book.id)).circulation).toEqual({ state: null });
+    expect((await recordDetail(db.h.db, book.recordId)).itemCounts).toEqual({ total: 2, available: 2 });
   });
 
   it('the loan refusals, in order: member, item, branch, status, limits, rule', async () => {

@@ -1,5 +1,6 @@
 import { fullTextFamily, type DB } from '@altis/db';
 import { DomainError } from '@altis/shared';
+import type { ItemCirculation } from '@altis/shared/api/catalog/items';
 import type { Kysely, Transaction } from 'kysely';
 
 // Which items are on loan. "On loan" is not an item status: an item keeps its catalogue status (`available`) while a
@@ -25,6 +26,22 @@ export async function openLoanDueDates(db: Db, itemIds: readonly string[], o: { 
       .select(['open_item_id', 'due_on'])
       .where('open_item_id', 'in', unique.slice(i, i + ID_BATCH));
     for (const r of await (lock ? q.forUpdate() : q).execute()) if (r.open_item_id !== null) out.set(r.open_item_id, r.due_on);
+  }
+  return out;
+}
+
+/** The circulation state of each of the items `itemIds` (an item without an open loan: `{state: null}`). */
+export async function itemCirculation(db: Db, itemIds: readonly string[]): Promise<Map<string, ItemCirculation>> {
+  const out = new Map<string, ItemCirculation>();
+  const unique = [...new Set(itemIds)];
+  for (const id of unique) out.set(id, { state: null });
+  for (let i = 0; i < unique.length; i += ID_BATCH) {
+    const rows = await db
+      .selectFrom('loans')
+      .select(['id', 'open_item_id', 'due_on'])
+      .where('open_item_id', 'in', unique.slice(i, i + ID_BATCH))
+      .execute();
+    for (const r of rows) if (r.open_item_id !== null) out.set(r.open_item_id, { state: 'on_loan', dueOn: r.due_on, loanId: r.id });
   }
   return out;
 }

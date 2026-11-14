@@ -176,6 +176,16 @@ export interface ItemLocationPath {
   shelfHint: string | null;
 }
 
+/**
+ * Where an item is in circulation, read from its open loan: being lent is never an item status (the item stays
+ * `available`). `on_loan` with the due date (`YYYY-MM-DD`) and the loan's id; null when the item is not out.
+ */
+export interface ItemCirculation {
+  state: 'on_loan' | null;
+  dueOn?: string;
+  loanId?: string;
+}
+
 /** One item as the admin sees it. Dates are `YYYY-MM-DD`; `price` is a decimal string in `currency`. */
 export interface ItemView {
   id: string;
@@ -206,6 +216,7 @@ export interface ItemView {
   /** §2.5: `available` and its collection type is loanable; self-service when also `self_service`. */
   loanable: boolean;
   selfService: boolean;
+  circulation: ItemCirculation;
   archived: boolean;
   createdAt: number;
   updatedAt: number | null;
@@ -241,6 +252,7 @@ export interface ItemListItem {
   callNumber: string | null;
   collectionTypeId: string;
   status: ItemStatus;
+  circulation: ItemCirculation;
   archived: boolean;
   version: number;
 }
