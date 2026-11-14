@@ -15,6 +15,7 @@ import { ApiError, api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
 import { useScannerInput } from '@/lib/scanner';
+import { ItemStatusBadge } from '@/screens/circulation/common';
 import { BulkDialog } from './bulk-dialog';
 import {
   ITEMS_KEY,
@@ -342,7 +343,7 @@ export function ItemsListScreen() {
           const row = info.row.original;
           return (
             <span className="flex flex-wrap gap-1">
-              <Badge tone={row.status === 'available' ? 'info' : 'neutral'}>{t(`vocab.item_status.${row.status}`)}</Badge>
+              <ItemStatusBadge status={row.status} circulation={row.circulation} />
               {row.archived && <Badge tone="danger">{t('catalog.items.archived')}</Badge>}
             </span>
           );

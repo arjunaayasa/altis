@@ -2,6 +2,7 @@ import type { DB } from '@altis/db';
 import type { AcqSource } from '@altis/shared';
 import type { ItemDetail, ItemListItem, ItemListQuery, ItemListResponse, ItemLocationPath, ItemView } from '@altis/shared/api/catalog/items';
 import type { Kysely, Transaction } from 'kysely';
+import { itemCirculation } from '../../circulation/availability.js';
 import { readCustomValues } from '../data/custom-fields.js';
 import { locationPaths, type LocationPath } from '../data/locations.js';
 import { barcodeProblem, normalizeBarcode } from '../lib/barcode.js';
@@ -15,7 +16,8 @@ import { suggestShelf } from './suggest.js';
 //
 // - The view: the record's title, the branch, the location path (room › area › shelf), the shelf suggestion of an item
 //   without a location (its call number, else the record's call number or classification; not stored), loanable and
-//   self-service (§2.5), the price as a decimal string, the custom values. `callNumber` is the item's own (null: it
+//   self-service (§2.5), the price as a decimal string, the custom values, and whether it is out on loan (its open
+//   loan's due date; the item's status stays `available` while it is lent). `callNumber` is the item's own (null: it
 //   follows the record).
 // - itemByBarcode normalises the raw text (spec §3.4) and checks it before any query, so a NUL or another character no
 //   barcode can hold never reaches the database (PostgreSQL refuses NUL in a parameter): such text, or a valid ISBN, is
@@ -24,7 +26,7 @@ import { suggestShelf } from './suggest.js';
 //   location (with the locations below it: a room lists the items of its shelves), status, collection type, record, and
 //   a barcode prefix (normalised like a barcode, read as the key range `[prefix, prefix + DEL)`: every key is printable
 //   ASCII, and a range uses the index where a LIKE would need an escape clause per dialect). A row's call number is the
-//   item's, else its record's.
+//   item's, else its record's; a row says whether the item is out on loan, as the view does.
 
 type Db = Kysely<DB> | Transaction<DB>;
 
@@ -59,6 +61,7 @@ async function itemViews(db: Db, ids: readonly string[]): Promise<ItemView[]> {
     .execute();
   const paths = await locationPaths(db, rows.flatMap((r) => (r.location_id === null ? [] : [r.location_id])));
   const custom = await readCustomValues(db, 'items', rows.map((r) => r.id));
+  const circulation = await itemCirculation(db, rows.map((r) => r.id));
   const views = new Map<string, ItemView>();
   for (const r of rows) {
     const callNumber = r.call_number ?? r.record_call_number ?? r.record_classification;
@@ -90,6 +93,7 @@ async function itemViews(db: Db, ids: readonly string[]): Promise<ItemView[]> {
       note: r.note,
       custom: custom.get(r.id) ?? {},
       ...loanability(status, r),
+      circulation: circulation.get(r.id) ?? { state: null },
       archived: r.archived_at !== null,
       createdAt: Number(r.created_at),
       updatedAt: r.updated_at === null ? null : Number(r.updated_at),
@@ -214,6 +218,7 @@ export async function listItems(db: Db, q: ItemListQuery): Promise<ItemListRespo
   const rows = await itemListPageQuery(db, q, locations).execute();
   const page = rows.slice(0, limit);
   const paths = await locationPaths(db, page.flatMap((r) => (r.location_id === null ? [] : [r.location_id])));
+  const circulation = await itemCirculation(db, page.map((r) => r.id));
   const items: ItemListItem[] = page.map((r) => ({
     id: r.id,
     barcode: r.barcode_display,
@@ -223,6 +228,7 @@ export async function listItems(db: Db, q: ItemListQuery): Promise<ItemListRespo
     callNumber: r.call_number ?? r.record_call_number,
     collectionTypeId: r.collection_type_id,
     status: itemStatusOf(r.status),
+    circulation: circulation.get(r.id) ?? { state: null },
     archived: r.archived_at !== null,
     version: Number(r.version),
   }));
