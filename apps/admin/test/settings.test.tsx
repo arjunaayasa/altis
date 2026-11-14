@@ -1,3 +1,4 @@
+import { DEFAULT_CARD_PROFILE } from '@altis/shared/api/member-ops';
 import type { RoleItem } from '@altis/shared/api/roles';
 import type {
   AccreditationSettingsView,
@@ -89,6 +90,10 @@ function settingsStore() {
     opac: structuredClone(OPAC),
     catalog: structuredClone(CATALOG),
     accreditation: structuredClone(ACCREDITATION),
+    // ---- Komunitas K2: members, visits and privacy ----
+    members: { card: { profile: structuredClone(DEFAULT_CARD_PROFILE) } },
+    visits: { dedupeMinutes: 60, fromDesk: true, fromOnline: true, askPurpose: false, station: { showPhoto: false, welcome: { id: null, en: null } } },
+    privacy: { loans: { anonymizeAfterYears: 5 }, visits: { anonymizeAfterYears: 2 }, members: { anonymizeArchivedAfterYears: null } },
   };
   const puts: { group: string; body: unknown }[] = [];
   const routes: Record<string, FakeHandler> = {
