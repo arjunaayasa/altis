@@ -1,4 +1,5 @@
 import { addDays, t, type MessageKey } from '@altis/shared';
+import type { KyselyPlugin } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDbContext } from '../../../../tools/test/test-db.js';
 import { collectionSummaryReport as def } from '../../src/reports/collection/summary.js';
@@ -97,6 +98,33 @@ describe.skipIf(!ctx.available)(`collection.summary [${engineLabel()}]`, () => {
     const paged = await drain(def, ctxFor(c, def, {}), 4);
     expect(paged.pages).toBeGreaterThan(3);
     expect(paged.rows).toEqual(whole.rows);
+  });
+
+  it('reads today’s collection in few passes: the copies once for every copy count, once more per distinct title count', async () => {
+    // The statements executed (a query is also transformed when a helper only inspects it).
+    const statements: string[] = [];
+    const compiled = new Map<unknown, string>();
+    const capture: KyselyPlugin = {
+      transformQuery(args) {
+        compiled.set(args.queryId, c.db.getExecutor().compileQuery(args.node, args.queryId).sql);
+        return args.node;
+      },
+      async transformResult(args) {
+        statements.push(compiled.get(args.queryId) ?? '');
+        return args.result;
+      },
+    };
+    for (const params of [{}, { branchId: c.branchId }]) {
+      statements.length = 0;
+      const counted = await drain(def, { ...ctxFor(c, def, params), db: c.db.withPlugin(capture) });
+      expect(counted.rows, JSON.stringify(params)).toEqual((await drain(def, ctxFor(c, def, params))).rows);
+      const over = (table: string, alias: string) => statements.filter((q) => new RegExp(`from [\`"]${table}[\`"] as [\`"]${alias}[\`"]`).test(q)).length;
+      // The copies: grouped once by status, material type, collection type and location; then the distinct titles per
+      // status, collection type and location. The titles: once by material type, and (without a branch, which leaves
+      // them out) once for those without copies.
+      expect(over('items', 'i'), JSON.stringify(params)).toBe(4);
+      expect(over('records', 'r'), JSON.stringify(params)).toBe('branchId' in params ? 1 : 2);
+    }
   });
 });
 

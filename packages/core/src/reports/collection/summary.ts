@@ -15,7 +15,6 @@ import {
   label,
   liveItemSql,
   locationsById,
-  materialCodeSql,
   materialTypesByCode,
   offsetPage,
   stockCopies,
@@ -96,12 +95,20 @@ function addGrouped(map: Record<string, Pair>, titles: readonly GroupedRow[], it
   for (const row of items) add(map, row['k'] === null ? GROUP_NONE : String(row['k']), 0, row.count);
 }
 
-/** The counts of today's stock, from grouped queries over the current rows. */
+/** A group key as the counts name it (`GROUP_NONE` for none). */
+const keyOf = (value: string | number | null | undefined): string => (value === null || value === undefined ? GROUP_NONE : String(value));
+
+/**
+ * The counts of today's stock, from grouped queries over the current rows. Each statement is a pass over the whole
+ * collection, so the parts that are sums are read together: the titles once by material type (all titles and the
+ * electronic ones are sums of those), the copies once by status, material type, collection type and location at the
+ * same time (every copy count is a sum of those). Only the titles per status, collection type and location need a
+ * distinct count each (a title with copies in two locations counts in both).
+ */
 async function countToday(ctx: ReportCtx, branchId: string | null): Promise<SummaryAcc> {
   const day = ctx.today;
   const scope = { branchId };
-  const electronic = ctx.settings.electronicMaterialTypeCodes;
-  const titles = () => ctx.db.selectFrom('records as r').where(stockTitleSql('r', day, scope, electronic));
+  const electronic = new Set(ctx.settings.electronicMaterialTypeCodes);
   const copies = () =>
     ctx.db
       .selectFrom('items as i')
@@ -110,18 +117,34 @@ async function countToday(ctx: ReportCtx, branchId: string | null): Promise<Summ
       .where('r.archived_at', 'is', null)
       .where(itemScopeSql('i', scope));
   const acc = emptyAcc();
-  acc.a = [await countRows(titles()), await countRows(copies())];
-  acc.w = (await countDistinctGrouped(copies(), {}, 'i.record_id'))[0]?.count ?? 0;
-  acc.n = branchId !== null ? 0 : await countRows(ctx.db.selectFrom('records as r').where('r.archived_at', 'is', null).where(countedWithoutCopiesSql('r', electronic)));
-  acc.e = [await countRows(titles().where(materialCodeSql('r', electronic))), await countRows(copies().where(materialCodeSql('r', electronic)))];
-  addGrouped(acc.s, await countDistinctGrouped(copies(), { k: 'i.status' }, 'i.record_id'), await countGrouped(copies(), { k: 'i.status' }));
-  addGrouped(
-    acc.m,
-    await countGrouped(titles().innerJoin('material_types as mt', 'mt.id', 'r.material_type_id'), { k: 'mt.code_key' }),
-    await countGrouped(copies().innerJoin('material_types as mt', 'mt.id', 'r.material_type_id'), { k: 'mt.code_key' }),
-  );
-  addGrouped(acc.c, await countDistinctGrouped(copies(), { k: 'i.collection_type_id' }, 'i.record_id'), await countGrouped(copies(), { k: 'i.collection_type_id' }));
-  addGrouped(acc.l, await countDistinctGrouped(copies(), { k: 'i.location_id' }, 'i.record_id'), await countGrouped(copies(), { k: 'i.location_id' }));
+  const titles = ctx.db
+    .selectFrom('records as r')
+    .leftJoin('material_types as mt', 'mt.id', 'r.material_type_id')
+    .where(stockTitleSql('r', day, scope, [...electronic]));
+  for (const row of await countGrouped(titles, { m: 'mt.code_key' })) {
+    acc.a[0] += row.count;
+    // A title whose material type row is gone counts in the titles, not in a material type (as an inner join had it).
+    if (row.m === null) continue;
+    add(acc.m, String(row.m), row.count, 0);
+    if (electronic.has(String(row.m))) acc.e[0] += row.count;
+  }
+  const byParts = copies().leftJoin('material_types as mt', 'mt.id', 'r.material_type_id');
+  for (const row of await countGrouped(byParts, { s: 'i.status', m: 'mt.code_key', c: 'i.collection_type_id', l: 'i.location_id' })) {
+    acc.a[1] += row.count;
+    if (row.m !== null) {
+      add(acc.m, String(row.m), 0, row.count);
+      if (electronic.has(String(row.m))) acc.e[1] += row.count;
+    }
+    add(acc.s, keyOf(row.s), 0, row.count);
+    add(acc.c, keyOf(row.c), 0, row.count);
+    add(acc.l, keyOf(row.l), 0, row.count);
+  }
+  acc.n = branchId !== null ? 0 : await countRows(ctx.db.selectFrom('records as r').where('r.archived_at', 'is', null).where(countedWithoutCopiesSql('r', [...electronic])));
+  // A title in the stock either has a copy in it or, without any copy at all, counts without one (`n`): never both.
+  acc.w = acc.a[0] - acc.n;
+  addGrouped(acc.s, await countDistinctGrouped(copies(), { k: 'i.status' }, 'i.record_id'), []);
+  addGrouped(acc.c, await countDistinctGrouped(copies(), { k: 'i.collection_type_id' }, 'i.record_id'), []);
+  addGrouped(acc.l, await countDistinctGrouped(copies(), { k: 'i.location_id' }, 'i.record_id'), []);
   return acc;
 }
 
@@ -129,7 +152,8 @@ async function countToday(ctx: ReportCtx, branchId: string | null): Promise<Summ
 function masterRows(section: string, map: Record<string, Pair>, masters: Map<string, MasterLabel>, none: string): ReportRow[] {
   const keys = Object.keys(map).filter((k) => map[k]![0] > 0 || map[k]![1] > 0);
   const orderOf = (k: string): readonly (string | number)[] => (k === GROUP_NONE ? [2] : masters.has(k) ? [0, ...masters.get(k)!.order] : [1, k]);
-  keys.sort((a, b) => compareOrder(orderOf(a), orderOf(b)));
+  // Two masters alike in order, label and code (locations of two branches) keep one order: by their id.
+  keys.sort((a, b) => compareOrder(orderOf(a), orderOf(b)) || compareOrder([a], [b]));
   return keys.map((k) => [section, k === GROUP_NONE ? none : (masters.get(k)?.label ?? k), map[k]![0], map[k]![1]]);
 }
 
