@@ -4,9 +4,11 @@
 // footer when the document is written, because the page count is only known then.
 //
 // The standard fonts are not embedded and use WinAnsi, so a character outside WinAnsi (Arabic, Javanese, CJK, emoji)
-// prints as `?`. A table row with a cell that lost characters gets one small extra line with the caller's note (for
-// example "see the XLSX/CSV") and is counted in `nonLatinRows`; a character WinAnsi has (`é`) or that transliterates
-// (`ā` → `a`) is no loss. Paragraphs are not counted. All sizes are PDF points (1/72 in). Pure apart from node:zlib.
+// prints as `?`. A table row with a cell that lost letters or digits of a writing system other than Latin gets one
+// small extra line with the caller's note (for example "see the XLSX/CSV") and is counted in `nonLatinRows`; a
+// character WinAnsi has (`é`), one that transliterates (`ā` → `a`), a modifier letter of romanisation (`ʿ` → `‘`) and
+// an invisible format character (a zero-width space, dropped) are no loss, and a symbol or emoji that prints as `?` is
+// no text of another script. Paragraphs are not counted. All sizes are PDF points (1/72 in). Pure apart from node:zlib.
 
 import { textWidth } from './afm.js';
 import type { PdfFont } from './afm.js';
@@ -34,7 +36,7 @@ export interface PdfLayoutOptions {
   header?: { left: string; right?: string } | null;
   /** The footer text of page `page` of `pages` (1-based); default `"<page>/<pages>"`. */
   footer?: (page: number, pages: number) => string;
-  /** The small line printed under a table row that lost characters to WinAnsi. */
+  /** The small line printed under a table row that lost text of another writing system to WinAnsi. */
   nonLatinNote: string;
 }
 
@@ -126,9 +128,12 @@ function textLines(s: string): string[] {
   return s.replace(/\t/g, ' ').split(/\r\n|\r|\n/);
 }
 
-/** How many characters of `s` print as `?` (line breaks and tabs are layout, not lost characters). */
+/**
+ * How many letters or digits of a writing system other than Latin in `s` print as `?` (line breaks and tabs are
+ * layout, not lost characters).
+ */
 function lostCharacters(s: string): number {
-  return toWinAnsi(s.replace(/\r\n|\r|\n|\t/g, ' ')).replaced;
+  return toWinAnsi(s.replace(/\r\n|\r|\n|\t/g, ' ')).otherScript;
 }
 
 /** Pieces of an over-long word, each at most `max` wide (one character at least). */
@@ -281,7 +286,7 @@ export class PdfLayout {
     return this.#pageList.length;
   }
 
-  /** Table rows that lost characters to WinAnsi, over every table so far. */
+  /** Table rows that lost text of another writing system to WinAnsi, over every table so far. */
   get nonLatinRows(): number {
     return this.#nonLatinRows;
   }
@@ -342,7 +347,8 @@ export class PdfLayout {
   /**
    * A table over the printable width, split between the columns by weight. Cells are wrapped; a row that does not fit
    * starts a new page (a row taller than a page continues on the next), and the header row is repeated at the top of
-   * every page the table reaches. A row with a cell that lost characters to WinAnsi gets the note line under it.
+   * every page the table reaches. A row with a cell that lost text of another writing system to WinAnsi gets the note
+   * line under it.
    * `rows` is read once, in order; a row may have fewer cells than columns (the rest are empty), not more.
    */
   table(columns: readonly PdfTableColumn[], rows: Iterable<readonly PdfCell[]>): { rows: number; nonLatinRows: number } {
