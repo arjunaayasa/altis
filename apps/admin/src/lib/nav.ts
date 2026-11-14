@@ -10,19 +10,24 @@ import type { AdminKey } from '@/i18n';
  *
  * Phase 2 (its spec §13; plan Task 2) groups them: Katalog, OPAC, then Sistem (the Phase 1 screens); Beranda stays
  * above the groups. The shell and the command palette show each group under its heading (`nav.group.<group>`). The
- * community milestones add Laporan (reports and accreditation) after Katalog; the service and member groups of later
- * milestones go before it.
+ * community milestones add Laporan (reports and accreditation) after Katalog, and Layanan (the circulation desk and its
+ * lists) and Anggota (members) between Katalog and Laporan.
  */
-export type NavGroup = 'catalog' | 'reports' | 'opac' | 'system';
+export type NavGroup = 'catalog' | 'circulation' | 'members' | 'reports' | 'opac' | 'system';
 
 /** The groups in the order the shell and the palette show them. */
-export const NAV_GROUPS: readonly NavGroup[] = Object.freeze(['catalog', 'reports', 'opac', 'system'] as const);
+export const NAV_GROUPS: readonly NavGroup[] = Object.freeze(['catalog', 'circulation', 'members', 'reports', 'opac', 'system'] as const);
 
 export interface NavItem {
   to: string;
   labelKey: AdminKey;
   permission?: Permission;
   superAdminOnly?: boolean;
+  /**
+   * The permission is granted per branch (the service desk): the item also shows for a user who holds it at any one
+   * branch through a role assigned there.
+   */
+  anyBranch?: boolean;
   /** The group the item is listed under; none for Beranda. */
   group?: NavGroup;
 }
@@ -61,6 +66,16 @@ export const NAV: readonly NavItem[] = Object.freeze([
   // workspace needs reading it first).
   { to: '/admin/reports', labelKey: 'nav.reports.reports', permission: 'reports.statistics.read', group: 'reports' },
   { to: '/admin/accreditation', labelKey: 'nav.reports.accreditation', permission: 'accreditation.workspace.read', group: 'reports' },
+  // ---- Members and desk circulation ----
+  // Layanan: the desk and its quick-return page work at a branch (the desk permission is granted per branch); the
+  // overdue list and the loan rules are library-wide. Anggota: the member list, the member types and the CSV import.
+  { to: '/admin/layanan', labelKey: 'nav.circulation.desk', permission: 'circulation.desk.use', anyBranch: true, group: 'circulation' },
+  { to: '/admin/layanan/kembali', labelKey: 'nav.circulation.quick_return', permission: 'circulation.desk.use', anyBranch: true, group: 'circulation' },
+  { to: '/admin/layanan/terlambat', labelKey: 'nav.circulation.overdue', permission: 'circulation.records.read', group: 'circulation' },
+  { to: '/admin/layanan/aturan', labelKey: 'nav.circulation.policies', permission: 'circulation.policies.manage', group: 'circulation' },
+  { to: '/admin/anggota', labelKey: 'nav.members.list', permission: 'members.records.read', group: 'members' },
+  { to: '/admin/anggota/tipe', labelKey: 'nav.members.types', permission: 'members.types.manage', group: 'members' },
+  { to: '/admin/anggota/impor', labelKey: 'nav.members.import', permission: 'members.import.run', group: 'members' },
   // The edition's own items (ruling R2, edition/index.ts), after the community ones: none in the community edition.
   ...editionNav,
 ] satisfies NavItem[]);
@@ -69,9 +84,11 @@ export const NAV: readonly NavItem[] = Object.freeze([
 export function visibleNav(me: MeResponse | undefined): NavItem[] {
   if (me === undefined || !me.authenticated || me.stage !== 'full') return [];
   const held = new Set<string>(me.permissions);
+  const atSomeBranch = new Set<string>(Object.values(me.branchPermissions).flat());
   return NAV.filter((item) => {
     if (item.superAdminOnly === true && !me.superAdmin) return false;
-    return item.permission === undefined || me.superAdmin || held.has(item.permission);
+    if (item.permission === undefined || me.superAdmin || held.has(item.permission)) return true;
+    return item.anyBranch === true && atSomeBranch.has(item.permission);
   });
 }
 

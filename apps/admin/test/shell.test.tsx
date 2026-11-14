@@ -243,6 +243,14 @@ describe('navigation and language', () => {
       ['Impor/Ekspor', '/admin/catalog/exchange'],
       ['Cetak Label', '/admin/catalog/labels'],
       ['Duplikat', '/admin/catalog/duplicates'],
+      // The Layanan and Anggota groups: the desk and its lists, the members.
+      ['Meja Layanan', '/admin/layanan'],
+      ['Kembali Cepat', '/admin/layanan/kembali'],
+      ['Terlambat & Jatuh Tempo', '/admin/layanan/terlambat'],
+      ['Aturan Peminjaman', '/admin/layanan/aturan'],
+      ['Daftar Anggota', '/admin/anggota'],
+      ['Tipe Anggota', '/admin/anggota/tipe'],
+      ['Impor Anggota', '/admin/anggota/impor'],
       // The Laporan group: the report catalogue and the accreditation workspace.
       ['Laporan', '/admin/reports'],
       ['Akreditasi', '/admin/accreditation'],
@@ -266,22 +274,24 @@ describe('navigation and language', () => {
     expect(within(mainNav()).getByRole('link', { name: 'Konfigurasi Sistem' })).toBeTruthy();
   });
 
-  it('the sections sit under their group headings, Katalog, Laporan, OPAC then Sistem; Beranda above them', async () => {
+  it('the sections sit under their group headings, Katalog, Layanan, Anggota, Laporan, OPAC then Sistem; Beranda above them', async () => {
     setup(signedIn({ permissions: systemRolePermissions('super_admin'), superAdmin: true }));
     await screen.findByText('Selamat datang, Ani.');
     const nav = mainNav();
     const groups = within(nav)
       .getAllByRole('list')
       .filter((list) => list.hasAttribute('aria-label'));
-    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual(['Katalog', 'Laporan', 'OPAC', 'Sistem']);
+    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual(['Katalog', 'Layanan', 'Anggota', 'Laporan', 'OPAC', 'Sistem']);
     // Each heading is shown above its list.
     for (const name of ['Katalog', 'OPAC', 'Sistem']) expect(within(nav).getByText(name, { selector: 'p' })).toBeTruthy();
     // The Laporan heading and the Laporan item read the same.
     expect(within(nav).getAllByText('Laporan', { selector: 'p' })).toHaveLength(1);
     expect(within(groups[0]!).getAllByRole('link').map((a) => a.textContent)).toContain('Migrasi SLiMS');
-    expect(within(groups[1]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Laporan', 'Akreditasi']);
-    expect(within(groups[2]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Halaman & Berita']);
-    expect(within(groups[3]!).getByRole('link', { name: 'Konfigurasi Sistem' })).toBeTruthy();
+    expect(within(groups[1]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Meja Layanan', 'Kembali Cepat', 'Terlambat & Jatuh Tempo', 'Aturan Peminjaman']);
+    expect(within(groups[2]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Daftar Anggota', 'Tipe Anggota', 'Impor Anggota']);
+    expect(within(groups[3]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Laporan', 'Akreditasi']);
+    expect(within(groups[4]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Halaman & Berita']);
+    expect(within(groups[5]!).getByRole('link', { name: 'Konfigurasi Sistem' })).toBeTruthy();
     // Beranda belongs to no group.
     for (const g of groups) expect(within(g).queryByRole('link', { name: 'Beranda' })).toBeNull();
     expect(within(nav).getByRole('link', { name: 'Beranda' })).toBeTruthy();

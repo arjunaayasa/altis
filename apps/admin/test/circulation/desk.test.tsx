@@ -1,0 +1,185 @@
+import type { BranchView } from '@altis/shared/api/branches';
+import type { DeskMemberView, LoanResponse, ReturnResponse } from '@altis/shared/api/circulation';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { adminMe, problem, startApp, type FakeHandler } from '../fake-api';
+
+// Meja Layanan: one scan box for a member card or an item barcode, each scan one transaction with its own
+// Idempotency-Key, and the outcome said three ways (colour, a sentence, a live region). Kembali (F3) returns by barcode
+// alone. A refusal is said in words from its code; an item the member already holds offers "Kembalikan sekarang".
+
+beforeAll(async () => {
+  await import('@/screens/circulation/desk');
+});
+
+beforeEach(() => {
+  localStorage.clear();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+const BRANCH = 'B1';
+const MEMBER_ID = '01JZ0000000000000000000A01';
+const ITEM_ID = '01JZ0000000000000000000I01';
+const RECORD_ID = '01JZ0000000000000000000R01';
+
+const BRANCH_VIEW: BranchView = {
+  id: BRANCH,
+  code: 'PUSAT',
+  name: 'Perpustakaan Pusat',
+  address: null,
+  timezone: 'Asia/Jakarta',
+  isDefault: true,
+  archivedAt: null,
+  version: 1,
+  active: true,
+};
+
+function deskMember(o: Partial<DeskMemberView> = {}): DeskMemberView {
+  return {
+    id: MEMBER_ID,
+    memberNo: 'A001',
+    name: 'Budi Santoso',
+    type: { id: '01JZ0000000000000000000T01', code: 'SISWA', nameId: 'Siswa', nameEn: 'Student', loanLimit: 3 },
+    className: '7A',
+    status: 'active',
+    statusNote: null,
+    expiresOn: '2027-06-30',
+    photoFileId: null,
+    notes: null,
+    counts: { openLoans: 0, overdue: 0 },
+    canBorrow: true,
+    borrowRefusal: null,
+    loans: [],
+    warnings: [],
+    ...o,
+  };
+}
+
+const LOAN: LoanResponse = {
+  id: '01JZ0000000000000000000L01',
+  version: 1,
+  dueOn: '2026-11-22',
+  item: { id: ITEM_ID, barcode: 'B0001', callNumber: '899.221 HIR l' },
+  record: { id: RECORD_ID, title: 'Laskar Pelangi' },
+};
+
+function start(routes: Record<string, FakeHandler>) {
+  return startApp({
+    me: adminMe(),
+    path: '/admin/layanan',
+    routes: {
+      'GET branches': () => ({ items: [BRANCH_VIEW] }),
+      'POST branches/:branchId/circulation/members/search': () => ({ items: [] }),
+      ...routes,
+    },
+  });
+}
+
+async function scan(code: string): Promise<void> {
+  // The box is a combobox while it looks a member up (name suggestions), a plain text box while it lends or returns.
+  const box = await screen.findByLabelText(/^Pindai/);
+  fireEvent.change(box, { target: { value: code } });
+  fireEvent.click(screen.getByRole('button', { name: 'Proses' }));
+}
+
+const headerOf = (init: RequestInit | undefined, name: string): string | null => new Headers(init?.headers).get(name);
+
+describe('Meja Layanan', () => {
+  it('finds the member by card, then lends a scanned item with its own Idempotency-Key and says the due date', async () => {
+    let member = deskMember();
+    const app = start({
+      'POST branches/:branchId/circulation/members/lookup': () => member,
+      'GET branches/:branchId/circulation/members/:memberId': () => member,
+      'POST branches/:branchId/circulation/loans': () => {
+        member = deskMember({ counts: { openLoans: 1, overdue: 0 }, loans: [{ id: LOAN.id, version: 1, branchId: BRANCH, item: LOAN.item, record: LOAN.record, loanedOn: '2026-11-15', dueOn: LOAN.dueOn, daysLate: 0, renewals: 0, renewLimit: 1 }] });
+        return new Response(JSON.stringify(LOAN), { status: 201, headers: { 'Content-Type': 'application/json', 'X-Altis-Build': '0.1.0' } });
+      },
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Meja Layanan' })).toBeTruthy();
+    expect(await screen.findByText('Belum ada anggota')).toBeTruthy();
+    await scan('a001');
+    expect(await screen.findByText('Anggota dimuat: Budi Santoso')).toBeTruthy();
+    expect(app.requests.find((r) => r.path.endsWith('/members/lookup'))?.body).toEqual({ no: 'a001' });
+    // The box now lends to this member.
+    expect(await screen.findByRole('textbox', { name: 'Pindai eksemplar untuk dipinjam oleh Budi Santoso' })).toBeTruthy();
+    expect(screen.queryByRole('combobox')).toBeNull();
+
+    await scan('B0001');
+    expect(await screen.findByText(/^Dipinjam: Laskar Pelangi — jatuh tempo/, { selector: 'p.text-xl' })).toBeTruthy();
+    expect(screen.getByText('Pinjaman ke-1 dari 3. Pindai eksemplar berikutnya.')).toBeTruthy();
+    const loanCall = app.fetchMock.mock.calls.find(([url, init]) => String(url).endsWith(`branches/${BRANCH}/circulation/loans`) && init?.method === 'POST');
+    expect(JSON.parse(String(loanCall?.[1]?.body))).toEqual({ memberId: MEMBER_ID, barcode: 'B0001' });
+    expect(headerOf(loanCall?.[1], 'Idempotency-Key')).toMatch(/^desk-loan:[0-9a-f]{32}$/);
+    // Screen readers hear it from the fixed status region.
+    await waitFor(() => expect(within(screen.getAllByRole('status')[0]!).queryByText(/Dipinjam: Laskar Pelangi/)).toBeTruthy());
+    // The panel lists the loan.
+    expect(await screen.findByRole('tab', { name: 'Dipinjam (1)' })).toBeTruthy();
+  });
+
+  it('says a refusal in words from its code, and offers to return an item the member already holds', async () => {
+    const held = deskMember({
+      counts: { openLoans: 1, overdue: 0 },
+      loans: [{ id: LOAN.id, version: 1, branchId: BRANCH, item: { ...LOAN.item, barcode: 'B0009' }, record: LOAN.record, loanedOn: '2026-11-10', dueOn: '2026-11-17', daysLate: 0, renewals: 0, renewLimit: 1 }],
+    });
+    const app = start({
+      'POST branches/:branchId/circulation/members/lookup': () => held,
+      'GET branches/:branchId/circulation/members/:memberId': () => held,
+      'POST branches/:branchId/circulation/loans': (req) =>
+        (req.body as { barcode: string }).barcode === 'B0009' ? problem(409, 'CIRC_ITEM_ON_LOAN') : problem(409, 'CIRC_NOT_LOANABLE', { reason: 'status' }),
+      'POST branches/:branchId/circulation/returns': (): ReturnResponse => ({
+        id: LOAN.id,
+        version: 2,
+        memberId: MEMBER_ID,
+        memberNo: 'A001',
+        item: { ...LOAN.item, barcode: 'B0009' },
+        record: LOAN.record,
+        loanedOn: '2026-11-10',
+        dueOn: '2026-11-17',
+        returnedOn: '2026-11-15',
+        daysLate: 0,
+      }),
+    });
+
+    await scan('A001');
+    expect(await screen.findByText('Anggota dimuat: Budi Santoso')).toBeTruthy();
+
+    await scan('B0002');
+    expect(await screen.findByText('Eksemplar tidak tersedia untuk dipinjam.', { selector: 'p.text-xl' })).toBeTruthy();
+    await waitFor(() => expect(within(screen.getByRole('alert')).queryByText('Eksemplar tidak tersedia untuk dipinjam.')).toBeTruthy());
+
+    await scan('B0009');
+    expect(await screen.findByText('Eksemplar ini sedang dipinjam anggota ini. Kembalikan sekarang?', { selector: 'p.text-xl' })).toBeTruthy();
+    // Enter on the empty box accepts the offer.
+    await scan('');
+    expect(await screen.findByText('Dikembalikan tepat waktu')).toBeTruthy();
+    expect(app.requests.find((r) => r.path.endsWith('/circulation/returns'))?.body).toEqual({ barcode: 'B0009' });
+  });
+
+  it('F3 switches to returns by barcode alone; a late return says how late', async () => {
+    const app = start({
+      'POST branches/:branchId/circulation/returns': (): ReturnResponse => ({
+        id: LOAN.id,
+        version: 2,
+        memberId: MEMBER_ID,
+        memberNo: 'A001',
+        item: LOAN.item,
+        record: LOAN.record,
+        loanedOn: '2026-11-01',
+        dueOn: '2026-11-08',
+        returnedOn: '2026-11-11',
+        daysLate: 3,
+      }),
+    });
+    await screen.findByRole('combobox', { name: 'Pindai kartu atau ketik nomor/nama anggota' });
+    fireEvent.keyDown(window, { key: 'F3' });
+    expect(await screen.findByRole('textbox', { name: 'Pindai eksemplar yang dikembalikan' })).toBeTruthy();
+    await scan('B0001');
+    expect(await screen.findByText('Dikembalikan — terlambat 3 hari')).toBeTruthy();
+    expect(app.requests.filter((r) => r.method === 'POST').map((r) => r.path)).toEqual([`branches/${BRANCH}/circulation/returns`]);
+  });
+});
