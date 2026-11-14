@@ -1,7 +1,7 @@
 import type { ReportCell, ReportPreviewBody, ReportPreviewResponse } from '@altis/shared/api/reports';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { adminMe, startApp, type FakeRequest } from '../fake-api';
+import { adminMe, problem, startApp, type FakeRequest } from '../fake-api';
 import { FIRST, SUMMARY, TEST_ROWS, reportRoutes } from './support';
 
 // The paged preview of a report's page: "Terapkan" asks for the first page of 200 rows; "Muat lagi" sends the page's
@@ -64,6 +64,26 @@ describe('the preview of a report', { timeout: 20_000 }, () => {
     expect(within(bodyRows(table)[249]!).getAllByRole('cell')[0]!.textContent).toBe('250');
     expect(screen.queryByRole('button', { name: 'Muat lagi' })).toBeNull();
     expect(screen.getByText('Semua baris sudah ditampilkan.')).toBeTruthy();
+  });
+
+  it('a later page refused as export-only keeps the rows shown and says to export the rest', async () => {
+    const me = adminMe();
+    const routes = {
+      ...reportRoutes(me),
+      [`POST reports/${TEST_ROWS.id}/preview`]: (req: FakeRequest) =>
+        (req.body as ReportPreviewBody).cursor === undefined ? pages(req) : problem(422, 'VALIDATION_FAILED', { errors: [{ path: 'params', code: 'export_only' }] }),
+    };
+    startApp({ me, path: `/admin/reports/${TEST_ROWS.id}`, routes });
+    await screen.findByRole('heading', { level: 1, name: 'Baris uji' }, FIRST);
+    const form = screen.getByRole('form', { name: 'Filter' });
+    fireEvent.change(within(form).getByLabelText('Jumlah baris'), { target: { value: '250' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Terapkan' }));
+    const table = await screen.findByRole('table', { name: 'Pratinjau laporan Baris uji' }, FIRST);
+    await waitFor(() => expect(bodyRows(table)).toHaveLength(200));
+    fireEvent.click(screen.getByRole('button', { name: 'Muat lagi' }));
+    expect(await screen.findByText('Laporan ini terlalu besar untuk pratinjau; ekspor saja.')).toBeTruthy();
+    expect(bodyRows(table)).toHaveLength(200);
+    expect(screen.queryByText('Data yang dikirim tidak valid', { exact: false })).toBeNull();
   });
 
   it('"Terapkan" again starts afresh from the first page with the new filters', async () => {

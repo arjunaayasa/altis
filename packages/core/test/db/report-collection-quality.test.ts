@@ -1,4 +1,5 @@
-import { t, type MessageKey } from '@altis/shared';
+import { isDomainError, t, type MessageKey } from '@altis/shared';
+import type { KyselyPlugin } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDbContext } from '../../../../tools/test/test-db.js';
 import { collectionDataQualityReport as def } from '../../src/reports/collection/data-quality.js';
@@ -108,6 +109,36 @@ describe.skipIf(!ctx.available)(`collection.data_quality [${engineLabel()}]`, ()
     const one = await drain(def, ctxFor(c, def, {}));
     const paged = await drain(def, ctxFor(c, def, {}), 1);
     expect(paged.rows).toEqual(one.rows);
+  });
+
+  it('in a preview that may not read the whole stock, answers the problems found before the scan, then offers the export', async () => {
+    const whole = await drain(def, ctxFor(c, def, {}));
+    // The statements executed (a query is also transformed when a helper only inspects it).
+    const executed: string[] = [];
+    const compiled = new Map<unknown, string>();
+    const capture: KyselyPlugin = {
+      transformQuery(args) {
+        compiled.set(args.queryId, c.db.getExecutor().compileQuery(args.node, args.queryId).sql);
+        return args.node;
+      },
+      async transformResult(args) {
+        executed.push(compiled.get(args.queryId) ?? '');
+        return args.result;
+      },
+    };
+    const preview = { ...ctxFor(c, def, {}), db: c.db.withPlugin(capture), mayScanStock: async () => false };
+    const first = await def.rows(preview, null, 500);
+    expect(first.rows).toEqual(whole.rows.filter((r) => r[0] !== problem('item_no_acq_date')));
+    expect(first.nextCursor).not.toBeNull();
+    const refused = await def.rows(preview, first.nextCursor, 500).then(
+      () => null,
+      (e: unknown) => (isDomainError(e) ? { code: e.code, errors: e.meta?.['errors'] } : e),
+    );
+    expect(refused).toEqual({ code: 'VALIDATION_FAILED', errors: [{ path: 'params', code: 'export_only' }] });
+    // The stock scan (titles read in id order with their material type code) never ran.
+    expect(executed.some((q) => /material_type_code/.test(q))).toBe(false);
+    // A preview that may read it answers every problem, as the export does.
+    expect((await drain(def, { ...ctxFor(c, def, {}), mayScanStock: async () => true })).rows).toEqual(whole.rows);
   });
 
   it('keeps to a branch', async () => {

@@ -20,6 +20,7 @@
     { "path": "tools/sign-cli" },
     { "path": "tools/release" },
     { "path": "tools/e2e" },
-    { "path": "tools/test/perf-phase2" }
+    { "path": "tools/test/perf-phase2" },
+    { "path": "tools/test/perf-komunitas" }
   ]
 }
