@@ -117,15 +117,27 @@ const FIELDS: Readonly<Record<SettingsGroupName, FieldMap>> = Object.freeze({
   ],
   // ---- Komunitas (circulation core) ----
   circulation: [
+    // ---- Komunitas (holds) ----
+    [['holds', 'enabled'], 'circulation.holds.enabled'],
+    [['holds', 'opac'], 'circulation.holds.opac'],
+    [['holds', 'onlyWhenNoneAvailable'], 'circulation.holds.onlyWhenNoneAvailable'],
+    [['holds', 'pickupDays'], 'circulation.holds.pickupDays'],
     [['loanVoidMinutes'], 'circulation.loanVoidMinutes'],
     [['lost', 'useItemPrice'], 'circulation.lost.useItemPrice'],
     [['lost', 'processingFeeMinor'], 'circulation.lost.processingFeeMinor'],
+    // ---- Komunitas (member area) ----
+    [['renew', 'opac'], 'circulation.renew.opac'],
   ],
   members: [
     [['clearance', 'prefix'], 'members.clearance.prefix'],
     [['clearance', 'profile'], 'members.clearance.profile'],
     // ---- Komunitas K2 (members extended) ----
     [['card', 'profile'], 'members.card.profile'],
+    // ---- Komunitas (member area) ----
+    [['password', 'minLength'], 'members.password.minLength'],
+    [['opac', 'enabled'], 'members.opac.enabled'],
+    [['session', 'idleMinutes'], 'members.session.idleMinutes'],
+    [['session', 'absoluteHours'], 'members.session.absoluteHours'],
   ],
   // ---- Komunitas K2 (members extended, visits, privacy) ----
   visits: [

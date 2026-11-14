@@ -652,14 +652,27 @@ export type ClearanceProfile = z.infer<typeof ClearanceProfile>;
 
 /** `PUT settings/circulation`: each key is its setting's name without `circulation.`, nested at its dots. */
 export const CirculationSettingsBody = z.strictObject({
+  // ---- Komunitas (holds) ----
+  holds: z
+    .strictObject({
+      enabled: z.boolean().optional(),
+      opac: z.boolean().optional(),
+      onlyWhenNoneAvailable: z.boolean().optional(),
+      pickupDays: z.int().min(1).max(30).optional(),
+    })
+    .optional(),
   loanVoidMinutes: loanVoidMinutesField.optional(),
   lost: z.strictObject({ useItemPrice: z.boolean().optional(), processingFeeMinor: minorAmountField.optional() }).optional(),
+  // ---- Komunitas (member area) ----
+  renew: z.strictObject({ opac: z.boolean().optional() }).optional(),
 });
 
 export type CirculationSettingsBody = z.infer<typeof CirculationSettingsBody>;
 
 /** `GET settings/circulation`. */
 export interface CirculationSettingsView {
+  holds: { enabled: boolean; opac: boolean; onlyWhenNoneAvailable: boolean; pickupDays: number };
+  renew: { opac: boolean };
   loanVoidMinutes: number;
   lost: { useItemPrice: boolean; processingFeeMinor: number };
 }
@@ -669,6 +682,12 @@ export const MembersSettingsBody = z.strictObject({
   clearance: z.strictObject({ prefix: clearancePrefixField.optional(), profile: ClearanceProfile.optional() }).optional(),
   // ---- Komunitas K2 (members extended): the member card profile (`members.card.profile`) ----
   card: z.strictObject({ profile: CardProfile.optional() }).optional(),
+  // ---- Komunitas (member area) ----
+  password: z.strictObject({ minLength: z.int().min(6).max(64).optional() }).optional(),
+  opac: z.strictObject({ enabled: z.boolean().optional() }).optional(),
+  session: z
+    .strictObject({ idleMinutes: z.int().min(5).max(120).optional(), absoluteHours: z.int().min(1).max(24).optional() })
+    .optional(),
 });
 
 export type MembersSettingsBody = z.infer<typeof MembersSettingsBody>;
@@ -677,4 +696,7 @@ export type MembersSettingsBody = z.infer<typeof MembersSettingsBody>;
 export interface MembersSettingsView {
   clearance: { prefix: string; profile: ClearanceProfile };
   card: { profile: CardProfile };
+  password: { minLength: number };
+  opac: { enabled: boolean };
+  session: { idleMinutes: number; absoluteHours: number };
 }
