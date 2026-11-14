@@ -248,9 +248,12 @@ describe('navigation and language', () => {
       ['Kembali Cepat', '/admin/layanan/kembali'],
       ['Terlambat & Jatuh Tempo', '/admin/layanan/terlambat'],
       ['Aturan Peminjaman', '/admin/layanan/aturan'],
+      ['Kunjungan', '/admin/layanan/kunjungan'],
+      ['Perangkat Buku Tamu', '/admin/layanan/buku-tamu'],
       ['Daftar Anggota', '/admin/anggota'],
       ['Tipe Anggota', '/admin/anggota/tipe'],
       ['Impor Anggota', '/admin/anggota/impor'],
+      ['Cetak Kartu', '/admin/anggota/kartu'],
       // The Laporan group: the report catalogue and the accreditation workspace.
       ['Laporan', '/admin/reports'],
       ['Akreditasi', '/admin/accreditation'],
@@ -287,8 +290,15 @@ describe('navigation and language', () => {
     // The Laporan heading and the Laporan item read the same.
     expect(within(nav).getAllByText('Laporan', { selector: 'p' })).toHaveLength(1);
     expect(within(groups[0]!).getAllByRole('link').map((a) => a.textContent)).toContain('Migrasi SLiMS');
-    expect(within(groups[1]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Meja Layanan', 'Kembali Cepat', 'Terlambat & Jatuh Tempo', 'Aturan Peminjaman']);
-    expect(within(groups[2]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Daftar Anggota', 'Tipe Anggota', 'Impor Anggota']);
+    expect(within(groups[1]!).getAllByRole('link').map((a) => a.textContent)).toEqual([
+      'Meja Layanan',
+      'Kembali Cepat',
+      'Terlambat & Jatuh Tempo',
+      'Aturan Peminjaman',
+      'Kunjungan',
+      'Perangkat Buku Tamu',
+    ]);
+    expect(within(groups[2]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Daftar Anggota', 'Tipe Anggota', 'Impor Anggota', 'Cetak Kartu']);
     expect(within(groups[3]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Laporan', 'Akreditasi']);
     expect(within(groups[4]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Halaman & Berita']);
     expect(within(groups[5]!).getByRole('link', { name: 'Konfigurasi Sistem' })).toBeTruthy();
