@@ -451,6 +451,8 @@ export async function returnItem(tx: TxCtx, input: { branchId: string; barcode: 
 
   const { item, record, row: itemRow } = await itemRefs(trx, locked.id);
   const daysLate = Math.max(0, diffDays(loan.due_on, today));
+  // Only once the loan is closed: its overdue fine (the charges module counts the days in the loan branch's calendar).
+  if (daysLate > 0) await chargeSeam().bookOverdue(tx, { loanId: loan.id, until: today });
   const warnings: CirculationWarningView[] = [];
   if (itemRow.branch_id !== input.branchId) {
     const b = await trx.selectFrom('branches').select('code_display').where('id', '=', itemRow.branch_id).executeTakeFirst();
@@ -551,6 +553,8 @@ async function renewOne(tx: TxCtx, loanId: string, branchId: string): Promise<Re
     .where('renewals', '=', renewals)
     .executeTakeFirst();
   if (Number(updated.numUpdatedRows) !== 1) throw renewRefused('changed');
+  // A late renewal books the overdue fine up to today; the loan goes on under its new due date.
+  if (loan.due_on < today) await chargeSeam().bookOverdue(tx, { loanId, until: today });
   const warnings: CirculationWarningView[] = [...memberWarnings(member?.expires_on ?? null, today), ...dueWarnings(due)];
   await tx.audit({ action: 'circulation.loan.renew', entity: 'loans', entityId: loanId, branchId, meta: { renewals: renewals + 1 } });
   return { id: loanId, version: ok(loan.version) + 1, dueOn: due.dueOn, renewals: renewals + 1, renewLimit: ok(loan.renew_limit), ...(warnings.length === 0 ? {} : { warnings }) };
