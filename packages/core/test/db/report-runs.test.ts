@@ -6,6 +6,7 @@ import { PHASE1_MIGRATIONS, runMigrations, withTx } from '@altis/db';
 import { reportExportPath } from '@altis/platform';
 import { isDomainError, localDate, newId, t, type MessageKey, type Permission } from '@altis/shared';
 import { REPORT_SCAN_PREVIEW_MAX_RECORDS, type ReportPreviewBody } from '@altis/shared/api/reports';
+import type { KyselyPlugin } from 'kysely';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
@@ -248,6 +249,30 @@ describe.skipIf(!ctx.available)(`report runs [${engineLabel()}]`, () => {
       });
       expect(rows.mock.calls.length).toBeGreaterThan(0);
       expect(rows.mock.calls.length).toBeLessThan(5);
+    });
+
+    it(`a report asking whether it may read the whole stock is told no above ${REPORT_SCAN_PREVIEW_MAX_RECORDS} live records, yes up to it`, async () => {
+      const answers: boolean[] = [];
+      const rows: TableReport['rows'] = async (c) => {
+        // Asked twice in one request: the library is counted once.
+        answers.push(await c.mayScanStock!(), await c.mayScanStock!());
+        return { rows: [[1]], nextCursor: null };
+      };
+      await liveRecords(REPORT_SCAN_PREVIEW_MAX_RECORDS + 1);
+      // The definition reads nothing itself: every statement of the request is the preview's own.
+      let statements = 0;
+      const counting: KyselyPlugin = {
+        transformQuery: (args) => args.node,
+        async transformResult(args) {
+          statements += 1;
+          return args.result;
+        },
+      };
+      expect((await previewReport(h.db.withPlugin(counting), localReport({ rows }), { params: { rows: 1 } }, o())).rows).toEqual([[1]]);
+      expect(statements).toBe(1);
+      await liveRecords(REPORT_SCAN_PREVIEW_MAX_RECORDS);
+      expect((await preview(localReport({ rows }), { params: { rows: 1 } })).rows).toEqual([[1]]);
+      expect(answers).toEqual([false, false, true, true]);
     });
 
     it('a page whose cursor is too long to come back in a preview body is export-only', async () => {

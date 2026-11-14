@@ -3,6 +3,7 @@ import type { MessageKey } from '@altis/shared';
 import { sql, type RawBuilder, type SqlBool } from 'kysely';
 import { z } from 'zod';
 import { reportColumn, reportIdField, reportParam } from '../params.js';
+import { reportFieldErrors } from '../runs/service.js';
 import { liveAt, type RecordStockFacts } from '../stock/index.js';
 import type { ReportCtx, ReportRow, TableReport } from '../types.js';
 import { chunks, decodeCursor, encodeCursor, itemScopeSql, label, liveItemSql, stockTitleSql, textCell, textParam, titleCell } from './common.js';
@@ -15,7 +16,8 @@ import { scanList, type ListEntry } from './stock-agg.js';
 // ordered, lost or withdrawn, and records that are archived or have no copy in it, have nothing to fix.
 //
 // The first four problems are read from the current rows by keyset (copies by barcode, records by title); the last
-// needs the acquisition-date chain, so it reads the stock scan, in the scan's order.
+// needs the acquisition-date chain, so it reads the stock scan, in the scan's order. A preview of a library too large to
+// scan while the user waits answers the first four only (ReportCtx.mayScanStock); the export has all five.
 
 /** The problems in print order. */
 export const DATA_QUALITY_PROBLEMS = Object.freeze([
@@ -142,6 +144,12 @@ export const collectionDataQualityReport: TableReport = Object.freeze<TableRepor
       const room = limit - rows.length;
       if (problem === 'item_no_acq_date') {
         if (room === 0) return { rows, nextCursor: encodeCursor(position) };
+        // A preview that may not read the whole stock ends here: with the problems found so far, or, with none, with the
+        // refusal that offers the export (which has them all).
+        if (ctx.mayScanStock !== undefined && !(await ctx.mayScanStock())) {
+          if (rows.length > 0) return { rows, nextCursor: encodeCursor(position) };
+          throw reportFieldErrors([{ path: 'params', code: 'export_only' }]);
+        }
         const page = await scanList(ctx, position.c, room, {
           branchId: textParam(ctx, 'branchId'),
           entries: (batch) => undatedEntries(ctx, batch, text),

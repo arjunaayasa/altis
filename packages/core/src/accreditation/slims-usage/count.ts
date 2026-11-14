@@ -14,7 +14,9 @@ import type { DateSpan } from '../windows.js';
 // - The row group of a member id: '' or NULL → `guest`; a member with a type → `slims_type:<type id>`; any other id
 //   (no `member` row any more, or one without a type) → `member_unknown`.
 // - Loans: `loan` then `loan_history`; a `loan_id` met before is skipped (a renewal is no new row in SLiMS, and a
-//   history row repeats its loan). Per month: by group, in total (''), and by class `ddc:<0…9|2X|NON>` from the
+//   history row repeats its loan). The id is each table's primary key, so only the ids of `loan` are remembered: a
+//   history row can only repeat one of those, never another history row (at a million history rows, remembering their
+//   ids too would hold them all in memory in every slice). Per month: by group, in total (''), and by class `ddc:<0…9|2X|NON>` from the
 //   classification of the title the copy leads to, else (a history row) the history row's own classification.
 // - Visits: every counted `visitor_count` row; a guest's visit counts at once (raw and deduplicated); a member's
 //   check-in goes to its month's work file, which the aggregate step reads in calendar order: a check-in is a repeat when
@@ -205,7 +207,7 @@ export interface RowContext {
   items: ReadonlyMap<string, string>;
   /** Title → `ddc:<class>` of its own classification, '' when it has none. */
   titles: ReadonlyMap<string, string>;
-  /** The loan ids met so far. */
+  /** The ids of the `loan` rows met so far. */
   seenLoans: ReadonlySet<string>;
   /** Member type id → name. */
   types: Record<string, string>;
@@ -266,7 +268,7 @@ export function countLoan(c: RowContext, table: 'loan' | 'loan_history', row: Sl
     c.counts.loanSeenBefore += 1;
     return;
   }
-  c.addLoanId(loanId);
+  if (table === 'loan') c.addLoanId(loanId);
   const date = takeDate(c.counts, table, row['loan_date'], c.cutoverOn);
   if (date === null) return;
   const hash = hashOfCell(row['member_id']);

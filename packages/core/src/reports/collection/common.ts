@@ -234,10 +234,17 @@ export function prefixSql(column: RawBuilder<unknown> | ReturnType<typeof sql.re
   return anyOf(prefixes.map((p) => sql<SqlBool>`upper(trim(${column})) like ${`${escapeLike(p)}%`} escape '!'`));
 }
 
-/** Copy `i` (a table alias) is in the stock on `day`. */
+/**
+ * Copy `i` (a table alias) is in the stock on `day`. Acquired by the day: the receiving date, or without one the date
+ * entered in the source system, is on or before it; a copy with neither is undated and counts. Written as one
+ * comparison of `coalesce(received_date, input_on, '')` (the empty text sorts before every date) rather than as
+ * `received_date is null or received_date <= day`: given that OR, SQLite reads the copies through the receiving-date
+ * index, one table lookup per copy, which made a count over the whole collection several times slower than a plain
+ * pass.
+ */
 export function liveItemSql(i: string, day: string): RawBuilder<SqlBool> {
-  const received = ref(i, 'received_date');
-  return sql<SqlBool>`(${ref(i, 'archived_at')} is null and ${ref(i, 'status')} not in ('on_order', 'lost') and (${received} is null or ${received} <= ${day}) and (${received} is not null or ${ref(i, 'input_on')} is null or ${ref(i, 'input_on')} <= ${day}))`;
+  const acquired = sql`coalesce(${ref(i, 'received_date')}, ${ref(i, 'input_on')}, '')`;
+  return sql<SqlBool>`(${ref(i, 'archived_at')} is null and ${ref(i, 'status')} not in ('on_order', 'lost') and ${acquired} <= ${day})`;
 }
 
 /** Copy `i` is in scope `s` (branch, location, collection type). */
