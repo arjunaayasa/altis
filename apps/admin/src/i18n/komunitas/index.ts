@@ -8,6 +8,8 @@ import { CIRC_CORE_EN, CIRC_CORE_ID } from './circ-core';
 import { CIRCULATION_EN, CIRCULATION_ID } from './circulation';
 // ---- Komunitas (holds) ----
 import { HOLDS_EN, HOLDS_ID } from './holds';
+// ---- Komunitas (charges and payments) ----
+import { CHARGES_ADMIN_EN, CHARGES_ADMIN_ID } from './charges';
 import { MEMBERS_EN, MEMBERS_ID } from './members';
 import { KOMUNITAS_SETTINGS_EN, KOMUNITAS_SETTINGS_ID } from './settings';
 
@@ -72,6 +74,8 @@ export const KOMUNITAS_AREAS_ID = Object.freeze({
   holds: HOLDS_ID,
   // ---- Komunitas (circulation core) ----
   circCore: CIRC_CORE_ID,
+  // ---- Komunitas (charges and payments) ----
+  charges: CHARGES_ADMIN_ID,
   placeholder: PLACEHOLDER_ID,
 });
 
@@ -89,6 +93,8 @@ export const KOMUNITAS_AREAS_EN: { readonly [A in keyof typeof KOMUNITAS_AREAS_I
   holds: HOLDS_EN,
   // ---- Komunitas (circulation core) ----
   circCore: CIRC_CORE_EN,
+  // ---- Komunitas (charges and payments) ----
+  charges: CHARGES_ADMIN_EN,
   placeholder: PLACEHOLDER_EN,
 });
 
@@ -105,6 +111,7 @@ export const KOMUNITAS_ID = {
   ...CIRCULATION_ID,
   ...HOLDS_ID,
   ...CIRC_CORE_ID,
+  ...CHARGES_ADMIN_ID,
   ...PLACEHOLDER_ID,
 } as const;
 
@@ -121,5 +128,6 @@ export const KOMUNITAS_EN: Record<keyof typeof KOMUNITAS_ID, string> = {
   ...CIRCULATION_EN,
   ...HOLDS_EN,
   ...CIRC_CORE_EN,
+  ...CHARGES_ADMIN_EN,
   ...PLACEHOLDER_EN,
 };
