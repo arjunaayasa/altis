@@ -27,8 +27,8 @@ afterEach(() => {
 
 const ULID = '01JZ0000000000000000000ABC';
 
-/** The screens an owning task has replaced with the real one (none yet). */
-const REPLACED: ReadonlySet<KomunitasPlaceholderScreen> = new Set<KomunitasPlaceholderScreen>([]);
+/** The screens an owning task has replaced with the real one. */
+const REPLACED: ReadonlySet<KomunitasPlaceholderScreen> = new Set<KomunitasPlaceholderScreen>(['reports_catalog', 'report_detail']);
 
 /** Each path (a parameter filled in), and the placeholder its screen shows. */
 const ROUTES: readonly [path: string, screen: KomunitasPlaceholderScreen][] = [
@@ -88,10 +88,14 @@ describe('the reports and accreditation routes and their placeholder screens', (
     expect(screen.queryByRole('heading', { name: ADMIN_MESSAGES.id['page.not_found.title'] })).toBeNull();
   });
 
-  it('in English for a user who chose English', async () => {
+  // A route whose screen is still a placeholder (none once every owning task replaced its screens).
+  const placeholderRoute = ROUTES.find(([, key]) => !REPLACED.has(key));
+
+  it.skipIf(placeholderRoute === undefined)('in English for a user who chose English', async () => {
+    const [path, key] = placeholderRoute!;
     const me = signedIn();
-    startApp({ me: { ...me, user: { ...me.user, locale: 'en' } }, path: '/admin/reports', routes: {} });
-    expect(await screen.findByRole('heading', { name: ADMIN_MESSAGES.en['komunitas.placeholder.reports_catalog'] })).toBeTruthy();
+    startApp({ me: { ...me, user: { ...me.user, locale: 'en' } }, path, routes: {} });
+    expect(await screen.findByRole('heading', { name: ADMIN_MESSAGES.en[`komunitas.placeholder.${key}`] })).toBeTruthy();
   });
 
   it('the workspace keeps its tab in the search params, and drops a tab it does not know', () => {
