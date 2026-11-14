@@ -215,6 +215,8 @@ export const ACCREDITATION_REGISTERS_ID = {
   'accreditation.registers.upload.hint':
     'PDF atau gambar (JPG, PNG, WebP), paling besar {mb} MB. Gambar diubah ke JPEG di browser sebelum diunggah.',
   'accreditation.registers.upload.hint_loading': 'PDF atau gambar (JPG, PNG, WebP). Gambar diubah ke JPEG di browser sebelum diunggah.',
+  'accreditation.registers.upload.hint_image': 'Gambar (JPG, PNG, WebP), paling besar {mb} MB. Gambar diubah ke JPEG di browser sebelum diunggah.',
+  'accreditation.registers.upload.hint_image_loading': 'Gambar (JPG, PNG, WebP). Gambar diubah ke JPEG di browser sebelum diunggah.',
   'accreditation.registers.upload.file': 'Berkas',
   'accreditation.registers.upload.caption': 'Keterangan',
   'accreditation.registers.upload.caption_hint': 'Boleh kosong, misalnya "Daftar hadir kegiatan".',
@@ -224,6 +226,7 @@ export const ACCREDITATION_REGISTERS_ID = {
   'accreditation.registers.upload.saving': 'Mencatat bukti…',
   'accreditation.registers.upload.error.required': 'Pilih berkas dulu.',
   'accreditation.registers.upload.error.type': 'Pilih berkas PDF atau gambar (JPG, PNG, WebP).',
+  'accreditation.registers.upload.error.type_image': 'Pilih gambar (JPG, PNG, WebP).',
   'accreditation.registers.upload.error.unreadable': 'Gambar ini tidak dapat dibaca. Coba berkas lain.',
   'accreditation.registers.upload.error.too_large': 'Berkas ini lebih besar dari batas {mb} MB. Perkecil atau pisahkan berkasnya.',
 } as const;
@@ -436,6 +439,8 @@ export const ACCREDITATION_REGISTERS_EN: Readonly<Record<keyof typeof ACCREDITAT
   // ---- the evidence upload ----
   'accreditation.registers.upload.hint': 'A PDF or an image (JPG, PNG, WebP) of at most {mb} MB. Images are converted to JPEG in the browser before they go up.',
   'accreditation.registers.upload.hint_loading': 'A PDF or an image (JPG, PNG, WebP). Images are converted to JPEG in the browser before they go up.',
+  'accreditation.registers.upload.hint_image': 'An image (JPG, PNG, WebP) of at most {mb} MB. It is converted to JPEG in the browser before it goes up.',
+  'accreditation.registers.upload.hint_image_loading': 'An image (JPG, PNG, WebP). It is converted to JPEG in the browser before it goes up.',
   'accreditation.registers.upload.file': 'File',
   'accreditation.registers.upload.caption': 'Caption',
   'accreditation.registers.upload.caption_hint': 'Optional, such as "Attendance list".',
@@ -445,6 +450,7 @@ export const ACCREDITATION_REGISTERS_EN: Readonly<Record<keyof typeof ACCREDITAT
   'accreditation.registers.upload.saving': 'Recording the evidence…',
   'accreditation.registers.upload.error.required': 'Choose a file first.',
   'accreditation.registers.upload.error.type': 'Choose a PDF or an image (JPG, PNG, WebP).',
+  'accreditation.registers.upload.error.type_image': 'Choose an image (JPG, PNG, WebP).',
   'accreditation.registers.upload.error.unreadable': 'This image cannot be read. Try another file.',
   'accreditation.registers.upload.error.too_large': 'This file is larger than the {mb} MB limit. Make it smaller or split it.',
 };

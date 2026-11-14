@@ -99,6 +99,11 @@ export const ACCREDITATION_WORKSPACE_ID = {
   'accreditation.workspace.evidence.generated': 'Dibuat ALTIS dari laporan {report}',
   'accreditation.workspace.evidence.screen': 'Tangkap layar ALTIS: {screen}',
   'accreditation.workspace.evidence.upload': 'Unggah berkas',
+  'accreditation.workspace.evidence.remove': 'Hapus',
+  'accreditation.workspace.evidence.remove_named': 'Hapus berkas {name}',
+  'accreditation.workspace.evidence.confirm.title': 'Hapus berkas {name}?',
+  'accreditation.workspace.evidence.confirm.body':
+    'Berkas ini dilepas dari butirnya, tidak lagi masuk berkas bukti dan ZIP-nya, dan dihapus otomatis dalam 24 jam.',
   'accreditation.workspace.screen.records': 'Bibliografi',
   'accreditation.workspace.screen.members': 'Daftar Anggota',
   'accreditation.workspace.screen.circulation_desk': 'Meja Layanan',
@@ -150,6 +155,12 @@ export const ACCREDITATION_WORKSPACE_ID = {
   'accreditation.workspace.profile.photo.reading_room': 'Ruang baca',
   'accreditation.workspace.profile.photo.upload': 'Unggah foto',
   'accreditation.workspace.profile.photo.remove': 'Lepas dari profil',
+  'accreditation.workspace.profile.photo.delete': 'Hapus foto',
+  'accreditation.workspace.profile.photo.delete_named': 'Hapus foto {name}',
+  'accreditation.workspace.profile.photo.unused': 'Tidak dipakai di profil, tetapi tetap masuk ZIP berkas bukti sampai dihapus.',
+  'accreditation.workspace.profile.photo.confirm.title': 'Hapus foto {name}?',
+  'accreditation.workspace.profile.photo.confirm.body':
+    'Foto ini dilepas dari profil dan dari periode, tidak lagi masuk berkas bukti dan ZIP-nya, dan berkasnya dihapus otomatis dalam 24 jam.',
   // Populasi & Sarana.
   'accreditation.workspace.population.section.population': 'Populasi',
   'accreditation.workspace.population.section.population_hint':
@@ -291,6 +302,11 @@ export const ACCREDITATION_WORKSPACE_EN: Readonly<Record<keyof typeof ACCREDITAT
   'accreditation.workspace.evidence.generated': 'Made by ALTIS from the report {report}',
   'accreditation.workspace.evidence.screen': 'Capture the ALTIS screen: {screen}',
   'accreditation.workspace.evidence.upload': 'Upload a file',
+  'accreditation.workspace.evidence.remove': 'Remove',
+  'accreditation.workspace.evidence.remove_named': 'Remove file {name}',
+  'accreditation.workspace.evidence.confirm.title': 'Remove file {name}?',
+  'accreditation.workspace.evidence.confirm.body':
+    'The file is taken off its item, no longer goes into the evidence file and its ZIPs, and is deleted automatically within 24 hours.',
   'accreditation.workspace.screen.records': 'Bibliographic records',
   'accreditation.workspace.screen.members': 'Member list',
   'accreditation.workspace.screen.circulation_desk': 'Service desk',
@@ -341,6 +357,12 @@ export const ACCREDITATION_WORKSPACE_EN: Readonly<Record<keyof typeof ACCREDITAT
   'accreditation.workspace.profile.photo.reading_room': 'Reading room',
   'accreditation.workspace.profile.photo.upload': 'Upload a photo',
   'accreditation.workspace.profile.photo.remove': 'Take out of the profile',
+  'accreditation.workspace.profile.photo.delete': 'Delete the photo',
+  'accreditation.workspace.profile.photo.delete_named': 'Delete photo {name}',
+  'accreditation.workspace.profile.photo.unused': 'Not used in the profile, but still goes into the evidence ZIP until it is deleted.',
+  'accreditation.workspace.profile.photo.confirm.title': 'Delete photo {name}?',
+  'accreditation.workspace.profile.photo.confirm.body':
+    'The photo is taken off the profile and the period, no longer goes into the evidence file and its ZIPs, and its file is deleted automatically within 24 hours.',
   'accreditation.workspace.population.section.population': 'Population',
   'accreditation.workspace.population.section.population_hint':
     'School libraries take the school population from Dapodik/EMIS; other libraries fill in the population they serve.',

@@ -3,6 +3,7 @@ import type { PeriodView } from '@altis/shared/api/accreditation';
 import { useState, type FormEvent, type JSX } from 'react';
 import { CheckField } from '@/components/form-field';
 import { useT, type TKey } from '@/i18n';
+import { useDirtyGuard } from '@/lib/dirty-forms';
 import {
   FormSection,
   PeriodFormFooter,
@@ -28,10 +29,10 @@ export function PopulationTab(props: { periodId: string }): JSX.Element {
   return <TabState periodId={props.periodId}>{(ctx) => <PopulationPanel ctx={ctx} />}</TabState>;
 }
 
-/** The form starts over from the stored period after each save (its version changes); the save's outcome stays. */
+/** The form starts over for another period; the save's outcome is kept above it. */
 function PopulationPanel({ ctx }: { ctx: TabContext }) {
   const saving = usePeriodSave(ctx.period);
-  return <PopulationForm key={ctx.period.version} ctx={ctx} saving={saving} />;
+  return <PopulationForm key={ctx.period.id} ctx={ctx} saving={saving} />;
 }
 
 /** The whole-number fields of the tab, with their labels, hints and upper bounds. */
@@ -71,29 +72,60 @@ function valuesOf(p: PeriodView): Values {
 
 const sameSet = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x) => b.includes(x));
 
+/**
+ * What `values` would send for `period`: the fields refused before anything is sent, and the patch of the fields that
+ * differ from the stored ones (empty: nothing to save).
+ */
+function populationPatch(values: Values, period: PeriodView): { found: Record<string, string>; patch: Record<string, unknown> } {
+  const found: Record<string, string> = {};
+  const patch: Record<string, unknown> = {};
+  for (const { name, max } of NUMBERS) {
+    const n = wholeOrNull(values.numbers[name], 0, max);
+    if (n === 'invalid') found[name] = 'form.error.invalid';
+    else if (n !== period[name]) patch[name] = n;
+  }
+  if (values.allRegisteredConfirmed !== period.allRegisteredConfirmed) patch['allRegisteredConfirmed'] = values.allRegisteredConfirmed;
+  if (!sameSet(values.services, period.services ?? [])) patch['services'] = SERVICE_CODES.filter((c) => values.services.includes(c));
+  const url = textOrNull(values.externalWebsiteUrl);
+  if (url !== period.externalWebsiteUrl) patch['externalWebsiteUrl'] = url;
+  return { found, patch };
+}
+
+/** `values` over the period read again: what was typed stays, every field left as it was takes its value in `after`. */
+function rebased(values: Values, before: Values, after: Values): Values {
+  const numbers = { ...values.numbers };
+  for (const { name } of NUMBERS) if (values.numbers[name] === before.numbers[name]) numbers[name] = after.numbers[name];
+  return {
+    numbers,
+    allRegisteredConfirmed: values.allRegisteredConfirmed === before.allRegisteredConfirmed ? after.allRegisteredConfirmed : values.allRegisteredConfirmed,
+    services: sameSet(values.services, before.services) ? after.services : values.services,
+    externalWebsiteUrl: values.externalWebsiteUrl === before.externalWebsiteUrl ? after.externalWebsiteUrl : values.externalWebsiteUrl,
+  };
+}
+
 function PopulationForm({ ctx, saving }: { ctx: TabContext; saving: PeriodSaving }) {
   const t = useT();
   const period = ctx.period;
   const [values, setValues] = useState<Values>(() => valuesOf(period));
+  // The period the values were taken from. Read again with a new version (another librarian's save, this form's own
+  // save), it never resets what was typed: those fields stay, the others show what is stored now, and the next save
+  // names the new version.
+  const [loaded, setLoaded] = useState(period);
+  if (loaded.version !== period.version) {
+    setLoaded(period);
+    setValues((v) => rebased(v, valuesOf(loaded), valuesOf(period)));
+  }
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const { save, busy, problem, outcome, serverErrors } = saving;
   const off = !ctx.canEdit || busy;
   const errorOf = (name: string): string | undefined => errors[name] ?? serverErrors[name];
+  const pending = populationPatch(values, period);
+  useDirtyGuard(ctx.canEdit && (Object.keys(pending.found).length > 0 || Object.keys(pending.patch).length > 0));
 
   const submit = (e: FormEvent): void => {
     e.preventDefault();
     if (!ctx.canEdit) return;
-    const found: Record<string, string> = {};
-    const patch: Record<string, unknown> = {};
-    for (const { name, max } of NUMBERS) {
-      const n = wholeOrNull(values.numbers[name], 0, max);
-      if (n === 'invalid') found[name] = 'form.error.invalid';
-      else if (n !== period[name]) patch[name] = n;
-    }
-    if (values.allRegisteredConfirmed !== period.allRegisteredConfirmed) patch['allRegisteredConfirmed'] = values.allRegisteredConfirmed;
-    if (!sameSet(values.services, period.services ?? [])) patch['services'] = SERVICE_CODES.filter((c) => values.services.includes(c));
-    const url = textOrNull(values.externalWebsiteUrl);
-    if (url !== period.externalWebsiteUrl) patch['externalWebsiteUrl'] = url;
+    const { found, patch } = populationPatch(values, period);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
     void save(patch as PeriodPatch, (path) => (path in values.numbers || path === 'externalWebsiteUrl' || path === 'services' ? path : null));

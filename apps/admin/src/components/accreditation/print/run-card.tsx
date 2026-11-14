@@ -1,17 +1,16 @@
-import type { MeResponse } from '@altis/shared/api/auth';
 import type { ReportRunView } from '@altis/shared/api/reports';
-import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { DownloadIcon } from 'lucide-react';
 import { Badge } from '@/components/form-field';
 import { JobProgress } from '@/components/job-progress';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { useDateTime } from '@/components/data-table';
 import { useLocale, useT, type Translate } from '@/i18n';
-import { reauth } from '@/lib/api';
 import { isMessageKey } from '@/lib/form-errors';
-import { ME_KEY, useApiQuery, useMe } from '@/lib/me';
+import { useApiQuery } from '@/lib/me';
 import { page } from '@/lib/page';
 import { useBytes } from '@/screens/backups/upload';
+import { confirmReauth } from '@/screens/reports/run-history';
 
 /**
  * A report run of the Cetak tab (spec §10.9): the document or annex it makes, its status, the job's progress while it
@@ -22,26 +21,9 @@ import { useBytes } from '@/screens/backups/upload';
  * - A file is a plain same-origin link (the browser downloads it with the session cookie; the server audits each
  *   download). A run holding personal data (the evidence file, the simulation, the staff annex) is downloaded only right
  *   after a password confirmation: a link cannot open the dialog, so its button asks first and then loads the file.
+ *   Whether a confirmation still counts is the Laporan screen's rule ({@link confirmReauth}): one made on this page in
+ *   the last four minutes, on the page's own clock, never the session's `reauthUntil` read against the PC's clock.
  */
-
-/** A re-authentication still counting for at least this long is not asked for again. */
-const REAUTH_MARGIN_MS = 60_000;
-
-/**
- * Makes sure the user confirmed their password recently: unless the last re-authentication still counts for a minute,
- * opens the reauth dialog (`reauth.request()`) and then reads `auth/me` again for its new `reauthUntil`. Resolves false
- * when the user cancels.
- */
-export async function confirmReauth(me: MeResponse | undefined, queryClient: QueryClient): Promise<boolean> {
-  if (me?.authenticated === true && me.reauthUntil !== null && me.reauthUntil - Date.now() > REAUTH_MARGIN_MS) return true;
-  try {
-    await reauth.request();
-  } catch {
-    return false;
-  }
-  void queryClient.invalidateQueries({ queryKey: ME_KEY, exact: true });
-  return true;
-}
 
 /** The file of a run. */
 export const runDownloadHref = (id: string): string => `/api/v1/reports/runs/${encodeURIComponent(id)}/download`;
@@ -95,7 +77,6 @@ const STATUS_TONE = { queued: 'neutral', running: 'info', succeeded: 'info', fai
 /** The download of a finished run: a link, or a button that confirms the password first for a personal run. */
 function RunDownload({ run, title }: { run: ReportRunView; title: string }) {
   const t = useT();
-  const me = useMe();
   const queryClient = useQueryClient();
   const dateTime = useDateTime();
   const expired = run.expiresAt !== null && run.expiresAt <= Date.now();
@@ -107,7 +88,7 @@ function RunDownload({ run, title }: { run: ReportRunView; title: string }) {
   const href = runDownloadHref(run.id);
   const label = t('accreditation.print.runs.download_label', { title, date: dateTime(run.createdAt) });
   const download = async (): Promise<void> => {
-    if (await confirmReauth(me, queryClient)) page.assign(href);
+    if (await confirmReauth(queryClient)) page.assign(href);
   };
   return (
     <div className="flex flex-wrap items-center gap-2">

@@ -11,11 +11,11 @@ import { Input } from '@/components/ui/input';
 import { useLocale, useT, type TKey } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
-import { useApiQuery, useMe } from '@/lib/me';
+import { useApiQuery } from '@/lib/me';
 import { uploadFile } from '@/lib/upload';
 import { useBytes } from '@/screens/backups/upload';
 import { ProgressBar } from '@/screens/jobs/list';
-import { confirmReauth } from '../print/run-card';
+import { confirmReauth } from '@/screens/reports/run-history';
 import { AccredGroupSelect, GroupMap } from './group-map';
 import { accredKeys } from './queries';
 import {
@@ -120,7 +120,6 @@ function Setup({
   onStarted(started: Started): void;
 }) {
   const t = useT();
-  const me = useMe();
   const bytes = useBytes();
   const queryClient = useQueryClient();
   const ids = { cutover: useId(), unknown: useId() };
@@ -178,7 +177,7 @@ function Setup({
     controller.current = run;
     try {
       // The password first: a cancelled confirmation uploads and starts nothing.
-      if (!(await confirmReauth(me, queryClient))) {
+      if (!(await confirmReauth(queryClient))) {
         setFailure(t('accreditation.usage.reauth_cancelled'));
         return;
       }

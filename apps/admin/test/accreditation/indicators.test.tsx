@@ -1,5 +1,5 @@
 import { MESSAGES } from '@altis/shared';
-import type { ResultsView } from '@altis/shared/api/accreditation';
+import type { EvidenceView, ResultsView } from '@altis/shared/api/accreditation';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { adminMe, signedIn, startApp, type FakeHandler } from '../fake-api';
@@ -17,6 +17,25 @@ afterEach(() => {
 
 const FIRST = { timeout: 10_000 };
 const ID = MESSAGES.id;
+const FILE_ID = '01JZ0000000000000000FIL001';
+const EVIDENCE_ID = '01JZ0000000000000000EVD001';
+
+/** The evidence row of a file uploaded for the policy document item of `SCH-K3`. */
+const policyFile = (): EvidenceView => ({
+  id: EVIDENCE_ID,
+  periodId: PERIOD_ID,
+  indicatorCode: 'SCH-K3',
+  evidenceCode: 'policy_document',
+  entity: null,
+  entityId: null,
+  fileId: FILE_ID,
+  fileName: 'salah-unggah.pdf',
+  size: 80_000,
+  mime: 'application/pdf',
+  caption: '',
+  sortOrder: 0,
+  createdAt: T0,
+});
 
 function open(o: { instrumentId?: string; results?: ResultsView; me?: ReturnType<typeof adminMe>; extra?: Record<string, FakeHandler> } = {}) {
   const period = periodView({ instrumentId: o.instrumentId ?? 'sch-sma-2025' });
@@ -140,6 +159,58 @@ describe('Indikator', () => {
     expect(shot!.textContent).toContain('Tangkap layar ALTIS: Bibliografi');
     expect(within(shot!).getByRole('button', { name: 'Unggah berkas' })).toBeTruthy();
     expect(within(titles!).queryByRole('button', { name: 'Unggah berkas' })).toBeNull();
+  });
+
+  it('a wrong file is removed from its item after a confirmation, and the item then says it is missing', async () => {
+    let removed = false;
+    const k3 = (): ResultsView =>
+      resultsView({
+        indicators: [
+          indicatorResult('SCH-K3', 'K3', 'K', {
+            evidence: [{ code: 'policy_document', present: !removed, files: removed ? [] : [{ id: FILE_ID, name: 'salah-unggah.pdf', caption: '' }] }],
+          }),
+        ],
+      });
+    const app = open({
+      results: k3(),
+      extra: {
+        'GET accreditation/periods/:id/results': () => k3(),
+        'GET accreditation/evidence': () => ({
+          evidence: removed ? [] : [policyFile()],
+          componentBytes: { K: removed ? 0 : 80_000, SP: 0, L: 0, T: 0, F: 0, G: 0, profil: 0 },
+        }),
+        'DELETE accreditation/evidence/:id': () => {
+          removed = true;
+          return { id: EVIDENCE_ID, version: 0 };
+        },
+      },
+    });
+    const item = await screen.findByRole('region', { name: 'K3 · Koleksi butir 3' }, FIRST);
+    expect(within(item).getByRole('link', { name: 'salah-unggah.pdf' }).getAttribute('href')).toBe(`/files/${FILE_ID}`);
+    fireEvent.click(await within(item).findByRole('button', { name: 'Hapus berkas salah-unggah.pdf' }));
+    const confirm = await screen.findByRole('alertdialog', { name: 'Hapus berkas salah-unggah.pdf?' });
+    expect(within(confirm).getByText(/tidak lagi masuk berkas bukti dan ZIP-nya/)).toBeTruthy();
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Hapus' }));
+    await waitFor(() => expect(app.writes()).toEqual([`DELETE accreditation/evidence/${EVIDENCE_ID}`]));
+    await waitFor(() => expect(within(item).queryByRole('link', { name: 'salah-unggah.pdf' })).toBeNull());
+    expect(within(item).getByText('belum')).toBeTruthy();
+  });
+
+  it('a reader sees the files of an item but cannot remove them', async () => {
+    open({
+      me: signedIn({ permissions: ['accreditation.workspace.read'] }),
+      results: resultsView({
+        indicators: [
+          indicatorResult('SCH-K3', 'K3', 'K', {
+            evidence: [{ code: 'policy_document', present: true, files: [{ id: FILE_ID, name: 'kebijakan.pdf', caption: '' }] }],
+          }),
+        ],
+      }),
+      extra: { 'GET accreditation/evidence': () => ({ evidence: [policyFile()], componentBytes: { K: 0, SP: 0, L: 0, T: 0, F: 0, G: 0, profil: 0 } }) },
+    });
+    const item = await screen.findByRole('region', { name: 'K3 · Koleksi butir 3' }, FIRST);
+    expect(within(item).getByRole('link', { name: 'kebijakan.pdf' })).toBeTruthy();
+    expect(within(item).queryByRole('button', { name: /^Hapus/ })).toBeNull();
   });
 
   it('links the detail report with its parameters', async () => {
