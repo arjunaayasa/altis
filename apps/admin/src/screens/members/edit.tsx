@@ -371,6 +371,9 @@ export function MemberCreateScreen() {
 
 type DetailTab = 'data' | 'loans' | 'history' | 'events';
 
+/** A member page tab: the height of one row of the tab list, also when the tabs wrap onto a second row. */
+const TAB_ROW = 'h-7.5';
+
 export function MemberDetailScreen() {
   const t = useT();
   const me = useMe();
@@ -466,13 +469,28 @@ export function MemberDetailScreen() {
       <RefetchProblem query={member} />
       {notice !== null && <Notice kind="success">{notice}</Notice>}
       {m.storedStatus === 'suspended' && m.statusNote !== null && <NoticeAlert>{t('members.suspended_note', { note: m.statusNote })}</NoticeAlert>}
+      {/* Wide screens: the tabs in the wide column, the summary beside them. Narrow screens: the summary first, above
+          the long form. The tab row grows when its tabs wrap, instead of covering the panel below it: the list's height
+          follows its rows, and each tab keeps the height of one row (not a share of the list's). */}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
-        <Tabs value={tab} onValueChange={(v) => setTab(v as DetailTab)} className="min-w-0 lg:order-1">
-          <TabsList className="flex-wrap">
-            <TabsTrigger value="data">{t('members.tab.data')}</TabsTrigger>
-            {canLoans && <TabsTrigger value="loans">{t('members.tab.loans', { count: m.openLoans })}</TabsTrigger>}
-            {canLoans && <TabsTrigger value="history">{t('members.tab.history')}</TabsTrigger>}
-            <TabsTrigger value="events">{t('members.tab.events')}</TabsTrigger>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as DetailTab)} className="order-1 min-w-0 lg:order-none">
+          <TabsList className="h-auto flex-wrap">
+            <TabsTrigger value="data" className={TAB_ROW}>
+              {t('members.tab.data')}
+            </TabsTrigger>
+            {canLoans && (
+              <TabsTrigger value="loans" className={TAB_ROW}>
+                {t('members.tab.loans', { count: m.openLoans })}
+              </TabsTrigger>
+            )}
+            {canLoans && (
+              <TabsTrigger value="history" className={TAB_ROW}>
+                {t('members.tab.history')}
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="events" className={TAB_ROW}>
+              {t('members.tab.events')}
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="data">
             <MemberFormView key={m.id} member={m} canManage={canManage && live} onSaved={async () => setNotice(t('members.saved'))} />
