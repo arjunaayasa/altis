@@ -182,6 +182,13 @@ const SAMPLE: Record<SettingKey, unknown> = {
   'circulation.lost.processingFeeMinor': 500_000,
   'members.clearance.prefix': 'SBP',
   'members.clearance.profile': { paper: 'A5', city: 'Bandung', signerTitle: 'Kepala Perpustakaan', signerName: 'Contoh', signerId: 'NIP 1', bodyText: '' },
+  // ---- Komunitas (charges and payments) ----
+  'circulation.block.unpaidOverMinor': 1_000_000,
+  'circulation.block.overdue': true,
+  'circulation.fines.skipClosedDays': false,
+  'circulation.receipt.paperMm': 58,
+  'circulation.receipt.footer.id': 'Terima kasih',
+  'circulation.receipt.footer.en': 'Thank you',
 };
 
 /** Every key of scope `instance` (machine state of this installation, kept by a restore), in registry order; all are in group `system`. */
@@ -299,6 +306,13 @@ describe('SETTINGS registry', () => {
       'circulation.loanVoidMinutes',
       'circulation.lost.useItemPrice',
       'circulation.lost.processingFeeMinor',
+      // ---- Komunitas (charges and payments) ----
+      'circulation.block.unpaidOverMinor',
+      'circulation.block.overdue',
+      'circulation.fines.skipClosedDays',
+      'circulation.receipt.paperMm',
+      'circulation.receipt.footer.id',
+      'circulation.receipt.footer.en',
     ]);
     expect(groupKeys('members')).toEqual(['members.clearance.prefix', 'members.clearance.profile']);
     expect(GROUPS.flatMap((g) => groupKeys(g)).sort()).toEqual(Object.keys(SETTINGS).sort());

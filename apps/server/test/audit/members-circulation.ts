@@ -1,4 +1,5 @@
 import type { AreaAuditScript } from './catalog.js';
+import { AUDIT as CHARGES } from './komunitas-charges.js';
 import { AUDIT as CIRC_CORE } from './komunitas-circ-core.js';
 import { AUDIT as CIRCULATION } from './komunitas-circulation.js';
 import { AUDIT as HOLDS } from './komunitas-holds.js';
@@ -18,6 +19,8 @@ export const MEMBERS_CIRCULATION_AUDIT_SCRIPTS: Readonly<Record<string, AreaAudi
   holds: HOLDS,
   // ---- Komunitas (circulation core) ----
   'circ-core': CIRC_CORE,
+  // ---- Komunitas (charges and payments) ----
+  charges: CHARGES,
 });
 
 /** While true, a script that is still null lists its actions as pending; both scripts are written, so every action is covered. */

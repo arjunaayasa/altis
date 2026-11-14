@@ -57,7 +57,7 @@ import {
 //
 // The test builds name every fixture migration (9001, 9002: decision D1d-26), so the later release here is a migration
 // numbered right after N's last (AHEAD_SCHEMA: 0010 in 1d, 0030 in Phase 2, 0034 once Komunitas K1 added 0030–0033, 0041 after members and
-// circulation's 0040, 0042 after holds' 0041, 0043 after the circulation core's 0042), which no build of this
+// circulation's 0040, 0042 after holds' 0041, 0043 after the circulation core's 0042, 0044 after charges' 0043), which no build of this
 // code knows, as in production.
 
 vi.mock('@altis/platform', async (importOriginal) => {

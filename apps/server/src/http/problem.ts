@@ -154,6 +154,11 @@ export const PROBLEM_REASONS: Readonly<Partial<Record<ErrorCode, readonly string
   // An item recorded lost that is scanned back (the desk offers to take it back), and why a loan cannot be voided.
   CIRC_LOAN_NOT_OPEN: Object.freeze(['lost_item']),
   CIRC_VOID_REFUSED: Object.freeze(['too_late', 'other_staff', 'renewed', 'charged']),
+  // ---- Komunitas (charges and payments) ----
+  // Why a member may not borrow or renew (an unpaid balance above the limit, an overdue loan), and why a charge or a
+  // payment cannot be changed (no longer open, voided already).
+  CIRC_MEMBER_BLOCKED: Object.freeze(['unpaid', 'overdue']),
+  CIRC_CHARGE_STATE: Object.freeze(['settled', 'cancelled', 'voided']),
 });
 
 /** The 5xx codes whose `reason` is sent (S7): all the others keep it out, as R53 says. */

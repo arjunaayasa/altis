@@ -7,6 +7,7 @@ import {
   isDomainError,
   newId,
   type ForceableReason,
+  type MemberBlockReason,
   type MemberStatus,
   type OverrideReason,
   type RenewRefusal,
@@ -35,6 +36,9 @@ import { branchToday, dueDateFor } from './dates.js';
 import { checkKeptCopy, fulfilHoldOnLoan, memberHolds, renewalHeldBack, trapOnReturn } from './holds.js';
 import { resolvePolicy } from './policies.js';
 import { chargeSeam } from './seams.js';
+// ---- Komunitas (charges and payments) ----
+import { deskCharges, memberBlock } from './charge-views.js';
+import { FinePreviewer } from './fines.js';
 
 // The circulation desk: lend, return and renew, and the member panel.
 //
@@ -63,6 +67,10 @@ import { chargeSeam } from './seams.js';
 // (CIRC_ITEM_ON_HOLD, checked after "no open loan"); a loan fulfils the borrower's own hold on the title; a copy
 // returned at its own branch is kept for the first hold in its queue and the return says for whom; a renewal is refused
 // (`hold`) while the title has a waiting hold at the loan's branch.
+// Charges (charges.ts, charge-views.ts): the optional blocks are checked after the rule and before the limits on a loan
+// (CIRC_MEMBER_BLOCKED `{reason}`: an unpaid balance above `circulation.block.unpaidOverMinor`, an overdue loan with
+// `circulation.block.overdue`; forced as `blocked`), and after the holds on a renewal (`blocked`: the balance only). The
+// panel shows each overdue loan's running fine, the balance, the open charges and the last payments.
 // Forcing and backdating a loan (the route checks `circulation.desk.override` at the branch): `override.reasons` names
 // the refusals the desk accepts (the collection type, the rule's `loanable = 0`, the limits); each refusal that occurs
 // and is named is passed and recorded in `loans.overrides` with the note. `loanedOn` before today enters a loan after
@@ -122,6 +130,7 @@ function renewRefused(reason: RenewRefusal): DomainError {
     same_day: 'Pinjaman ini dipinjam atau diperpanjang hari ini / This loan was made or renewed today',
     limit: 'Batas perpanjangan sudah tercapai / The renewal limit is reached',
     hold: 'Judul ini sedang dipesan anggota lain / Another member is waiting for this title',
+    blocked: 'Tanggungan biaya anggota melebihi batas / The member’s unpaid balance is above the limit',
   };
   return new DomainError('CIRC_RENEW_REFUSED', { detail: text[reason] ?? 'Perpanjangan ditolak / The renewal was refused', meta: { reason } });
 }
@@ -134,6 +143,15 @@ function limitReached(scope: 'member_type' | 'policy', limit: number): DomainErr
         : `Batas ${limit} pinjaman terbuka sudah tercapai / The limit of ${limit} open loans is reached`,
     meta: { scope, limit, reason: scope },
   });
+}
+
+/** CIRC_MEMBER_BLOCKED: the member's unpaid balance is above the limit, or the member has an overdue loan. */
+export function memberBlocked(reason: MemberBlockReason): DomainError {
+  const text: Record<MemberBlockReason, string> = {
+    unpaid: 'Tanggungan biaya anggota melebihi batas / The member’s unpaid balance is above the limit',
+    overdue: 'Anggota masih punya pinjaman terlambat / The member has an overdue loan',
+  };
+  return new DomainError('CIRC_MEMBER_BLOCKED', { detail: text[reason], meta: { reason } });
 }
 
 function suspended(): DomainError {
@@ -311,6 +329,9 @@ export async function lendItem(tx: TxCtx, input: LendInput): Promise<LoanRespons
   });
   if (policy === null) throw new DomainError('CIRC_NO_POLICY', { detail: 'Tidak ada aturan peminjaman yang berlaku / No loan rule applies' });
   if (Number(policy.loanable) !== 1) unlessForced('policy', notLoanable('policy'));
+  // The optional blocks (both off unless the library switches them on).
+  const block = await memberBlock(trx, { memberId: member.id, today });
+  if (block !== null) unlessForced('blocked', memberBlocked(block));
 
   const type = await trx.selectFrom('member_types').select(['loan_limit', 'accred_group']).where('id', '=', member.member_type_id).executeTakeFirst();
   const openLoans = await openLoanCount(trx, member.id);
@@ -469,7 +490,7 @@ export async function returnItem(tx: TxCtx, input: { branchId: string; barcode: 
   const { item, record, row: itemRow } = await itemRefs(trx, locked.id);
   const daysLate = Math.max(0, diffDays(loan.due_on, today));
   // Only once the loan is closed: its overdue fine (the charges module counts the days in the loan branch's calendar).
-  if (daysLate > 0) await chargeSeam().bookOverdue(tx, { loanId: loan.id, until: today });
+  if (daysLate > 0) await chargeSeam().bookOverdue(tx, { loanId: loan.id, dueOn: loan.due_on, until: today });
   const warnings: CirculationWarningView[] = [];
   if (itemRow.branch_id !== input.branchId) {
     const b = await trx.selectFrom('branches').select('code_display').where('id', '=', itemRow.branch_id).executeTakeFirst();
@@ -562,6 +583,7 @@ async function renewOne(tx: TxCtx, loanId: string, branchId: string): Promise<Re
   const renewals = ok(loan.renewals);
   if (renewals >= ok(loan.renew_limit)) throw renewRefused('limit');
   if (loan.record_id !== null && (await renewalHeldBack(trx, { recordId: loan.record_id, branchId: loan.branch_id, itemId: loan.item_id }))) throw renewRefused('hold');
+  if (member !== undefined && (await memberBlock(trx, { memberId: member.id, today, renewal: true })) !== null) throw renewRefused('blocked');
 
   const due = await dueDateFor(trx, { loanedOn: today, days: ok(loan.loan_days), expiresOn: member?.expires_on ?? null, branchId: loan.branch_id });
   const updated = await trx
@@ -580,7 +602,7 @@ async function renewOne(tx: TxCtx, loanId: string, branchId: string): Promise<Re
     .executeTakeFirst();
   if (Number(updated.numUpdatedRows) !== 1) throw renewRefused('changed');
   // A late renewal books the overdue fine up to today; the loan goes on under its new due date.
-  if (loan.due_on < today) await chargeSeam().bookOverdue(tx, { loanId, until: today });
+  if (loan.due_on < today) await chargeSeam().bookOverdue(tx, { loanId, dueOn: loan.due_on, until: today });
   const warnings: CirculationWarningView[] = [...memberWarnings(member?.expires_on ?? null, today), ...dueWarnings(due)];
   await tx.audit({ action: 'circulation.loan.renew', entity: 'loans', entityId: loanId, branchId, meta: { renewals: renewals + 1 } });
   return { id: loanId, version: ok(loan.version) + 1, dueOn: due.dueOn, renewals: renewals + 1, renewLimit: ok(loan.renew_limit), ...(warnings.length === 0 ? {} : { warnings }) };
@@ -645,6 +667,10 @@ export async function deskLoans(db: Db, memberId: string, now: number): Promise<
       'l.due_on',
       'l.renewals',
       'l.renew_limit',
+      'l.fine_per_day_minor',
+      'l.fine_cap_minor',
+      'l.grace_days',
+      'l.currency',
       'l.item_id',
       'l.record_id',
       'i.barcode_display',
@@ -658,6 +684,7 @@ export async function deskLoans(db: Db, memberId: string, now: number): Promise<
     .orderBy('l.id')
     .execute();
   const todays = new Map<string, string>();
+  const fines = await FinePreviewer.open(db);
   const out: DeskLoanView[] = [];
   for (const r of rows) {
     let today = todays.get(r.branch_id);
@@ -676,6 +703,17 @@ export async function deskLoans(db: Db, memberId: string, now: number): Promise<
       daysLate: Math.max(0, diffDays(r.due_on, today)),
       renewals: ok(r.renewals),
       renewLimit: ok(r.renew_limit),
+      finePreview: await fines.preview(
+        {
+          branchId: r.branch_id,
+          dueOn: r.due_on,
+          currency: r.currency,
+          finePerDayMinor: ok(r.fine_per_day_minor),
+          fineCapMinor: r.fine_cap_minor === null ? null : ok(r.fine_cap_minor),
+          graceDays: ok(r.grace_days),
+        },
+        today,
+      ),
     });
   }
   return out;
@@ -702,9 +740,11 @@ export async function deskMemberView(db: Db, input: { branchId: string; memberId
   const status: MemberStatus = memberStatusOf({ ...m, anonymized_at: null, archived_at: null }, today);
   const loans = await deskLoans(db, m.id, now);
   const holds = await memberHolds(db, m.id);
+  const charges = await deskCharges(db, m.id, today);
   let borrowRefusal: DeskMemberView['borrowRefusal'] = null;
   if (status === 'suspended') borrowRefusal = 'MEMBER_SUSPENDED';
   else if (status === 'expired') borrowRefusal = 'MEMBER_EXPIRED';
+  else if (charges.blocked !== null) borrowRefusal = 'CIRC_MEMBER_BLOCKED';
   else if (type.loanLimit !== null && loans.length >= type.loanLimit) borrowRefusal = 'CIRC_LIMIT_REACHED';
   return {
     id: m.id,
@@ -723,6 +763,7 @@ export async function deskMemberView(db: Db, input: { branchId: string; memberId
     loans,
     holds,
     warnings: memberWarnings(m.expires_on, today),
+    charges,
   };
 }
 

@@ -56,6 +56,7 @@ const MEMBER: DeskMemberView = {
   loans: [],
   holds: [],
   warnings: [],
+  charges: { balance: '0.00', currency: 'IDR', charges: [], payments: [], blocked: null },
 };
 
 function start(routes: Record<string, FakeHandler>, path: string) {

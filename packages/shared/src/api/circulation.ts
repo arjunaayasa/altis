@@ -46,6 +46,8 @@ import { rawBarcodeField } from './catalog/items.js';
 import { rawMemberNoField, type MemberTypeRef } from './members.js';
 // ---- Komunitas (holds) ----
 import type { HoldView, ReturnHoldTrap } from './holds.js';
+// ---- Komunitas (charges and payments) ----
+import type { DeskChargesView, FinePreview } from './charges.js';
 
 // ---- shared shapes ---------------------------------------------------------------------------------------------------
 
@@ -121,6 +123,8 @@ export interface DeskLoanView {
   daysLate: number;
   renewals: number;
   renewLimit: number;
+  /** The running fine if it came back today; null when it is not overdue or its rule has no fine. */
+  finePreview: FinePreview | null;
 }
 
 /**
@@ -142,13 +146,18 @@ export interface DeskMemberView {
   /** `holdsReady`: the member's holds whose copy is kept on a hold shelf now. */
   counts: { openLoans: number; overdue: number; holdsReady: number };
   canBorrow: boolean;
-  /** Why the member may not borrow now: an error code of this API (`MEMBER_SUSPENDED`, `MEMBER_EXPIRED`, `CIRC_LIMIT_REACHED`). */
-  borrowRefusal: 'MEMBER_SUSPENDED' | 'MEMBER_EXPIRED' | 'CIRC_LIMIT_REACHED' | null;
+  /**
+   * Why the member may not borrow now: an error code of this API (`MEMBER_SUSPENDED`, `MEMBER_EXPIRED`,
+   * `CIRC_LIMIT_REACHED`, `CIRC_MEMBER_BLOCKED` with `charges.blocked`).
+   */
+  borrowRefusal: 'MEMBER_SUSPENDED' | 'MEMBER_EXPIRED' | 'CIRC_LIMIT_REACHED' | 'CIRC_MEMBER_BLOCKED' | null;
   /** The open loans, the oldest due date first. */
   loans: DeskLoanView[];
   /** The member's active holds (ready first, then waiting by the time they were placed), at every branch. */
   holds: HoldView[];
   warnings: CirculationWarningView[];
+  /** The balance, the open charges, the last payments and the block that applies now. */
+  charges: DeskChargesView;
 }
 
 // ---- the desk: lend, return, renew -------------------------------------------------------------------------------------
@@ -303,6 +312,8 @@ export interface LoanListItem {
   record: LoanRecordRef | null;
   /** null once the loan was anonymised. */
   member: LoanMemberRef | null;
+  /** An overdue open loan's running fine if it came back today; null otherwise. */
+  finePreview: FinePreview | null;
 }
 
 export type LoanListResponse = Paged<LoanListItem>;

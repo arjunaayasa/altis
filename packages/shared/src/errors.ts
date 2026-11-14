@@ -362,6 +362,11 @@ export const ERROR_CODES = Object.freeze({
   CIRC_VOID_REFUSED: Object.freeze({ status: 409 }),
   /** No open day within a year after the due date the rule gives: the library calendar closes every day. */
   CIRC_CALENDAR_CLOSED: Object.freeze({ status: 422 }),
+  // ---- Komunitas (charges and payments) ----
+  /** The member is blocked from borrowing or renewing; `meta {reason: unpaid | overdue}` (MEMBER_BLOCK_REASONS). */
+  CIRC_MEMBER_BLOCKED: Object.freeze({ status: 409 }),
+  /** The charge is no longer open, or the payment was voided already; `meta {status}` (CHARGE_STATE_REFUSALS). */
+  CIRC_CHARGE_STATE: Object.freeze({ status: 409 }),
 });
 
 export type ErrorCode = keyof typeof ERROR_CODES;
