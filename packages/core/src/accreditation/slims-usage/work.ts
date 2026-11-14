@@ -25,7 +25,7 @@ import { emptyCounts, type MemberInfo, type MonthEntry, type UsageCounts } from 
 //                                the next slice resumes from
 //   usage-members.bin            member hash → type id, membership end (one JSON line each)
 //   usage-items.bin              copy → title; usage-titles.bin: title → class (JSON lines)
-//   usage-loans.bin              the loan ids met (JSON lines)
+//   usage-loans.bin              the ids of the `loan` rows met (JSON lines)
 //   usage-visits-<YYYY-MM>.bin   the members' check-ins of a month: 16 bytes of hash, the second of the month (uint32)
 //   usage-borrows-<YYYY-MM>.bin  the members' loans of a month, the same way
 //   usage-carry-<YYYY-MM>.bin    what the month before carries into this month: hash, second (int32, ≤ 0)
@@ -34,7 +34,9 @@ import { emptyCounts, type MemberInfo, type MonthEntry, type UsageCounts } from 
 //
 // A slice appends to the append-only files (members, items, titles, loans, the months' check-ins and loans) and
 // records their lengths in the state it writes last, so a slice killed before its state was written leaves bytes the
-// next slice cuts off again. The span sets are unions rewritten whole, and a replayed slice adds the same members again;
+// next slice cuts off again. What it appends waits in memory, a few chunks per file, only until about
+// APPEND_FLUSH_BYTES are waiting: the job writes them out after every page it reads (flushOver), so a slice's memory does
+// not grow with the rows it reads; bytes written before a kill are cut off the same way. The span sets are unions rewritten whole, and a replayed slice adds the same members again;
 // the carry of a month is written once its month is read and read by the next month, both idempotent.
 
 /** The phases of an import, in order (a database source starts at `members`). */
@@ -85,6 +87,17 @@ const APPEND_FILE = /^usage-(?:members|items|titles|loans|(?:visits|borrows)-\d{
 /** A month's entry: 16 bytes of hash and the second of the month. */
 const ENTRY_BYTES = 20;
 const HASH_BYTES = 16;
+/** Appends wait in memory until about this many bytes do; then the job writes them out (flushOver). */
+export const APPEND_FLUSH_BYTES = 1024 * 1024;
+/** The appends of one file are gathered in chunks of this size (a larger append gets a chunk of its own size). */
+const CHUNK_BYTES = 16 * 1024;
+
+/** What one append-only file has waiting: the chunks filled and the one being filled. */
+interface Pending {
+  full: Buffer[];
+  chunk: Buffer;
+  used: number;
+}
 
 const spanSchema = z.strictObject({ from: z.string(), to: z.string() });
 const countsSchema = z.strictObject({
@@ -140,7 +153,9 @@ export class UsageWork {
   readonly dataDir: string;
   readonly runId: string;
   state: UsageState;
-  private readonly appends = new Map<string, Buffer[]>();
+  private readonly appends = new Map<string, Pending>();
+  /** The bytes waiting in `appends`. */
+  private waiting = 0;
   private readonly sets = new Map<string, Set<string>>();
   private readonly dirty = new Set<string>();
   private membersMap: Map<string, MemberInfo> | null = null;
@@ -227,25 +242,48 @@ export class UsageWork {
     return bytes;
   }
 
+  /** The bytes appended and not written yet. */
+  get waitingBytes(): number {
+    return this.waiting;
+  }
+
+  /** Room for `n` more bytes of `name`: the pending chunk to write them into at its `used`. */
+  private room(name: string, n: number): Pending {
+    let p = this.appends.get(name);
+    if (p === undefined) {
+      p = { full: [], chunk: Buffer.allocUnsafe(Math.max(CHUNK_BYTES, n)), used: 0 };
+      this.appends.set(name, p);
+    } else if (p.used + n > p.chunk.length) {
+      if (p.used > 0) p.full.push(p.chunk.subarray(0, p.used));
+      p.chunk = Buffer.allocUnsafe(Math.max(CHUNK_BYTES, n));
+      p.used = 0;
+    }
+    this.waiting += n;
+    return p;
+  }
+
   /** Appends `bytes` to the append-only file `name` (written by flush). */
-  append(name: string, bytes: Buffer): void {
-    let list = this.appends.get(name);
-    if (list === undefined) this.appends.set(name, (list = []));
-    list.push(bytes);
+  append(name: string, bytes: Uint8Array): void {
+    const p = this.room(name, bytes.length);
+    p.chunk.set(bytes, p.used);
+    p.used += bytes.length;
   }
 
   /** Appends one JSON line to `name`. */
   appendLine(name: string, value: unknown): void {
-    this.append(name, Buffer.from(`${JSON.stringify(value)}\n`, 'utf8'));
+    const text = `${JSON.stringify(value)}\n`;
+    const n = Buffer.byteLength(text, 'utf8');
+    const p = this.room(name, n);
+    p.chunk.write(text, p.used, n, 'utf8');
+    p.used += n;
   }
 
   /** Appends a member's entry of `month` to its file of `kind`. */
   appendEntry(kind: 'visits' | 'borrows', month: string, e: MonthEntry): void {
-    const name = `usage-${kind}-${month}.bin`;
-    const record = Buffer.alloc(ENTRY_BYTES);
-    record.write(e.hash, 0, HASH_BYTES, 'hex');
-    record.writeUInt32LE(e.second, HASH_BYTES);
-    this.append(name, record);
+    const p = this.room(`usage-${kind}-${month}.bin`, ENTRY_BYTES);
+    p.chunk.write(e.hash, p.used, HASH_BYTES, 'hex');
+    p.chunk.writeUInt32LE(e.second, p.used + HASH_BYTES);
+    p.used += ENTRY_BYTES;
     if (!this.monthSet.has(month)) {
       this.monthSet.add(month);
       this.state.months = [...this.monthSet].sort();
@@ -339,7 +377,7 @@ export class UsageWork {
     return (this.titlesMap = map);
   }
 
-  /** The loan ids met so far. */
+  /** The ids of the `loan` rows met so far. */
   async loans(): Promise<Set<string>> {
     if (this.loansSet !== null) return this.loansSet;
     const set = new Set<string>();
@@ -374,21 +412,34 @@ export class UsageWork {
     this.dirty.add(name);
   }
 
-  /** Writes the buffered appends, recording each file's new length in the state. */
+  /** Writes the buffered appends, recording each file's new length in the state (saved by save()). */
   private async flush(): Promise<void> {
     if (this.appends.size > 0) this.folder = true; // openAppend makes the folder
-    for (const [name, parts] of this.appends) {
-      const bytes = Buffer.concat(parts);
+    for (const [name, p] of this.appends) {
+      const parts = p.used > 0 ? [...p.full, p.chunk.subarray(0, p.used)] : p.full;
+      let size = 0;
       const handle = await openAppend(this.path(name));
       try {
-        let at = 0;
-        while (at < bytes.length) at += (await handle.write(bytes, at, bytes.length - at)).bytesWritten;
+        for (const bytes of parts) {
+          let at = 0;
+          while (at < bytes.length) at += (await handle.write(bytes, at, bytes.length - at)).bytesWritten;
+          size += bytes.length;
+        }
       } finally {
         await handle.close();
       }
-      this.state.files[name] = (this.state.files[name] ?? 0) + bytes.length;
+      this.state.files[name] = (this.state.files[name] ?? 0) + size;
+      this.appends.delete(name);
     }
-    this.appends.clear();
+    this.waiting = 0;
+  }
+
+  /**
+   * Writes the appends out once `bound` bytes or more wait (the job calls it after every page it reads). A slice killed
+   * after it leaves bytes past the lengths the saved state records, which the next slice cuts off (see the top).
+   */
+  async flushOver(bound = APPEND_FLUSH_BYTES): Promise<void> {
+    if (this.waiting >= bound) await this.flush();
   }
 
   /**
