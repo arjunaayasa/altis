@@ -2,9 +2,13 @@ import {
   RECORD_FIELD_NAMES,
   normalizeKey,
   type AgentType,
+  type Audience,
   type FieldState,
   type IdentifierType,
+  type LocalWork,
+  type LocalWorkKind,
   type RecordFieldName,
+  type ReferenceKind,
   type RelationType,
   type RelatorRole,
   type SubjectType,
@@ -18,6 +22,9 @@ import type { AgentRefInput, PublisherRefInput, RecordCreateBody, RecordDetail, 
  * they are made from a copied draft ({@link draftToFormValues}) or a stored record ({@link detailToFormValues}), and
  * how they become the strict create and patch bodies of Task 4's contract.
  *
+ * - The accreditation fields (who a record is meant for, who made a local work and its kind, the kind of a reference
+ *   work) are no template field: each is a vocabulary value or `''` for none, sent on create when chosen and on a
+ *   patch when changed (`null` clears one).
  * - The form names its fields as the bodies name their keys (`subtitle`, `publicationYear`, `agents.0.ref`), so a
  *   server field error lands on its field. Two exceptions are mapped by {@link bodyPathToFormPath}: the identifiers
  *   (empty rows are not sent, so body and form indexes differ) and the custom fields (a code may hold a `.`, which a
@@ -122,6 +129,11 @@ export interface RecordFormValues {
   marcExtra: MarcExtraField[];
   /** A copied draft's links: stored as public URL attachments on create (S4). */
   links: LinkInput[];
+  // ---- Komunitas K1 (catalogue accreditation fields) ----
+  audience: Audience | '';
+  localWork: LocalWork | '';
+  localWorkKind: LocalWorkKind | '';
+  referenceKind: ReferenceKind | '';
 }
 
 /** The masters a draft's codes are looked up in. */
@@ -247,6 +259,10 @@ export function emptyFormValues(materialType: MaterialTypeView | undefined): Rec
     source: null,
     marcExtra: [],
     links: [],
+    audience: '',
+    localWork: '',
+    localWorkKind: '',
+    referenceKind: '',
   };
 }
 
@@ -325,6 +341,7 @@ export function draftToFormValues(draft: RecordDraft, masters: DraftMasters, sou
     source: source ?? null,
     marcExtra: [...draft.marcExtra],
     links: [...draft.links],
+    ...accredFormValues(draft),
   };
 }
 
@@ -369,7 +386,13 @@ export function detailToFormValues(d: RecordDetail): RecordFormValues {
     source: d.source,
     marcExtra: d.marcExtra,
     links: [],
+    ...accredFormValues(d),
   };
+}
+
+/** The accreditation fields of a draft or a stored record as the form holds them (`''` for none). */
+function accredFormValues(r: Pick<RecordDraft, AccredKey>): Pick<RecordFormValues, AccredKey> {
+  return { audience: r.audience ?? '', localWork: r.localWork ?? '', localWorkKind: r.localWorkKind ?? '', referenceKind: r.referenceKind ?? '' };
 }
 
 // ---- making the bodies -------------------------------------------------------------------------------------------
@@ -450,7 +473,16 @@ interface BodyFields {
   relations: NonNullable<RecordCreateBody['relations']>;
   opacVisible: boolean;
   promoted: boolean;
+  audience: Audience | null;
+  localWork: LocalWork | null;
+  localWorkKind: LocalWorkKind | null;
+  referenceKind: ReferenceKind | null;
 }
+
+/** The accreditation fields: no template governs them. */
+type AccredKey = 'audience' | 'localWork' | 'localWorkKind' | 'referenceKind';
+
+const ACCRED_KEYS: readonly AccredKey[] = ['audience', 'localWork', 'localWorkKind', 'referenceKind'];
 
 /** The keys of {@link BodyFields} the template governs, then the others a patch compares. */
 const TEMPLATE_KEYS: readonly TemplateKey[] = [
@@ -505,6 +537,10 @@ function bodyFields(v: RecordFormValues): BodyFields {
     relations: v.relations.map((r) => ({ relatedId: r.relatedId, type: r.type })),
     opacVisible: v.opacVisible,
     promoted: v.promoted,
+    audience: v.audience === '' ? null : v.audience,
+    localWork: v.localWork === '' ? null : v.localWork,
+    localWorkKind: v.localWorkKind === '' ? null : v.localWorkKind,
+    referenceKind: v.referenceKind === '' ? null : v.referenceKind,
   };
 }
 
@@ -549,6 +585,7 @@ export function formToCreateBody(v: RecordFormValues, ctx: BodyContext): RecordC
   if (f.relations.length > 0) body['relations'] = f.relations;
   body['opacVisible'] = f.opacVisible;
   body['promoted'] = f.promoted;
+  for (const key of ACCRED_KEYS) if (f[key] !== null) body[key] = f[key];
   const custom: Record<string, unknown> = {};
   for (const [code, value] of customBodyValues(v.customValues, ctx)) if (value !== null) custom[code] = value;
   if (Object.keys(custom).length > 0) body['custom'] = custom;
@@ -572,7 +609,7 @@ export function formToPatchBody(v: RecordFormValues, before: RecordFormValues, v
   if (after.materialTypeId !== prev.materialTypeId) body['materialTypeId'] = after.materialTypeId;
   if (after.title !== prev.title) body['title'] = after.title;
   for (const key of TEMPLATE_KEYS) if (!hidden.has(key) && !same(after[key], prev[key])) body[key] = after[key];
-  for (const key of ['relations', 'opacVisible', 'promoted'] as const) if (!same(after[key], prev[key])) body[key] = after[key];
+  for (const key of ['relations', 'opacVisible', 'promoted', ...ACCRED_KEYS] as const) if (!same(after[key], prev[key])) body[key] = after[key];
   const now = customBodyValues(v.customValues, ctx);
   const was = customBodyValues(before.customValues, ctx);
   const custom: Record<string, unknown> = {};

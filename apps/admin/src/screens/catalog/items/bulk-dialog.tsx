@@ -1,10 +1,11 @@
 import { ITEM_STATUSES, type ItemStatus } from '@altis/shared';
 import { ITEM_BULK_MAX, type ItemBulkBody, type ItemBulkResponse, type ItemListItem } from '@altis/shared/api/catalog/items';
 import { useId, useMemo, useState } from 'react';
-import { Field, Notice, SELECT_CLASS } from '@/components/form-field';
+import { Field, Notice, NoticeAlert, SELECT_CLASS } from '@/components/form-field';
 import { useReturnFocus } from '@/components/return-focus';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
 import { holdsAt } from '@/lib/access';
 import { api } from '@/lib/api';
@@ -24,10 +25,18 @@ import { LocationOptions, useBranchLocations, useCollectionTypeName, useCollecti
  *   (`invalid_transition`, `not_found`, `invalid_location`; `record_archived`, `archived_reference` for an item leaving
  *   `withdrawn`) and are listed by barcode, the rest is changed.
  * - Nothing is sent before one change is chosen.
+ * - **Tanggal terima** (`set.receivedDate`): "Isi yang kosong" (the default, `receivedDateMode: 'fill_empty'`) fills only
+ *   the copies without one, and the server refuses the others `received_date_set`; "Timpa semua" (`overwrite`) sets it
+ *   on every copy. A date filled here is an edit made in ALTIS, so a SLiMS re-sync skips such a copy from then on: the
+ *   dialog says so above its buttons as soon as a date is entered, before the change is confirmed.
  */
 
 /** The location choice "no location" (the select's `''` is "unchanged"). */
 const NO_LOCATION = 'none';
+
+type ReceivedDateMode = NonNullable<ItemBulkBody['receivedDateMode']>;
+
+const RECEIVED_DATE_MODES: readonly ReceivedDateMode[] = ['fill_empty', 'overwrite'];
 
 type Refusal = ItemBulkResponse['refused'][number];
 
@@ -71,7 +80,7 @@ function BulkBody({ items, onApplied, onClose }: { items: readonly ItemListItem[
   const t = useT();
   const me = useMe();
   const typeName = useCollectionTypeName();
-  const ids = { location: useId(), status: useId(), type: useId(), refused: useId() };
+  const ids = { location: useId(), status: useId(), type: useId(), refused: useId(), received: useId(), mode: useId() };
   const outside = useInactiveBranches();
   const held = useMemo(() => items.filter((i) => holdsAt(me, 'catalog.items.manage', i.branch.id)), [items, me]);
   const managed = useMemo(() => held.filter((i) => !outside.has(i.branch.id)), [held, outside]);
@@ -87,6 +96,8 @@ function BulkBody({ items, onApplied, onClose }: { items: readonly ItemListItem[
   const [location, setLocation] = useState('');
   const [status, setStatus] = useState<ItemStatus | ''>('');
   const [collectionTypeId, setCollectionTypeId] = useState('');
+  const [receivedDate, setReceivedDate] = useState('');
+  const [receivedDateMode, setReceivedDateMode] = useState<ReceivedDateMode>('fill_empty');
   const [error, setError] = useState<string | null>(null);
   const [failures, setFailures] = useState<BranchFailure[]>([]);
   const [busy, setBusy] = useState(false);
@@ -101,6 +112,7 @@ function BulkBody({ items, onApplied, onClose }: { items: readonly ItemListItem[
     if (location !== '') set.locationId = location === NO_LOCATION ? null : location;
     if (status !== '') set.status = status;
     if (collectionTypeId !== '') set.collectionTypeId = collectionTypeId;
+    if (receivedDate !== '') set.receivedDate = receivedDate;
     if (Object.keys(set).length === 0) {
       setError(t('catalog.items.bulk.nothing'));
       return;
@@ -110,7 +122,7 @@ function BulkBody({ items, onApplied, onClose }: { items: readonly ItemListItem[
     const done: Outcome = { updated: 0, refused: [] };
     const failed: BranchFailure[] = [];
     for (const [branchId, branchIds] of byBranch) {
-      const body: ItemBulkBody = { ids: branchIds, set };
+      const body: ItemBulkBody = { ids: branchIds, set, ...(set.receivedDate === undefined ? {} : { receivedDateMode }) };
       try {
         const answer = await api<ItemBulkResponse>('POST', `branches/${encodeURIComponent(branchId)}/items/bulk`, body);
         done.updated += answer.updated;
@@ -216,6 +228,29 @@ function BulkBody({ items, onApplied, onClose }: { items: readonly ItemListItem[
                 </select>
               )}
             </Field>
+            <Field id={ids.received} label={t('catalog.items.bulk.received_date')} hint={t('catalog.items.bulk.received_date_hint')}>
+              {(c) => <Input {...c} type="date" disabled={busy} value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} />}
+            </Field>
+            <fieldset className="grid gap-2" disabled={busy || receivedDate === ''}>
+              <legend className="mb-1 text-sm font-medium">{t('catalog.items.bulk.received_mode')}</legend>
+              {RECEIVED_DATE_MODES.map((mode) => (
+                <div key={mode} className="flex items-center gap-2">
+                  <input
+                    id={`${ids.mode}-${mode}`}
+                    type="radio"
+                    name={ids.mode}
+                    value={mode}
+                    checked={receivedDateMode === mode}
+                    onChange={() => setReceivedDateMode(mode)}
+                    className="size-4 accent-primary"
+                  />
+                  <label htmlFor={`${ids.mode}-${mode}`} className="text-sm">
+                    {t(`catalog.items.bulk.received_mode.${mode}`)}
+                  </label>
+                </div>
+              ))}
+            </fieldset>
+            {receivedDate !== '' && <NoticeAlert>{t('catalog.items.bulk.received_sync_note')}</NoticeAlert>}
             <DialogFooter>
               <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
                 {t('form.cancel')}

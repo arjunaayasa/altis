@@ -220,6 +220,27 @@ export const MIGRATION_ID = {
   'catalog.migration.real.source_mismatch': 'Basis data harus sama dengan yang dibaca uji kering: host, port, dan nama basis datanya.',
   'catalog.migration.real.not_empty':
     'Katalog tujuan sudah berisi cantuman. Centang "Izinkan katalog tujuan yang tidak kosong" dan ketik nama perpustakaan bila memang ingin menambahkan ke katalog ini.',
+
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  // The catalogue mode of a run (add new rows only, or re-sync the rows no one edited in ALTIS), skipping the catalogue
+  // stages after a re-sync dry run that found no change, and why the report does not read a table.
+  'catalog.migration.options.catalog_mode': 'Mode katalog',
+  'catalog.migration.options.catalog_mode.append': 'Tambah baris baru saja',
+  'catalog.migration.options.catalog_mode.sync': 'Selaraskan dengan SLiMS',
+  'catalog.migration.options.sync_note':
+    'Cantuman dan eksemplar yang belum disunting di ALTIS ditulis ulang mengikuti SLiMS (status, penyiangan, tanggal terima, lokasi, tipe koleksi, barkod, harga, dan ruas bibliografis), dan eksemplar yang sudah tidak ada di SLiMS diarsipkan. Baris yang sudah disunting di ALTIS dilewati dan dicantumkan di laporan beserta ruas yang berbeda.',
+  'catalog.migration.options.skip_catalog': 'Lewati tahap katalog',
+  'catalog.migration.options.skip_catalog_hint':
+    'Hanya dapat dipilih setelah uji kering dengan mode Selaraskan dengan SLiMS yang tidak menemukan cantuman atau eksemplar SLiMS yang baru, berubah, atau hilang.',
+  'catalog.migration.options.skip_catalog_ready':
+    'Uji kering ini tidak menemukan cantuman atau eksemplar SLiMS yang baru, berubah, atau hilang, jadi tahap katalog boleh dilewati.',
+  'catalog.migration.real.catalog_changed':
+    'Uji kering menemukan cantuman atau eksemplar SLiMS yang baru, berubah, atau hilang, jadi tahap katalog tidak dapat dilewati. Jalankan uji kering baru dengan mode katalog Selaraskan dengan SLiMS agar katalog ikut diselaraskan.',
+  'catalog.migration.real.skip_needs_sync': 'Tahap katalog hanya dapat dilewati setelah uji kering dengan mode katalog Selaraskan dengan SLiMS.',
+  'catalog.migration.report.catalog_changes': 'Cantuman dan eksemplar SLiMS yang baru, berubah, atau hilang: {count}',
+  'catalog.migration.report.unread_phase3': 'Tidak dibaca: modul Anggota/Sirkulasi',
+  'catalog.migration.report.unread_phase3_hint': 'Impor agregat terpisah membaca sebagian kolom tanpa memigrasi.',
+  'catalog.migration.report.unread_derived': 'Tidak dibaca: tabel turunan',
 } as const;
 
 export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
@@ -428,4 +449,23 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.real.source_mismatch': 'The database must be the one the dry run read: the same host, port and database name.',
   'catalog.migration.real.not_empty':
     'The target catalogue holds records already. Tick "Allow a target catalogue that is not empty" and type the library\'s name if you do want to add to this catalogue.',
+
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  'catalog.migration.options.catalog_mode': 'Catalogue mode',
+  'catalog.migration.options.catalog_mode.append': 'Add new rows only',
+  'catalog.migration.options.catalog_mode.sync': 'Re-sync with SLiMS',
+  'catalog.migration.options.sync_note':
+    'Records and copies not edited in ALTIS are written again as SLiMS has them (status, weeding, date received, location, collection type, barcode, price and the bibliographic fields), and copies no longer in SLiMS are archived. Rows edited in ALTIS are skipped and listed in the report with the fields that differ.',
+  'catalog.migration.options.skip_catalog': 'Skip the catalogue stages',
+  'catalog.migration.options.skip_catalog_hint':
+    'Only possible after a dry run in the mode Re-sync with SLiMS that found no SLiMS record or copy that is new, changed or gone.',
+  'catalog.migration.options.skip_catalog_ready':
+    'This dry run found no SLiMS record or copy that is new, changed or gone, so the catalogue stages may be skipped.',
+  'catalog.migration.real.catalog_changed':
+    'The dry run found SLiMS records or copies that are new, changed or gone, so the catalogue stages cannot be skipped. Start a new dry run in the catalogue mode Re-sync with SLiMS so that the catalogue is re-synced too.',
+  'catalog.migration.real.skip_needs_sync': 'The catalogue stages can only be skipped after a dry run in the catalogue mode Re-sync with SLiMS.',
+  'catalog.migration.report.catalog_changes': 'SLiMS records and copies that are new, changed or gone: {count}',
+  'catalog.migration.report.unread_phase3': 'Not read: Members/Circulation module',
+  'catalog.migration.report.unread_phase3_hint': 'The separate aggregate import reads some of its columns without migrating them.',
+  'catalog.migration.report.unread_derived': 'Not read: derived table',
 };

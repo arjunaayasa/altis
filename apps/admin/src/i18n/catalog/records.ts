@@ -208,6 +208,34 @@ export const RECORDS_ID = {
   'catalog.records.marc.leader': 'Pemimpin (LDR)',
   'catalog.records.marc.download_mrc': 'Unduh MARC (ISO 2709)',
   'catalog.records.marc.download_xml': 'Unduh MARCXML',
+
+  // ---- Komunitas K1 (catalogue accreditation fields) ----
+  // The editor's accreditation section and Bibliografi's bulk change of those fields. The values are labelled by the
+  // shared vocabularies (`vocab.audience.*`, `vocab.local_work.*`, `vocab.local_work_kind.*`, `vocab.reference_kind.*`).
+  'catalog.records.section.accreditation': 'Akreditasi',
+  'catalog.records.section.accreditation_hint':
+    'Ruas ini dipakai Laporan Siap Akreditasi. Mengubah ruas ini saja tidak membuat cantuman hasil migrasi dianggap disunting di ALTIS, jadi penyelarasan ulang dari SLiMS tetap berlaku untuknya.',
+  'catalog.records.field.audience': 'Sasaran pembaca',
+  'catalog.records.field.local_work': 'Karya lokal',
+  'catalog.records.field.local_work_hint': 'Karya warga sekolah atau masyarakat setempat: siapa pembuatnya.',
+  'catalog.records.field.local_work_kind': 'Jenis karya',
+  'catalog.records.field.local_work_kind_hint': 'Bentuk karya lokal, misalnya karya tulis, kliping, atau antologi puisi.',
+  'catalog.records.field.reference_kind': 'Jenis referensi',
+  'catalog.records.list.accred_bulk': 'Ubah data akreditasi',
+  'catalog.records.list.accred_bulk_too_many': 'Ubah data akreditasi paling banyak {max} cantuman sekaligus.',
+  'catalog.records.bulk.title': 'Ubah data akreditasi cantuman',
+  'catalog.records.bulk.description': '{count} cantuman terpilih. Ruas yang dibiarkan "Tidak diubah" tetap seperti semula.',
+  'catalog.records.bulk.keep': 'Tidak diubah',
+  'catalog.records.bulk.clear': 'Kosongkan',
+  'catalog.records.bulk.nothing': 'Pilih sedikitnya satu perubahan.',
+  'catalog.records.bulk.apply': 'Terapkan',
+  'catalog.records.bulk.applying': 'Menerapkan…',
+  'catalog.records.bulk.updated': '{count} cantuman diubah.',
+  'catalog.records.bulk.refused': 'Tidak diubah ({count})',
+  'catalog.records.bulk.refused.not_found': 'Cantuman tidak ditemukan.',
+  'catalog.records.bulk.refused.archived': 'Cantuman sudah diarsipkan.',
+  'catalog.records.bulk.close': 'Tutup',
+  'catalog.records.bulk.done': 'Selesai',
 } as const;
 
 export const RECORDS_EN: Record<keyof typeof RECORDS_ID, string> = {
@@ -412,4 +440,30 @@ export const RECORDS_EN: Record<keyof typeof RECORDS_ID, string> = {
   'catalog.records.marc.leader': 'Leader (LDR)',
   'catalog.records.marc.download_mrc': 'Download MARC (ISO 2709)',
   'catalog.records.marc.download_xml': 'Download MARCXML',
+
+  // ---- Komunitas K1 (catalogue accreditation fields) ----
+  'catalog.records.section.accreditation': 'Accreditation',
+  'catalog.records.section.accreditation_hint':
+    'These fields feed the accreditation report. Changing only these fields does not count a migrated record as edited in ALTIS, so a re-sync from SLiMS still applies to it.',
+  'catalog.records.field.audience': 'Intended readers',
+  'catalog.records.field.local_work': 'Local work',
+  'catalog.records.field.local_work_hint': 'A work by the school community or local people: who made it.',
+  'catalog.records.field.local_work_kind': 'Kind of work',
+  'catalog.records.field.local_work_kind_hint': 'The form of a local work, such as a written work, clippings or a poetry anthology.',
+  'catalog.records.field.reference_kind': 'Kind of reference work',
+  'catalog.records.list.accred_bulk': 'Change accreditation data',
+  'catalog.records.list.accred_bulk_too_many': 'Accreditation data can be changed for at most {max} records at once.',
+  'catalog.records.bulk.title': 'Change the accreditation data of records',
+  'catalog.records.bulk.description': '{count} records selected. Fields left "Unchanged" keep their values.',
+  'catalog.records.bulk.keep': 'Unchanged',
+  'catalog.records.bulk.clear': 'Clear',
+  'catalog.records.bulk.nothing': 'Choose at least one change.',
+  'catalog.records.bulk.apply': 'Apply',
+  'catalog.records.bulk.applying': 'Applying…',
+  'catalog.records.bulk.updated': '{count} records changed.',
+  'catalog.records.bulk.refused': 'Not changed ({count})',
+  'catalog.records.bulk.refused.not_found': 'The record was not found.',
+  'catalog.records.bulk.refused.archived': 'The record is archived.',
+  'catalog.records.bulk.close': 'Close',
+  'catalog.records.bulk.done': 'Done',
 };

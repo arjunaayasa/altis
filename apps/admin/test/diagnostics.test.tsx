@@ -328,6 +328,25 @@ describe('Jam sekarang benar', () => {
   });
 });
 
+// ---- Komunitas K1 (date-based jobs) ----
+describe('the date-based jobs held back by a clock anomaly', () => {
+  const POSTPONED = 'Tugas berbasis tanggal ditunda: jam sistem melompat';
+
+  it('the clock block says so while the anomaly is set, in Indonesian and in English', async () => {
+    const anomaly = { detectedAt: AT - 600_000, maxSeen: AT + 3_600_000 };
+    startApp({ me: adminMe(), path: '/admin/diagnostics', routes: routes(() => report({ clock: { anomaly } })) });
+    const line = await screen.findByText(POSTPONED);
+    expect(line.closest('[data-diagnostics-block]')?.getAttribute('data-diagnostics-block')).toBe('clock');
+    expect(translate('en', 'jobs.message.reports.housekeeping.date_jobs_postponed')).toBe('Date-based jobs postponed: the system clock jumped');
+  });
+
+  it('and not without an anomaly', async () => {
+    startApp({ me: adminMe(), path: '/admin/diagnostics', routes: routes(() => report()) });
+    expect(await screen.findByText('Tidak ada pergeseran jam yang terdeteksi.')).toBeTruthy();
+    expect(screen.queryByText(POSTPONED)).toBeNull();
+  });
+});
+
 describe('an op in needs_attention', () => {
   const attention = (): DashboardResponse =>
     dashboard({ alerts: [{ kind: 'ops_attention', severity: 'error', messageKey: 'alert.ops_attention', link: '/admin/_update' }] });
