@@ -29,6 +29,8 @@ import { CIRCULATION_CORE_ID } from './circulation-core.js';
 import { MEMBERS_VISITS_ID } from './members-visits.js';
 // ---- Komunitas (member area) ----
 import { MEMBER_AREA_ID } from './member-area.js';
+// ---- Komunitas (charges and payments) ----
+import { CHARGES_ID } from './charges.js';
 
 /**
  * The keys that exist only in the test profile (spec §12.5, ruling S28), next to `permissionCatalog`'s test entry and the
@@ -1589,6 +1591,8 @@ const BASE = {
   // ---- Komunitas (member area) ----
   // Audit actions, the members' attachment access and the member password-reset mail (i18n/member-area.ts).
   ...MEMBER_AREA_ID,
+  // ---- Komunitas (charges and payments) ----
+  ...CHARGES_ID,
 } satisfies Record<string, string>;
 
 /**

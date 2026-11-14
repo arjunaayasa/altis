@@ -650,6 +650,13 @@ export const ClearanceProfile = z.strictObject({
 
 export type ClearanceProfile = z.infer<typeof ClearanceProfile>;
 
+// ---- Komunitas (charges and payments) ----
+/** `circulation.receipt.paperMm`: the width of the receipt roll, 58 or 80 mm. */
+export const receiptPaperField = z.union([z.literal(58), z.literal(80)]);
+
+/** `circulation.receipt.footer.<locale>`: the receipt's closing line, plain text of at most 300 characters, or null. */
+export const receiptFooterField = z.string().trim().max(300).nullable();
+
 /** `PUT settings/circulation`: each key is its setting's name without `circulation.`, nested at its dots. */
 export const CirculationSettingsBody = z.strictObject({
   // ---- Komunitas (holds) ----
@@ -661,10 +668,20 @@ export const CirculationSettingsBody = z.strictObject({
       pickupDays: z.int().min(1).max(30).optional(),
     })
     .optional(),
+  // ---- Komunitas (circulation core) ----
   loanVoidMinutes: loanVoidMinutesField.optional(),
   lost: z.strictObject({ useItemPrice: z.boolean().optional(), processingFeeMinor: minorAmountField.optional() }).optional(),
   // ---- Komunitas (member area) ----
   renew: z.strictObject({ opac: z.boolean().optional() }).optional(),
+  // ---- Komunitas (charges and payments) ----
+  block: z.strictObject({ unpaidOverMinor: minorAmountField.nullable().optional(), overdue: z.boolean().optional() }).optional(),
+  fines: z.strictObject({ skipClosedDays: z.boolean().optional() }).optional(),
+  receipt: z
+    .strictObject({
+      paperMm: receiptPaperField.optional(),
+      footer: z.strictObject({ id: receiptFooterField.optional(), en: receiptFooterField.optional() }).optional(),
+    })
+    .optional(),
 });
 
 export type CirculationSettingsBody = z.infer<typeof CirculationSettingsBody>;
@@ -675,6 +692,10 @@ export interface CirculationSettingsView {
   renew: { opac: boolean };
   loanVoidMinutes: number;
   lost: { useItemPrice: boolean; processingFeeMinor: number };
+  /** `unpaidOverMinor` null: no block by balance. */
+  block: { unpaidOverMinor: number | null; overdue: boolean };
+  fines: { skipClosedDays: boolean };
+  receipt: { paperMm: 58 | 80; footer: { id: string | null; en: string | null } };
 }
 
 /** `PUT settings/members`: each key is its setting's name without `members.`, nested at its dots. */

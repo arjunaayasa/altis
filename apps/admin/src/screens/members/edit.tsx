@@ -26,6 +26,8 @@ import { ExtendDialog, SuspendDialog, refreshMembers, useMember } from './common
 import { MemberCustomPanel, MemberPhotoPanel, MemberPrivacyPanel, RestoreButton } from './member-extras';
 // ---- Komunitas (member area) ----
 import { MemberPasswordDialog } from './password';
+// ---- Komunitas (charges and payments) ----
+import { MemberChargesTab } from '@/screens/circulation/charges';
 
 /**
  * A member: Anggota baru (`/admin/anggota/baru`) and the member's page (`/admin/anggota/$memberId`).
@@ -372,7 +374,7 @@ export function MemberCreateScreen() {
   );
 }
 
-type DetailTab = 'data' | 'loans' | 'history' | 'events';
+type DetailTab = 'data' | 'loans' | 'history' | 'charges' | 'events';
 
 export function MemberDetailScreen() {
   const t = useT();
@@ -493,6 +495,11 @@ export function MemberDetailScreen() {
                 {t('members.tab.history')}
               </TabsTrigger>
             )}
+            {canLoans && (
+              <TabsTrigger value="charges" className={WRAPPING_TABS.trigger}>
+                {t('charges.member_page.tab')}
+              </TabsTrigger>
+            )}
             <TabsTrigger value="events" className={WRAPPING_TABS.trigger}>
               {t('members.tab.events')}
             </TabsTrigger>
@@ -510,6 +517,11 @@ export function MemberDetailScreen() {
           {canLoans && (
             <TabsContent value="history">
               <MemberLoans memberId={m.id} state="closed" />
+            </TabsContent>
+          )}
+          {canLoans && (
+            <TabsContent value="charges">
+              <MemberChargesTab memberId={m.id} />
             </TabsContent>
           )}
           <TabsContent value="events">

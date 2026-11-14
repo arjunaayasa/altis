@@ -229,6 +229,54 @@ export const POLICY_RANK_REASONS = Object.freeze(['only', 'more_specific', 'earl
 
 export type PolicyRankReason = (typeof POLICY_RANK_REASONS)[number];
 
+// ---- Komunitas (charges and payments) --------------------------------------------------------------------------------
+
+/**
+ * `charges.kind`: an overdue fine, a lost item's replacement (or its processing fee), damage, a member card, any other
+ * charge the desk books by hand, or one carried over by a migration.
+ */
+export const CHARGE_KINDS = Object.freeze(['overdue', 'lost', 'damage', 'card', 'manual', 'migrated'] as const);
+
+export type ChargeKind = (typeof CHARGE_KINDS)[number];
+
+/** The kinds the desk books by hand (the others are booked by the system or a migration). */
+export const MANUAL_CHARGE_KINDS = Object.freeze(['damage', 'card', 'manual'] as const);
+
+export type ManualChargeKind = (typeof MANUAL_CHARGE_KINDS)[number];
+
+/** `charges.status`: something is left to pay (`open`), nothing is (`settled`), or the whole charge was cancelled. */
+export const CHARGE_STATUSES = Object.freeze(['open', 'settled', 'cancelled'] as const);
+
+export type ChargeStatus = (typeof CHARGE_STATUSES)[number];
+
+/** `charges.source`: booked at the desk, by the system (fines and lost items), or by a migration. */
+export const CHARGE_SOURCES = Object.freeze(['desk', 'system', 'migrated'] as const);
+
+export type ChargeSource = (typeof CHARGE_SOURCES)[number];
+
+/** `charge_adjustments.kind`: a waive by staff, or a cancellation (a lost item that came back). */
+export const CHARGE_ADJUSTMENT_KINDS = Object.freeze(['waive', 'cancel'] as const);
+
+export type ChargeAdjustmentKind = (typeof CHARGE_ADJUSTMENT_KINDS)[number];
+
+/** `payments.method`. */
+export const PAYMENT_METHODS = Object.freeze(['cash', 'transfer', 'other'] as const);
+
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+/**
+ * `CIRC_MEMBER_BLOCKED.meta.reason`: the unpaid balance is above the library's limit (`unpaid`, blocks loans and
+ * renewals), or the member has an overdue loan (`overdue`, blocks loans). Both blocks are off unless switched on.
+ */
+export const MEMBER_BLOCK_REASONS = Object.freeze(['unpaid', 'overdue'] as const);
+
+export type MemberBlockReason = (typeof MEMBER_BLOCK_REASONS)[number];
+
+/** `CIRC_CHARGE_STATE.meta.status`: the charge is no longer open, or the payment was voided already. */
+export const CHARGE_STATE_REFUSALS = Object.freeze(['settled', 'cancelled', 'voided'] as const);
+
+export type ChargeStateRefusal = (typeof CHARGE_STATE_REFUSALS)[number];
+
 // ---- labels ----------------------------------------------------------------------------------------------------------
 
 /**
@@ -260,4 +308,11 @@ export const CIRCULATION_VOCAB_LISTS = Object.freeze({
   clearance_purpose: CLEARANCE_PURPOSES,
   clearance_refusal: CLEARANCE_REFUSALS,
   policy_rank_reason: POLICY_RANK_REASONS,
+  // ---- Komunitas (charges and payments) ----
+  charge_kind: CHARGE_KINDS,
+  charge_status: CHARGE_STATUSES,
+  charge_adjustment_kind: CHARGE_ADJUSTMENT_KINDS,
+  payment_method: PAYMENT_METHODS,
+  member_block_reason: MEMBER_BLOCK_REASONS,
+  charge_state_refusal: CHARGE_STATE_REFUSALS,
 });

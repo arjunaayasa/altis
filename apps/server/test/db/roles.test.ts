@@ -155,12 +155,12 @@ describe.skipIf(!ctx.available)(`roles and permissions API [${engineLabel()}]`, 
   });
 
   describe('GET permissions', () => {
-    it('the catalog of the test profile: 46 items in catalog order, the last test.branch.manage with scope branch', async () => {
+    it('the catalog of the test profile: 47 items in catalog order, the last test.branch.manage with scope branch', async () => {
       const res = await (await as(ad)).get(PERMISSIONS);
       expect(res.status).toBe(200);
       const { items } = res.json as { items: PermissionItem[] };
       // The community edition: the Sistem group without system.license.* (19 keys).
-      expect(items).toHaveLength(46);
+      expect(items).toHaveLength(47);
       expect(items[0]).toEqual({ key: 'system.settings.read', scope: 'global', module: 'system' });
       expect(items.filter((i) => i.key.startsWith('system.license.'))).toEqual([]);
       // Phase 2 (its spec §12.1): the catalog's keys after Phase 1's, two of them branch-scoped.
@@ -194,7 +194,9 @@ describe.skipIf(!ctx.available)(`roles and permissions API [${engineLabel()}]`, 
         ['visits.records.manage', 'branch', 'visits'],
         ['visits.stations.manage', 'branch', 'visits'],
       ]);
-      expect(items[45]).toEqual({ key: 'test.branch.manage', scope: 'branch', module: 'test' });
+      // Charges and payments' waive, branch-scoped like the desk.
+      expect(items[45]).toEqual({ key: 'circulation.charges.waive', scope: 'branch', module: 'circulation' });
+      expect(items[46]).toEqual({ key: 'test.branch.manage', scope: 'branch', module: 'test' });
       expect(items.map((i) => i.key)).toEqual(permissionCatalog().map((d) => d.key));
     });
 

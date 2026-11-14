@@ -67,8 +67,11 @@ const CIRCULATION_CORE = ['circulation.desk.override'];
 /** The members-extended and visits keys, appended in this order after the members and circulation keys. */
 const MEMBERS_VISITS = ['members.export.run', 'members.privacy.manage', 'visits.records.read', 'visits.records.manage', 'visits.stations.manage'];
 
+/** Charges and payments' key, appended after the members-extended and visits keys: waiving charges and voiding payments at a branch. */
+const CHARGES = ['circulation.charges.waive'];
+
 /** Every production key, in catalog order. */
-const ALL = [...SPEC_13_4, ...PHASE_2, ...KOMUNITAS_K1, ...MEMBERS_CIRCULATION, ...CIRCULATION_CORE, ...MEMBERS_VISITS];
+const ALL = [...SPEC_13_4, ...PHASE_2, ...KOMUNITAS_K1, ...MEMBERS_CIRCULATION, ...CIRCULATION_CORE, ...MEMBERS_VISITS, ...CHARGES];
 
 /** The two branch-scoped keys of Phase 2 (§12.1: "cabang"). */
 const PHASE_2_BRANCH = ['catalog.locations.manage', 'catalog.items.manage'];
@@ -87,11 +90,11 @@ describe('PERMISSIONS', () => {
     expect(PERMISSIONS.slice(0, 32)).toEqual([...SPEC_13_4, ...PHASE_2, ...KOMUNITAS_K1]);
   });
 
-  it('then the 7 keys of members and circulation, the circulation core\'s override, and ends with the 5 of members extended and visits: 45 in all', () => {
+  it('then the 7 keys of members and circulation, the circulation core\'s override, the 5 of members extended and visits, and ends with the charges\' waive: 46 in all', () => {
     expect(MEMBERS_CIRCULATION).toHaveLength(7);
     expect(MEMBERS_VISITS).toHaveLength(5);
     expect([...PERMISSIONS]).toEqual(ALL);
-    expect(PERMISSIONS).toHaveLength(45);
+    expect(PERMISSIONS).toHaveLength(46);
   });
 
   it('has no licence permission (the community edition)', () => {
@@ -155,6 +158,7 @@ describe('permissionCatalog', () => {
       'circulation.desk.override',
       'visits.records.manage',
       'visits.stations.manage',
+      'circulation.charges.waive',
     ]);
     expect(production.slice(39).map((d) => [d.key, d.scope, d.module])).toEqual([
       ['circulation.desk.override', 'branch', 'circulation'],
@@ -163,14 +167,15 @@ describe('permissionCatalog', () => {
       ['visits.records.read', 'global', 'visits'],
       ['visits.records.manage', 'branch', 'visits'],
       ['visits.stations.manage', 'branch', 'visits'],
+      ['circulation.charges.waive', 'branch', 'circulation'],
     ]);
   });
 
-  it("the 'test' profile ends with the branch-scoped test permission: 46", () => {
+  it("the 'test' profile ends with the branch-scoped test permission: 47", () => {
     const test = permissionCatalog('test');
-    expect(test).toHaveLength(46);
-    expect(test.slice(0, 45).map((d) => d.key)).toEqual(ALL);
-    expect(test[45]).toEqual({ key: TEST_PERMISSION, scope: 'branch', module: 'test' });
+    expect(test).toHaveLength(47);
+    expect(test.slice(0, 46).map((d) => d.key)).toEqual(ALL);
+    expect(test[46]).toEqual({ key: TEST_PERMISSION, scope: 'branch', module: 'test' });
   });
 
   it('under the Vitest test profile the default catalog holds the test permission', () => {
@@ -261,10 +266,10 @@ describe('systemRolePermissions', () => {
     expect(systemRolePermissions('super_admin', 'production')).toEqual([...ALL]);
   });
 
-  it('admin holds the production keys minus exactly the four of ADMIN_EXCLUDED: 41, without catalog.migration.run', () => {
+  it('admin holds the production keys minus exactly the four of ADMIN_EXCLUDED: 42, without catalog.migration.run', () => {
     const admin = systemRolePermissions('admin', 'production');
     expect(admin).toEqual(ALL.filter((k) => !(ADMIN_EXCLUDED as readonly string[]).includes(k)));
-    expect(admin).toHaveLength(41);
+    expect(admin).toHaveLength(42);
     for (const key of ADMIN_EXCLUDED) expect(admin).not.toContain(key);
     expect(admin).not.toContain('catalog.migration.run');
     expect(admin).toContain('system.roles.manage');
@@ -292,7 +297,7 @@ describe('systemRolePermissions', () => {
   it('is computed from the catalog, so the production bundle has no test permission', () => {
     vi.stubGlobal('__BUILD_PROFILE__', 'production');
     expect(systemRolePermissions('super_admin', 'test')).toEqual([...ALL]);
-    expect(systemRolePermissions('admin')).toHaveLength(41);
+    expect(systemRolePermissions('admin')).toHaveLength(42);
   });
 
   it('returns frozen lists', () => {

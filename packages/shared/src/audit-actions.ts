@@ -212,6 +212,12 @@ export const AUDIT_ACTIONS = Object.freeze([
   'members.self.password_reset',
   'members.self.data_export',
   'members.self.login_locked',
+  // ---- Komunitas (charges and payments) ----
+  // a charge booked by hand, a waive; a payment with its numbered receipt, a voided payment
+  'circulation.charge.create',
+  'circulation.charge.waive',
+  'circulation.payment.create',
+  'circulation.payment.void',
 ] as const);
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

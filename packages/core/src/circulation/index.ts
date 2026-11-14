@@ -83,3 +83,47 @@ export {
 export type { ClearanceIssue, ClearanceLetter, ClearancePdfInput } from './clearances.js';
 export { chargeSeam, chargesInstalled, holdSeam, registerCirculationChargeSeam, registerCirculationHoldSeam } from './seams.js';
 export type { CirculationChargeSeam, CirculationHoldSeam } from './seams.js';
+// ---- Komunitas (charges and payments) ----
+// Overdue fines, charges (booked by the system through the charges seam, which this module plugs in when it loads, or by
+// hand at the desk), waives, payments with numbered receipts, voided payments, the receipt PDF, the member's balance
+// and the optional blocks, and the lists staff read.
+export { FinePreviewer, finesSkipClosedDays, overdueFineMinor } from './fines.js';
+export type { FineTerms, PreviewLoan } from './fines.js';
+export {
+  CHARGES_SEAM,
+  anonymizeLoanCharges,
+  bookLostCharges,
+  bookOverdueFine,
+  cancelLostCharges,
+  chargeStatusOf,
+  createCharge,
+  loanHasCharges,
+  waiveCharge,
+} from './charges.js';
+export {
+  OPEN_BALANCES_MAX,
+  PAYMENT_SUMMARY_MAX_DAYS,
+  blockSettings,
+  chargeLeft,
+  deskCharges,
+  listPayments,
+  memberBalances,
+  memberBlock,
+  memberCharges,
+  openBalances,
+  paymentSummary,
+} from './charge-views.js';
+export {
+  buildReceiptPdf,
+  ensureReceiptLockRow,
+  receiptData,
+  receiptLockName,
+  receiptNumber,
+  receiptYearOf,
+  takePayment,
+  voidPayment,
+} from './payments.js';
+export type { PaymentInput, ReceiptData } from './payments.js';
+export { memberBlocked } from './desk.js';
+export { buildSlipPdf, slipData } from './slips.js';
+export type { SlipData } from './slips.js';

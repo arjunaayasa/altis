@@ -119,6 +119,11 @@ export const TABLE_CLASSES: Readonly<Record<TableName, TableClass>> = Object.fre
   // ---- Komunitas (member area) ----
   member_bookmarks: 'data',
   attachment_member_types: 'data',
+  // ---- Komunitas (charges and payments): all data ----
+  charges: 'data',
+  charge_adjustments: 'data',
+  payments: 'data',
+  payment_allocations: 'data',
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping, made by the runner on every run ----
   schema_migrations_edition: 'migrator',
   schema_migrations_edition_lock: 'migrator',
@@ -247,6 +252,13 @@ export const PERSONAL_COLUMNS: Readonly<Partial<Record<TableName, readonly Perso
     { column: 'guest_name', category: 'identity' },
     { column: 'guest_institution', category: 'identity' },
     { column: 'note', category: 'free_text' },
+  ],
+  // ---- Komunitas (charges and payments) ----
+  charges: [{ column: 'description', category: 'free_text' }],
+  charge_adjustments: [{ column: 'reason_text', category: 'free_text' }],
+  payments: [
+    { column: 'note', category: 'free_text' },
+    { column: 'void_reason', category: 'free_text' },
   ],
 } satisfies PersonalEntries);
 

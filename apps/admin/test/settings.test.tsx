@@ -96,6 +96,9 @@ function settingsStore() {
       renew: { opac: true },
       loanVoidMinutes: 10,
       lost: { useItemPrice: true, processingFeeMinor: 0 },
+      block: { unpaidOverMinor: null, overdue: false },
+      fines: { skipClosedDays: true },
+      receipt: { paperMm: 80, footer: { id: null, en: null } },
     },
     // ---- Komunitas K2: members (clearance and card), visits and privacy ----
     members: {
