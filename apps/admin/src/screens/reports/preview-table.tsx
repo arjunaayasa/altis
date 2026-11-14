@@ -31,7 +31,8 @@ import './print.css';
  * own script direction (`dir="auto"`: Arabic titles read right to left).
  *
  * - A report that would scan too much for a preview is refused with 422 `{path: 'params', code: 'export_only'}`: the
- *   screen says so (`report.export_only`) and the export stays offered. A refused filter is marked on its field by the
+ *   screen says so (`report.export_only`) and the export stays offered, on a later page too (a list whose rest needs
+ *   the scan of a large library: the rows shown stay). A refused filter is marked on its field by the
  *   page (param-form.tsx `serverParamErrors`); here a line says to check the marked filters.
  * - **Cetak** prints the rows on screen through the print stylesheet (print.css): a copy of the table is put at the
  *   end of the page for the print only, with the library's name, the report's title, its filters in words and who
@@ -268,7 +269,7 @@ export function PreviewSection({ entry, title, query, applied, filters }: { entr
     body = (
       <div className="flex flex-col gap-3">
         <ReportTable columns={columns} rows={rows} totals={totals} caption={t('reports.preview.caption', { title })} />
-        {query.isFetchNextPageError && <ProblemAlert error={query.error} />}
+        {query.isFetchNextPageError && (isExportOnly(query.error) ? <NoticeAlert>{t('report.export_only')}</NoticeAlert> : <ProblemAlert error={query.error} />)}
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <span className="text-muted-foreground">{t('reports.preview.shown', { count: number.format(rows.length) })}</span>
           {query.hasNextPage ? (
