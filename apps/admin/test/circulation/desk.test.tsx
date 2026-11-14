@@ -50,10 +50,11 @@ function deskMember(o: Partial<DeskMemberView> = {}): DeskMemberView {
     expiresOn: '2027-06-30',
     photoFileId: null,
     notes: null,
-    counts: { openLoans: 0, overdue: 0 },
+    counts: { openLoans: 0, overdue: 0, holdsReady: 0 },
     canBorrow: true,
     borrowRefusal: null,
     loans: [],
+    holds: [],
     warnings: [],
     ...o,
   };
@@ -95,7 +96,7 @@ describe('Meja Layanan', () => {
       'POST branches/:branchId/circulation/members/lookup': () => member,
       'GET branches/:branchId/circulation/members/:memberId': () => member,
       'POST branches/:branchId/circulation/loans': () => {
-        member = deskMember({ counts: { openLoans: 1, overdue: 0 }, loans: [{ id: LOAN.id, version: 1, branchId: BRANCH, item: LOAN.item, record: LOAN.record, loanedOn: '2026-11-15', dueOn: LOAN.dueOn, daysLate: 0, renewals: 0, renewLimit: 1 }] });
+        member = deskMember({ counts: { openLoans: 1, overdue: 0, holdsReady: 0 }, loans: [{ id: LOAN.id, version: 1, branchId: BRANCH, item: LOAN.item, record: LOAN.record, loanedOn: '2026-11-15', dueOn: LOAN.dueOn, daysLate: 0, renewals: 0, renewLimit: 1 }] });
         return new Response(JSON.stringify(LOAN), { status: 201, headers: { 'Content-Type': 'application/json', 'X-Altis-Build': '0.1.0' } });
       },
     });
@@ -123,7 +124,7 @@ describe('Meja Layanan', () => {
 
   it('says a refusal in words from its code, and offers to return an item the member already holds', async () => {
     const held = deskMember({
-      counts: { openLoans: 1, overdue: 0 },
+      counts: { openLoans: 1, overdue: 0, holdsReady: 0 },
       loans: [{ id: LOAN.id, version: 1, branchId: BRANCH, item: { ...LOAN.item, barcode: 'B0009' }, record: LOAN.record, loanedOn: '2026-11-10', dueOn: '2026-11-17', daysLate: 0, renewals: 0, renewLimit: 1 }],
     });
     const app = start({

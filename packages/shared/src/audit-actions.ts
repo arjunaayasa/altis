@@ -165,6 +165,13 @@ export const AUDIT_ACTIONS = Object.freeze([
   'circulation.policy.create',
   'circulation.policy.update',
   'circulation.policy.archive',
+  // ---- Komunitas (holds) ----
+  // holds and the hold shelf (`circulation.holds.run` is one entry per run of the expiry job, `meta`: counts)
+  'circulation.hold.create',
+  'circulation.hold.cancel',
+  'circulation.hold.ready',
+  'circulation.hold.shelf_clear',
+  'circulation.holds.run',
 ] as const);
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

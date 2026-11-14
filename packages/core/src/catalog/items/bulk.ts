@@ -1,6 +1,7 @@
 import type { FieldWarning } from '@altis/shared/api/catalog/common';
 import { ItemBulkBody, type ItemBulkResponse } from '@altis/shared/api/catalog/items';
 import { openLoanDueDates } from '../../circulation/availability.js';
+import { returnKeptHoldsToQueue } from '../../circulation/holds.js';
 import type { TxCtx } from '../../context.js';
 import { writeItemEvents } from './events.js';
 import { ARCHIVED_STATUS, archivedAtAfter, canChangeStatus, itemStatusOf } from './lifecycle.js';
@@ -120,6 +121,8 @@ export async function bulkUpdateItems(tx: TxCtx, branchId: string, body: ItemBul
       changed.push('status');
       set.status = to;
       set.archived_at = archivedAtAfter(from, to, row.archived_at === null ? null : Number(row.archived_at), tx.now);
+      // A copy kept on a hold shelf that leaves `available` is no longer kept: its hold goes back to the queue.
+      if (to !== 'available') await returnKeptHoldsToQueue(tx, [id]);
     }
     if (locationId !== undefined && locationId !== row.location_id) {
       changed.push('locationId');

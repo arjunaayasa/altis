@@ -147,6 +147,9 @@ export const PROBLEM_REASONS: Readonly<Partial<Record<ErrorCode, readonly string
   CIRC_ITEM_ON_LOAN: Object.freeze(['same_member', 'other_member']),
   CIRC_LIMIT_REACHED: Object.freeze(['member_type', 'policy']),
   CIRC_RENEW_REFUSED: Object.freeze(['changed', 'suspended', 'expired', 'same_day', 'limit', 'hold', 'blocked', 'not_online']),
+  // ---- Komunitas (holds) ----
+  // Why a hold was refused (HOLD_REFUSALS): the desk and the member area say it in words.
+  CIRC_HOLD_REFUSED: Object.freeze(['disabled', 'member', 'not_allowed', 'limit', 'duplicate', 'own_loan', 'no_copies', 'available', 'closed', 'not_on_shelf']),
 });
 
 /** The 5xx codes whose `reason` is sent (S7): all the others keep it out, as R53 says. */

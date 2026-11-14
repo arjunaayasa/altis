@@ -19,7 +19,7 @@ import type { FacetName } from './types.js';
 // is what loses its tail.
 //
 // Facets (§4.6): mt material type, lg language, ct collection types and br branches of the live items, lc the room of
-// each located item, av `1` when a live item not on loan is `available` in a public location or has none, at the kind of each
+// each located item, av `1` when a live item neither on loan nor kept on a hold shelf is `available` in a public location or has none, at the kind of each
 // public live attachment (`pdf`, `audio`, `video`, `image`, `url`, `other`), sb the subjects, cl (M4) the first digit
 // of the classification when it starts with one.
 
@@ -62,6 +62,8 @@ export interface SearchDocSource {
     call_number: string | null;
     /** An open loan holds the item (it keeps its catalogue status, but it is out). */
     on_loan?: boolean;
+    /** The item is kept on a hold shelf for a member (it is not available to others). */
+    on_hold?: boolean;
   }[];
   /** The paths of the items' locations (locationPaths). */
   locations: ReadonlyMap<string, LocationPath>;
@@ -197,7 +199,7 @@ export function buildSearchDoc(src: SearchDocSource): SearchDoc {
     facet('lc', path?.roomId);
     // An item without a location (or whose location is gone) is on no closed shelf: it counts as reachable. An item on
     // loan is not available, whatever its status.
-    if (item.status === 'available' && item.on_loan !== true && (path === undefined || path.isPublic)) facet('av', '1');
+    if (item.status === 'available' && item.on_loan !== true && item.on_hold !== true && (path === undefined || path.isPublic)) facet('av', '1');
   }
   for (const a of src.attachments) facet('at', a.kind === 'url' ? 'url' : fileKind(a.mime));
   for (const s of src.subjects) facet('sb', s.id);

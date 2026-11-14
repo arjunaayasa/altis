@@ -201,6 +201,12 @@ describe('ERROR_CODES', () => {
     CIRC_RENEW_REFUSED: 409,
   };
 
+  // ---- Komunitas (holds) ----
+  const holds: Record<string, number> = {
+    CIRC_ITEM_ON_HOLD: 409,
+    CIRC_HOLD_REFUSED: 409,
+  };
+
   const expected: Record<ErrorCode, number> = {
     ...phase1a,
     ...phase1b,
@@ -210,6 +216,7 @@ describe('ERROR_CODES', () => {
     ...k1EditionLane,
     ...komunitasK1,
     ...membersCirculation,
+    ...holds,
   } as Record<ErrorCode, number>;
 
   it('registers exactly the Phase 1a, 1b, 1c, 1d, 2 and Komunitas codes (edition lane, reports and accreditation, members and circulation) with their HTTP status', () => {
@@ -236,6 +243,7 @@ describe('ERROR_CODES', () => {
       ...Object.keys(k1EditionLane),
       ...Object.keys(komunitasK1),
       ...Object.keys(membersCirculation),
+      ...Object.keys(holds),
     ]);
     for (const [code, status] of Object.entries(phase1a)) {
       expect(ERROR_CODES[code as ErrorCode].status, code).toBe(status);

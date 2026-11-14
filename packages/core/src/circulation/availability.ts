@@ -2,6 +2,7 @@ import { fullTextFamily, type DB } from '@altis/db';
 import { DomainError } from '@altis/shared';
 import type { ItemCirculation } from '@altis/shared/api/catalog/items';
 import type { Kysely, Transaction } from 'kysely';
+import { keptItems } from './holds.js';
 
 // Which items are on loan. "On loan" is not an item status: an item keeps its catalogue status (`available`) while a
 // loan of it is open, and the open loan (`loans.open_item_id`) says it is out. The search index (facet `av`), the OPAC
@@ -30,11 +31,16 @@ export async function openLoanDueDates(db: Db, itemIds: readonly string[], o: { 
   return out;
 }
 
-/** The circulation state of each of the items `itemIds` (an item without an open loan: `{state: null}`). */
+/**
+ * The circulation state of each of the items `itemIds`: on loan, else kept on a hold shelf (`on_hold`), else
+ * `{state: null}`.
+ */
 export async function itemCirculation(db: Db, itemIds: readonly string[]): Promise<Map<string, ItemCirculation>> {
   const out = new Map<string, ItemCirculation>();
   const unique = [...new Set(itemIds)];
   for (const id of unique) out.set(id, { state: null });
+  // ---- Komunitas (holds) ----
+  for (const [id, k] of await keptItems(db, unique)) out.set(id, { state: 'on_hold', holdId: k.holdId, ...(k.pickupUntil === null ? {} : { pickupUntil: k.pickupUntil }) });
   for (let i = 0; i < unique.length; i += ID_BATCH) {
     const rows = await db
       .selectFrom('loans')

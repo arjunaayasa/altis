@@ -1,0 +1,42 @@
+/* The hold shelf slip (screens/circulation/holds.tsx HoldSlipPrint): while the desk prints it, the slip is put at the
+   end of <body> (`.hold-slip-copy`) and <html> is marked data-print="hold-slip"; the print then holds the slip only, on
+   a receipt-printer page 80 mm wide. A plain stylesheet (no Tailwind); its print rules apply only under the mark. */
+
+.hold-slip-copy {
+  display: none;
+}
+
+@page hold-slip {
+  size: 80mm auto;
+  margin: 4mm;
+}
+
+@media print {
+  html[data-print='hold-slip'] body > *:not(.hold-slip-copy) {
+    display: none !important;
+  }
+
+  html[data-print='hold-slip'] .hold-slip-copy {
+    display: block;
+    page: hold-slip;
+    color: #000;
+    background: #fff;
+    font-size: 10pt;
+    line-height: 1.35;
+  }
+
+  html[data-print='hold-slip'] .hold-slip-copy p {
+    margin: 0 0 1.5mm;
+  }
+
+  html[data-print='hold-slip'] .hold-slip-heading {
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  html[data-print='hold-slip'] .hold-slip-number {
+    font-family: ui-monospace, monospace;
+    font-size: 18pt;
+    font-weight: 700;
+  }
+}
