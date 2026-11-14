@@ -74,6 +74,7 @@ const CIRCULATION_SECTIONS: [string, string][] = [
   ['/admin/layanan/baca', 'circulation.desk.use'],
   ['/admin/layanan/denda', 'circulation.records.read'],
   ['/admin/layanan/terlambat', 'circulation.records.read'],
+  ['/admin/layanan/pengingat', 'circulation.records.read'],
   ['/admin/layanan/aturan', 'circulation.policies.manage'],
   ['/admin/layanan/kalender', 'circulation.policies.manage'],
   ['/admin/layanan/kunjungan', 'visits.records.read'],
@@ -178,7 +179,7 @@ describe('visibleNav', () => {
     ]);
     expect(sectionsOf(me({ permissions: ['members.records.read', 'circulation.records.read'] }))).toEqual([
       [null, ['/admin']],
-      ['circulation', ['/admin/layanan/denda', '/admin/layanan/terlambat']],
+      ['circulation', ['/admin/layanan/denda', '/admin/layanan/terlambat', '/admin/layanan/pengingat']],
       ['members', ['/admin/anggota', '/admin/anggota/kartu']],
       ['system', ['/admin/about']],
     ]);
