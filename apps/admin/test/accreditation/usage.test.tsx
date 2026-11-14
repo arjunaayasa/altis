@@ -100,6 +100,15 @@ describe('Penggunaan Bulanan: the grid', () => {
     expect(api.writes()).toEqual([]);
   });
 
+  it('the visits without repeats are the import\'s own figure: their cells cannot be edited, and the grid says so', async () => {
+    renderTab(UsageTab, routes({ grid: usageGrid({ 'visits_deduped|2026-01|': { value: 110, source: 'slims' } }) }));
+    const deduped = await cellInput(/^Kunjungan tanpa kunjungan berulang, Januari 2026,/);
+    expect(deduped.value).toBe('110');
+    expect(deduped.disabled).toBe(true);
+    expect((await cellInput(/^Kunjungan \(mentah\), Januari 2026,/)).disabled).toBe(false);
+    expect(screen.getByText(ADMIN_ID['accreditation.usage.import_only_hint'])).toBeTruthy();
+  });
+
   it('a reader without the manage permission sees the grid but cannot edit it', async () => {
     renderTab(UsageTab, routes(), { me: signedIn({ permissions: ['accreditation.workspace.read'] }) });
     expect((await cellInput(/^Kunjungan \(mentah\), Januari 2026,/)).disabled).toBe(true);

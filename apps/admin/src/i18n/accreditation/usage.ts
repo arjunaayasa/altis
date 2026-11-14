@@ -33,6 +33,8 @@ export const ACCREDITATION_USAGE_ID = {
   'accreditation.usage.cell': '{metric}, {month}, kelompok {group}',
   'accreditation.usage.until': 'sampai {date}',
   'accreditation.usage.empty_hint': 'Kosongkan sel untuk menghapus isian manual; angka impor SLiMS lalu dipakai lagi.',
+  'accreditation.usage.import_only_hint':
+    'Kunjungan tanpa kunjungan berulang hanya dihitung oleh impor SLiMS; isi Kunjungan (mentah) untuk angka hitungan Anda sendiri.',
   'accreditation.usage.invalid': 'Isi bilangan bulat 0 atau lebih, atau kosongkan untuk menghapus isian manual.',
   'accreditation.usage.changes': '{count} sel diubah',
   'accreditation.usage.save': 'Simpan perubahan',
@@ -171,6 +173,8 @@ export const ACCREDITATION_USAGE_EN: Readonly<Record<keyof typeof ACCREDITATION_
   'accreditation.usage.cell': '{metric}, {month}, group {group}',
   'accreditation.usage.until': 'until {date}',
   'accreditation.usage.empty_hint': 'Empty a cell to remove its manual entry; the SLiMS import is then used again.',
+  'accreditation.usage.import_only_hint':
+    'Visits without repeat visits are counted by the SLiMS import only; enter Visits (raw) for a figure you counted yourself.',
   'accreditation.usage.invalid': 'Enter a whole number of 0 or more, or leave it empty to remove the manual entry.',
   'accreditation.usage.changes': '{count} cells changed',
   'accreditation.usage.save': 'Save changes',

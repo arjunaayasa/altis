@@ -402,18 +402,32 @@ export type AnswerPutBody = z.infer<typeof AnswerPutBody>;
 export const USAGE_CELL_GROUP_KEY = /^(|grp:(student|teacher|edu_staff|public|other)|guest)$/;
 
 /**
+ * The metrics only an import counts, never a manual cell: the visits without a member's repeats are found by comparing
+ * each member's check-ins, which a figure counted by hand cannot do (a librarian's own `visits` cell is what a month
+ * counts, and it wins over the import's figures of that month).
+ */
+export const USAGE_IMPORT_ONLY_METRICS: readonly UsageMetric[] = Object.freeze(['visits_deduped']);
+
+/**
  * `PUT accreditation/periods/:id/usage`: 1-500 cells. `month: null` is the period's whole span (for a span metric);
- * `value: null` removes the manual cell.
+ * `value: null` removes the manual cell. A metric of {@link USAGE_IMPORT_ONLY_METRICS} is refused
+ * (`cells.<i>.metric` `import_only`).
  */
 export const UsagePutBody = z.strictObject({
   cells: z
     .array(
-      z.strictObject({
-        metric: z.enum(USAGE_METRICS),
-        month: monthField.nullable(),
-        groupKey: z.string().regex(USAGE_CELL_GROUP_KEY),
-        value: z.int().min(0).max(SAFE_MAX).nullable(),
-      }),
+      z
+        .strictObject({
+          metric: z.enum(USAGE_METRICS),
+          month: monthField.nullable(),
+          groupKey: z.string().regex(USAGE_CELL_GROUP_KEY),
+          value: z.int().min(0).max(SAFE_MAX).nullable(),
+        })
+        .check((ctx) => {
+          if (USAGE_IMPORT_ONLY_METRICS.includes(ctx.value.metric)) {
+            ctx.issues.push({ code: 'custom', path: ['metric'], params: { code: 'import_only' }, message: 'import_only', input: ctx.value.metric });
+          }
+        }),
     )
     .min(1)
     .max(USAGE_PUT_MAX_CELLS),
