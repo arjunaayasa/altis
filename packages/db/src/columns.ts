@@ -1222,7 +1222,7 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
     ...trail(M0043),
   ]),
   charge_adjustments: frozen(
-    added(M0043, t.id(), t.ulid('charge_id'), t.varchar('kind', 16), t.bigint('amount_minor'), t.varchar('reason', 191), t.timestamp('at'), nul(t.ulid('by'))),
+    added(M0043, t.id(), t.ulid('charge_id'), t.varchar('kind', 16), t.bigint('amount_minor'), t.varchar('reason_text', 191), t.timestamp('at'), nul(t.ulid('by'))),
   ),
   payments: frozen([
     ...added(

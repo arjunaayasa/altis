@@ -12,7 +12,8 @@ import type { AltisMigration } from '../migrator.js';
 //   `description` is the line the member sees (personal data: it may name what was borrowed). `date_unknown` marks a
 //   migrated charge whose day was not known.
 // - charge_adjustments: a waive (part or all of what is left, with a reason) or a cancellation of a charge; they belong
-//   to the charge (CASCADE).
+//   to the charge (CASCADE). The reason is `reason_text` (personal data): a column named `reason` would put that word on
+//   the list of field names the server log redacts, and `reason` is the code word every problem carries.
 // - payments: one payment at the desk, with its receipt number `<branch code>/<year>/<sequence, 6 digits>`: the next
 //   `receipt_seq` of the branch and the library's year, unique per (branch, year), never reused (a voided payment keeps
 //   its number). A migrated payment has no number (all three columns null).
@@ -57,7 +58,7 @@ export const charges: AltisMigration = {
       t.ulid('charge_id');
       t.varchar('kind', 16);
       t.bigint('amount_minor');
-      t.varchar('reason', 191);
+      t.varchar('reason_text', 191);
       t.timestamp('at');
       t.ulid('by').nullable();
       t.foreignKey('charge_id', 'charges', 'id', { onDelete: 'cascade' });

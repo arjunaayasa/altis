@@ -1437,8 +1437,8 @@ export interface ChargeAdjustmentsTable {
   /** `waive` | `cancel`. */
   kind: string;
   amount_minor: number;
-  /** Personal data (free text). */
-  reason: string;
+  /** Personal data (free text): why it was waived or cancelled. */
+  reason_text: string;
   at: EpochMs;
   by: string | null;
 }

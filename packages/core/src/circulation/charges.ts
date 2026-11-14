@@ -211,7 +211,7 @@ export async function cancelLostCharges(tx: TxCtx, i: { loanId: string }): Promi
     await writeChargeSums(tx, row, { paid, waived, status: chargeStatusOf(ok(row.amount_minor), paid, waived, true) });
     await tx.trx
       .insertInto('charge_adjustments')
-      .values({ id: newId(tx.now), charge_id: row.id, kind: 'cancel', amount_minor: left, reason: t(locale, 'charge.text.item_returned'), at: tx.now, by: tx.actor.id })
+      .values({ id: newId(tx.now), charge_id: row.id, kind: 'cancel', amount_minor: left, reason_text: t(locale, 'charge.text.item_returned'), at: tx.now, by: tx.actor.id })
       .execute();
     changed += 1;
   }
@@ -290,7 +290,7 @@ export async function waiveCharge(tx: TxCtx, i: { branchId: string; chargeId: st
   const paid = ok(row.paid_minor);
   const waived = ok(row.waived_minor) + minor;
   await writeChargeSums(tx, row, { paid, waived, status: chargeStatusOf(ok(row.amount_minor), paid, waived) });
-  await trx.insertInto('charge_adjustments').values({ id: newId(tx.now), charge_id: row.id, kind: 'waive', amount_minor: minor, reason: i.reason, at: tx.now, by: tx.actor.id }).execute();
+  await trx.insertInto('charge_adjustments').values({ id: newId(tx.now), charge_id: row.id, kind: 'waive', amount_minor: minor, reason_text: i.reason, at: tx.now, by: tx.actor.id }).execute();
   await tx.audit({ action: 'circulation.charge.waive', entity: 'charges', entityId: row.id, branchId: i.branchId, meta: { kind: row.kind, whole: minor === left } });
   const after = await trx.selectFrom('charges').selectAll().where('id', '=', row.id).executeTakeFirstOrThrow();
   return (await chargeViews(trx, [after]))[0]!;

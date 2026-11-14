@@ -97,7 +97,7 @@ export const CHARGES_COLUMNS: Record<ChargesTable, Record<string, string>> = {
     charge_id: 'char(26)',
     kind: 'varchar(16)',
     amount_minor: 'bigint',
-    reason: 'varchar(191)',
+    reason_text: 'varchar(191)',
     at: 'bigint',
     by: 'char(26) null',
   },
@@ -208,8 +208,8 @@ export function chargesSampleRows(o: { branchId: string; staffId: string; newId?
       },
     ],
     charge_adjustments: [
-      { id: nextId(), charge_id: chargeA, kind: 'waive', amount_minor: 100_000, reason: 'Siswa kurang mampu', at: LATER_MS, by: o.staffId },
-      { id: nextId(), charge_id: chargeB, kind: 'cancel', amount_minor: 1, reason: 'Eksemplar kembali', at: EPOCH_MS, by: null },
+      { id: nextId(), charge_id: chargeA, kind: 'waive', amount_minor: 100_000, reason_text: 'Siswa kurang mampu', at: LATER_MS, by: o.staffId },
+      { id: nextId(), charge_id: chargeB, kind: 'cancel', amount_minor: 1, reason_text: 'Eksemplar kembali', at: EPOCH_MS, by: null },
     ],
     payments: [
       {

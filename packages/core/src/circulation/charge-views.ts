@@ -239,7 +239,7 @@ export async function memberCharges(db: Db, memberId: string, q: MemberChargesQu
         chargeId: a.charge_id,
         kind: a.kind as ChargeAdjustmentKind,
         amount: formatPrice(ok(a.amount_minor)),
-        reason: a.reason,
+        reason: a.reason_text,
         at: ok(a.at),
         by: a.by === null ? null : (names.get(a.by) ?? null),
       });
