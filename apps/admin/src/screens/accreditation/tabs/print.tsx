@@ -4,15 +4,16 @@ import { useQueryClient } from '@tanstack/react-query';
 import { FileArchiveIcon, FileTextIcon, LockIcon } from 'lucide-react';
 import { useId, useState, type JSX, type ReactNode } from 'react';
 import { ComponentSizes } from '@/components/accreditation/print/component-sizes';
-import { RunCard, StartedRunCard, confirmReauth } from '@/components/accreditation/print/run-card';
+import { RunCard, StartedRunCard } from '@/components/accreditation/print/run-card';
 import { accredKeys, accredPaths, useInstruments, usePeriod } from '@/components/accreditation/usage/queries';
 import { Badge, Notice, RefetchProblem } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { useT, type TKey } from '@/i18n';
 import { api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
-import { useApiQuery, useMe } from '@/lib/me';
+import { useApiQuery } from '@/lib/me';
 import { useRetryKey } from '@/screens/catalog/exchange/summary-view';
+import { confirmReauth } from '@/screens/reports/run-history';
 
 /**
  * The workspace tab Cetak (spec §6, §10.9). Every file is a report run, always in Indonesian:
@@ -88,7 +89,6 @@ function Card({ title, children, icon }: { title: string; children: ReactNode; i
 
 export function PrintTab({ periodId }: { periodId: string }): JSX.Element {
   const t = useT();
-  const me = useMe();
   const titleId = useId();
   const queryClient = useQueryClient();
   const retryKey = useRetryKey('accreditation-print');
@@ -106,7 +106,7 @@ export function PrintTab({ periodId }: { periodId: string }): JSX.Element {
     setFailure(null);
     setBusy(start.action);
     try {
-      if (start.personal && !(await confirmReauth(me, queryClient))) {
+      if (start.personal && !(await confirmReauth(queryClient))) {
         setFailure({ action: start.action, text: t('accreditation.print.reauth_cancelled') });
         return;
       }

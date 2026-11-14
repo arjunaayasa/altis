@@ -38,12 +38,14 @@ export const EVIDENCE_IMAGE_MAX_SIDE = 2000;
 export const EVIDENCE_MAX_MB_DEFAULT = 5;
 /** What the file choosers offer. */
 export const EVIDENCE_ACCEPT = 'application/pdf,image/jpeg,image/png,image/webp';
+/** What a chooser of images only (a profile photo) offers. */
+export const EVIDENCE_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp';
 
 const MIB = 1024 * 1024;
 const CAPTION_MAX = 191;
 
-/** Why a file was refused before its upload. */
-export type EvidenceFileProblem = 'type' | 'unreadable' | 'too_large';
+/** Why a file was refused before its upload (`not_image`: anything but an image where only an image is taken). */
+export type EvidenceFileProblem = 'type' | 'not_image' | 'unreadable' | 'too_large';
 
 /** A file refused before its upload (see {@link prepareEvidenceFile}). */
 export class EvidenceFileError extends Error {
@@ -60,6 +62,8 @@ export function evidenceProblemText(t: Translate, problem: EvidenceFileProblem, 
   switch (problem) {
     case 'type':
       return t('accreditation.registers.upload.error.type');
+    case 'not_image':
+      return t('accreditation.registers.upload.error.type_image');
     case 'unreadable':
       return t('accreditation.registers.upload.error.unreadable');
     case 'too_large':
@@ -78,12 +82,14 @@ function jpegName(name: string): string {
 
 /**
  * The file that goes up for `file`: a PDF as it is, an image converted to JPEG (longest side
- * {@link EVIDENCE_IMAGE_MAX_SIDE}, named `<name>.jpg`). Rejects with an {@link EvidenceFileError} for any other type,
- * an image the browser cannot decode, or a result larger than `maxMb` MiB.
+ * {@link EVIDENCE_IMAGE_MAX_SIDE}, named `<name>.jpg`). Rejects with an {@link EvidenceFileError} for any other type
+ * (with `imagesOnly`, also for a PDF), an image the browser cannot decode, or a result larger than `maxMb` MiB.
  */
-export async function prepareEvidenceFile(file: File, maxMb: number): Promise<File> {
+export async function prepareEvidenceFile(file: File, maxMb: number, o: { imagesOnly?: boolean } = {}): Promise<File> {
   let prepared: File;
-  if (isPdf(file)) {
+  if (o.imagesOnly === true && !isImage(file)) {
+    throw new EvidenceFileError('not_image');
+  } else if (isPdf(file)) {
     prepared = file;
   } else if (isImage(file)) {
     let jpeg: Blob;
@@ -128,6 +134,8 @@ export interface EvidenceUploadProps {
   /** The register table of `entityId` (training certificates, partnership and document files). */
   entity?: EvidenceEntity;
   entityId?: string;
+  /** Takes images only (a profile photo, which the profile names only as a JPEG): a PDF is refused before its upload. */
+  imagesOnly?: boolean;
   label: string;
   /** Called once the evidence is stored. */
   onDone(): void;
@@ -212,7 +220,7 @@ function UploadForm(props: EvidenceUploadProps & { onBusy(busy: boolean): void; 
     setPhase('preparing');
     props.onBusy(true);
     try {
-      const prepared = await prepareEvidenceFile(file, maxMb);
+      const prepared = await prepareEvidenceFile(file, maxMb, { imagesOnly: props.imagesOnly === true });
       setPhase('sending');
       const { uploadId } = await uploadFile(prepared, {
         context: 'accreditation.evidence',
@@ -247,7 +255,13 @@ function UploadForm(props: EvidenceUploadProps & { onBusy(busy: boolean): void; 
       <DialogHeader>
         <DialogTitle>{props.label}</DialogTitle>
         <DialogDescription>
-          {maxMb === null ? t('accreditation.registers.upload.hint_loading') : t('accreditation.registers.upload.hint', { mb: maxMb })}
+          {props.imagesOnly === true
+            ? maxMb === null
+              ? t('accreditation.registers.upload.hint_image_loading')
+              : t('accreditation.registers.upload.hint_image', { mb: maxMb })
+            : maxMb === null
+              ? t('accreditation.registers.upload.hint_loading')
+              : t('accreditation.registers.upload.hint', { mb: maxMb })}
         </DialogDescription>
       </DialogHeader>
       <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
@@ -256,7 +270,7 @@ function UploadForm(props: EvidenceUploadProps & { onBusy(busy: boolean): void; 
             <input
               {...c}
               type="file"
-              accept={EVIDENCE_ACCEPT}
+              accept={props.imagesOnly === true ? EVIDENCE_IMAGE_ACCEPT : EVIDENCE_ACCEPT}
               disabled={busy}
               aria-invalid={error?.file === true ? true : undefined}
               aria-describedby={error?.file === true ? errorId : undefined}
