@@ -11,6 +11,7 @@ import { ANNEX_REGISTERS_EN } from './k1/annex-registers.js';
 import { ANNEX_USAGE_EN } from './k1/annex-usage.js';
 import { COLLECTION_REPORTS_EN } from './k1/collection-reports.js';
 import { MEMBERS_CIRCULATION_EN } from './members-circulation.js';
+import { CIRCULATION_CORE_EN } from './circulation-core.js';
 
 const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   // ---- error.<CODE> ---------------------------------------------------------------------------------------
@@ -1521,6 +1522,8 @@ const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   ...ANNEX_COLLECTION_EN,
   // ---- Komunitas (members and circulation) ----
   ...MEMBERS_CIRCULATION_EN,
+  // ---- Komunitas (circulation core) ----
+  ...CIRCULATION_CORE_EN,
 };
 
 /** Spread in only under the test profile, like the Indonesian one (see `id.ts`). */

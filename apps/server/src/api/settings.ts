@@ -3,6 +3,8 @@ import { DomainError, isDomainError } from '@altis/shared';
 import {
   AccreditationSettingsBody,
   CatalogSettingsBody,
+  CirculationSettingsBody,
+  MembersSettingsBody,
   EmailSettingsBody,
   LibrarySettingsBody,
   OpacSettingsBody,
@@ -109,6 +111,16 @@ const FIELDS: Readonly<Record<SettingsGroupName, FieldMap>> = Object.freeze({
     [['undatedShareMaxPct'], 'accreditation.undatedShareMaxPct'],
     [['visits', 'dedupeLegacy'], 'accreditation.visits.dedupeLegacy'],
     [['unknownMemberGroup', 'default'], 'accreditation.unknownMemberGroup.default'],
+  ],
+  // ---- Komunitas (circulation core) ----
+  circulation: [
+    [['loanVoidMinutes'], 'circulation.loanVoidMinutes'],
+    [['lost', 'useItemPrice'], 'circulation.lost.useItemPrice'],
+    [['lost', 'processingFeeMinor'], 'circulation.lost.processingFeeMinor'],
+  ],
+  members: [
+    [['clearance', 'prefix'], 'members.clearance.prefix'],
+    [['clearance', 'profile'], 'members.clearance.profile'],
   ],
 });
 
@@ -316,5 +328,8 @@ export const SETTINGS_ROUTES: RouteDecl[] = [
   catalogConfig,
   // ---- Komunitas K1 (settings) ----
   settingsPut('accreditation', AccreditationSettingsBody),
+  // ---- Komunitas (circulation core) ----
+  settingsPut('circulation', CirculationSettingsBody),
+  settingsPut('members', MembersSettingsBody),
   ...SYSTEM_CONFIG_ROUTES,
 ];

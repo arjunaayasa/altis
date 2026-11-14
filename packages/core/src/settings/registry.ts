@@ -23,6 +23,11 @@ import {
   undatedShareMaxPctField,
   unknownMemberGroupField,
   visitsDedupeMinutesField,
+  // ---- Komunitas (circulation core) ----
+  ClearanceProfile,
+  clearancePrefixField,
+  loanVoidMinutesField,
+  minorAmountField,
 } from '@altis/shared/api/settings';
 import { z } from 'zod';
 
@@ -56,7 +61,10 @@ export type SettingsGroup =
   | 'catalog'
   // ---- Komunitas K1 (settings) ----
   | 'accreditation'
-  | 'visits';
+  | 'visits'
+  // ---- Komunitas (circulation core) ----
+  | 'circulation'
+  | 'members';
 
 /** Every registered key. The compiler checks {@link SETTINGS} against it both ways (no missing key, no extra one). */
 export type SettingKey =
@@ -97,7 +105,11 @@ export type SettingKey =
   | 'accreditation.k7.processedThresholdPct'
   | 'accreditation.visits.dedupeLegacy'
   | 'accreditation.unknownMemberGroup.default'
-  | 'visits.dedupeMinutes';
+  | 'visits.dedupeMinutes'
+  // ---- Komunitas (circulation core) ----
+  | 'circulation.loanVoidMinutes'
+  | `circulation.lost.${'useItemPrice' | 'processingFeeMinor'}`
+  | `members.clearance.${'prefix' | 'profile'}`;
 
 export interface SettingDef {
   group: SettingsGroup;
@@ -520,6 +532,19 @@ export const SETTINGS: Readonly<Record<SettingKey, SettingDef>> = Object.freeze(
   }),
   // Visits: a member's check-in within this many minutes of an earlier one is a repeat (0 turns the rule off).
   'visits.dedupeMinutes': def({ group: 'visits', schema: visitsDedupeMinutesField, default: 60 }),
+
+  // ---- Komunitas (circulation core) ----
+  // How long the desk may still void a loan; a lost item's replacement charge (the item's price when it has one) and
+  // processing fee (minor units, 0: none); then, in group `members`, the clearance letters' number prefix and profile.
+  'circulation.loanVoidMinutes': def({ group: 'circulation', schema: loanVoidMinutesField, default: 10 }),
+  'circulation.lost.useItemPrice': def({ group: 'circulation', schema: z.boolean(), default: true }),
+  'circulation.lost.processingFeeMinor': def({ group: 'circulation', schema: minorAmountField, default: 0 }),
+  'members.clearance.prefix': def({ group: 'members', schema: clearancePrefixField, default: 'BP' }),
+  'members.clearance.profile': def({
+    group: 'members',
+    schema: ClearanceProfile,
+    default: seed(ClearanceProfile, { paper: 'A4', city: '', signerTitle: 'Kepala Perpustakaan', signerName: '', signerId: '', bodyText: '' }),
+  }),
 });
 
 /** The registered keys in registry order. */

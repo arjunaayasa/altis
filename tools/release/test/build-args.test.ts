@@ -116,7 +116,7 @@ describe('fixture levels (decision D1d-26)', () => {
   });
 
   it('schemaFacts: level 0/1 → the release schema; level 2 → 9001; level 3 → 9002 with minCodeVersionAfter 0.3.0-test', () => {
-    expect(RELEASE_SCHEMA).toBe('0040'); // members and circulation's 0040 after Komunitas K1's 0030–0033, Phase 2's 0020–0029 and 1c's 0009
+    expect(RELEASE_SCHEMA).toBe('0041'); // the circulation core's 0041 and members and circulation's 0040 after Komunitas K1's 0030–0033, Phase 2's 0020–0029 and 1c's 0009
     expect(schemaFacts(0)).toEqual({ schemaLatest: RELEASE_SCHEMA, minCodeVersionAfter: '0.0.0' });
     expect(schemaFacts(1)).toEqual({ schemaLatest: RELEASE_SCHEMA, minCodeVersionAfter: '0.0.0' });
     expect(schemaFacts(2)).toEqual({ schemaLatest: '9001', minCodeVersionAfter: '0.0.0' });

@@ -156,6 +156,18 @@ const MEMBERS_CIRCULATION = [
   'circulation.policy.archive',
 ];
 
+/** The circulation core, appended after members and circulation in this order: 8 actions. */
+const CIRCULATION_CORE = [
+  'circulation.loan.void',
+  'circulation.loan.lost',
+  'circulation.loan.due_change',
+  'circulation.calendar.create',
+  'circulation.calendar.update',
+  'circulation.calendar.archive',
+  'members.clearance.issue',
+  'members.clearance.void',
+];
+
 describe('AUDIT_ACTIONS', () => {
   it('is exactly the Phase 1b list followed by the 18 actions of Phase 1c, the 5 of Phase 1d, the 30 of Phase 2, the 18 of reports and accreditation, then the 15 of members and circulation, in order', () => {
     expect(PHASE_1C).toHaveLength(18);
@@ -163,7 +175,8 @@ describe('AUDIT_ACTIONS', () => {
     expect(PHASE_2).toHaveLength(30);
     expect(KOMUNITAS_K1).toHaveLength(18);
     expect(MEMBERS_CIRCULATION).toHaveLength(15);
-    expect([...AUDIT_ACTIONS]).toEqual([...PHASE_1B, ...PHASE_1C, ...PHASE_1D, ...PHASE_2, ...KOMUNITAS_K1, ...MEMBERS_CIRCULATION]);
+    expect(CIRCULATION_CORE).toHaveLength(8);
+    expect([...AUDIT_ACTIONS]).toEqual([...PHASE_1B, ...PHASE_1C, ...PHASE_1D, ...PHASE_2, ...KOMUNITAS_K1, ...MEMBERS_CIRCULATION, ...CIRCULATION_CORE]);
   });
 
   it('every action is dotted lower-case and fits audit_log.action (64)', () => {

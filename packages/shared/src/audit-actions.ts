@@ -165,6 +165,18 @@ export const AUDIT_ACTIONS = Object.freeze([
   'circulation.policy.create',
   'circulation.policy.update',
   'circulation.policy.archive',
+  // ---- Komunitas (circulation core) ----
+  // the desk: voiding the last loan, a loan declared lost, a due date changed by hand
+  'circulation.loan.void',
+  'circulation.loan.lost',
+  'circulation.loan.due_change',
+  // the library calendar
+  'circulation.calendar.create',
+  'circulation.calendar.update',
+  'circulation.calendar.archive',
+  // numbered clearance letters
+  'members.clearance.issue',
+  'members.clearance.void',
 ] as const);
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
