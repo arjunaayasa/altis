@@ -97,6 +97,78 @@ const CATALOGUE: Readonly<Record<string, { kind: 'table' | 'document'; personal:
     orientation: 'landscape',
     columns: 'member_no:text name:text member_type:text class:text gender:text member_status:text joined_on:date expires_on:date',
   },
+  // ---- Komunitas (member, visit and circulation reports) ----
+  'members.summary': { kind: 'table', personal: false, orientation: 'portrait', columns: 'section:text item:text registered:int active:int expired:int suspended:int' },
+  'members.expiring': {
+    kind: 'table',
+    personal: true,
+    orientation: 'landscape',
+    columns: 'member_no:text name:text member_type:text class:text expires_on:date days_left:int phone:text email:text',
+  },
+  'members.reprint_list': { kind: 'table', personal: true, orientation: 'portrait', columns: 'source_no:text member_no:text name:text' },
+  'visits.monthly': { kind: 'table', personal: false, orientation: 'landscape', columns: 'group:text m01:int m02:int m03:int m04:int m05:int m06:int m07:int m08:int m09:int m10:int m11:int m12:int total:int' },
+  'visits.daily': { kind: 'table', personal: false, orientation: 'portrait', columns: 'date:date weekday:text members:int guests:int total:int' },
+  'visits.list': {
+    kind: 'table',
+    personal: true,
+    orientation: 'landscape',
+    columns: 'visited_at:text member_no:text name:text member_type:text class:text institution:text location:text source:text purpose:text',
+  },
+  'circulation.summary': { kind: 'table', personal: false, orientation: 'portrait', columns: 'section:text item:text value:int' },
+  'circulation.loans_by_class': { kind: 'table', personal: false, orientation: 'landscape', columns: 'month:text c000:int c100:int c200:int c300:int c400:int c500:int c600:int c700:int c800:int c900:int c2x:int cnon:int total:int' },
+  'circulation.item_usage': { kind: 'table', personal: false, orientation: 'landscape', columns: 'barcode:text title:text m01:int m02:int m03:int m04:int m05:int m06:int m07:int m08:int m09:int m10:int m11:int m12:int total:int' },
+  'circulation.top_titles': { kind: 'table', personal: false, orientation: 'portrait', columns: 'rank:int title:text call_number:text loans:int' },
+  'circulation.in_library': { kind: 'table', personal: false, orientation: 'landscape', columns: 'month:text c000:int c100:int c200:int c300:int c400:int c500:int c600:int c700:int c800:int c900:int c2x:int cnon:int total:int' },
+  'circulation.loan_history': {
+    kind: 'table',
+    personal: true,
+    orientation: 'landscape',
+    columns:
+      'member_no:text name:text member_type:text class:text barcode:text title:text loaned_on:date due_on:date returned_on:date renewals:int outcome:text days_late:int',
+  },
+  'circulation.open_loans': { kind: 'table', personal: true, orientation: 'landscape', columns: 'member_no:text name:text class:text phone:text email:text barcode:text title:text loaned_on:date due_on:date days_late:int' },
+  'circulation.overdue': {
+    kind: 'table',
+    personal: true,
+    orientation: 'landscape',
+    columns: 'member_no:text name:text class:text phone:text email:text barcode:text title:text price:money loaned_on:date due_on:date days_late:int fine:money',
+  },
+  'circulation.due_soon': { kind: 'table', personal: true, orientation: 'landscape', columns: 'member_no:text name:text class:text phone:text email:text barcode:text title:text loaned_on:date due_on:date days_left:int' },
+  'circulation.holds': {
+    kind: 'table',
+    personal: true,
+    orientation: 'landscape',
+    columns: 'title:text member_no:text name:text placed_on:date status:text queue_position:int pickup_until:date',
+  },
+  'circulation.charges': {
+    kind: 'table',
+    personal: true,
+    orientation: 'landscape',
+    columns: 'member_no:text name:text charged_on:date kind:text description:text amount:money paid:money waived:money balance:money',
+  },
+  'circulation.payments_daily': { kind: 'table', personal: true, orientation: 'landscape', columns: 'paid_on:date method:text staff:text payments:int amount:money' },
+  'circulation.top_borrowers': { kind: 'table', personal: true, orientation: 'portrait', columns: 'rank:int member_no:text name:text member_type:text class:text loans:int' },
+};
+
+/** The module, permission and export permission of the member, visit and circulation reports. */
+const PERMISSIONS: Readonly<Record<string, readonly [string, string, string]>> = {
+  'members.list': ['members', 'members.records.read', 'members.export.run'],
+  // ---- Komunitas (member, visit and circulation reports) ----
+  'members.summary': ['members', 'reports.statistics.read', 'reports.statistics.read'],
+  'members.expiring': ['members', 'members.records.read', 'members.export.run'],
+  'members.reprint_list': ['members', 'members.records.read', 'members.export.run'],
+  'visits.monthly': ['visits', 'reports.statistics.read', 'reports.statistics.read'],
+  'visits.daily': ['visits', 'reports.statistics.read', 'reports.statistics.read'],
+  'visits.list': ['visits', 'visits.records.read', 'visits.records.read'],
+  ...Object.fromEntries(
+    ['summary', 'loans_by_class', 'item_usage', 'top_titles', 'in_library'].map((n) => [`circulation.${n}`, ['circulation', 'reports.statistics.read', 'reports.statistics.read']]),
+  ),
+  ...Object.fromEntries(
+    ['loan_history', 'open_loans', 'overdue', 'due_soon', 'holds', 'charges', 'payments_daily', 'top_borrowers'].map((n) => [
+      `circulation.${n}`,
+      ['circulation', 'circulation.records.read', 'circulation.records.read'],
+    ]),
+  ),
 };
 
 /** The test profile's definitions, appended after the catalogue. */
@@ -138,8 +210,8 @@ describe('REPORTS', () => {
       if (id.startsWith('collection.')) {
         expect([def.module, def.permission, def.exportPermission ?? def.permission], id).toEqual(['collection', 'reports.statistics.read', 'reports.statistics.read']);
         expect(def.formats, id).toEqual(['csv', 'xlsx', 'pdf']);
-      } else if (id.startsWith('members.')) {
-        expect([def.module, def.permission, def.exportPermission], id).toEqual(['members', 'members.records.read', 'members.export.run']);
+      } else if (PERMISSIONS[id] !== undefined) {
+        expect([def.module, def.permission, def.exportPermission ?? def.permission], id).toEqual(PERMISSIONS[id]);
         expect(def.formats, id).toEqual(['csv', 'xlsx', 'pdf']);
       } else {
         expect([def.module, def.permission], id).toEqual(['accreditation', 'accreditation.workspace.read']);
@@ -164,6 +236,20 @@ describe('REPORTS', () => {
     );
     expect(shape(staff, { section: 'trainings' })).toBe('name:text training:text organizer:text held_on:date hours:int');
     expect(shape(staff, { section: 'ratio' })).toBe('label:text value:int');
+    // ---- Komunitas (member, visit and circulation reports) ----
+    expect(shape(table('members.reprint_list'), { kind: 'items' })).toBe('source_barcode:text barcode:text title:text');
+    expect(shape(table('circulation.loans_by_class'), { mainClass: '800' })).toBe('class:text m01:int m02:int m03:int m04:int m05:int m06:int m07:int m08:int m09:int m10:int m11:int m12:int total:int');
+    expect(shape(table('circulation.payments_daily'), { view: 'receipts' })).toBe(
+      'paid_on:date receipt_no:text member_no:text name:text method:text staff:text amount:money voided:text',
+    );
+  });
+
+  it('the copies of the reprint list also take the catalogue permission; no other definition asks for one more', () => {
+    const reprint = table('members.reprint_list');
+    expect(reprint.extraPermission?.({ kind: 'items' })).toBe('catalog.records.read');
+    expect(reprint.extraPermission?.({ kind: 'members' })).toBeNull();
+    expect(reprint.extraPermission?.({})).toBeNull();
+    expect(REPORTS.filter((d) => d.extraPermission !== undefined).map((d) => d.id)).toEqual(['members.reprint_list']);
   });
 
   it('the stock scans: the acquisitions always, four lists with a date of their own, and three annexes', () => {
@@ -191,7 +277,22 @@ describe('the personal rule', () => {
     for (const def of REPORTS) {
       if (showsPersonalColumn(def)) expect(def.personal, def.id).toBe(true);
     }
-    expect(REPORTS.filter((def) => def.kind === 'table' && showsPersonalColumn(def)).map((d) => d.id)).toEqual(['accreditation.annex.staff', 'members.list', 'test.personal']);
+    expect(REPORTS.filter((def) => def.kind === 'table' && showsPersonalColumn(def)).map((d) => d.id)).toEqual([
+      'accreditation.annex.staff',
+      'members.list',
+      'members.expiring',
+      'members.reprint_list',
+      'visits.list',
+      'circulation.loan_history',
+      'circulation.open_loans',
+      'circulation.overdue',
+      'circulation.due_soon',
+      'circulation.holds',
+      'circulation.charges',
+      'circulation.payments_daily',
+      'circulation.top_borrowers',
+      'test.personal',
+    ]);
   });
 
   it('the staff annex is caught by every section that shows a name, and test.personal only because it is marked', () => {
