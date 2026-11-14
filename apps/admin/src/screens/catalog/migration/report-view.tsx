@@ -17,7 +17,11 @@ import { cn } from '@/lib/utils';
  *
  * - **Reconciliation** per SLiMS table: `source = migrated + merged + skipped + archived`; a table read with a
  *   difference left over is drawn in red with its difference and "Tidak terjelaskan"; a table this edition does not
- *   read (not supported yet, derived, plugin tables) says so ("Tidak dibaca (belum didukung)") and never fails.
+ *   read never fails and says why by its `unreadKind`: a table of a later module ("Tidak dibaca: modul
+ *   Anggota/Sirkulasi", with the hint that the separate aggregate import reads some of its columns without migrating
+ *   them), a derived table ("Tidak dibaca: tabel turunan"), or no reason (a plugin table, or a summary stored by an
+ *   earlier release: "Tidak dibaca (belum didukung)").
+ * - A re-sync dry run counts the SLiMS records and copies that are new, changed or gone (`catalogChanges`).
  * - The rows of the ALTIS target tables before and after (M13), the character-set sample of the first 1 000 rows
  *   (M13), the text repairs per column and their samples (cut to 120 characters, M6), the random check sample with a
  *   link to each record, the missing files and the non-standard barcodes, and the warnings.
@@ -45,6 +49,8 @@ const ReportSummary = z.object({
           archived: count,
           unread: z.boolean().catch(false),
           diff: count,
+          // ---- Komunitas K1 (catalogue re-sync) ----
+          unreadKind: z.enum(['phase3', 'derived']).optional().catch(undefined),
         }),
       ),
     })
@@ -69,6 +75,8 @@ const ReportSummary = z.object({
   missingFiles: count,
   nonstandardBarcodes: count,
   warnings: z.array(z.string()).catch([]),
+  // ---- Komunitas K1 (catalogue re-sync) ----
+  catalogChanges: z.number().int().nonnegative().optional().catch(undefined),
 });
 
 /** What the report shows of a run's summary (MigrationSummary without the per-table counters, which reconcile). */
@@ -145,6 +153,20 @@ function RowHead({ children }: { children: ReactNode }) {
 
 function Td({ children, numeric = false, className }: { children: ReactNode; numeric?: boolean; className?: string }) {
   return <td className={cn('px-3 py-2', numeric && 'text-right tabular-nums', className)}>{children}</td>;
+}
+
+/** Why a table is not read, by its `unreadKind` (none: the earlier label). */
+function UnreadLabel({ kind }: { kind: 'phase3' | 'derived' | undefined }) {
+  const t = useT();
+  if (kind === 'phase3') {
+    return (
+      <span className="inline-flex flex-col items-end gap-1">
+        <Badge>{t('catalog.migration.report.unread_phase3')}</Badge>
+        <span className="text-xs text-muted-foreground">{t('catalog.migration.report.unread_phase3_hint')}</span>
+      </span>
+    );
+  }
+  return <Badge>{t(kind === 'derived' ? 'catalog.migration.report.unread_derived' : 'catalog.migration.report.unread')}</Badge>;
 }
 
 export function ReportView({ run }: { run: RunView }) {
@@ -229,7 +251,7 @@ export function ReportView({ run }: { run: RunView }) {
                       <Td numeric>{r.unread ? t('catalog.migration.report.none') : n(r.archived)}</Td>
                       <Td numeric>
                         {r.unread ? (
-                          <Badge>{t('catalog.migration.report.unread')}</Badge>
+                          <UnreadLabel kind={r.unreadKind} />
                         ) : fails ? (
                           <span className="inline-flex flex-wrap items-center justify-end gap-2">
                             <span className="font-semibold">{n(r.diff)}</span>
@@ -249,6 +271,7 @@ export function ReportView({ run }: { run: RunView }) {
           <ul className="flex flex-col gap-1 text-sm">
             <li>{t('catalog.migration.report.missing_files', { count: n(report.missingFiles) })}</li>
             <li>{t('catalog.migration.report.nonstandard_barcodes', { count: n(report.nonstandardBarcodes) })}</li>
+            {report.catalogChanges !== undefined && <li>{t('catalog.migration.report.catalog_changes', { count: n(report.catalogChanges) })}</li>}
           </ul>
 
           {report.targets.length > 0 && (
