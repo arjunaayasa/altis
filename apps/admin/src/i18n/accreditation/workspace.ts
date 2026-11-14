@@ -19,6 +19,10 @@ export const ACCREDITATION_WORKSPACE_ID = {
   'accreditation.workspace.form.frozen':
     'Periode ini dibekukan: datanya hanya bisa dibaca. Cairkan periode di tab Riwayat untuk menyuntingnya.',
   'accreditation.workspace.form.read_only': 'Anda hanya bisa membaca data periode ini.',
+  // Shared by Profil and Populasi & Sarana: the period was changed elsewhere while the form holds unsaved changes.
+  'accreditation.workspace.form.stale':
+    'Periode ini sudah diubah di tempat lain setelah formulir ini dibuka. Simpan akan ditolak agar perubahan itu tidak tertimpa. Muat ulang untuk melihat data yang tersimpan sekarang; isian Anda yang belum disimpan akan hilang.',
+  'accreditation.workspace.form.reload': 'Muat ulang data tersimpan',
   // Ringkasan.
   'accreditation.workspace.summary.missing': 'Hasil periode ini belum dihitung. Tekan Hitung ulang untuk menghitungnya.',
   'accreditation.workspace.summary.running': 'Hasil sedang dihitung…',
@@ -225,6 +229,9 @@ export const ACCREDITATION_WORKSPACE_EN: Readonly<Record<keyof typeof ACCREDITAT
   'accreditation.workspace.component_short.profil': 'Profile',
   'accreditation.workspace.form.frozen': 'This period is frozen: its data is read only. Unfreeze the period in the History tab to edit it.',
   'accreditation.workspace.form.read_only': "You can only read this period's data.",
+  'accreditation.workspace.form.stale':
+    'This period was changed elsewhere after this form was opened. Saving is refused so that the change is not overwritten. Reload to see what is stored now; your unsaved entries are lost.',
+  'accreditation.workspace.form.reload': 'Reload the stored data',
   'accreditation.workspace.summary.missing': 'The results of this period were not computed yet. Press Recompute to compute them.',
   'accreditation.workspace.summary.running': 'The results are being computed…',
   'accreditation.workspace.summary.failed': 'The last computation failed; the earlier results are shown. Press Recompute to try again.',

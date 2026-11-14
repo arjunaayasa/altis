@@ -4,6 +4,7 @@ import { useId, useState, type JSX } from 'react';
 import { GroupMap } from '@/components/accreditation/usage/group-map';
 import { UsageGrid } from '@/components/accreditation/usage/grid';
 import { ImportWizard } from '@/components/accreditation/usage/import-wizard';
+import { UnsavedChangesDialog, hasUnsavedChanges } from '@/components/accreditation/unsaved-changes';
 import { accredKeys, accredPaths, useInstruments, usePeriod } from '@/components/accreditation/usage/queries';
 import { useDateTime } from '@/components/data-table';
 import { Notice, NoticeAlert, RefetchProblem } from '@/components/form-field';
@@ -18,7 +19,9 @@ import { useApiQuery, useMe } from '@/lib/me';
  * months × metrics with the source of every cell (manual entries edited in place while the period is open), the
  * metrics of the whole period, the mapping of the SLiMS member types and of the members SLiMS deleted, and "Impor dari
  * SLiMS", which takes the tab's place while it is open. Editing and importing need `accreditation.workspace.manage`; a
- * frozen period locks the manual entries (the mapping and the import are not the period's, so they stay open).
+ * frozen period locks the manual entries (the mapping and the import are not the period's, so they stay open). The
+ * import takes the grid's place, so while the grid holds unsaved cells "Impor dari SLiMS" asks first ("Perubahan belum
+ * disimpan").
  */
 export function UsageTab({ periodId }: { periodId: string }): JSX.Element {
   const t = useT();
@@ -30,6 +33,9 @@ export function UsageTab({ periodId }: { periodId: string }): JSX.Element {
   const instruments = useInstruments();
   const grid = useApiQuery<UsageGridView>({ queryKey: accredKeys.usage(periodId), path: accredPaths.usage(periodId) });
   const [importing, setImporting] = useState(false);
+  // "Impor dari SLiMS" pressed while a form of the tab (the grid's cells) holds unsaved changes: the question is open.
+  const [asking, setAsking] = useState(false);
+  const openImport = (): void => (hasUnsavedChanges() ? setAsking(true) : setImporting(true));
 
   const config = instruments.data?.config;
   const configKnown = instruments.data !== undefined || instruments.isError;
@@ -76,7 +82,7 @@ export function UsageTab({ periodId }: { periodId: string }): JSX.Element {
             )}
           </div>
           {canManage && configKnown && (
-            <Button type="button" variant="outline" onClick={() => setImporting(true)}>
+            <Button type="button" variant="outline" onClick={openImport}>
               <UploadIcon aria-hidden="true" />
               {t('accreditation.usage.import_open')}
             </Button>
@@ -100,6 +106,7 @@ export function UsageTab({ periodId }: { periodId: string }): JSX.Element {
         <p className="text-sm text-muted-foreground">{t('accreditation.usage.intro')}</p>
       </div>
       {body}
+      <UnsavedChangesDialog open={asking} onLeave={() => setImporting(true)} onStay={() => setAsking(false)} />
     </section>
   );
 }

@@ -158,3 +158,36 @@ describe('Penggunaan Bulanan: the member-type mapping', () => {
     expect(api.to('PUT accreditation/usage-groups')[0]!.body).toEqual({ groups: [{ groupKey: 'slims_type:1', accredGroup: null }] });
   });
 });
+
+describe('Penggunaan Bulanan: opening the SLiMS import', () => {
+  const UNSAVED = ADMIN_ID['accreditation.unsaved.title'];
+  const WIZARD = ADMIN_ID['accreditation.usage.wizard.title'];
+  const openImport = (): void => void fireEvent.click(screen.getByRole('button', { name: ADMIN_ID['accreditation.usage.import_open'] }));
+
+  it('asks first while cells are unsaved: Batal keeps them, going on opens the import in their place', async () => {
+    const api = renderTab(UsageTab, routes());
+    fireEvent.change(await cellInput(/^Peminjaman, Januari 2026,/), { target: { value: '7' } });
+    openImport();
+    const ask = await screen.findByRole('alertdialog', { name: UNSAVED });
+    expect(screen.queryByRole('heading', { name: WIZARD })).toBeNull();
+    fireEvent.click(within(ask).getByRole('button', { name: ADMIN_ID['form.cancel'] }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog', { name: UNSAVED })).toBeNull());
+    await waitFor(() => expect((screen.getByRole('textbox', { name: /^Peminjaman, Januari 2026,/ }) as HTMLInputElement).value).toBe('7'));
+    expect(screen.queryByRole('heading', { name: WIZARD })).toBeNull();
+
+    openImport();
+    const again = await screen.findByRole('alertdialog', { name: UNSAVED });
+    fireEvent.click(within(again).getByRole('button', { name: ADMIN_ID['accreditation.unsaved.leave'] }));
+    expect(await screen.findByRole('heading', { name: WIZARD })).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: /^Peminjaman, Januari 2026,/ })).toBeNull();
+    expect(api.writes()).toEqual([]);
+  });
+
+  it('opens at once when no cell is unsaved', async () => {
+    renderTab(UsageTab, routes());
+    await cellInput(/^Peminjaman, Januari 2026,/);
+    openImport();
+    expect(await screen.findByRole('heading', { name: WIZARD })).toBeTruthy();
+    expect(screen.queryByRole('alertdialog', { name: UNSAVED })).toBeNull();
+  });
+});

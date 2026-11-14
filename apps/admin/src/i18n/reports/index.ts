@@ -107,6 +107,8 @@ export const REPORTS_ID = {
   'reports.runs.load_more': 'Muat lagi',
   'reports.warning.component_over_limit': 'Komponen {component} berukuran {size}, melebihi batas ukuran per komponen.',
   'reports.warning.generated_too_large': 'Daftar {list} terlalu panjang untuk dimuat di ZIP; ekspor daftar itu tersendiri.',
+  'reports.warning.file_missing':
+    'Satu berkas bukti tidak ditemukan di penyimpanan sehingga tidak dimuat di ZIP. Tab Cetak di ruang Akreditasi menyebut nama berkasnya.',
   'reports.warning.other': 'Peringatan: {code}',
 } as const;
 
@@ -212,5 +214,7 @@ export const REPORTS_EN: Readonly<Record<keyof typeof REPORTS_ID, string>> = {
   'reports.runs.load_more': 'Load more',
   'reports.warning.component_over_limit': 'Component {component} is {size}, over the size limit per component.',
   'reports.warning.generated_too_large': 'The list {list} is too long to go into the ZIP; export that list on its own.',
+  'reports.warning.file_missing':
+    'An evidence file was not found in the storage, so it is not in the ZIP. The Print tab of the Accreditation workspace names the file.',
   'reports.warning.other': 'Warning: {code}',
 };

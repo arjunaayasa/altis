@@ -264,10 +264,16 @@ export function PrintTab({ periodId }: { periodId: string }): JSX.Element {
           ) : (
             <ul className="grid gap-2">
               {fresh.map((id) => (
-                <StartedRunCard key={id} runId={id} limitMb={limitMb} />
+                <StartedRunCard key={id} runId={id} limitMb={limitMb} evidence={evidence.data?.evidence} />
               ))}
               {listed.map((run) => (
-                <RunCard key={run.id} run={run} limitMb={limitMb} onEnded={() => void queryClient.invalidateQueries({ queryKey: RUNS_KEY })} />
+                <RunCard
+                  key={run.id}
+                  run={run}
+                  limitMb={limitMb}
+                  evidence={evidence.data?.evidence}
+                  onEnded={() => void queryClient.invalidateQueries({ queryKey: RUNS_KEY })}
+                />
               ))}
             </ul>
           )}
