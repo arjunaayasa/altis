@@ -212,6 +212,11 @@ export function slimsSummaryRows(o: {
         catalogMode: o.settings.catalogMode ?? 'append',
         skipCatalog: o.settings.skipCatalog ?? false,
         ...(s.catalogChanges === undefined ? {} : { catalogChanges: s.catalogChanges }),
+        // ---- Komunitas (SLiMS members and circulation) ----
+        membersMode: o.settings.people?.membersMode ?? 'append',
+        circulationMode: o.settings.people?.circulationMode ?? 'append',
+        staffUsers: o.settings.people?.staffUsers ?? true,
+        ...(s.memberNoCollisions === undefined ? {} : { memberNoCollisions: s.memberNoCollisions }),
       }),
     ],
   ];
@@ -253,6 +258,11 @@ export function slimsSummaryRows(o: {
     const counts = pairs({ rows: c.rows, ascii: c.ascii, utf8: c.utf8, cp1252: c.cp1252, mojibake: c.mojibake });
     rows.push([c.column.split('.')[0] ?? '', '', 'charset', `${c.column}: ${counts}`]);
   }
+  // ---- Komunitas (SLiMS members and circulation): "Cocokkan dengan SLiMS" ----
+  for (const m of s.matches ?? []) {
+    rows.push(['', m.scope, m.ok ? 'match' : 'match_diff', `${m.key}: ${pairs({ source: m.source, altis: m.altis, explained: m.explained })}`]);
+  }
+  for (const t of s.memberTypes ?? []) rows.push(['mst_member_type', t.id, 'member_type_group', pairs({ group: t.group, members: t.members })]);
   rows.push([
     '',
     '',
@@ -260,13 +270,15 @@ export function slimsSummaryRows(o: {
     'Pengenal OAI SLiMS lama tidak dilayani; aplikasi pemanen data perlu memanen ulang / ' +
       'The old SLiMS OAI identifiers are not served; harvesters must harvest again',
   ]);
-  const phase3 = [...SLIMS_PHASE3_PREFIXES.map((p) => `${p}*`), ...SLIMS_PHASE3_TABLES].join(', ');
+  // The member and circulation tables are read now: the row names the ones of those modules the run still did not read.
+  const unread = s.unread.filter((t) => slimsUnreadKind(t) === 'phase3');
   rows.push([
     '',
     '',
     'phase3_tables',
-    'Tidak dibaca: modul Anggota/Sirkulasi; impor agregat terpisah membaca sebagian kolom tanpa memigrasi / ' +
-      `Not read: Members/Circulation module; the separate aggregate import reads some columns without migrating them: ${phase3}`,
+    unread.length === 0
+      ? 'Tabel modul Anggota dan Sirkulasi dibaca semua / Every table of the Members and Circulation modules is read'
+      : `Tidak dibaca (modul Anggota/Sirkulasi) / Not read (Members/Circulation module): ${unread.join(', ')}`,
   ]);
   return rows;
 }

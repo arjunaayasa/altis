@@ -438,7 +438,7 @@ describe.skipIf(!ctx.available)(`SLiMS migration end to end (K15) [${engineLabel
     expect(s.reconciliation?.ok).toBe(true);
     expect(s.warnings).toEqual([]);
     const roles = fixture.expected.roles;
-    for (const table of [...roles.read, ...roles.archived]) {
+    for (const table of [...roles.read, ...roles.archived, ...roles.people]) {
       const row = s.reconciliation!.tables.find((t) => t.table === table);
       expect(row, table).toBeDefined();
       expect([table, row!.diff, row!.source, row!.unread]).toEqual([table, 0, fixture.expected.tables[table]!.source, false]);

@@ -889,6 +889,9 @@ export interface MigrationArchiveTable {
   /** JSON. */
   row_json: string;
   created_at: EpochMs;
+  // ---- Komunitas (SLiMS members and circulation): 0046 ----
+  /** A keyed hash naming the member the row is about (anonymisation removes the rows by it); null for none. */
+  subject_key: string | null;
 }
 
 // ---------------------------------------------------------------------------------------------------------------

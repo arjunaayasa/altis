@@ -377,6 +377,9 @@ export const ERROR_CODES = Object.freeze({
   CIRC_MEMBER_BLOCKED: Object.freeze({ status: 409 }),
   /** The charge is no longer open, or the payment was voided already; `meta {status}` (CHARGE_STATE_REFUSALS). */
   CIRC_CHARGE_STATE: Object.freeze({ status: 409 }),
+  // ---- Komunitas (SLiMS members and circulation) ----
+  /** A `replace` migration of circulation while ALTIS already lends, takes holds or charges of its own; `meta {count}`. */
+  MIGRATION_CIRCULATION_LIVE: Object.freeze({ status: 409 }),
 });
 
 export type ErrorCode = keyof typeof ERROR_CODES;

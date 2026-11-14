@@ -218,6 +218,9 @@ export const AUDIT_ACTIONS = Object.freeze([
   'circulation.charge.waive',
   'circulation.payment.create',
   'circulation.payment.void',
+  // ---- Komunitas (SLiMS members and circulation) ----
+  // an item of the SLiMS cut-over checklist marked done (the reprint list opened; serving started in ALTIS)
+  'catalog.migration.cutover',
 ] as const);
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

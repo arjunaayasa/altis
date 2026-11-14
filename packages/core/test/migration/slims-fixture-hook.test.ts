@@ -49,12 +49,13 @@ describe('the SLiMS fixture hooks', () => {
     expect(both.expected.tables['loan']!.source).toBe(usageOnly.expected.tables['loan']!.source + 2);
   });
 
-  it('expected: the catalogue tables and roles as before, plus the two empty usage tables, not read by the catalogue migration', () => {
-    expect(plain.expected.roles.phase3).toEqual(['member', 'loan', 'loan_history', 'visitor_count', 'mst_member_type']);
+  it('expected: the catalogue tables and roles as before, plus the two empty usage tables; the member and circulation tables are the people stages\' own', () => {
+    expect(plain.expected.roles.phase3).toEqual([]);
+    expect(plain.expected.roles.people.slice(0, 6)).toEqual(['member', 'loan', 'loan_history', 'visitor_count', 'mst_member_type', 'read_counter']);
     expect(plain.expected.tables['visitor_count']).toEqual({ source: 0 });
     expect(plain.expected.tables['mst_member_type']).toEqual({ source: 0 });
     expect(Object.keys(plain.expected.tables)).toEqual(FIXTURE_TABLES.map((t) => t.name));
-    for (const table of ['visitor_count', 'mst_member_type', 'member', 'loan', 'loan_history']) expect(slimsTableRole(table), table).toBe('phase3');
+    for (const table of ['visitor_count', 'mst_member_type', 'member', 'loan', 'loan_history']) expect(slimsTableRole(table), table).toBe('read');
     expect(plain.expected.roles.read).not.toContain('visitor_count');
   });
 
@@ -73,7 +74,7 @@ describe('the SLiMS fixture hooks', () => {
       transform: (data) => ({ ...data, rows: new Map([...data.rows, ['visitor_count', [visit]]]) }),
     });
     expect(out.expected.tables['visitor_count']).toEqual({ source: 1 });
-    expect(sections(out.dump).get('visitor_count')).toContain("INSERT INTO `visitor_count` VALUES (1,NULL,'Tamu','SMP Tetangga','2025-08-04 08:15:00');");
+    expect(sections(out.dump).get('visitor_count')).toContain("INSERT INTO `visitor_count` VALUES (1,NULL,'Tamu','SMP Tetangga','2025-08-04 08:15:00',NULL);");
     for (const table of catalogueTables) expect(sections(out.dump).get(table), table).toBe(sections(plain.dump).get(table));
   });
 });
