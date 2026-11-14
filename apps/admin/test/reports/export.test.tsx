@@ -229,6 +229,18 @@ describe('the exports of a report', { timeout: 20_000 }, () => {
     expect(writes()).toEqual([]);
   });
 
+  it('an evidence file missing from a dossier ZIP is said in words', async () => {
+    const dossier = run({ id: RUN_ID, reportId: DOSSIER.id, format: 'zip', personal: true, warnings: ['file_missing:01JZ0000000000000000FIL0X1'] });
+    await open(DOSSIER.id, 'Berkas bukti akreditasi', {}, [dossier]);
+    const list = runList();
+    expect(
+      await within(list).findByText(
+        'Satu berkas bukti tidak ditemukan di penyimpanan sehingga tidak dimuat di ZIP. Tab Cetak di ruang Akreditasi menyebut nama berkasnya.',
+      ),
+    ).toBeTruthy();
+    expect(within(list).queryByText(/file_missing/)).toBeNull();
+  });
+
   it('a preview answered 422 export_only says to export instead, and the export buttons stay enabled', async () => {
     await open(TEST_ROWS.id, 'Baris uji', {
       ...startRoutes(),

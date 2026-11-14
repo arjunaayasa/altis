@@ -58,7 +58,7 @@ export const ACCREDITATION_PRINT_ID = {
   'accreditation.print.runs.download_label': 'Unduh {title}, {date}',
   'accreditation.print.runs.expires': 'Tersedia sampai {date}',
   'accreditation.print.runs.expired': 'Kedaluwarsa pada {date}; buat lagi bila perlu.',
-  'accreditation.print.runs.failed': 'Gagal dibuat ({code}).',
+  'accreditation.print.runs.failed': 'Gagal dibuat: {reason}',
   'accreditation.print.started': 'Pembuatan {title} dimulai.',
   'accreditation.print.reauth_cancelled': 'Berkas tidak dibuat karena konfirmasi kata sandi dibatalkan.',
 
@@ -69,6 +69,10 @@ export const ACCREDITATION_PRINT_ID = {
     'Komponen {component} berukuran {size}, melebihi batas unggah per komponen. Perkecil berkasnya sebelum mengunggah ke SiPAPI.',
   'accreditation.print.warning.generated_too_large':
     'Daftar {code} melebihi 10.000 baris sehingga tidak dimasukkan ke ZIP; ekspor daftar itu tersendiri dari laporannya.',
+  'accreditation.print.warning.file_missing':
+    'Berkas bukti “{name}” tidak ditemukan di penyimpanan sehingga tidak dimuat di ZIP. Unggah ulang berkas itu, lalu buat ZIP lagi.',
+  'accreditation.print.warning.file_missing_unknown':
+    'Satu berkas bukti tidak ditemukan di penyimpanan sehingga tidak dimuat di ZIP, dan berkas itu sudah tidak ada di daftar bukti periode ini. Periksa bukti periode ini, lalu buat ZIP lagi.',
   'accreditation.print.warning.other': 'Peringatan: {code}',
 } as const;
 
@@ -120,7 +124,7 @@ export const ACCREDITATION_PRINT_EN: Readonly<Record<keyof typeof ACCREDITATION_
   'accreditation.print.runs.download_label': 'Download {title}, {date}',
   'accreditation.print.runs.expires': 'Available until {date}',
   'accreditation.print.runs.expired': 'Expired on {date}; make it again if needed.',
-  'accreditation.print.runs.failed': 'Could not be made ({code}).',
+  'accreditation.print.runs.failed': 'Could not be made: {reason}',
   'accreditation.print.started': 'Making {title} has started.',
   'accreditation.print.reauth_cancelled': 'The file was not made because the password confirmation was cancelled.',
 
@@ -130,5 +134,9 @@ export const ACCREDITATION_PRINT_EN: Readonly<Record<keyof typeof ACCREDITATION_
     'Component {component} is {size}, over the upload limit per component. Shrink its files before uploading to SiPAPI.',
   'accreditation.print.warning.generated_too_large':
     'The list {code} has more than 10,000 rows, so it was left out of the ZIP; export that list on its own from its report.',
+  'accreditation.print.warning.file_missing':
+    'The evidence file “{name}” was not found in the storage, so it is not in the ZIP. Upload that file again, then make the ZIP again.',
+  'accreditation.print.warning.file_missing_unknown':
+    "An evidence file was not found in the storage, so it is not in the ZIP, and it is no longer in this period's evidence list. Check this period's evidence, then make the ZIP again.",
   'accreditation.print.warning.other': 'Warning: {code}',
 };

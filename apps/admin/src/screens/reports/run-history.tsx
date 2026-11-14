@@ -86,10 +86,13 @@ function sizeText(locale: string, bytes: number): string {
 
 /**
  * A warning code of a run as a sentence: `component_over_limit:<component>:<bytes>` (an evidence ZIP component over
- * its size limit), `generated_too_large:<list>` (a list too long for the ZIP), or any other code named as it is.
+ * its size limit), `generated_too_large:<list>` (a list too long for the ZIP), `file_missing:<file id>` (an evidence
+ * file gone from the storage; this screen does not read the period's evidence, so the Cetak tab names it), or any
+ * other code named as it is.
  */
 export function warningText(t: Translate, locale: string, code: string): string {
   const [kind, a, b] = code.split(':');
+  if (kind === 'file_missing') return t('reports.warning.file_missing');
   if (kind === 'component_over_limit' && a !== undefined && b !== undefined && /^\d+$/.test(b)) {
     return t('reports.warning.component_over_limit', { component: a, size: sizeText(locale, Number(b)) });
   }

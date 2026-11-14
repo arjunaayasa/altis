@@ -1,4 +1,5 @@
 import { MESSAGES } from '@altis/shared';
+import type { EvidenceListResponse } from '@altis/shared/api/accreditation';
 import type { ReportRunListResponse, ReportRunView } from '@altis/shared/api/reports';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -11,6 +12,7 @@ import {
   JOB_ID,
   PERIOD_ID,
   RUN_ID,
+  T0,
   confirmPassword,
   evidenceAnswer,
   instrument,
@@ -192,6 +194,63 @@ describe('Cetak', () => {
     );
     await waitFor(() => expect(assign).toHaveBeenCalledWith(`/api/v1/reports/runs/${RUN_ID}/download`));
     expect(api.to('POST auth/reauth')).toHaveLength(1);
+  });
+
+  it('a failed run says why in words', async () => {
+    const failed = (n: number, errorCode: string | null) =>
+      reportRun({ id: `01JZ0000000000000000RUNF0${n}`, status: 'failed', errorCode, downloadable: false, expiresAt: null, outputSize: null });
+    renderTab(
+      PrintTab,
+      routes({ runs: [failed(1, 'abandoned'), failed(2, 'disk_full'), failed(3, 'REPORT_TOO_LARGE'), failed(4, 'internal'), failed(5, 'some_new_code')] }),
+    );
+    const runs = await card(ADMIN_ID['accreditation.print.runs.title']);
+    expect(await within(runs).findByText('Gagal dibuat: Tugas ekspornya terhenti sebelum selesai. Ekspor laporannya lagi.', undefined, FIRST)).toBeTruthy();
+    expect(within(runs).getByText(`Gagal dibuat: ${ID['error.DISK_QUOTA']}`)).toBeTruthy();
+    expect(within(runs).getByText(`Gagal dibuat: ${ID['error.REPORT_TOO_LARGE']}`)).toBeTruthy();
+    expect(within(runs).getByText(`Gagal dibuat: ${ID['error.INTERNAL']}`)).toBeTruthy();
+    expect(within(runs).getByText('Gagal dibuat: kode some_new_code')).toBeTruthy();
+    expect(within(runs).queryByText(/disk_full|REPORT_TOO_LARGE|abandoned/)).toBeNull();
+  });
+
+  it('an evidence file missing from the ZIP is named by its file name, and one no longer in the evidence list gets a sentence too', async () => {
+    const FILE_GONE = '01JZ0000000000000000FILU01';
+    const FILE_UNLISTED = '01JZ0000000000000000FILU02';
+    renderTab(
+      PrintTab,
+      routes({
+        runs: [reportRun({ warnings: [`file_missing:${FILE_GONE}`, `file_missing:${FILE_UNLISTED}`] })],
+        extra: {
+          'GET accreditation/evidence': (): EvidenceListResponse => ({
+            ...evidenceAnswer(),
+            evidence: [
+              {
+                id: '01JZ0000000000000000EVDU01',
+                periodId: PERIOD_ID,
+                indicatorCode: 'SCH-K3',
+                evidenceCode: 'policy_document',
+                entity: null,
+                entityId: null,
+                fileId: FILE_GONE,
+                fileName: 'kebijakan-koleksi.pdf',
+                size: 120_000,
+                mime: 'application/pdf',
+                caption: '',
+                sortOrder: 0,
+                createdAt: T0,
+              },
+            ],
+          }),
+        },
+      }),
+    );
+    const runs = await card(ADMIN_ID['accreditation.print.runs.title']);
+    const named = await within(runs).findByText(/Berkas bukti “kebijakan-koleksi\.pdf” tidak ditemukan di penyimpanan/, undefined, FIRST);
+    expect(named.textContent).toBe(
+      'Berkas bukti “kebijakan-koleksi.pdf” tidak ditemukan di penyimpanan sehingga tidak dimuat di ZIP. Unggah ulang berkas itu, lalu buat ZIP lagi.',
+    );
+    expect(within(runs).getByText(ADMIN_ID['accreditation.print.warning.file_missing_unknown'])).toBeTruthy();
+    expect(within(runs).queryByText(new RegExp(FILE_GONE))).toBeNull();
+    expect(within(runs).queryByText(new RegExp(FILE_UNLISTED))).toBeNull();
   });
 
   it('a generated list too large for the ZIP is said in words', async () => {
