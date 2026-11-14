@@ -1,6 +1,7 @@
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { isDomainError, newId } from '@altis/shared';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../tools/test/test-db.js';
@@ -10,7 +11,9 @@ import { runMigrations } from '../src/migrator.js';
 // Phase 2 (catalog), Task 1: migrations 0020–0029 appended to the frozen migration map (decision P2-06), on the engine
 // picked by ALTIS_TEST_DB. The tables themselves are tables.test.ts's and columns.test.ts's; the seeds
 // catalog-seed.test.ts's; the full-text index fulltext.test.ts's. Komunitas K1 appends 0030–0033 (reports and
-// accreditation) to the same map; its tables are tables.test.ts's (fixtures/komunitas-k1-tables.ts).
+// accreditation) to the same map; its tables are tables.test.ts's (fixtures/komunitas-k1-tables.ts). Members and
+// circulation append 0040 (tables: fixtures/komunitas-members-circulation-tables.ts); its seeds and the one-open-loan
+// guarantee are checked here.
 
 const ctx = testDbContext();
 
@@ -30,6 +33,9 @@ const CATALOG_MIGRATIONS = [
 // ---- Komunitas K1 (tables) ----
 const K1_MIGRATIONS = ['0030_reports_core', '0031_accreditation', '0032_library_registers', '0033_catalog_accred_fields'];
 
+// ---- Komunitas (members and circulation) ----
+const CIRCULATION_MIGRATIONS = ['0040_members_circulation'];
+
 describe('the Phase 2 migrations in the migration map (P2-06)', () => {
   it('appends 0020–0029 in order to the same frozen map; 0029_search_token_version is the last key', () => {
     const names = Object.keys(PHASE1_MIGRATIONS).sort();
@@ -38,12 +44,18 @@ describe('the Phase 2 migrations in the migration map (P2-06)', () => {
     for (const name of CATALOG_MIGRATIONS) expect(typeof PHASE1_MIGRATIONS[name]?.up).toBe('function');
   });
 
-  it('Komunitas K1 appends 0030–0033 in order; 0033_catalog_accred_fields is the last key', () => {
+  it('Komunitas K1 appends 0030–0033 in order', () => {
     const names = Object.keys(PHASE1_MIGRATIONS).sort();
     expect(names.filter((n) => n >= '0030' && n < '0040')).toEqual(K1_MIGRATIONS);
-    // Komunitas K1 is the newest range on this branch (Phase 1d's 0010–0019 and Phase 2's 0020–0029 sort before it).
-    expect(names.at(-1)).toBe('0033_catalog_accred_fields');
     for (const name of K1_MIGRATIONS) expect(typeof PHASE1_MIGRATIONS[name]?.up).toBe('function');
+  });
+
+  it('members and circulation append 0040; 0040_members_circulation is the last key', () => {
+    const names = Object.keys(PHASE1_MIGRATIONS).sort();
+    expect(names.filter((n) => n >= '0040' && n < '0050')).toEqual(CIRCULATION_MIGRATIONS);
+    // The newest range on this branch (every earlier range sorts before it).
+    expect(names.at(-1)).toBe('0040_members_circulation');
+    expect(typeof PHASE1_MIGRATIONS['0040_members_circulation']?.up).toBe('function');
   });
 });
 
@@ -82,14 +94,15 @@ describe.skipIf(!ctx.available)(`the Phase 2 migrations [${engineLabel()}]`, () 
     return rows.map((r) => String(r.col));
   }
 
-  it('migrates an empty database to 0033, and a second run reports it up to date', async () => {
+  it('migrates an empty database to 0040, and a second run reports it up to date', async () => {
     const first = await runMigrations(h, { appVersion: '0.1.0', dataDir, migrations: PHASE1_MIGRATIONS });
     expect(first.mode).toBe('migrated');
-    expect(first.applied.slice(-(CATALOG_MIGRATIONS.length + K1_MIGRATIONS.length))).toEqual([...CATALOG_MIGRATIONS, ...K1_MIGRATIONS]);
-    expect(first.schemaVersion).toBe('0033');
+    const newest = [...CATALOG_MIGRATIONS, ...K1_MIGRATIONS, ...CIRCULATION_MIGRATIONS];
+    expect(first.applied.slice(-newest.length)).toEqual(newest);
+    expect(first.schemaVersion).toBe('0040');
     const second = await runMigrations(h, { appVersion: '0.1.0', dataDir, migrations: PHASE1_MIGRATIONS });
-    expect(second).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0033', minCodeVersion: '0.0.0', edition: { mode: 'empty', applied: [] } });
-    expect(await h.db.selectFrom('schema_meta').select('schema_version').execute()).toEqual([{ schema_version: '0033' }]);
+    expect(second).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0040', minCodeVersion: '0.0.0', edition: { mode: 'empty', applied: [] } });
+    expect(await h.db.selectFrom('schema_meta').select('schema_version').execute()).toEqual([{ schema_version: '0040' }]);
   });
 
   it('S14: search_doc has the newest-first indexes (is_public, created_at) and (created_at)', async () => {
@@ -162,5 +175,101 @@ describe.skipIf(!ctx.available)(`the Phase 2 migrations [${engineLabel()}]`, () 
       ['usage_group_map', 'data', '0031_accreditation'],
       ['usage_stats', 'data', '0031_accreditation'],
     ]);
+  });
+
+  // ---- Komunitas (members and circulation) ----
+  it('0040 seeds the four member types and the general loan rule (7 days, one renewal, every dimension "all")', async () => {
+    const types = await h.db
+      .selectFrom('member_types')
+      .select(['code_key', 'accred_group', 'membership_days', 'loan_limit', 'holds_allowed', 'holds_limit', 'online_renewal'])
+      .orderBy('sort_order')
+      .execute();
+    expect(types).toEqual([
+      { code_key: 'SISWA', accred_group: 'student', membership_days: 365, loan_limit: 3, holds_allowed: 1, holds_limit: 2, online_renewal: 1 },
+      { code_key: 'GURU', accred_group: 'teacher', membership_days: 365, loan_limit: 10, holds_allowed: 1, holds_limit: 2, online_renewal: 1 },
+      { code_key: 'TENDIK', accred_group: 'edu_staff', membership_days: 365, loan_limit: 5, holds_allowed: 1, holds_limit: 2, online_renewal: 1 },
+      { code_key: 'UMUM', accred_group: 'public', membership_days: 365, loan_limit: 2, holds_allowed: 1, holds_limit: 2, online_renewal: 1 },
+    ]);
+    const rules = await h.db.selectFrom('policies').selectAll().execute();
+    expect(rules).toHaveLength(1);
+    expect(rules[0]).toMatchObject({
+      code_key: 'DEFAULT',
+      scope_key: '*/*/*/*',
+      member_type_id: null,
+      collection_type_id: null,
+      material_type_id: null,
+      branch_id: null,
+      loanable: 1,
+      loan_days: 7,
+      loan_limit: null,
+      renew_limit: 1,
+      fine_per_day_minor: 0,
+      fine_cap_minor: null,
+      grace_days: 0,
+      currency: 'IDR',
+      archived_at: null,
+    });
+  });
+
+  it('0040 runs again without changing anything, and keeps a library\'s own edits of the seeds', async () => {
+    await h.db.updateTable('member_types').set({ name_id: 'Peserta didik' }).where('code_key', '=', 'SISWA').execute();
+    await h.db.updateTable('policies').set({ loan_days: 14 }).where('code_key', '=', 'DEFAULT').execute();
+    const before = await h.db.selectFrom('schema_tables').selectAll().orderBy('name').execute();
+    const types = await h.db.selectFrom('member_types').selectAll().orderBy('code_key').execute();
+    const rules = await h.db.selectFrom('policies').selectAll().execute();
+    await PHASE1_MIGRATIONS['0040_members_circulation']!.up(h.db, h.dialect);
+    expect(await h.db.selectFrom('schema_tables').selectAll().orderBy('name').execute()).toEqual(before);
+    expect(await h.db.selectFrom('member_types').selectAll().orderBy('code_key').execute()).toEqual(types);
+    expect(await h.db.selectFrom('policies').selectAll().execute()).toEqual(rules);
+    expect(before.filter((t) => t.created_by === '0040_members_circulation').map((t) => [t.name, t.class])).toEqual([
+      ['loans', 'data'],
+      ['member_events', 'data'],
+      ['member_types', 'data'],
+      ['members', 'data'],
+      ['policies', 'data'],
+    ]);
+  });
+
+  it('0040: one open loan per item: a second open loan of the same item is a unique violation, closed loans are not', async () => {
+    const itemId = newId();
+    const loan = (open: boolean) => ({
+      id: newId(),
+      item_id: itemId,
+      open_item_id: open ? itemId : null,
+      record_id: null,
+      member_id: newId(),
+      branch_id: newId(),
+      policy_id: null,
+      loaned_on: '2026-01-02',
+      loaned_at: 0,
+      due_on: '2026-01-09',
+      returned_on: open ? null : '2026-01-05',
+      returned_at: open ? null : 1,
+      outcome: open ? null : 'returned',
+      loan_days: 7,
+      renew_limit: 1,
+      grace_days: 0,
+      fine_per_day_minor: 0,
+      fine_cap_minor: null,
+      currency: 'IDR',
+      source: 'desk',
+      created_at: 0,
+      updated_at: 0,
+    });
+    try {
+      await h.db.insertInto('loans').values([loan(false), loan(false), loan(true)]).execute();
+      const second = await h.db
+        .insertInto('loans')
+        .values(loan(true))
+        .execute()
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
+      expect(isDomainError(second) && second.code).toBe('UNIQUE_VIOLATION');
+      expect(await h.db.selectFrom('loans').select('id').where('item_id', '=', itemId).execute()).toHaveLength(3);
+    } finally {
+      await h.db.deleteFrom('loans').where('item_id', '=', itemId).execute();
+    }
   });
 });

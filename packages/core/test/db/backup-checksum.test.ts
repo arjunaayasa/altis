@@ -8,6 +8,8 @@ import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../
 import { catalogSampleRows, type CatalogTable } from '../../../db/test/fixtures/catalog-tables.js';
 // ---- Komunitas K1 (tables) ----
 import { k1SampleRows, type K1Table } from '../../../db/test/fixtures/komunitas-k1-tables.js';
+// ---- Komunitas (members and circulation) ----
+import { circulationSampleRows, type CirculationTable } from '../../../db/test/fixtures/komunitas-members-circulation-tables.js';
 import { backupTables, tableChecksumFromDb } from '../../src/backup/canonical.js';
 import { createExporter, type ExportCheckpoint } from '../../src/backup/exporter.js';
 import { readManifest, type BackupManifest } from '../../src/backup/manifest.js';
@@ -18,7 +20,8 @@ import { readManifest, type BackupManifest } from '../../src/backup/manifest.js'
 // The rows cover every column kind, NULLs, non-ASCII text (byte order of keys: 'A' < 'a' < 'é'), composite keys,
 // a secret settings row and an instance settings row (left out of the backup). Phase 2 (catalog): the catalog tables
 // hold the full sample rows of packages/db's table test, with fixed ids; the seed rows of 0027 (new ids on each
-// database) are removed first. Komunitas K1: its data tables hold the K1 sample rows the same way.
+// database) are removed first. Komunitas K1: its data tables hold the K1 sample rows the same way; members and
+// circulation (0040) too, its seeds removed first.
 
 const ctx = testDbContext();
 const T = 1_800_000_000_000;
@@ -61,6 +64,12 @@ function catalogRows(): ReturnType<typeof catalogSampleRows> {
 function k1Rows(): ReturnType<typeof k1SampleRows> {
   let n = 0;
   return k1SampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JR${String((n += 1)).padStart(22, '0')}` });
+}
+
+/** The members and circulation sample rows with ids numbered from another fixed prefix. */
+function circulationRows(): ReturnType<typeof circulationSampleRows> {
+  let n = 0;
+  return circulationSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JS${String((n += 1)).padStart(22, '0')}` });
 }
 
 /** The same rows, written through Kysely, on any dialect. */
@@ -184,6 +193,8 @@ async function seed(db: Kysely<DB>): Promise<void> {
   // Phase 2 (catalog): the seeds of 0027 carry new ids on each database; the backed-up catalog tables get the sample
   // rows instead, parents first.
   for (const t of ['material_types', 'languages', 'collection_types'] as const) await db.deleteFrom(t).execute();
+  // Komunitas (members and circulation): the seeds of 0040 (member types, the general loan rule) likewise.
+  for (const t of ['member_types', 'policies'] as const) await db.deleteFrom(t).execute();
   const rows = catalogRows();
   const backedUp = (Object.keys(rows) as CatalogTable[]).filter((t) => TABLE_CLASSES[t] === 'data');
   for (const t of tableLoadOrder(backedUp).order as CatalogTable[]) {
@@ -194,6 +205,12 @@ async function seed(db: Kysely<DB>): Promise<void> {
   const k1BackedUp = (Object.keys(k1) as K1Table[]).filter((t) => TABLE_CLASSES[t] === 'data');
   for (const t of tableLoadOrder(k1BackedUp).order as K1Table[]) {
     await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(k1[t]).execute();
+  }
+  // ---- Komunitas (members and circulation): its tables, parents first ----
+  const circulation = circulationRows();
+  const circulationTables = Object.keys(circulation) as CirculationTable[];
+  for (const t of tableLoadOrder(circulationTables).order as CirculationTable[]) {
+    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(circulation[t]).execute();
   }
 }
 

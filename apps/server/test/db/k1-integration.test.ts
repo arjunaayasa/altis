@@ -109,12 +109,14 @@ describe('the community routes are covered: matrix rows, personas, audit scripts
 
   it('every community audit action has its script, none pending; every audited community route names one of them', () => {
     expect(K1_PENDING_ALLOWED).toBe(false);
-    const k1Actions = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('reports.run.start'));
+    // The reports and accreditation actions end where the members and circulation actions begin.
+    const k1Actions = AUDIT_ACTIONS.slice(AUDIT_ACTIONS.indexOf('reports.run.start'), AUDIT_ACTIONS.indexOf('members.member.create'));
     expect(k1Actions).toHaveLength(18);
     for (const [area, script] of Object.entries(KOMUNITAS_AUDIT_SCRIPTS)) expect([area, script.run === null]).toEqual([area, false]);
     const scripted = new Set(Object.values(KOMUNITAS_AUDIT_SCRIPTS).flatMap((s) => [...s.actions]));
     expect(k1Actions.filter((a) => !scripted.has(a))).toEqual([]);
-    for (const d of KOMUNITAS_ROUTES) {
+    // The members and circulation routes audit actions of their own (audit/members-circulation.ts).
+    for (const d of KOMUNITAS_ROUTES.filter((r) => !r.id.startsWith('members.') && !r.id.startsWith('circulation.'))) {
       if (d.audit === null) continue;
       expect([d.id, (k1Actions as readonly string[]).includes(d.audit)]).toEqual([d.id, true]);
     }

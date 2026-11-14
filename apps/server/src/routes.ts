@@ -6,12 +6,14 @@ import { AUTH_PASSWORD_ROUTES } from './api/auth-password.js';
 import { BACKUP_ROUTES } from './api/backups.js';
 import { ACCREDITATION_ROUTES } from './api/accreditation/index.js';
 import { CATALOG_ROUTES } from './api/catalog/index.js';
+import { CIRCULATION_ROUTES } from './api/circulation/index.js';
 import { CRON_ROUTES } from './api/cron.js';
 import { DASHBOARD_ROUTES } from './api/dashboard.js';
 import { DIAGNOSTICS_ROUTES } from './api/diagnostics.js';
 import { EVENTS_ROUTES } from './api/events.js';
 import { FILES_ROUTES } from './api/files.js';
 import { JOBS_ROUTES } from './api/jobs.js';
+import { MEMBERS_ROUTES } from './api/members/index.js';
 import { testOnlyRoutes } from './api/test-only.js';
 import { USERS_ROUTES } from './api/users.js';
 import { ROLE_ROUTES } from './api/roles.js';
@@ -48,8 +50,11 @@ const health = route({
 });
 
 // ---- Komunitas K1 (reports and accreditation) ----
-/** The community routes: the reports, then the accreditation workspace (each area's list filled by its own change). */
-export const KOMUNITAS_ROUTES: RouteDecl[] = [...REPORTS_ROUTES, ...ACCREDITATION_ROUTES];
+/**
+ * The community routes: the reports, then the accreditation workspace (each area's list filled by its own change),
+ * then members and circulation.
+ */
+export const KOMUNITAS_ROUTES: RouteDecl[] = [...REPORTS_ROUTES, ...ACCREDITATION_ROUTES, ...MEMBERS_ROUTES, ...CIRCULATION_ROUTES];
 
 export const ALL_ROUTES: RouteDecl[] = defineRoutes([
   health,

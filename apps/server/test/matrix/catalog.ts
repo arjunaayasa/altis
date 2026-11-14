@@ -37,6 +37,12 @@ export interface AreaMatrix {
   maintenance: Record<string, 'allow' | 'restore-allow'>;
   // ---- Komunitas K1 (system routes) ----
   systemRoutes?: readonly string[];
+  // ---- Komunitas (members and circulation) ----
+  /**
+   * The route ids whose handlers are not written yet (they answer 501, or 500 AUDIT_MISSING when audited): the gate
+   * outcomes are checked as for every route, the audit-once call is listed as to do until the id leaves this list.
+   */
+  pending?: readonly string[];
 }
 
 /**

@@ -137,13 +137,33 @@ const KOMUNITAS_K1 = [
   'catalog.record.bulk_update',
 ];
 
+/** Members and circulation, appended after the reports and accreditation actions in this order: 15 actions. */
+const MEMBERS_CIRCULATION = [
+  'members.member.create',
+  'members.member.update',
+  'members.member.archive',
+  'members.member.extend',
+  'members.type.create',
+  'members.type.update',
+  'members.type.archive',
+  'members.import.start',
+  'members.import.finish',
+  'circulation.loan.create',
+  'circulation.loan.return',
+  'circulation.loan.renew',
+  'circulation.policy.create',
+  'circulation.policy.update',
+  'circulation.policy.archive',
+];
+
 describe('AUDIT_ACTIONS', () => {
-  it('is exactly the Phase 1b list followed by the 18 actions of Phase 1c, the 5 of Phase 1d, the 30 of Phase 2, then the 18 of reports and accreditation, in order', () => {
+  it('is exactly the Phase 1b list followed by the 18 actions of Phase 1c, the 5 of Phase 1d, the 30 of Phase 2, the 18 of reports and accreditation, then the 15 of members and circulation, in order', () => {
     expect(PHASE_1C).toHaveLength(18);
     expect(PHASE_1D).toHaveLength(5);
     expect(PHASE_2).toHaveLength(30);
     expect(KOMUNITAS_K1).toHaveLength(18);
-    expect([...AUDIT_ACTIONS]).toEqual([...PHASE_1B, ...PHASE_1C, ...PHASE_1D, ...PHASE_2, ...KOMUNITAS_K1]);
+    expect(MEMBERS_CIRCULATION).toHaveLength(15);
+    expect([...AUDIT_ACTIONS]).toEqual([...PHASE_1B, ...PHASE_1C, ...PHASE_1D, ...PHASE_2, ...KOMUNITAS_K1, ...MEMBERS_CIRCULATION]);
   });
 
   it('every action is dotted lower-case and fits audit_log.action (64)', () => {

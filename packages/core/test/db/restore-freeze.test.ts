@@ -91,8 +91,11 @@ describe.skipIf(!ctx.available)(`restore whose freeze broke [${engineLabel()}]`,
     await h.db.updateTable('branches').set({ name: 'Ditulis saat situs melayani', updated_at: Date.now() }).execute();
   };
 
-  /** One handler step per call until `until` holds for op.json (at most `calls` calls). */
-  async function stepTo(until: (state: string, params: Record<string, unknown>) => boolean | Promise<boolean>, calls = 500): Promise<void> {
+  /**
+   * One handler step per call until `until` holds for op.json (at most `calls` calls). The pre_restore backup takes a
+   * few steps per table, so the bound grows with the schema (members and circulation brought it past 500).
+   */
+  async function stepTo(until: (state: string, params: Record<string, unknown>) => boolean | Promise<boolean>, calls = 1500): Promise<void> {
     for (let i = 0; i < calls; i += 1) {
       const op = await currentOp(dataDir);
       if (await until(op.state, op.params)) return;
