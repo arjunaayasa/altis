@@ -17,11 +17,14 @@ export interface BootLog {
 
 type Level = 'debug' | 'info' | 'warn' | 'error';
 
-/** An error as plain fields: name, message, code, stack, and the same for its cause (a few levels deep). */
+/**
+ * An error as plain fields: its class (`errorName`), message, code, stack, and the same for its cause (a few levels
+ * deep). The class is `errorName` as in the server log, which redacts every field called `name` (a person's name).
+ */
 export function errorFields(error: unknown, depth?: number): unknown {
   const level = depth === undefined ? 0 : depth;
   if (!(error instanceof Error)) return typeof error === 'string' ? error : String(error);
-  const out: LogFields = { name: error.name, message: error.message };
+  const out: LogFields = { errorName: error.name, message: error.message };
   const code = (error as { code?: unknown }).code;
   if (typeof code === 'string' || typeof code === 'number') out['code'] = code;
   if (typeof error.stack === 'string') out['stack'] = error.stack;
