@@ -178,7 +178,7 @@ describe.skipIf(!ctx.available)(`members and circulation [${engineLabel()}]`, ()
     // The member type's own rule wins over the general rule; the rule's limit counts its own loans.
     const rule = await db.run((tx) => createPolicy(tx, { code: 'GURU-14', name: 'Guru', memberTypeId: guru, loanDays: 14, loanLimit: 1, renewLimit: 2 } as never));
     expect(await fieldErrors(db.run((tx) => createPolicy(tx, { code: 'GURU-2', name: 'Guru 2', memberTypeId: guru, loanDays: 3, loanLimit: null } as never)))).toEqual([
-      { path: 'memberTypeId', code: 'taken' },
+      { path: 'scope', code: 'taken' },
     ]);
     const teacher = await member({ memberTypeId: guru });
     expect((await lend(teacher, (await item()).barcode)).dueOn).toBe(addDays(TODAY, 14));

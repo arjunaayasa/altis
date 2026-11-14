@@ -42,11 +42,11 @@ describe('item statuses and transitions (§2.5)', () => {
     expect([...ITEM_STATUSES]).toEqual(['on_order', 'processing', 'available', 'not_for_loan', 'repair', 'missing', 'lost', 'withdrawn']);
   });
 
-  it('ITEM_TRANSITIONS is the §2.5 table, verbatim', () => {
+  it('ITEM_TRANSITIONS is the §2.5 table, plus available → lost (an item its borrower declares lost)', () => {
     expect(ITEM_TRANSITIONS).toEqual({
       on_order: ['processing', 'available', 'withdrawn'],
       processing: ['available', 'not_for_loan', 'withdrawn'],
-      available: ['not_for_loan', 'repair', 'missing', 'withdrawn'],
+      available: ['not_for_loan', 'repair', 'missing', 'withdrawn', 'lost'],
       not_for_loan: ['available', 'repair', 'missing', 'withdrawn'],
       repair: ['available', 'not_for_loan', 'withdrawn'],
       missing: ['available', 'not_for_loan', 'lost'],
@@ -56,8 +56,9 @@ describe('item statuses and transitions (§2.5)', () => {
     expect(Object.keys(ITEM_TRANSITIONS)).toEqual([...ITEM_STATUSES]);
   });
 
-  it('canTransition follows the table: available → lost is refused, missing → lost is allowed', () => {
-    expect(canTransition('available', 'lost')).toBe(false);
+  it('canTransition follows the table: repair → lost is refused, available → lost and missing → lost are allowed', () => {
+    expect(canTransition('repair', 'lost')).toBe(false);
+    expect(canTransition('available', 'lost')).toBe(true);
     expect(canTransition('missing', 'lost')).toBe(true);
     expect(canTransition('withdrawn', 'processing')).toBe(true);
     expect(canTransition('withdrawn', 'available')).toBe(false);

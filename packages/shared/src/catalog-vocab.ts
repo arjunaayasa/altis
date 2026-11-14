@@ -39,7 +39,8 @@ export type ItemStatus = (typeof ITEM_STATUSES)[number];
 export const ITEM_TRANSITIONS: Readonly<Record<ItemStatus, readonly ItemStatus[]>> = Object.freeze({
   on_order: Object.freeze(['processing', 'available', 'withdrawn'] as const),
   processing: Object.freeze(['available', 'not_for_loan', 'withdrawn'] as const),
-  available: Object.freeze(['not_for_loan', 'repair', 'missing', 'withdrawn'] as const),
+  // `available → lost`: an item on loan that its borrower declares lost (the loan is closed as lost at the desk).
+  available: Object.freeze(['not_for_loan', 'repair', 'missing', 'withdrawn', 'lost'] as const),
   not_for_loan: Object.freeze(['available', 'repair', 'missing', 'withdrawn'] as const),
   repair: Object.freeze(['available', 'not_for_loan', 'withdrawn'] as const),
   missing: Object.freeze(['available', 'not_for_loan', 'lost'] as const),

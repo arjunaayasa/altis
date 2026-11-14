@@ -209,4 +209,15 @@ export type {
   NotLoanableReason,
   RenewRefusal,
 } from './circulation-vocab.js';
+// ---- Komunitas (circulation core) ----
+export {
+  CALENDAR_KINDS,
+  CLEARANCE_PURPOSES,
+  CLEARANCE_REFUSALS,
+  FORCEABLE_REASONS,
+  OVERRIDE_REASONS,
+  POLICY_RANK_REASONS,
+  VOID_REFUSALS,
+} from './circulation-vocab.js';
+export type { CalendarKind, ClearancePurpose, ClearanceRefusal, ForceableReason, OverrideReason, PolicyRankReason, VoidRefusal } from './circulation-vocab.js';
 export type { ReportCell, ReportColumnType, ReportColumnView, ReportParamKind, ReportParamSpec } from './api/reports.js';

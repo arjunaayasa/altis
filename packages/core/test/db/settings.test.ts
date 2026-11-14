@@ -171,6 +171,12 @@ const SAMPLE: Record<SettingKey, unknown> = {
   'accreditation.visits.dedupeLegacy': false,
   'accreditation.unknownMemberGroup.default': 'teacher',
   'visits.dedupeMinutes': 30,
+  // ---- Komunitas (circulation core) ----
+  'circulation.loanVoidMinutes': 5,
+  'circulation.lost.useItemPrice': false,
+  'circulation.lost.processingFeeMinor': 500_000,
+  'members.clearance.prefix': 'SBP',
+  'members.clearance.profile': { paper: 'A5', city: 'Bandung', signerTitle: 'Kepala Perpustakaan', signerName: 'Contoh', signerId: 'NIP 1', bodyText: '' },
 };
 
 /** Every key of scope `instance` (machine state of this installation, kept by a restore), in registry order; all are in group `system`. */
@@ -205,7 +211,7 @@ const NON_NULL_1D_DEFAULTS: Partial<Record<SettingKey, unknown>> = {
   'update.channel': 'stable',
 };
 
-const GROUPS: SettingsGroup[] = ['library', 'email', 'security', 'opac', 'smtp', 'system', 'catalog', 'accreditation', 'visits'];
+const GROUPS: SettingsGroup[] = ['library', 'email', 'security', 'opac', 'smtp', 'system', 'catalog', 'accreditation', 'visits', 'circulation', 'members'];
 
 /** The accreditation keys, in registry order: the sixteen of group `accreditation`. */
 const ACCREDITATION_KEYS: readonly SettingKey[] = [
@@ -279,6 +285,9 @@ describe('SETTINGS registry', () => {
     expect(groupKeys('system')).toEqual(INSTANCE_KEYS);
     expect(groupKeys('accreditation')).toEqual(ACCREDITATION_KEYS);
     expect(groupKeys('visits')).toEqual(['visits.dedupeMinutes']);
+    // ---- Komunitas (circulation core) ----
+    expect(groupKeys('circulation')).toEqual(['circulation.loanVoidMinutes', 'circulation.lost.useItemPrice', 'circulation.lost.processingFeeMinor']);
+    expect(groupKeys('members')).toEqual(['members.clearance.prefix', 'members.clearance.profile']);
     expect(GROUPS.flatMap((g) => groupKeys(g)).sort()).toEqual(Object.keys(SETTINGS).sort());
     // The group is the key's first segment, but for the instance keys of 1c that read `audit.*` and `realtime.*`: all system.
     for (const key of Object.keys(SETTINGS) as SettingKey[]) {

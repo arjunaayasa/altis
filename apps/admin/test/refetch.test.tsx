@@ -76,6 +76,9 @@ const SETTINGS: SettingsView = {
     visits: { dedupeLegacy: true },
     unknownMemberGroup: { default: 'auto' },
   },
+  // ---- Komunitas (circulation core) ----
+  circulation: { loanVoidMinutes: 10, lost: { useItemPrice: true, processingFeeMinor: 0 } },
+  members: { clearance: { prefix: 'BP', profile: { paper: 'A4', city: '', signerTitle: 'Kepala Perpustakaan', signerName: '', signerId: '', bodyText: '' } } },
 };
 
 const SYSTEM: SystemConfigView = {

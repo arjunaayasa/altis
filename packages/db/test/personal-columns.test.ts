@@ -3,6 +3,7 @@ import { TABLE_COLUMNS, TABLE_KEYS, type ColumnSpec } from '../src/columns.js';
 import { PERSONAL_COLUMNS, isPersonalColumn, personalLogKeys, type PersonalCategory, type TableName } from '../src/registry.js';
 import { K1_TABLES_BY_MIGRATION } from './fixtures/komunitas-k1-tables.js';
 import { CIRCULATION_TABLES_BY_MIGRATION } from './fixtures/komunitas-members-circulation-tables.js';
+import { CIRC_CORE_TABLES_BY_MIGRATION } from './fixtures/komunitas-circ-core-tables.js';
 
 // The personal-data dictionary (PERSONAL_COLUMNS): which columns hold personal data, so that public output, events,
 // logs and exports can leave them out or ask for re-authentication. Every registered column must exist; every column of
@@ -105,6 +106,25 @@ const CIRCULATION_NON_PERSONAL: Record<string, string> = {
   'loans.stat_class_name': 'the class a loan is counted in for statistics, kept after anonymisation',
 };
 
+// ---- Komunitas (circulation core) ----
+const CIRC_CORE_TABLES = Object.values(CIRC_CORE_TABLES_BY_MIGRATION).flat() as TableName[];
+
+/** Text columns of the circulation core tables holding a code from a fixed list, a date part or a value ALTIS computes. */
+const CIRC_CORE_CODE_COLUMNS: Record<string, string> = {
+  'calendars.kind': 'a calendar rule kind',
+  'calendars.month_day_from': 'a day of the year (MM-DD)',
+  'calendars.month_day_to': 'a day of the year (MM-DD)',
+  'item_uses.stat_ddc': 'a classification key for statistics',
+  'item_uses.source': 'where the use came from (desk or migrated)',
+  'member_clearances.purpose': 'a clearance purpose code',
+};
+
+/** Free-text columns of the circulation core tables that are not personal data, each with the reason. */
+const CIRC_CORE_NON_PERSONAL: Record<string, string> = {
+  'calendars.name': 'the name of closed days (a holiday)',
+  'member_clearances.number_display': 'the letter number the library assigns',
+};
+
 /** The columns of `table` in a primary key, a unique index or a foreign key. */
 function keyColumns(table: TableName): Set<string> {
   const keys = TABLE_KEYS[table];
@@ -200,6 +220,7 @@ describe('PERSONAL_COLUMNS', () => {
         { column: 'password_hash', category: 'credential' },
       ],
       loans: [{ column: 'override_note', category: 'free_text' }],
+      member_clearances: [{ column: 'void_reason', category: 'free_text' }],
     });
   });
 
@@ -218,6 +239,26 @@ describe('PERSONAL_COLUMNS', () => {
     expect(unclassified).toEqual([]);
     expect(twice).toEqual([]);
     for (const [column, reason] of [...Object.entries(CIRCULATION_CODE_COLUMNS), ...Object.entries(CIRCULATION_NON_PERSONAL)]) {
+      expect({ column, isText: text.includes(column) }).toEqual({ column, isText: true });
+      expect(reason.length).toBeGreaterThan(5);
+    }
+  });
+
+  // ---- Komunitas (circulation core) ----
+  it('classifies every text column of the 3 circulation core tables that is not a key; no stale exception', () => {
+    expect(CIRC_CORE_TABLES).toEqual(['calendars', 'item_uses', 'member_clearances']);
+    const personal = new Set(registered());
+    const text = textColumnsOf(CIRC_CORE_TABLES);
+    const unclassified: string[] = [];
+    const twice: string[] = [];
+    for (const column of text) {
+      const places = [personal.has(column), Object.hasOwn(CIRC_CORE_CODE_COLUMNS, column), Object.hasOwn(CIRC_CORE_NON_PERSONAL, column)].filter(Boolean);
+      if (places.length === 0) unclassified.push(column);
+      if (places.length > 1) twice.push(column);
+    }
+    expect(unclassified).toEqual([]);
+    expect(twice).toEqual([]);
+    for (const [column, reason] of [...Object.entries(CIRC_CORE_CODE_COLUMNS), ...Object.entries(CIRC_CORE_NON_PERSONAL)]) {
       expect({ column, isText: text.includes(column) }).toEqual({ column, isText: true });
       expect(reason.length).toBeGreaterThan(5);
     }

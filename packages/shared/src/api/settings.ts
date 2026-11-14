@@ -27,6 +27,9 @@ export const SETTINGS_GROUPS = Object.freeze([
   'catalog',
   // ---- Komunitas K1 (settings) ----
   'accreditation',
+  // ---- Komunitas (circulation core) ----
+  'circulation',
+  'members',
 ] as const);
 
 export type SettingsGroupName = (typeof SETTINGS_GROUPS)[number];
@@ -186,6 +189,9 @@ export interface SettingsView {
   catalog: CatalogSettings;
   // ---- Komunitas K1 (settings) ----
   accreditation: AccreditationSettingsView;
+  // ---- Komunitas (circulation core) ----
+  circulation: CirculationSettingsView;
+  members: MembersSettingsView;
 }
 
 /**
@@ -552,4 +558,65 @@ export interface AccreditationSettingsView {
   undatedShareMaxPct: number;
   visits: { dedupeLegacy: boolean };
   unknownMemberGroup: { default: (typeof ACCRED_GROUPS)[number] | 'auto' | null };
+}
+
+// ---- Komunitas (circulation core) ----------------------------------------------------------------------------------
+// The group `circulation` (`GET|PUT settings/circulation`): how long a loan may still be voided and how a lost item is
+// charged; in the group `members` (`GET|PUT settings/members`), the numbered clearance letters (their number prefix and
+// the letter profile). Every key is of scope `data` and none is a secret.
+
+/** `circulation.loanVoidMinutes`: how long after a loan the desk may still void it, 0-60 minutes (0: never). */
+export const loanVoidMinutesField = z.int().min(0).max(60);
+
+/** A sum in minor units, 0 or more (`circulation.lost.processingFeeMinor`). */
+export const minorAmountField = z.int().min(0).max(Number.MAX_SAFE_INTEGER);
+
+/** `members.clearance.prefix`: the start of a clearance letter number, 1-16 printable characters without `/`. */
+export const clearancePrefixField = z.string().trim().min(1).max(16).regex(/^[\x21-\x2E\x30-\x7E]+$/);
+
+/** The paper of a clearance letter: a sheet (A4, A5) or a receipt roll (58 or 80 mm). */
+export const CLEARANCE_PROFILE_PAPERS = Object.freeze(['A4', 'A5', '58', '80'] as const);
+
+/** A plain text of at most `max` characters, trimmed, newlines allowed. */
+const plainText = (max: number) => z.string().trim().max(max);
+
+/**
+ * `members.clearance.profile`: the paper of a clearance letter, the place it is signed in, who signs it (title, name,
+ * staff number), and the statement printed above the signature (plain text; empty: the built-in sentence).
+ */
+export const ClearanceProfile = z.strictObject({
+  paper: z.enum(CLEARANCE_PROFILE_PAPERS),
+  city: plainText(60),
+  signerTitle: plainText(60),
+  signerName: plainText(80),
+  signerId: plainText(60),
+  bodyText: plainText(1000),
+});
+
+export type ClearanceProfile = z.infer<typeof ClearanceProfile>;
+
+/** `PUT settings/circulation`: each key is its setting's name without `circulation.`, nested at its dots. */
+export const CirculationSettingsBody = z.strictObject({
+  loanVoidMinutes: loanVoidMinutesField.optional(),
+  lost: z.strictObject({ useItemPrice: z.boolean().optional(), processingFeeMinor: minorAmountField.optional() }).optional(),
+});
+
+export type CirculationSettingsBody = z.infer<typeof CirculationSettingsBody>;
+
+/** `GET settings/circulation`. */
+export interface CirculationSettingsView {
+  loanVoidMinutes: number;
+  lost: { useItemPrice: boolean; processingFeeMinor: number };
+}
+
+/** `PUT settings/members`: each key is its setting's name without `members.`, nested at its dots. */
+export const MembersSettingsBody = z.strictObject({
+  clearance: z.strictObject({ prefix: clearancePrefixField.optional(), profile: ClearanceProfile.optional() }).optional(),
+});
+
+export type MembersSettingsBody = z.infer<typeof MembersSettingsBody>;
+
+/** `GET settings/members`. */
+export interface MembersSettingsView {
+  clearance: { prefix: string; profile: ClearanceProfile };
 }

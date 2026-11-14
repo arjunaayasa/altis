@@ -57,6 +57,10 @@ export const PERMISSIONS = Object.freeze([
   'circulation.desk.use',
   'circulation.policies.manage',
   'circulation.records.read',
+  // ---- Komunitas (circulation core) ----
+  // Forcing a refused loan (limit, hold, block, collection type, rule), a loan dated before today, a changed due date,
+  // and voiding another staff member's last loan; at a branch, like the desk.
+  'circulation.desk.override',
 ] as const);
 
 /** A catalog key. The second member exists only in the test profile (spec §12.5): see {@link permissionCatalog}. */
@@ -87,6 +91,8 @@ const BRANCH_SCOPED: ReadonlySet<string> = new Set([
   // ---- Komunitas (members and circulation) ----
   // The desk works at a branch (its routes are `branches/:branchId/circulation/...`).
   'circulation.desk.use',
+  // ---- Komunitas (circulation core) ----
+  'circulation.desk.override',
 ]);
 
 /** The module of a production key: its prefix (`system`, `catalog`, `opac`, `reports`, `accreditation`, `members` or `circulation`). */
