@@ -27,7 +27,14 @@ afterEach(() => {
 const ULID = '01JZ0000000000000000000ABC';
 
 /** The screens an owning task has replaced with the real one. */
-const REPLACED: ReadonlySet<KomunitasPlaceholderScreen> = new Set<KomunitasPlaceholderScreen>(['reports_catalog', 'report_detail', 'tab_registers']);
+const REPLACED: ReadonlySet<KomunitasPlaceholderScreen> = new Set<KomunitasPlaceholderScreen>([
+  'reports_catalog',
+  'report_detail',
+  'tab_registers',
+  'tab_usage',
+  'tab_snp',
+  'tab_print',
+]);
 
 /** Each path (a parameter filled in), and the placeholder its screen shows. */
 const ROUTES: readonly [path: string, screen: KomunitasPlaceholderScreen][] = [
