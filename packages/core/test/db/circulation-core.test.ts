@@ -252,6 +252,20 @@ describe.skipIf(!ctx.available)(`the circulation core [${engineLabel()}]`, () =>
     expect(await failure(giveBack(true))).toMatchObject({ code: 'CIRC_LOAN_NOT_OPEN' });
   });
 
+  it('a late return and a late renewal hand the overdue fine to the charges module after their write; an on-time one does not', async () => {
+    const calls: string[] = [];
+    registerCirculationChargeSeam({ ...noCharges(), bookOverdue: async (_tx, i) => void calls.push(`${i.loanId}:${i.until}`) });
+    const reader = await member();
+    const onTime = await lend(reader, (await item()).barcode);
+    const late = await item();
+    const lateLoan = await lend(reader, late.barcode);
+    const renewing = await lend(reader, (await item()).barcode);
+    await db.run((tx) => returnItem(tx, { branchId: db.branchId, barcode: (onTime.item.barcode) }), NOW + DAY);
+    await db.run((tx) => returnItem(tx, { branchId: db.branchId, barcode: late.barcode }), NOW + 10 * DAY);
+    await db.run((tx) => renewLoan(tx, { branchId: db.branchId, loanId: renewing.id }), NOW + 9 * DAY);
+    expect(calls).toEqual([`${lateLoan.id}:${addDays(TODAY, 10)}`, `${renewing.id}:${addDays(TODAY, 9)}`]);
+  });
+
   it('a due date changed by hand: never before the loan, a closed day only warns, the note is kept', async () => {
     const reader = await member();
     const loan = await lend(reader, (await item()).barcode);

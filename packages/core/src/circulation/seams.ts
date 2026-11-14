@@ -5,9 +5,11 @@ import type { Db } from '../members/common.js';
 // payments) and keep holds (reservations and the hold shelf). The core calls them at the moments those modules care
 // about; until a module registers itself, the calls do nothing and answer "none", so the desk works without them.
 //
-// - Charges: a loan declared lost books the overdue fine up to that day, the replacement charge and the processing fee
-//   (each a charge of its own); an item recorded lost that comes back cancels the unpaid part of its lost charge; a loan
-//   with any charge cannot be voided; a clearance letter needs a balance of zero.
+// - Charges: a late return and a late renewal book the overdue fine up to that day; a loan declared lost books the
+//   overdue fine, the replacement charge and the processing fee (each a charge of its own); an item recorded lost that
+//   comes back cancels the unpaid part of its lost charge; a loan with any charge cannot be voided; a clearance letter
+//   needs a balance of zero. Each booking runs after the loan's conditional write succeeded (a loan another desk
+//   closed first books nothing).
 // - Holds: voiding a loan that fulfilled a hold gives the hold back (ready again, with its item and pickup day); a
 //   clearance letter is refused while a hold of the member waits on the hold shelf.
 //
@@ -17,8 +19,9 @@ import type { Db } from '../members/common.js';
 /** What the circulation core asks of the charges module. */
 export interface CirculationChargeSeam {
   /**
-   * Books the overdue fine of the loan `loanId` for the days late up to `until` (a loan declared lost); 0 days or a rule
-   * without fines books nothing.
+   * Books the overdue fine of the loan `loanId` for the days late up to `until` (its return, a late renewal, or the day
+   * it was declared lost), from the terms the loan copied (fine per day, cap, grace days) and the calendar of the loan's
+   * branch (calendars.ts `lateDays`); 0 days or a rule without fines books nothing.
    */
   bookOverdue(tx: TxCtx, input: { loanId: string; until: string }): Promise<void>;
   /** Books the replacement charge of a loan closed as lost, and the processing fee as a charge of its own when > 0. */
