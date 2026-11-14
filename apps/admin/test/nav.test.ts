@@ -3,7 +3,7 @@ import type { MeResponse } from '@altis/shared/api/auth';
 import { describe, expect, it } from 'vitest';
 import { editionNav } from '@/edition';
 import { ADMIN_MESSAGES } from '@/i18n';
-import { NAV, NAV_GROUPS, visibleNav, visibleNavSections } from '@/lib/nav';
+import { NAV, NAV_GROUPS, activeNavPath, visibleNav, visibleNavSections } from '@/lib/nav';
 
 // Permission-based navigation (spec §13.3 "Kerangka admin"). The menus only hide: the server refuses whatever they
 // hide anyway (§4.8).
@@ -265,5 +265,30 @@ describe('visibleNav', () => {
     expect(visibleNav(undefined)).toEqual([]);
     expect(visibleNav({ authenticated: false, csrfToken: 'x', library: { name: 'P', locale: 'id' }, build: '0.1.0' })).toEqual([]);
     expect(visibleNav({ ...me({ permissions: [] }), stage: 'mfa' })).toEqual([]);
+  });
+});
+
+describe('activeNavPath: the one menu item a page marks', () => {
+  it('a page with its own item marks that item alone, not the item whose path it lies under', () => {
+    expect(activeNavPath(NAV, '/admin/layanan')).toBe('/admin/layanan');
+    expect(activeNavPath(NAV, '/admin/layanan/kembali')).toBe('/admin/layanan/kembali');
+    expect(activeNavPath(NAV, '/admin/layanan/terlambat')).toBe('/admin/layanan/terlambat');
+    expect(activeNavPath(NAV, '/admin/anggota/tipe')).toBe('/admin/anggota/tipe');
+    expect(activeNavPath(NAV, '/admin/anggota/impor/')).toBe('/admin/anggota/impor');
+  });
+
+  it('a page without an item of its own marks the closest item above it; Beranda only itself', () => {
+    expect(activeNavPath(NAV, '/admin/anggota/01J0000000000000000000000A')).toBe('/admin/anggota');
+    expect(activeNavPath(NAV, '/admin/anggota/baru')).toBe('/admin/anggota');
+    expect(activeNavPath(NAV, '/admin/catalog/records/new')).toBe('/admin/catalog/records');
+    expect(activeNavPath(NAV, '/admin')).toBe('/admin');
+    expect(activeNavPath(NAV, '/admin/')).toBe('/admin');
+    expect(activeNavPath(NAV, '/admin/profile')).toBeNull();
+    expect(activeNavPath(NAV, '/admin/layanan-lain')).toBeNull();
+  });
+
+  it('only the items given count: a hidden item leaves the page to the item above it', () => {
+    const shown = NAV.filter((item) => item.to !== '/admin/anggota/tipe');
+    expect(activeNavPath(shown, '/admin/anggota/tipe')).toBe('/admin/anggota');
   });
 });
