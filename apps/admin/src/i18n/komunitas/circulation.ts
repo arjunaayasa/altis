@@ -138,6 +138,7 @@ export const CIRCULATION_ID = {
   'circulation.overdue.empty': 'Tidak ada pinjaman terlambat.',
   'circulation.overdue.empty_filtered': 'Tidak ada pinjaman terlambat yang cocok dengan saringan ini.',
   'circulation.overdue.summary': '{loans} pinjaman · {members} anggota · terlama {days} hari',
+  'circulation.overdue.summary_loaded': 'Yang sudah dimuat: {loans} pinjaman · {members} anggota · terlama {days} hari. Masih ada lagi; muat lebih banyak untuk melihatnya.',
   'circulation.overdue.serve': 'Layani',
   'circulation.overdue.anonymous': 'Anggota dianonimkan',
   'circulation.policies.intro':
@@ -327,6 +328,7 @@ export const CIRCULATION_EN: Record<keyof typeof CIRCULATION_ID, string> = {
   'circulation.overdue.empty': 'No overdue loans.',
   'circulation.overdue.empty_filtered': 'No overdue loan matches these filters.',
   'circulation.overdue.summary': '{loans} loans · {members} members · longest {days} days',
+  'circulation.overdue.summary_loaded': 'Loaded so far: {loans} loans · {members} members · longest {days} days. There are more; load more to see them.',
   'circulation.overdue.serve': 'Serve',
   'circulation.overdue.anonymous': 'Anonymised member',
   'circulation.policies.intro':

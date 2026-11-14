@@ -18,7 +18,8 @@ import { useCalendarDate, useMemberTypes, useTypeName } from './common';
  * Terlambat & Jatuh Tempo (`/admin/layanan/terlambat`): the open loans past their due date, the longest-overdue first
  * (by due date), with the member, the item, the due date and the days late (amber up to two weeks, red beyond). Filters:
  * member type, branch and the fewest days late; they go in the request's query string, which never carries a personal
- * value (a member is named by id). "Layani" opens the member at the desk.
+ * value (a member is named by id). "Layani" opens the member at the desk. The list comes a page at a time and the API
+ * gives no total, so while more pages remain the summary says it counts the loans loaded so far.
  */
 
 const LATE_RED_AFTER_DAYS = 14;
@@ -195,7 +196,9 @@ export function OverdueScreen() {
       ) : (
         <>
           {rows.length > 0 && (
-            <p className="text-sm text-muted-foreground">{t('circulation.overdue.summary', { loans: rows.length, members, days: longest })}</p>
+            <p className="text-sm text-muted-foreground">
+              {t(list.hasNextPage ? 'circulation.overdue.summary_loaded' : 'circulation.overdue.summary', { loans: rows.length, members, days: longest })}
+            </p>
           )}
           <MasterTable
             caption={t('circulation.overdue.caption')}
