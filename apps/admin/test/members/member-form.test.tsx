@@ -163,6 +163,27 @@ describe('the member page form', () => {
     return { app, patches, change: (next: Partial<MemberView>) => (current = { ...current, ...next, version: current.version + 1 }) };
   }
 
+  it('lays the tabs in the wide column and the summary beside them; a wrapped tab row grows instead of covering the panel', async () => {
+    memberPage();
+    expect(await screen.findByRole('heading', { name: 'Siti Aminah' })).toBeTruthy();
+    const list = screen.getByRole('tablist');
+    const tabs = list.closest('[data-slot="tabs"]')!;
+    const summary = screen.getByRole('complementary', { name: 'Ringkasan anggota' });
+    expect(tabs.parentElement).toBe(summary.parentElement);
+    expect(tabs.parentElement!.className).toContain('lg:grid-cols-[minmax(0,1fr)_260px]');
+    // The tabs come first in the wide layout (the wide column): nothing moves them after the summary there.
+    expect(tabs.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tabs.className.split(/\s+/)).toContain('lg:order-none');
+    expect(summary.className).not.toMatch(/(^|\s)lg:order-/);
+    expect(list.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-auto', 'flex-wrap']));
+    expect(list.className.split(/\s+/)).not.toContain('h-9');
+    // Each tab keeps one row's height: a share of the list's height would overflow it once the tabs wrap.
+    for (const tab of within(list).getAllByRole('tab')) {
+      expect(tab.className.split(/\s+/)).toContain('h-7.5');
+      expect(tab.className).not.toContain('h-[calc(100%-1px)]');
+    }
+  });
+
   it('after an extension, a save of another field never sends the old end date back', async () => {
     const page = memberPage();
     expect(await screen.findByRole('heading', { name: 'Siti Aminah' })).toBeTruthy();

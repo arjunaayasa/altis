@@ -92,6 +92,22 @@ export function visibleNav(me: MeResponse | undefined): NavItem[] {
   });
 }
 
+/**
+ * The path of the one item the page at `pathname` belongs to, so the menu marks a single item: the item whose path is
+ * the page's, else the longest one the page lies under (Beranda only for itself). Kembali Cepat
+ * (`/admin/layanan/kembali`) is marked alone, never Meja Layanan (`/admin/layanan`) beside it, while a member's page
+ * (`/admin/anggota/<id>`) still marks Daftar Anggota. Null when no item covers the page.
+ */
+export function activeNavPath(items: readonly NavItem[], pathname: string): string | null {
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  let best: string | null = null;
+  for (const { to } of items) {
+    const covers = path === to || (to !== '/admin' && path.startsWith(`${to}/`));
+    if (covers && (best === null || to.length > best.length)) best = to;
+  }
+  return best;
+}
+
 /** One heading of the navigation: its group (null for the items above the groups) and its visible items. */
 export interface NavSection {
   group: NavGroup | null;

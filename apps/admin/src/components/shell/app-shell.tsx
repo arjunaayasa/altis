@@ -1,6 +1,6 @@
 import type { MeResponse } from '@altis/shared/api/auth';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link, Outlet, useNavigate, useRouter } from '@tanstack/react-router';
+import { Link, Outlet, useLocation, useNavigate, useRouter } from '@tanstack/react-router';
 import { LibraryIcon, LogOutIcon, MenuIcon, SearchIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Banners } from '@/components/banners';
@@ -14,7 +14,7 @@ import { holds } from '@/lib/access';
 import { inBackground, isSignInPath, sessionEndedHref } from '@/lib/api';
 import { dirtyForms } from '@/lib/dirty-forms';
 import { ME_KEY, ShellMeContext, gateTarget, useMe } from '@/lib/me';
-import { visibleNavSections, type NavItem } from '@/lib/nav';
+import { activeNavPath, visibleNavSections, type NavItem } from '@/lib/nav';
 import { REALTIME_RESYNC_KEYS, RealtimeContext, createRealtimeHub, invalidateRealtimeKeys, realtimeQueryKeys } from '@/lib/realtime';
 import { useShortcuts } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
@@ -65,6 +65,7 @@ export function AppShell() {
   const live = useMe();
   const router = useRouter();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const queryClient = useQueryClient();
   const warningId = useId();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -119,6 +120,12 @@ export function AppShell() {
   if (me === null) return <Pending />;
   // Phase 2 (Task 2): Beranda, then each nav group under its heading (Katalog, OPAC, Sistem; lib/nav.ts).
   const sections = visibleNavSections(me);
+  // One item is marked: the page's own, else the closest one above it (lib/nav.ts `activeNavPath`). The router's own
+  // active state only counts an exact match here, so it never marks a second item.
+  const current = activeNavPath(
+    sections.flatMap((s) => s.items),
+    pathname,
+  );
 
   const links = (items: readonly NavItem[], label?: string) => (
     <ul className="flex flex-col gap-1" {...(label === undefined ? {} : { 'aria-label': label })}>
@@ -126,9 +133,13 @@ export function AppShell() {
         <li key={item.to}>
           <Link
             to={item.to}
-            activeOptions={{ exact: item.to === '/admin' }}
+            activeOptions={{ exact: true, includeSearch: false }}
+            aria-current={item.to === current ? 'page' : undefined}
             onClick={() => setMenuOpen(false)}
-            className="block rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground data-[status=active]:bg-accent data-[status=active]:font-medium data-[status=active]:text-accent-foreground"
+            className={cn(
+              'block rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+              item.to === current && 'bg-accent font-medium text-accent-foreground',
+            )}
           >
             {t(item.labelKey)}
           </Link>
