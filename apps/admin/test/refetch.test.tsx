@@ -78,9 +78,17 @@ const SETTINGS: SettingsView = {
     unknownMemberGroup: { default: 'auto' },
   },
   // ---- Komunitas (circulation core) ----
-  circulation: { loanVoidMinutes: 10, lost: { useItemPrice: true, processingFeeMinor: 0 } },
+  circulation: {
+      holds: { enabled: true, opac: true, onlyWhenNoneAvailable: true, pickupDays: 3 },
+      renew: { opac: true },
+      loanVoidMinutes: 10,
+      lost: { useItemPrice: true, processingFeeMinor: 0 },
+    },
   // ---- Komunitas K2: members (clearance and card), visits and privacy (their screens have their own tests) ----
   members: {
+    password: { minLength: 8 },
+    opac: { enabled: true },
+    session: { idleMinutes: 20, absoluteHours: 8 },
     clearance: { prefix: 'BP', profile: { paper: 'A4', city: '', signerTitle: 'Kepala Perpustakaan', signerName: '', signerId: '', bodyText: '' } },
     card: { profile: DEFAULT_CARD_PROFILE },
   },
