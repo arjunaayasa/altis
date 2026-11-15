@@ -17,7 +17,7 @@ const trail = (s: MatrixSeed) => ({ created_at: s.now, created_by: null, updated
 const unique = (prefix: string): string => `${prefix}${newId().slice(-12)}`;
 
 /** A live branch of its own; its id. */
-async function seedBranch(s: MatrixSeed): Promise<string> {
+export async function seedBranch(s: MatrixSeed): Promise<string> {
   const id = newId();
   const code = unique('MC');
   await s.h.db
@@ -68,7 +68,7 @@ async function seedRecord(s: MatrixSeed): Promise<string> {
 }
 
 /** An `available` item of the seeded collection type UMUM, of a record of its own, in `branchId`. */
-async function seedItem(s: MatrixSeed, branchId: string): Promise<{ id: string; recordId: string; barcode: string }> {
+export async function seedItem(s: MatrixSeed, branchId: string): Promise<{ id: string; recordId: string; barcode: string }> {
   const id = newId();
   const barcode = unique('SX-');
   const recordId = await seedRecord(s);
@@ -105,7 +105,7 @@ async function seedItem(s: MatrixSeed, branchId: string): Promise<{ id: string; 
 }
 
 /** An open loan, lent two days before `s.now`, of a new item in `branchId` to a new member; its id and the item's barcode. */
-async function seedOpenLoan(s: MatrixSeed, branchId: string): Promise<{ id: string; barcode: string; memberId: string }> {
+export async function seedOpenLoan(s: MatrixSeed, branchId: string): Promise<{ id: string; barcode: string; memberId: string }> {
   const id = newId();
   const item = await seedItem(s, branchId);
   const member = await seedMember(s);

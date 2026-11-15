@@ -278,6 +278,18 @@ describe.skipIf(!ctx.available)(`reports API [${engineLabel()}]`, () => {
       const doc = await preview(stats, 'test.document', { params: {} });
       expect([doc.status, errors(doc)]).toEqual([422, [{ path: 'reportId', code: 'not_previewable' }]]);
     });
+
+    // ---- Komunitas (member, visit and circulation reports) ----
+    it('the copies of the reprint list need the catalogue permission besides the members one, in a preview and an export', async () => {
+      const members = await signedIn('anggota-saja', { permissions: ['members.records.read', 'members.export.run'], reauthAt: NOW });
+      const both = await signedIn('anggota-katalog', { permissions: ['members.records.read', 'catalog.records.read'] });
+      expect((await preview(members, 'members.reprint_list', { params: { kind: 'members' } })).status).toBe(200);
+      const refused = await preview(members, 'members.reprint_list', { params: { kind: 'items' } });
+      expect([refused.status, code(refused)]).toEqual([403, 'AUTHZ_DENIED']);
+      const run = await members.post(`${REPORTS_API}/runs/personal`, { reportId: 'members.reprint_list', format: 'csv', params: { kind: 'items' } });
+      expect([run.status, code(run)]).toEqual([403, 'AUTHZ_DENIED']);
+      expect((await preview(both, 'members.reprint_list', { params: { kind: 'items' } })).status).toBe(200);
+    });
   });
 
   describe('POST reports/runs and reports/runs/personal', () => {

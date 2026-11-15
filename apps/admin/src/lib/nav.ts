@@ -71,11 +71,28 @@ export const NAV: readonly NavItem[] = Object.freeze([
   // overdue list and the loan rules are library-wide. Anggota: the member list, the member types and the CSV import.
   { to: '/admin/layanan', labelKey: 'nav.circulation.desk', permission: 'circulation.desk.use', anyBranch: true, group: 'circulation' },
   { to: '/admin/layanan/kembali', labelKey: 'nav.circulation.quick_return', permission: 'circulation.desk.use', anyBranch: true, group: 'circulation' },
+  // ---- Komunitas (holds) ----
+  { to: '/admin/layanan/rak-tunggu', labelKey: 'nav.circulation.hold_shelf', permission: 'circulation.desk.use', anyBranch: true, group: 'circulation' },
+  // ---- Komunitas (circulation core): read in place at a desk ----
+  { to: '/admin/layanan/baca', labelKey: 'nav.circulation.in_library', permission: 'circulation.desk.use', anyBranch: true, group: 'circulation' },
+  // ---- Komunitas (charges and payments): open balances, the daily cash summary, the payments ----
+  { to: '/admin/layanan/denda', labelKey: 'nav.circulation.charges', permission: 'circulation.records.read', group: 'circulation' },
   { to: '/admin/layanan/terlambat', labelKey: 'nav.circulation.overdue', permission: 'circulation.records.read', group: 'circulation' },
+  // ---- Komunitas (notices): the e-mail reminder log, its status and the test send ----
+  { to: '/admin/layanan/pengingat', labelKey: 'nav.circulation.notices', permission: 'circulation.records.read', group: 'circulation' },
   { to: '/admin/layanan/aturan', labelKey: 'nav.circulation.policies', permission: 'circulation.policies.manage', group: 'circulation' },
+  // ---- Komunitas (circulation core): the library calendar (read at the desk too; changed with the rules) ----
+  { to: '/admin/layanan/kalender', labelKey: 'nav.circulation.calendar', permission: 'circulation.policies.manage', group: 'circulation' },
+  // ---- Komunitas K2 (visits) ----
+  { to: '/admin/layanan/kunjungan', labelKey: 'nav.circulation.visits', permission: 'visits.records.read', group: 'circulation' },
+  { to: '/admin/layanan/buku-tamu', labelKey: 'nav.circulation.stations', permission: 'visits.stations.manage', anyBranch: true, group: 'circulation' },
   { to: '/admin/anggota', labelKey: 'nav.members.list', permission: 'members.records.read', group: 'members' },
   { to: '/admin/anggota/tipe', labelKey: 'nav.members.types', permission: 'members.types.manage', group: 'members' },
   { to: '/admin/anggota/impor', labelKey: 'nav.members.import', permission: 'members.import.run', group: 'members' },
+  // ---- Komunitas (circulation core): numbered clearance letters ----
+  { to: '/admin/anggota/bebas-pustaka', labelKey: 'nav.members.clearances', permission: 'members.records.manage', group: 'members' },
+  // ---- Komunitas K2 (members extended) ----
+  { to: '/admin/anggota/kartu', labelKey: 'nav.members.cards', permission: 'members.records.read', group: 'members' },
   // The edition's own items (ruling R2, edition/index.ts), after the community ones: none in the community edition.
   ...editionNav,
 ] satisfies NavItem[]);
@@ -90,6 +107,22 @@ export function visibleNav(me: MeResponse | undefined): NavItem[] {
     if (item.permission === undefined || me.superAdmin || held.has(item.permission)) return true;
     return item.anyBranch === true && atSomeBranch.has(item.permission);
   });
+}
+
+/**
+ * The path of the one item the page at `pathname` belongs to, so the menu marks a single item: the item whose path is
+ * the page's, else the longest one the page lies under (Beranda only for itself). Kembali Cepat
+ * (`/admin/layanan/kembali`) is marked alone, never Meja Layanan (`/admin/layanan`) beside it, while a member's page
+ * (`/admin/anggota/<id>`) still marks Daftar Anggota. Null when no item covers the page.
+ */
+export function activeNavPath(items: readonly NavItem[], pathname: string): string | null {
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  let best: string | null = null;
+  for (const { to } of items) {
+    const covers = path === to || (to !== '/admin' && path.startsWith(`${to}/`));
+    if (covers && (best === null || to.length > best.length)) best = to;
+  }
+  return best;
 }
 
 /** One heading of the navigation: its group (null for the items above the groups) and its visible items. */

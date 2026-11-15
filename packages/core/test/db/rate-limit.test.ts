@@ -41,6 +41,19 @@ describe('BUCKETS', () => {
       opac_search: { limit: 120, windowMs: MIN },
       oai: { limit: 60, windowMs: MIN },
       catalog_lookup: { limit: 30, windowMs: MIN },
+      // Komunitas K2 (visits): a guestbook station's activation per IP, its check-ins per station.
+      'visit_station_activate:ip': { limit: 10, windowMs: 15 * MIN },
+      visit_station_checkin: { limit: 120, windowMs: MIN },
+      // Komunitas (member area): the member's sign-in, forgotten password, reset, own writes and own data download.
+      'member_login:user-ip': { limit: 5, windowMs: 15 * MIN },
+      'member_login:ip': { limit: 20, windowMs: 15 * MIN },
+      'member_login:user': { limit: 50, windowMs: 60 * MIN },
+      'member_forgot:member:5m': { limit: 1, windowMs: 5 * MIN },
+      'member_forgot:member:1d': { limit: 5, windowMs: 24 * 60 * MIN },
+      'member_forgot:ip': { limit: 10, windowMs: 60 * MIN },
+      'member_reset:ip': { limit: 20, windowMs: 60 * MIN },
+      member_write: { limit: 30, windowMs: MIN },
+      'member_export:member': { limit: 3, windowMs: 60 * MIN },
     });
     expect(Object.isFrozen(BUCKETS)).toBe(true);
     expect(Object.isFrozen(BUCKETS['login:ip'])).toBe(true);

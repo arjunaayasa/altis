@@ -2,6 +2,8 @@ import { paletteShortcut } from '@/components/shell/app-shell';
 import { useT } from '@/i18n';
 import { useMe } from '@/lib/me';
 import { Dashboard } from '@/screens/dashboard';
+// ---- Komunitas (member, visit and circulation reports) ----
+import { TodayStrip } from '@/screens/dashboard-today';
 
 /** Beranda: the first screen after signing in, a welcome above the system dashboard (§13.3 "Dasbor sistem", 1c Task 31). */
 export function HomeScreen() {
@@ -15,6 +17,7 @@ export function HomeScreen() {
         <p>{t('home.welcome', { name })}</p>
         <p className="text-muted-foreground">{t('home.intro', { shortcut: paletteShortcut() })}</p>
       </div>
+      <TodayStrip />
       <Dashboard />
     </div>
   );

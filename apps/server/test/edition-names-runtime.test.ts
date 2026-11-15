@@ -29,7 +29,7 @@ const silentMailer: Mailer = { send: async () => {} };
 const CONFIG = sampleConfig({ db: { dialect: 'sqlite' } });
 
 /** Every value of `Actor.type` (the audit log's and the job runner's actors), and the operations' install actor. */
-const ACTOR_TYPES = ['staff', 'system', 'cli', 'anonymous'] as const;
+const ACTOR_TYPES = ['staff', 'system', 'cli', 'anonymous', 'visit_station', 'member'] as const; // 'member': Komunitas (member area)
 
 /** Every job handler of a server process (one with its housekeeping, Diagnostik and update-check deps). */
 const handlers = jobHandlers({

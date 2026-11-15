@@ -21,6 +21,16 @@ const PREFIXES: Readonly<Record<keyof typeof KOMUNITAS_AREAS_ID, readonly string
   settings: ['accreditation.settings.'],
   members: ['members.'],
   circulation: ['circulation.'],
+  holds: ['holds.', 'nav.circulation.hold_shelf', 'jobs.type.circulation.holds', 'jobs.schedule.circulation.holds', 'jobs.message.circulation.holds.'],
+  circCore: ['circulation.', 'members.clearance.'],
+  membersTools: ['members.tools.', 'visits.'],
+  // ---- Komunitas (member area) ----
+  'member-area': ['members.types.field.', 'members.types.opac.', 'members.password.', 'catalog.attachments.', 'auditlog.actor.member', 'jobs.type.mail.member_password_reset'],
+  charges: ['charges.', 'nav.circulation.charges'],
+  // ---- Komunitas (member, visit and circulation reports) ----
+  circReports: ['dashboard.today.', 'reportLinks.'],
+  // ---- Komunitas (notices) ----
+  notices: ['notices.', 'nav.circulation.notices', 'jobs.type.circulation.notices', 'jobs.schedule.circulation.notices', 'jobs.message.circulation.notices.'],
   placeholder: ['komunitas.placeholder.'],
 };
 
@@ -28,7 +38,7 @@ describe('the reports and accreditation admin copy', () => {
   const areas = Object.keys(KOMUNITAS_AREAS_ID) as (keyof typeof KOMUNITAS_AREAS_ID)[];
 
   it('is one file per area, in a fixed order, plus the placeholder texts', () => {
-    expect(areas).toEqual(['reports', 'accreditation', 'workspace', 'registers', 'usage', 'print', 'settings', 'members', 'circulation', 'placeholder']);
+    expect(areas).toEqual(['reports', 'accreditation', 'workspace', 'registers', 'usage', 'print', 'settings', 'members', 'circulation', 'holds', 'circCore', 'membersTools', 'member-area', 'charges', 'circReports', 'notices', 'placeholder']);
     expect(Object.keys(KOMUNITAS_AREAS_EN)).toEqual(areas);
   });
 

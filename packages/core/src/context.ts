@@ -11,9 +11,12 @@ import type { Transaction } from 'kysely';
 // security audit after the failure) take a TxRunner rather than a DbHandle, so that the HTTP layer can hand them its
 // own `rc.withTx` and count their audits (M38); runnerFor builds one over withTx for the CLI and the tests.
 
-/** Who performs an action. `id` is the staff user's ULID (null for system, CLI and anonymous actors). */
+/**
+ * Who performs an action. `id` is the staff user's ULID (null for system, CLI and anonymous actors); for a guestbook
+ * station (`visit_station`, whose activation is audited) the station's id.
+ */
 export interface Actor {
-  type: 'staff' | 'system' | 'cli' | 'anonymous';
+  type: 'staff' | 'system' | 'cli' | 'anonymous' | 'visit_station' | 'member';
   id: string | null;
   /** The client IP (P15), or null when there is no request. */
   ip: string | null;

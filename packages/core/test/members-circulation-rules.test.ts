@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dueDateFor } from '../src/circulation/dates.js';
+import { computeDueDate } from '../src/circulation/calendars.js';
 import { pickPolicy, policyScopeKey } from '../src/circulation/policies.js';
 import { parseDateCell, parseGenderCell, readMemberCsv } from '../src/members/import.js';
 import { memberNameKey, memberNoDisplay, memberNoProblem, normalizeMemberNo } from '../src/members/keys.js';
@@ -55,12 +55,12 @@ describe('loan rule resolution', () => {
 });
 
 describe('the due date', () => {
-  it('is loanedOn + days, cut to the expiry, never before the loan day', async () => {
-    const db = null as never;
-    expect(await dueDateFor(db, { loanedOn: '2026-11-14', days: 7, expiresOn: null, branchId: 'B' })).toEqual({ dueOn: '2026-11-21', capped: false });
-    expect(await dueDateFor(db, { loanedOn: '2026-11-14', days: 7, expiresOn: '2026-11-18', branchId: 'B' })).toEqual({ dueOn: '2026-11-18', capped: true });
-    expect(await dueDateFor(db, { loanedOn: '2026-11-14', days: 0, expiresOn: null, branchId: 'B' })).toEqual({ dueOn: '2026-11-14', capped: false });
-    expect(await dueDateFor(db, { loanedOn: '2026-11-14', days: 7, expiresOn: '2026-11-01', branchId: 'B' })).toEqual({ dueOn: '2026-11-14', capped: true });
+  it('is loanedOn + days, cut to the expiry, never before the loan day (no closed days)', () => {
+    const open = (): boolean => false;
+    expect(computeDueDate({ loanedOn: '2026-11-14', days: 7, expiresOn: null }, open)).toEqual({ dueOn: '2026-11-21', capped: false, moved: false });
+    expect(computeDueDate({ loanedOn: '2026-11-14', days: 7, expiresOn: '2026-11-18' }, open)).toEqual({ dueOn: '2026-11-18', capped: true, moved: false });
+    expect(computeDueDate({ loanedOn: '2026-11-14', days: 0, expiresOn: null }, open)).toEqual({ dueOn: '2026-11-14', capped: false, moved: false });
+    expect(computeDueDate({ loanedOn: '2026-11-14', days: 7, expiresOn: '2026-11-01' }, open)).toEqual({ dueOn: '2026-11-14', capped: true, moved: false });
   });
 });
 

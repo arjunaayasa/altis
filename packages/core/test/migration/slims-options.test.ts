@@ -32,7 +32,28 @@ describe('SLiMS run options: the catalogue mode', () => {
   it('stored options without the catalogue fields parse, and the stages get append and no skip', () => {
     const settings = parseSlimsRunSettings(JSON.stringify(OLD));
     expect(settings.catalogMode).toBeUndefined();
-    expect(stageOptions(settings)).toEqual({ branchId: BRANCH, priceMode: 'major', sourceName: 'slims', allowNonEmpty: false, catalogMode: 'append', skipCatalog: false });
+    expect(stageOptions(settings)).toEqual({
+      branchId: BRANCH,
+      priceMode: 'major',
+      sourceName: 'slims',
+      allowNonEmpty: false,
+      catalogMode: 'append',
+      skipCatalog: false,
+      // The member and circulation options of an older run: every default.
+      people: {
+        membersMode: 'append',
+        visitsBefore: 'auto',
+        unknownMemberGroup: null,
+        circulationMode: 'append',
+        fineMode: 'major',
+        fineOutlierMajor: 100_000,
+        migrateGender: false,
+        defaultMemberTypeId: null,
+        memberTypeGroups: {},
+        staffUsers: true,
+        typeLimitAsTotal: false,
+      },
+    });
   });
 
   it('stored options with them parse as stored; anything else in them is refused', () => {
@@ -114,12 +135,12 @@ describe('the report of a run', () => {
     ...o,
   });
 
-  it('the tables not read are named by their module, with the hint of the separate aggregate import', () => {
-    const rows = slimsSummaryRows({ summary: summary(), settings: { ...parseSlimsRunSettings(JSON.stringify(OLD)) }, dryRun: false, status: 'succeeded', baseUrl: 'https://x.test', checkSource: {} });
-    const unread = rows.find((r) => r[2] === 'phase3_tables')!;
-    expect(unread[3]).toMatch(
-      /^Tidak dibaca: modul Anggota\/Sirkulasi; impor agregat terpisah membaca sebagian kolom tanpa memigrasi \/ Not read: Members\/Circulation module; the separate aggregate import reads some columns without migrating them: member\*, loan\*, group\*, fines, /,
-    );
+  it('the member and circulation tables still not read are named by their module; with none, the row says every one is read', () => {
+    const settings = { ...parseSlimsRunSettings(JSON.stringify(OLD)) };
+    const rows = slimsSummaryRows({ summary: summary(), settings, dryRun: false, status: 'succeeded', baseUrl: 'https://x.test', checkSource: {} });
+    expect(rows.find((r) => r[2] === 'phase3_tables')![3]).toBe('Tabel modul Anggota dan Sirkulasi dibaca semua / Every table of the Members and Circulation modules is read');
+    const older = slimsSummaryRows({ summary: summary({ unread: ['loan', 'search_biblio'] }), settings, dryRun: false, status: 'succeeded', baseUrl: 'https://x.test', checkSource: {} });
+    expect(older.find((r) => r[2] === 'phase3_tables')![3]).toBe('Tidak dibaca (modul Anggota/Sirkulasi) / Not read (Members/Circulation module): loan');
     expect(rows[0]![3]).toContain('catalogMode=append; skipCatalog=false');
   });
 

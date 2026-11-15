@@ -351,6 +351,35 @@ export const ERROR_CODES = Object.freeze({
   CIRC_LOAN_NOT_OPEN: Object.freeze({ status: 409 }),
   /** The loan cannot be renewed; `meta {reason}` (RENEW_REFUSALS). */
   CIRC_RENEW_REFUSED: Object.freeze({ status: 409 }),
+
+  // ---- Komunitas (holds) ----
+  /** The item is kept on the hold shelf for another member; `meta {holdId}`. */
+  CIRC_ITEM_ON_HOLD: Object.freeze({ status: 409 }),
+  /** The hold cannot be placed or changed; `meta {reason}` (HOLD_REFUSALS). */
+  CIRC_HOLD_REFUSED: Object.freeze({ status: 409 }),
+  // ---- Komunitas (circulation core) ----
+  /** The last loan cannot be voided; `meta {reason}` (VOID_REFUSALS: too late, another staff member's, renewed, charged). */
+  CIRC_VOID_REFUSED: Object.freeze({ status: 409 }),
+  /** No open day within a year after the due date the rule gives: the library calendar closes every day. */
+  CIRC_CALENDAR_CLOSED: Object.freeze({ status: 422 }),
+
+  // ---- Komunitas K2 (members extended and visits) ----
+  /** The member was anonymised: nothing more can be done with the row. */
+  MEMBER_ANONYMIZED: Object.freeze({ status: 409 }),
+  /** Too many members for one card sheet request; `meta {max}`. */
+  MEMBER_CARD_LIMIT: Object.freeze({ status: 422 }),
+  /** The guestbook page has no valid station cookie (never activated, revoked, or replaced by a newer code). */
+  VISIT_STATION_UNPAIRED: Object.freeze({ status: 401 }),
+  /** The activation code is wrong, used already or expired. */
+  VISIT_ACTIVATION_INVALID: Object.freeze({ status: 422 }),
+  // ---- Komunitas (charges and payments) ----
+  /** The member is blocked from borrowing or renewing; `meta {reason: unpaid | overdue}` (MEMBER_BLOCK_REASONS). */
+  CIRC_MEMBER_BLOCKED: Object.freeze({ status: 409 }),
+  /** The charge is no longer open, or the payment was voided already; `meta {status}` (CHARGE_STATE_REFUSALS). */
+  CIRC_CHARGE_STATE: Object.freeze({ status: 409 }),
+  // ---- Komunitas (SLiMS members and circulation) ----
+  /** A `replace` migration of circulation while ALTIS already lends, takes holds or charges of its own; `meta {count}`. */
+  MIGRATION_CIRCULATION_LIVE: Object.freeze({ status: 409 }),
 });
 
 export type ErrorCode = keyof typeof ERROR_CODES;

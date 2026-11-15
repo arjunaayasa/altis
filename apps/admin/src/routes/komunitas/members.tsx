@@ -28,6 +28,18 @@ export function membersRoutes(shell: typeof shellRoute) {
       path: 'anggota/impor',
       component: lazyScreen(() => import('@/screens/members/import'), 'MemberImportScreen'),
     }),
+    // ---- Komunitas (circulation core): clearance letters ----
+    createRoute({
+      getParentRoute: () => shell,
+      path: 'anggota/bebas-pustaka',
+      component: lazyScreen(() => import('@/screens/members/clearances'), 'ClearancesScreen'),
+    }),
+    // ---- Komunitas K2 (members extended): the card sheet ----
+    createRoute({
+      getParentRoute: () => shell,
+      path: 'anggota/kartu',
+      component: lazyScreen(() => import('@/screens/members/cards'), 'MemberCardsScreen'),
+    }),
     createRoute({
       getParentRoute: () => shell,
       path: 'anggota/$memberId',

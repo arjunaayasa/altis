@@ -12,6 +12,10 @@ import { z } from 'zod';
 import { localeField, timezoneField, ulidField } from './common.js';
 import { ACCRED_GROUPS } from '../accreditation-vocab.js';
 import { isCalendarDate } from '../dates.js';
+import { CardProfile } from './member-ops.js';
+
+/** The card profile as the members settings carry it. */
+export type CardProfileForSettings = CardProfile;
 import type { Locale } from '../i18n/index.js';
 
 /**
@@ -27,6 +31,12 @@ export const SETTINGS_GROUPS = Object.freeze([
   'catalog',
   // ---- Komunitas K1 (settings) ----
   'accreditation',
+  // ---- Komunitas (circulation core) ----
+  'circulation',
+  'members',
+  // ---- Komunitas K2 (members extended, visits, privacy) ----
+  'visits',
+  'privacy',
 ] as const);
 
 export type SettingsGroupName = (typeof SETTINGS_GROUPS)[number];
@@ -81,12 +91,29 @@ const EmailTemplateBody = z.strictObject({
   body: passwordResetBodyField.optional(),
 });
 
+// ---- Komunitas (notices) ----
+/** A member notice body (`email.template.circulation_<kind>.<locale>.body`): null or blank is the catalog text. */
+export const noticeTemplateBodyField = z.string().max(4000).nullable();
+
+/** One member notice template: null (or blank) is the catalog text. */
+const NoticeTemplateBody = z.strictObject({
+  subject: textOrNull(200).optional(),
+  body: noticeTemplateBodyField.optional(),
+});
+
+/** A notice template in both languages. */
+const NoticeTemplatePair = z.strictObject({ id: NoticeTemplateBody.optional(), en: NoticeTemplateBody.optional() }).optional();
+
 /** `PUT settings/email`: the sender's display name and the password-reset mail per language. */
 export const EmailSettingsBody = z.strictObject({
   senderName: textOrNull(100).optional(),
   templates: z
     .strictObject({
       passwordReset: z.strictObject({ id: EmailTemplateBody.optional(), en: EmailTemplateBody.optional() }).optional(),
+      // ---- Komunitas (notices) ----
+      circulationDueSoon: NoticeTemplatePair,
+      circulationOverdue: NoticeTemplatePair,
+      circulationHoldReady: NoticeTemplatePair,
     })
     .optional(),
 });
@@ -150,7 +177,13 @@ export interface EmailTemplate {
 export interface EmailSettings {
   /** null: the library's name. */
   senderName: string | null;
-  templates: { passwordReset: { id: EmailTemplate; en: EmailTemplate } };
+  templates: {
+    passwordReset: { id: EmailTemplate; en: EmailTemplate };
+    // ---- Komunitas (notices) ----
+    circulationDueSoon: { id: EmailTemplate; en: EmailTemplate };
+    circulationOverdue: { id: EmailTemplate; en: EmailTemplate };
+    circulationHoldReady: { id: EmailTemplate; en: EmailTemplate };
+  };
 }
 
 /** `GET settings/security`. */
@@ -186,6 +219,12 @@ export interface SettingsView {
   catalog: CatalogSettings;
   // ---- Komunitas K1 (settings) ----
   accreditation: AccreditationSettingsView;
+  // ---- Komunitas (circulation core) ----
+  circulation: CirculationSettingsView;
+  members: MembersSettingsView;
+  // ---- Komunitas K2 (members extended, visits, privacy) ----
+  visits: VisitsSettingsView;
+  privacy: PrivacySettingsView;
 }
 
 /**
@@ -509,6 +548,51 @@ export const unknownMemberGroupField = z.enum([...ACCRED_GROUPS, 'auto']).nullab
 /** `visits.dedupeMinutes`: a member's check-in within this many minutes of an earlier one is a repeat; 0 turns it off. */
 export const visitsDedupeMinutesField = z.int().min(0).max(720);
 
+// ---- Komunitas K2 (members extended, visits, privacy) ----
+/** `privacy.*.anonymizeAfterYears`: 1-20 years, or null (never). */
+export const anonymizeYearsField = z.int().min(1).max(20).nullable();
+
+/** `PUT settings/visits`: the repeat window, the visit sources, and the guestbook station's options. */
+export const VisitsSettingsBody = z.strictObject({
+  dedupeMinutes: visitsDedupeMinutesField.optional(),
+  fromDesk: z.boolean().optional(),
+  fromOnline: z.boolean().optional(),
+  askPurpose: z.boolean().optional(),
+  station: z
+    .strictObject({
+      showPhoto: z.boolean().optional(),
+      welcome: z.strictObject({ id: textOrNull(300).optional(), en: textOrNull(300).optional() }).optional(),
+    })
+    .optional(),
+});
+
+export type VisitsSettingsBody = z.infer<typeof VisitsSettingsBody>;
+
+/** `GET settings/visits`. */
+export interface VisitsSettingsView {
+  dedupeMinutes: number;
+  fromDesk: boolean;
+  fromOnline: boolean;
+  askPurpose: boolean;
+  station: { showPhoto: boolean; welcome: { id: string | null; en: string | null } };
+}
+
+/** `PUT settings/privacy` (needs a fresh password confirmation): the retention periods of personal data in history. */
+export const PrivacySettingsBody = z.strictObject({
+  loans: z.strictObject({ anonymizeAfterYears: anonymizeYearsField.optional() }).optional(),
+  visits: z.strictObject({ anonymizeAfterYears: anonymizeYearsField.optional() }).optional(),
+  members: z.strictObject({ anonymizeArchivedAfterYears: anonymizeYearsField.optional() }).optional(),
+});
+
+export type PrivacySettingsBody = z.infer<typeof PrivacySettingsBody>;
+
+/** `GET settings/privacy`. */
+export interface PrivacySettingsView {
+  loans: { anonymizeAfterYears: number | null };
+  visits: { anonymizeAfterYears: number | null };
+  members: { anonymizeArchivedAfterYears: number | null };
+}
+
 /** `PUT settings/accreditation`: each key is its setting's name without `accreditation.`, nested at its dots. */
 export const AccreditationSettingsBody = z.strictObject({
   schoolYearStartMonth: schoolYearStartMonthField.optional(),
@@ -552,4 +636,123 @@ export interface AccreditationSettingsView {
   undatedShareMaxPct: number;
   visits: { dedupeLegacy: boolean };
   unknownMemberGroup: { default: (typeof ACCRED_GROUPS)[number] | 'auto' | null };
+}
+
+// ---- Komunitas (circulation core) ----------------------------------------------------------------------------------
+// The group `circulation` (`GET|PUT settings/circulation`): how long a loan may still be voided and how a lost item is
+// charged; in the group `members` (`GET|PUT settings/members`), the numbered clearance letters (their number prefix and
+// the letter profile). Every key is of scope `data` and none is a secret.
+
+/** `circulation.loanVoidMinutes`: how long after a loan the desk may still void it, 0-60 minutes (0: never). */
+export const loanVoidMinutesField = z.int().min(0).max(60);
+
+/** A sum in minor units, 0 or more (`circulation.lost.processingFeeMinor`). */
+export const minorAmountField = z.int().min(0).max(Number.MAX_SAFE_INTEGER);
+
+/** `members.clearance.prefix`: the start of a clearance letter number, 1-16 printable characters without `/`. */
+export const clearancePrefixField = z.string().trim().min(1).max(16).regex(/^[\x21-\x2E\x30-\x7E]+$/);
+
+/** The paper of a clearance letter: a sheet (A4, A5) or a receipt roll (58 or 80 mm). */
+export const CLEARANCE_PROFILE_PAPERS = Object.freeze(['A4', 'A5', '58', '80'] as const);
+
+/** A plain text of at most `max` characters, trimmed, newlines allowed. */
+const plainText = (max: number) => z.string().trim().max(max);
+
+/**
+ * `members.clearance.profile`: the paper of a clearance letter, the place it is signed in, who signs it (title, name,
+ * staff number), and the statement printed above the signature (plain text; empty: the built-in sentence).
+ */
+export const ClearanceProfile = z.strictObject({
+  paper: z.enum(CLEARANCE_PROFILE_PAPERS),
+  city: plainText(60),
+  signerTitle: plainText(60),
+  signerName: plainText(80),
+  signerId: plainText(60),
+  bodyText: plainText(1000),
+});
+
+export type ClearanceProfile = z.infer<typeof ClearanceProfile>;
+
+// ---- Komunitas (charges and payments) ----
+/** `circulation.receipt.paperMm`: the width of the receipt roll, 58 or 80 mm. */
+export const receiptPaperField = z.union([z.literal(58), z.literal(80)]);
+
+/** `circulation.receipt.footer.<locale>`: the receipt's closing line, plain text of at most 300 characters, or null. */
+export const receiptFooterField = z.string().trim().max(300).nullable();
+
+/** `PUT settings/circulation`: each key is its setting's name without `circulation.`, nested at its dots. */
+export const CirculationSettingsBody = z.strictObject({
+  // ---- Komunitas (holds) ----
+  holds: z
+    .strictObject({
+      enabled: z.boolean().optional(),
+      opac: z.boolean().optional(),
+      onlyWhenNoneAvailable: z.boolean().optional(),
+      pickupDays: z.int().min(1).max(30).optional(),
+    })
+    .optional(),
+  // ---- Komunitas (circulation core) ----
+  loanVoidMinutes: loanVoidMinutesField.optional(),
+  lost: z.strictObject({ useItemPrice: z.boolean().optional(), processingFeeMinor: minorAmountField.optional() }).optional(),
+  // ---- Komunitas (member area) ----
+  renew: z.strictObject({ opac: z.boolean().optional() }).optional(),
+  // ---- Komunitas (charges and payments) ----
+  block: z.strictObject({ unpaidOverMinor: minorAmountField.nullable().optional(), overdue: z.boolean().optional() }).optional(),
+  fines: z.strictObject({ skipClosedDays: z.boolean().optional() }).optional(),
+  receipt: z
+    .strictObject({
+      paperMm: receiptPaperField.optional(),
+      footer: z.strictObject({ id: receiptFooterField.optional(), en: receiptFooterField.optional() }).optional(),
+    })
+    .optional(),
+  // ---- Komunitas (notices) ----
+  notices: z
+    .strictObject({
+      dueSoonDays: z.int().min(0).max(14).optional(),
+      overdueEveryDays: z.int().min(1).max(60).optional(),
+      overdueMax: z.int().min(0).max(10).optional(),
+      holdReady: z.boolean().optional(),
+    })
+    .optional(),
+});
+
+export type CirculationSettingsBody = z.infer<typeof CirculationSettingsBody>;
+
+/** `GET settings/circulation`. */
+export interface CirculationSettingsView {
+  holds: { enabled: boolean; opac: boolean; onlyWhenNoneAvailable: boolean; pickupDays: number };
+  renew: { opac: boolean };
+  loanVoidMinutes: number;
+  lost: { useItemPrice: boolean; processingFeeMinor: number };
+  /** `unpaidOverMinor` null: no block by balance. */
+  block: { unpaidOverMinor: number | null; overdue: boolean };
+  fines: { skipClosedDays: boolean };
+  receipt: { paperMm: 58 | 80; footer: { id: string | null; en: string | null } };
+  // ---- Komunitas (notices) ----
+  /** `dueSoonDays` 0 and `overdueMax` 0 switch that reminder off. */
+  notices: { dueSoonDays: number; overdueEveryDays: number; overdueMax: number; holdReady: boolean };
+}
+
+/** `PUT settings/members`: each key is its setting's name without `members.`, nested at its dots. */
+export const MembersSettingsBody = z.strictObject({
+  clearance: z.strictObject({ prefix: clearancePrefixField.optional(), profile: ClearanceProfile.optional() }).optional(),
+  // ---- Komunitas K2 (members extended): the member card profile (`members.card.profile`) ----
+  card: z.strictObject({ profile: CardProfile.optional() }).optional(),
+  // ---- Komunitas (member area) ----
+  password: z.strictObject({ minLength: z.int().min(6).max(64).optional() }).optional(),
+  opac: z.strictObject({ enabled: z.boolean().optional() }).optional(),
+  session: z
+    .strictObject({ idleMinutes: z.int().min(5).max(120).optional(), absoluteHours: z.int().min(1).max(24).optional() })
+    .optional(),
+});
+
+export type MembersSettingsBody = z.infer<typeof MembersSettingsBody>;
+
+/** `GET settings/members`. */
+export interface MembersSettingsView {
+  clearance: { prefix: string; profile: ClearanceProfile };
+  card: { profile: CardProfile };
+  password: { minLength: number };
+  opac: { enabled: boolean };
+  session: { idleMinutes: number; absoluteHours: number };
 }

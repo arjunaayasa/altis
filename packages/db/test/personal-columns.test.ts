@@ -3,6 +3,15 @@ import { TABLE_COLUMNS, TABLE_KEYS, type ColumnSpec } from '../src/columns.js';
 import { PERSONAL_COLUMNS, isPersonalColumn, personalLogKeys, type PersonalCategory, type TableName } from '../src/registry.js';
 import { K1_TABLES_BY_MIGRATION } from './fixtures/komunitas-k1-tables.js';
 import { CIRCULATION_TABLES_BY_MIGRATION } from './fixtures/komunitas-members-circulation-tables.js';
+// ---- Komunitas (holds) ----
+import { HOLDS_TABLES_BY_MIGRATION } from './fixtures/komunitas-holds-tables.js';
+import { CIRC_CORE_TABLES_BY_MIGRATION } from './fixtures/komunitas-circ-core-tables.js';
+import { VISITS_TABLES_BY_MIGRATION } from './fixtures/komunitas-visits-tables.js';
+// ---- Komunitas (member area) ----
+import { MEMBER_AREA_TABLES_BY_MIGRATION } from './fixtures/komunitas-member-area-tables.js';
+import { CHARGES_TABLES_BY_MIGRATION } from './fixtures/komunitas-charges-tables.js';
+// ---- Komunitas (notices) ----
+import { NOTICES_TABLES_BY_MIGRATION } from './fixtures/komunitas-notices-tables.js';
 
 // The personal-data dictionary (PERSONAL_COLUMNS): which columns hold personal data, so that public output, events,
 // logs and exports can leave them out or ask for re-authentication. Every registered column must exist; every column of
@@ -105,6 +114,82 @@ const CIRCULATION_NON_PERSONAL: Record<string, string> = {
   'loans.stat_class_name': 'the class a loan is counted in for statistics, kept after anonymisation',
 };
 
+// ---- Komunitas (holds) ----
+const HOLDS_TABLES = Object.values(HOLDS_TABLES_BY_MIGRATION).flat() as TableName[];
+
+/** Text columns of the holds table holding a status or a code from a fixed list; it has no free text. */
+const HOLDS_CODE_COLUMNS: Record<string, string> = {
+  'holds.status': 'a hold status',
+  'holds.source': 'where the hold was placed (desk, OPAC or migrated)',
+  'holds.close_reason': 'a hold close reason code',
+};
+
+// ---- Komunitas (circulation core) ----
+const CIRC_CORE_TABLES = Object.values(CIRC_CORE_TABLES_BY_MIGRATION).flat() as TableName[];
+
+/** Text columns of the circulation core tables holding a code from a fixed list, a date part or a value ALTIS computes. */
+const CIRC_CORE_CODE_COLUMNS: Record<string, string> = {
+  'calendars.kind': 'a calendar rule kind',
+  'calendars.month_day_from': 'a day of the year (MM-DD)',
+  'calendars.month_day_to': 'a day of the year (MM-DD)',
+  'item_uses.stat_ddc': 'a classification key for statistics',
+  'item_uses.source': 'where the use came from (desk or migrated)',
+  'member_clearances.purpose': 'a clearance purpose code',
+};
+
+/** Free-text columns of the circulation core tables that are not personal data, each with the reason. */
+const CIRC_CORE_NON_PERSONAL: Record<string, string> = {
+  'calendars.name': 'the name of closed days (a holiday)',
+  'member_clearances.number_display': 'the letter number the library assigns',
+};
+
+// ---- Komunitas K2 (visits) ----
+const VISITS_TABLES = Object.values(VISITS_TABLES_BY_MIGRATION).flat() as TableName[];
+
+/** Text columns of the visits tables holding a code, a hash or a value ALTIS computes. */
+const VISITS_CODE_COLUMNS: Record<string, string> = {
+  'visit_stations.activation_hash': 'the SHA-256 of a one-time activation code',
+  'visits.source': 'where the visit was recorded',
+  'visits.accred_group': 'a population group code',
+  'visits.purpose': 'a visit purpose code',
+};
+
+/** Free-text columns of the visits tables that are not personal data, each with the reason. */
+const VISITS_NON_PERSONAL: Record<string, string> = {
+  'visit_stations.name': 'the name of a guestbook device chosen by the library',
+  'visits.class_name': 'the class a visit is counted in for statistics, kept after anonymisation',
+};
+
+// ---- Komunitas (charges and payments) ----
+const CHARGES_TABLES = Object.values(CHARGES_TABLES_BY_MIGRATION).flat() as TableName[];
+
+/** Text columns of the charges and payments tables holding a code from a fixed list or a value ALTIS computes. */
+const CHARGES_CODE_COLUMNS: Record<string, string> = {
+  'charges.kind': 'a charge kind',
+  'charges.currency': 'a currency code',
+  'charges.status': 'a charge status',
+  'charges.source': 'where the charge came from (desk, system or migrated)',
+  'charge_adjustments.kind': 'an adjustment kind (waive or cancel)',
+  'payments.currency': 'a currency code',
+  'payments.method': 'a payment method code',
+  'payments.source': 'where the payment came from (desk or migrated)',
+};
+
+/** Free-text columns of the charges and payments tables that are not personal data, each with the reason. */
+const CHARGES_NON_PERSONAL: Record<string, string> = {
+  'payments.receipt_no': 'the receipt number the library assigns',
+};
+
+// ---- Komunitas (notices) ----
+/** Text columns of the notices table: codes from fixed lists and a list of ids; the mail's text is never kept. */
+const NOTICES_CODE_COLUMNS: Record<string, string> = {
+  'notices.kind': 'a notice kind (due soon, overdue, hold ready)',
+  'notices.channel': 'the channel code (email)',
+  'notices.status': 'a notice status',
+  'notices.reason': 'a skip or failure reason code',
+  'notices.loan_ids': 'a JSON list of loan ids',
+};
+
 /** The columns of `table` in a primary key, a unique index or a foreign key. */
 function keyColumns(table: TableName): Set<string> {
   const keys = TABLE_KEYS[table];
@@ -200,7 +285,38 @@ describe('PERSONAL_COLUMNS', () => {
         { column: 'password_hash', category: 'credential' },
       ],
       loans: [{ column: 'override_note', category: 'free_text' }],
+      member_clearances: [{ column: 'void_reason', category: 'free_text' }],
+      visits: [
+        { column: 'guest_name', category: 'identity' },
+        { column: 'guest_institution', category: 'identity' },
+        { column: 'note', category: 'free_text' },
+      ],
+      charges: [{ column: 'description', category: 'free_text' }],
+      charge_adjustments: [{ column: 'reason_text', category: 'free_text' }],
+      payments: [
+        { column: 'note', category: 'free_text' },
+        { column: 'void_reason', category: 'free_text' },
+      ],
     });
+  });
+
+  // ---- Komunitas K2 (visits) ----
+  it('classifies every text column of the 2 visits tables that is not a key; no stale exception', () => {
+    expect(VISITS_TABLES).toEqual(['visit_stations', 'visits']);
+    const personal = new Set(registered());
+    const text = textColumnsOf(VISITS_TABLES);
+    const unclassified: string[] = [];
+    const twice: string[] = [];
+    for (const column of text) {
+      const places = [personal.has(column), Object.hasOwn(VISITS_CODE_COLUMNS, column), Object.hasOwn(VISITS_NON_PERSONAL, column)].filter(Boolean);
+      if (places.length === 0) unclassified.push(column);
+      if (places.length > 1) twice.push(column);
+    }
+    expect(unclassified).toEqual([]);
+    expect(twice).toEqual([]);
+    for (const column of [...Object.keys(VISITS_CODE_COLUMNS), ...Object.keys(VISITS_NON_PERSONAL)]) {
+      expect({ column, isText: text.includes(column) }).toEqual({ column, isText: true });
+    }
   });
 
   // ---- Komunitas (members and circulation) ----
@@ -221,6 +337,72 @@ describe('PERSONAL_COLUMNS', () => {
       expect({ column, isText: text.includes(column) }).toEqual({ column, isText: true });
       expect(reason.length).toBeGreaterThan(5);
     }
+  });
+
+  // ---- Komunitas (holds) ----
+  it('the holds table has no personal column: every text column that is not a key is a code', () => {
+    expect(HOLDS_TABLES).toEqual(['holds']);
+    const personal = new Set(registered());
+    const text = textColumnsOf(HOLDS_TABLES);
+    expect(text.filter((c) => personal.has(c))).toEqual([]);
+    expect([...text].sort()).toEqual(Object.keys(HOLDS_CODE_COLUMNS).sort());
+  });
+
+  // ---- Komunitas (circulation core) ----
+  it('classifies every text column of the 3 circulation core tables that is not a key; no stale exception', () => {
+    expect(CIRC_CORE_TABLES).toEqual(['calendars', 'item_uses', 'member_clearances']);
+    const personal = new Set(registered());
+    const text = textColumnsOf(CIRC_CORE_TABLES);
+    const unclassified: string[] = [];
+    const twice: string[] = [];
+    for (const column of text) {
+      const places = [personal.has(column), Object.hasOwn(CIRC_CORE_CODE_COLUMNS, column), Object.hasOwn(CIRC_CORE_NON_PERSONAL, column)].filter(Boolean);
+      if (places.length === 0) unclassified.push(column);
+      if (places.length > 1) twice.push(column);
+    }
+    expect(unclassified).toEqual([]);
+    expect(twice).toEqual([]);
+    for (const [column, reason] of [...Object.entries(CIRC_CORE_CODE_COLUMNS), ...Object.entries(CIRC_CORE_NON_PERSONAL)]) {
+      expect({ column, isText: text.includes(column) }).toEqual({ column, isText: true });
+      expect(reason.length).toBeGreaterThan(5);
+    }
+  });
+
+  // ---- Komunitas (member area) ----
+  it('the member area tables (bookmarks, attachment member types) hold keys and dates only', () => {
+    const tables = Object.values(MEMBER_AREA_TABLES_BY_MIGRATION).flat() as TableName[];
+    expect(tables).toEqual(['member_bookmarks', 'attachment_member_types']);
+    expect(textColumnsOf(tables)).toEqual([]);
+  });
+
+  // ---- Komunitas (charges and payments) ----
+  it('classifies every text column of the 4 charges and payments tables that is not a key; no stale exception', () => {
+    expect(CHARGES_TABLES).toEqual(['charges', 'charge_adjustments', 'payments', 'payment_allocations']);
+    const personal = new Set(registered());
+    const text = textColumnsOf(CHARGES_TABLES);
+    const unclassified: string[] = [];
+    const twice: string[] = [];
+    for (const column of text) {
+      const places = [personal.has(column), Object.hasOwn(CHARGES_CODE_COLUMNS, column), Object.hasOwn(CHARGES_NON_PERSONAL, column)].filter(Boolean);
+      if (places.length === 0) unclassified.push(column);
+      if (places.length > 1) twice.push(column);
+    }
+    expect(unclassified).toEqual([]);
+    expect(twice).toEqual([]);
+    for (const [column, reason] of [...Object.entries(CHARGES_CODE_COLUMNS), ...Object.entries(CHARGES_NON_PERSONAL)]) {
+      expect({ column, isText: text.includes(column) }).toEqual({ column, isText: true });
+      expect(reason.length).toBeGreaterThan(5);
+    }
+  });
+
+  // ---- Komunitas (notices) ----
+  it('the notices table has no personal column: its text columns that are not keys are codes and ids', () => {
+    const tables = Object.values(NOTICES_TABLES_BY_MIGRATION).flat() as TableName[];
+    expect(tables).toEqual(['notices']);
+    const personal = new Set(registered());
+    const text = textColumnsOf(tables);
+    expect(text.filter((c) => personal.has(c))).toEqual([]);
+    expect([...text].sort()).toEqual(Object.keys(NOTICES_CODE_COLUMNS).sort());
   });
 
   it('a member: every column a person could be recognised by is registered; the number, type and dates are not', () => {

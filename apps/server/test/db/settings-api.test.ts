@@ -57,6 +57,11 @@ interface Client {
   post(path: string, body: unknown): Promise<AgentReply>;
 }
 
+
+// ---- Komunitas (notices) ----
+/** A member notice template not set: both languages read as the catalog text. */
+const NOTICE_TEMPLATE = { id: { subject: null, body: null }, en: { subject: null, body: null } };
+
 describe.skipIf(!ctx.available)(`settings API [${engineLabel()}]`, () => {
   let dataDir: string;
   let app: ReturnType<typeof createApp>;
@@ -108,7 +113,13 @@ describe.skipIf(!ctx.available)(`settings API [${engineLabel()}]`, () => {
       expect(email.status).toBe(200);
       expect(email.json).toEqual({
         senderName: null,
-        templates: { passwordReset: { id: { subject: null, body: null }, en: { subject: null, body: null } } },
+        templates: {
+          passwordReset: { id: { subject: null, body: null }, en: { subject: null, body: null } },
+          // ---- Komunitas (notices) ----
+          circulationDueSoon: NOTICE_TEMPLATE,
+          circulationOverdue: NOTICE_TEMPLATE,
+          circulationHoldReady: NOTICE_TEMPLATE,
+        },
       });
 
       const security = await admin.get(`${SETTINGS_PATH}/security`);
@@ -144,7 +155,13 @@ describe.skipIf(!ctx.available)(`settings API [${engineLabel()}]`, () => {
       const email = await admin.get(`${SETTINGS_PATH}/email`);
       expect(email.json).toEqual({
         senderName: 'Perpus SMA 1',
-        templates: { passwordReset: { id: { subject: null, body: null }, en: { subject: 'Reset at {library}', body: null } } },
+        templates: {
+          passwordReset: { id: { subject: null, body: null }, en: { subject: 'Reset at {library}', body: null } },
+          // ---- Komunitas (notices) ----
+          circulationDueSoon: NOTICE_TEMPLATE,
+          circulationOverdue: NOTICE_TEMPLATE,
+          circulationHoldReady: NOTICE_TEMPLATE,
+        },
       });
     });
 
@@ -501,8 +518,8 @@ describe.skipIf(!ctx.available)(`settings API [${engineLabel()}]`, () => {
       expect(res.status, res.text).toBe(200);
       expect(res.json).toEqual(DEFAULTS);
       expect(groupKeys('accreditation')).toHaveLength(16);
-      // The visits group has no screen yet: it is not served.
-      expect((await admin.get(`${SETTINGS_PATH}/visits`)).status).toBe(404);
+      // The visits group has its screen now: it is served too.
+      expect((await admin.get(`${SETTINGS_PATH}/visits`)).status).toBe(200);
     });
 
     it('PUT round-trips (codes upper case), audited as settings.update with the changed keys; a second PUT changes nothing', async () => {

@@ -4,7 +4,7 @@ import type { TableName } from './registry.js';
 export type { ColumnKind } from './ddl.js';
 
 // The column registry (decision C11): every column of every table, in table-definition order, and every table's
-// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0029; Komunitas K1: 0030–0033; members and circulation: 0040) and the runner's own tables (ddl.ts ensureBootstrap,
+// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0029; Komunitas K1: 0030–0033; members and circulation: 0040; holds: 0041; circulation core: 0042; visits: 0043; member area: 0044; charges and payments: 0045; notices: 0046; SLiMS members and circulation: 0047) and the runner's own tables (ddl.ts ensureBootstrap,
 // migrator.ts). Backup and restore read it for the canonical row (registry column order), the per-version checks of
 // an archive's rows (columnsAt) and the length checks against the code's DDL; restore's read-only pre-pass reads the
 // unique keys (S5c) and the load order follows the foreign keys (order.ts).
@@ -119,6 +119,20 @@ const M0032 = '0032_library_registers';
 const M0033 = '0033_catalog_accred_fields';
 // ---- Komunitas (members and circulation) ----
 const M0040 = '0040_members_circulation';
+// ---- Komunitas (holds) ----
+const M0041 = '0041_holds';
+// ---- Komunitas (circulation core) ----
+const M0042 = '0042_circulation_core';
+// ---- Komunitas K2 (visits) ----
+const M0043 = '0043_visits';
+// ---- Komunitas (member area) ----
+const M0044 = '0044_member_area';
+// ---- Komunitas (charges and payments) ----
+const M0045 = '0045_charges';
+// ---- Komunitas (notices) ----
+const M0046 = '0046_notices';
+// ---- Komunitas (SLiMS members and circulation) ----
+const M0047 = '0047_migration_subject';
 
 /** `archived_at` + `version`, then the trail columns (Phase 2 spec §2.2 "arsip+ver, jejak"). */
 function archivedTrail(since: string): ColumnSpec[] {
@@ -749,8 +763,8 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
     ),
   ),
   migration_map: frozen(added(M0025, t.key191('source'), t.key191('entity'), t.key191('legacy_key'), t.ulid('target_id'), t.ulid('run_id'))),
-  migration_archive: frozen(
-    added(
+  migration_archive: frozen([
+    ...added(
       M0025,
       t.id(),
       t.ulid('run_id'),
@@ -760,7 +774,9 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
       t.text('row_json'),
       t.timestamp('created_at'),
     ),
-  ),
+    // ---- Komunitas (SLiMS members and circulation): the member a row is about ----
+    ...added(M0047, nul(t.char('subject_key', 64))),
+  ]),
   // ---- Komunitas K1 (tables) ----
   report_runs: frozen(
     added(
@@ -1113,6 +1129,204 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
     ),
     ...trail(M0040),
   ]),
+  // ---- Komunitas (holds) ----
+  holds: frozen([
+    ...added(
+      M0041,
+      t.id(),
+      t.ulid('record_id'),
+      nul(t.ulid('item_id')),
+      t.bool('pinned'),
+      nul(t.ulid('member_id')),
+      t.ulid('pickup_branch_id'),
+      t.varchar('status', 16),
+      nul(t.key191('active_key')),
+      nul(t.ulid('trap_item_id')),
+      t.date('placed_on'),
+      t.timestamp('placed_at'),
+      nul(t.ulid('placed_by')),
+      t.varchar('source', 16),
+      nul(t.date('expires_on')),
+      nul(t.timestamp('ready_at')),
+      nul(t.date('pickup_until')),
+      nul(t.timestamp('closed_at')),
+      nul(t.varchar('close_reason', 24)),
+      nul(t.timestamp('shelf_cleared_at')),
+      nul(t.ulid('loan_id')),
+      t.int('version'),
+    ),
+    ...trail(M0041),
+  ]),
+  // ---- Komunitas (circulation core) ----
+  calendars: frozen([
+    ...added(
+      M0042,
+      t.id(),
+      nul(t.ulid('branch_id')),
+      t.varchar('kind', 16),
+      nul(t.smallint('weekday')),
+      nul(t.date('date_from')),
+      nul(t.date('date_to')),
+      nul(t.char('month_day_from', 5)),
+      nul(t.char('month_day_to', 5)),
+      t.varchar('name', 191),
+    ),
+    ...archivedTrail(M0042),
+  ]),
+  item_uses: frozen(
+    added(
+      M0042,
+      t.id(),
+      nul(t.ulid('item_id')),
+      nul(t.ulid('record_id')),
+      t.ulid('branch_id'),
+      t.date('used_on'),
+      t.timestamp('used_at'),
+      nul(t.ulid('member_id')),
+      nul(t.varchar('stat_ddc', 8)),
+      nul(t.ulid('stat_material_type_id')),
+      nul(t.ulid('stat_collection_type_id')),
+      t.varchar('source', 16),
+      nul(t.ulid('created_by')),
+    ),
+  ),
+  member_clearances: frozen(
+    added(
+      M0042,
+      t.id(),
+      t.ulid('member_id'),
+      t.smallint('year'),
+      t.int('seq'),
+      t.varchar('number_display', 64),
+      t.date('issued_on'),
+      t.timestamp('issued_at'),
+      t.ulid('issued_by'),
+      t.varchar('purpose', 16),
+      nul(t.timestamp('voided_at')),
+      nul(t.ulid('voided_by')),
+      nul(t.varchar('void_reason', 191)),
+    ),
+  ),
+  // ---- Komunitas K2 (visits) ----
+  visit_stations: frozen([
+    ...added(
+      M0043,
+      t.id(),
+      t.ulid('branch_id'),
+      nul(t.ulid('location_id')),
+      t.varchar('name', 191),
+      nul(t.char('token_hash', 64)),
+      nul(t.char('activation_hash', 64)),
+      nul(t.timestamp('activation_expires_at')),
+      nul(t.timestamp('activated_at')),
+      nul(t.timestamp('last_seen_at')),
+      nul(t.timestamp('revoked_at')),
+      t.int('version'),
+    ),
+    ...trail(M0043),
+  ]),
+  visits: frozen(
+    added(
+      M0043,
+      t.id(),
+      t.ulid('branch_id'),
+      nul(t.ulid('location_id')),
+      t.date('visited_on'),
+      t.timestamp('visited_at'),
+      t.varchar('source', 16),
+      nul(t.ulid('member_id')),
+      nul(t.ulid('member_type_id')),
+      nul(t.varchar('accred_group', 16)),
+      nul(t.varchar('class_name', 64)),
+      nul(t.varchar('guest_name', 191)),
+      nul(t.varchar('guest_institution', 191)),
+      nul(t.varchar('purpose', 16)),
+      t.smallint('headcount'),
+      t.bool('is_repeat'),
+      nul(t.ulid('station_id')),
+      nul(t.key191('day_key')),
+      nul(t.varchar('note', 191)),
+      nul(t.timestamp('voided_at')),
+      nul(t.ulid('voided_by')),
+      nul(t.ulid('created_by')),
+    ),
+  ),
+  // ---- Komunitas (member area) ----
+  member_bookmarks: frozen(added(M0044, t.ulid('member_id'), t.ulid('record_id'), t.timestamp('created_at'))),
+  attachment_member_types: frozen(added(M0044, t.ulid('attachment_id'), t.ulid('member_type_id'))),
+  // ---- Komunitas (charges and payments) ----
+  charges: frozen([
+    ...added(
+      M0045,
+      t.id(),
+      t.ulid('member_id'),
+      t.ulid('branch_id'),
+      nul(t.ulid('loan_id')),
+      nul(t.ulid('item_id')),
+      t.varchar('kind', 16),
+      t.varchar('description', 191),
+      t.bigint('amount_minor'),
+      t.bigint('paid_minor'),
+      t.bigint('waived_minor'),
+      t.char('currency', 3),
+      t.varchar('status', 16),
+      t.date('charged_on'),
+      t.timestamp('charged_at'),
+      t.bool('date_unknown'),
+      t.varchar('source', 16),
+      t.int('version'),
+    ),
+    ...trail(M0045),
+  ]),
+  charge_adjustments: frozen(
+    added(M0045, t.id(), t.ulid('charge_id'), t.varchar('kind', 16), t.bigint('amount_minor'), t.varchar('reason_text', 191), t.timestamp('at'), nul(t.ulid('by'))),
+  ),
+  payments: frozen([
+    ...added(
+      M0045,
+      t.id(),
+      t.ulid('member_id'),
+      t.ulid('branch_id'),
+      nul(t.smallint('receipt_year')),
+      nul(t.int('receipt_seq')),
+      nul(t.varchar('receipt_no', 64)),
+      t.bigint('amount_minor'),
+      t.char('currency', 3),
+      t.varchar('method', 16),
+      t.date('paid_on'),
+      t.timestamp('paid_at'),
+      nul(t.ulid('received_by')),
+      nul(t.varchar('note', 191)),
+      nul(t.timestamp('voided_at')),
+      nul(t.ulid('voided_by')),
+      nul(t.varchar('void_reason', 191)),
+      t.bool('date_unknown'),
+      t.varchar('source', 16),
+      t.int('version'),
+    ),
+    ...trail(M0045),
+  ]),
+  payment_allocations: frozen(added(M0045, t.ulid('payment_id'), t.ulid('charge_id'), t.bigint('amount_minor'))),
+  // ---- Komunitas (notices) ----
+  notices: frozen(
+    added(
+      M0046,
+      t.id(),
+      t.ulid('member_id'),
+      t.varchar('kind', 16),
+      t.key191('ref_key'),
+      t.varchar('channel', 16),
+      t.varchar('status', 16),
+      nul(t.varchar('reason', 32)),
+      nul(t.text('loan_ids')),
+      nul(t.ulid('hold_id')),
+      t.smallint('attempts'),
+      nul(t.ulid('job_id')),
+      nul(t.timestamp('claimed_at')),
+      t.timestamp('created_at'),
+      nul(t.timestamp('sent_at')),
+    ),
+  ),
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping (made by the runner, like the two above) ----
   schema_migrations_edition: frozen(added(RUNNER_TABLES_SINCE, t.key191('name'), t.varchar('timestamp', 64))),
   schema_migrations_edition_lock: frozen(added(RUNNER_TABLES_SINCE, t.key191('id'), t.int('is_locked'))),
@@ -1240,6 +1454,27 @@ export const TABLE_KEYS: Readonly<Record<TableName, TableKeySpec>> = Object.free
   member_events: keys(['id'], { fks: [{ column: 'member_id', table: 'members', refColumn: 'id' }] }),
   policies: keys(['id'], { unique: [['code_key'], ['scope_key']] }),
   loans: keys(['id'], { unique: [['open_item_id']] }),
+  // ---- Komunitas (holds) ----
+  holds: keys(['id'], { unique: [['active_key'], ['trap_item_id']] }),
+  // ---- Komunitas (circulation core): no foreign keys ----
+  calendars: keys(['id']),
+  item_uses: keys(['id']),
+  member_clearances: keys(['id'], { unique: [['year', 'seq']] }),
+  // ---- Komunitas K2 (visits): no foreign keys (a station and a visit point at a branch, a room and a member by id) ----
+  visit_stations: keys(['id'], { unique: [['token_hash']] }),
+  visits: keys(['id'], { unique: [['day_key']] }),
+  // ---- Komunitas (member area) ----
+  member_bookmarks: keys(['member_id', 'record_id'], { fks: [{ column: 'member_id', table: 'members', refColumn: 'id' }] }),
+  attachment_member_types: keys(['attachment_id', 'member_type_id'], {
+    fks: [{ column: 'attachment_id', table: 'attachments', refColumn: 'id' }],
+  }),
+  // ---- Komunitas (charges and payments): a charge owns its adjustments, a payment its allocations ----
+  charges: keys(['id']),
+  charge_adjustments: keys(['id'], { fks: [{ column: 'charge_id', table: 'charges', refColumn: 'id' }] }),
+  payments: keys(['id'], { unique: [['branch_id', 'receipt_year', 'receipt_seq']] }),
+  payment_allocations: keys(['payment_id', 'charge_id'], { fks: [{ column: 'payment_id', table: 'payments', refColumn: 'id' }] }),
+  // ---- Komunitas (notices) ----
+  notices: keys(['id'], { unique: [['ref_key']] }),
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: keys(['name']),
   schema_migrations_edition_lock: keys(['id']),

@@ -23,6 +23,20 @@ import { ANNEX_REGISTERS_ID } from './k1/annex-registers.js';
 import { ANNEX_USAGE_ID } from './k1/annex-usage.js';
 import { COLLECTION_REPORTS_ID } from './k1/collection-reports.js';
 import { MEMBERS_CIRCULATION_ID } from './members-circulation.js';
+// ---- Komunitas (holds) ----
+import { HOLDS_ID } from './holds.js';
+import { CIRCULATION_CORE_ID } from './circulation-core.js';
+import { MEMBERS_VISITS_ID } from './members-visits.js';
+// ---- Komunitas (member area) ----
+import { MEMBER_AREA_ID } from './member-area.js';
+// ---- Komunitas (charges and payments) ----
+import { CHARGES_ID } from './charges.js';
+// ---- Komunitas (member, visit and circulation reports) ----
+import { CIRC_REPORTS_ID } from './circ-reports.js';
+// ---- Komunitas (notices) ----
+import { NOTICES_ID } from './notices.js';
+// ---- Komunitas (SLiMS members and circulation) ----
+import { SLIMS_PEOPLE_ID } from './slims-people.js';
 
 /**
  * The keys that exist only in the test profile (spec §12.5, ruling S28), next to `permissionCatalog`'s test entry and the
@@ -664,6 +678,7 @@ const BASE = {
   'vocab.custom_field_type.url': 'Alamat web (URL)',
   'vocab.custom_field_entity.records': 'Cantuman',
   'vocab.custom_field_entity.items': 'Eksemplar',
+  'vocab.custom_field_entity.members': 'Anggota',
   'vocab.attachment_kind.file': 'Berkas',
   'vocab.attachment_kind.url': 'Tautan',
   'vocab.attachment_access.public': 'Publik',
@@ -1572,6 +1587,25 @@ const BASE = {
   // ---- Komunitas (members and circulation) ----
   // Permissions, audit actions, error codes and vocabularies of members and desk circulation (i18n/members-circulation.ts).
   ...MEMBERS_CIRCULATION_ID,
+  // ---- Komunitas (holds) ----
+  // Audit actions, error codes and vocabularies of holds and the hold shelf (i18n/holds.ts).
+  ...HOLDS_ID,
+  // ---- Komunitas (circulation core) ----
+  ...CIRCULATION_CORE_ID,
+  // ---- Komunitas K2 (members extended and visits) ----
+  ...MEMBERS_VISITS_ID,
+  // ---- Komunitas (member area) ----
+  // Audit actions, the members' attachment access and the member password-reset mail (i18n/member-area.ts).
+  ...MEMBER_AREA_ID,
+  // ---- Komunitas (charges and payments) ----
+  ...CHARGES_ID,
+  // ---- Komunitas (member, visit and circulation reports) ----
+  ...CIRC_REPORTS_ID,
+  // ---- Komunitas (notices) ----
+  // Audit actions, vocabularies, the member e-mails and the staff notifications of notices (i18n/notices.ts).
+  ...NOTICES_ID,
+  // ---- Komunitas (SLiMS members and circulation) ----
+  ...SLIMS_PEOPLE_ID,
 } satisfies Record<string, string>;
 
 /**

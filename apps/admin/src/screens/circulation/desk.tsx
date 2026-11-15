@@ -1,12 +1,15 @@
-import { RENEW_REFUSALS, type RenewRefusal } from '@altis/shared';
+import { MEMBER_BLOCK_REASONS, RENEW_REFUSALS, VOID_REFUSALS, type ForceableReason, type MemberBlockReason, type RenewRefusal, type VoidRefusal } from '@altis/shared';
+import type { PaymentView } from '@altis/shared/api/charges';
 import type {
   CirculationWarningView,
   DeskLoanView,
   DeskMemberSearchResponse,
   DeskMemberSummary,
   DeskMemberView,
+  InLibraryUseResponse,
   LoanListResponse,
   LoanResponse,
+  LoanVoidResponse,
   RenewAllResponse,
   RenewResponse,
   ReturnResponse,
@@ -33,7 +36,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useT, type TKey, type Translate } from '@/i18n';
-import { holds } from '@/lib/access';
+import { holds, holdsAt } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
@@ -41,6 +44,7 @@ import { useScannerInput } from '@/lib/scanner';
 import { useShortcuts } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
 import { ExtendDialog } from '@/screens/members/common';
+import { DueDialog, LostDialog } from './desk-dialogs';
 import {
   DESK_SOUND_KEY,
   DueBadge,
@@ -49,11 +53,16 @@ import {
   limitText,
   newTransactionKey,
   readStored,
+  todayLocal,
   useCalendarDate,
   useDeskBranch,
   useTypeName,
   writeStored,
 } from './common';
+// ---- Komunitas (holds) ----
+import { HoldSlipPrint, MemberHoldsPanel, type HoldSlip } from './holds';
+// ---- Komunitas (charges and payments) ----
+import { MemberChargesPanel, printSlip, receiptHref, useMoney } from './charges';
 
 /**
  * Meja Layanan (`/admin/layanan`) and Kembali Cepat (`/admin/layanan/kembali`): the circulation desk, built for a
@@ -78,9 +87,19 @@ import {
  *   (the visit list is cleared).
  * - The desk branch is chosen once and kept in this browser; the member panel lists the member's open loans at every
  *   branch, with Kembalikan (K), Perpanjang (P) and Perpanjang semua (Shift+P) on the focused row.
+ * - Baca di tempat (F4, and `/admin/layanan/baca` as a page of its own) counts each scanned item as read in the
+ *   library; an item on loan or recorded missing or lost is still counted and the desk says so.
+ * - With `circulation.desk.override` at the branch: a refusal the desk may force (a collection type or a rule that does
+ *   not allow the loan, a limit) offers "Paksa pinjam" (Enter), which asks for the reason and sends the loan again with
+ *   it; "Pinjaman tercatat mundur" enters loans of an earlier day (at most 30 days back) with a note; and a loan row
+ *   offers "Ubah jatuh tempo". Ctrl+Z voids the last loan of this visit (within the library's void window). A loan row
+ *   offers "Hilang" (H). An item recorded lost that comes back offers "Terima kembali" (Enter).
+ * - Charges (charges.tsx): an overdue loan shows its running fine; the Denda tab shows the balance, the open charges and
+ *   the last payments, takes payments (B on a loan or charge row, Shift+B for all) with a link to print the receipt,
+ *   waives and books charges by hand. A member blocked by the library's optional blocks is told why.
  */
 
-type Mode = 'member' | 'return' | 'name';
+type Mode = 'member' | 'return' | 'name' | 'read';
 type Tone = 'idle' | 'success' | 'warning' | 'error' | 'info';
 
 interface Feedback {
@@ -90,14 +109,21 @@ interface Feedback {
   seq: number;
 }
 
-type Offer = { kind: 'switch'; memberNo: string } | { kind: 'return'; barcode: string };
+type Offer =
+  | { kind: 'switch'; memberNo: string }
+  | { kind: 'return'; barcode: string }
+  // ---- Komunitas (circulation core) ----
+  | { kind: 'force'; barcode: string; reasons: ForceableReason[] }
+  | { kind: 'found_lost'; barcode: string };
 
 interface VisitRow {
   seq: number;
-  kind: 'loan' | 'return' | 'renew' | 'refused';
+  kind: 'loan' | 'return' | 'renew' | 'refused' | 'voided';
   title: string;
   barcode: string;
   note: string;
+  /** The loan of a loan, renewal or return (the slip lists it). */
+  refId?: string;
 }
 
 interface ReturnRow {
@@ -107,10 +133,35 @@ interface ReturnRow {
   memberNo: string | null;
   dueOn: string;
   daysLate: number;
+  /** The days its overdue fine counted, when a fine was booked and they differ from `daysLate` (closed days). */
+  finedDays: number | null;
   otherBranch: string | null;
+  /** The member number the copy is kept for on the hold shelf. */
+  keptFor: string | null;
 }
 
-type PanelTab = 'visit' | 'loans' | 'history';
+type PanelTab = 'visit' | 'loans' | 'holds' | 'charges' | 'history';
+
+/** One item read in place at this desk, the newest first. */
+interface ReadRow {
+  seq: number;
+  barcode: string;
+  title: string;
+  note: string | null;
+}
+
+/** The forceable reason of a refused loan, or null when the desk cannot force it. */
+export function forceableOf(e: unknown): ForceableReason | null {
+  if (!(e instanceof ApiError)) return null;
+  const code: string = e.code;
+  if (code === 'CIRC_NOT_LOANABLE' && (e.reason === 'collection_type' || e.reason === 'policy')) return e.reason;
+  if (code === 'CIRC_LIMIT_REACHED') return 'limit';
+  if (code === 'CIRC_ITEM_ON_HOLD') return 'hold';
+  if (code === 'CIRC_MEMBER_BLOCKED') return 'blocked';
+  return null;
+}
+
+const isVoidRefusal = (s: string | undefined): s is VoidRefusal => s !== undefined && (VOID_REFUSALS as readonly string[]).includes(s);
 
 /** The query key of a member's desk panel at a branch. */
 const deskMemberKey = (branchId: string, memberId: string) => ['circulation', 'desk', branchId, 'member', memberId] as const;
@@ -119,6 +170,8 @@ const deskMemberKey = (branchId: string, memberId: string) => ['circulation', 'd
 const normalizeCode = (s: string): string => s.replace(/[\r\n\t]/g, '').trim().replace(/ {2,}/g, ' ').toUpperCase();
 
 const isRenewRefusal = (s: string | undefined): s is RenewRefusal => s !== undefined && (RENEW_REFUSALS as readonly string[]).includes(s);
+
+const isBlockReason = (s: string | undefined | null): s is MemberBlockReason => typeof s === 'string' && (MEMBER_BLOCK_REASONS as readonly string[]).includes(s);
 
 type DeskAction = 'lookup' | 'loan' | 'return' | 'renew';
 
@@ -169,6 +222,10 @@ export function deskRefusal(t: Translate, e: unknown, o: { action: DeskAction; c
     }
     case 'CIRC_LOAN_NOT_OPEN':
       return { title: t(o.action === 'renew' ? 'circulation.problem.closed_elsewhere' : 'circulation.problem.not_on_loan') };
+    case 'CIRC_ITEM_ON_HOLD':
+      return { title: t('holds.problem.item_on_hold') };
+    case 'CIRC_MEMBER_BLOCKED':
+      return { title: isBlockReason(e.reason) ? t('charges.member.blocked', { reason: t(`vocab.member_block_reason.${e.reason}`) }) : t('error.CIRC_MEMBER_BLOCKED') };
     case 'CIRC_RENEW_REFUSED':
       if (e.reason === 'changed') return { title: t('circulation.problem.conflict') };
       if (isRenewRefusal(e.reason)) return { title: t(`vocab.renew_refusal.${e.reason}`) };
@@ -191,9 +248,17 @@ function borrowRefusalText(t: Translate, m: DeskMemberView): string | null {
     case 'CIRC_LIMIT_REACHED':
       if (m.type.loanLimit === 0) return t('circulation.problem.cannot_borrow');
       return m.type.loanLimit === null ? t('error.CIRC_LIMIT_REACHED') : t('circulation.problem.limit', { count: m.counts.openLoans, limit: m.type.loanLimit });
+    case 'CIRC_MEMBER_BLOCKED':
+      return isBlockReason(m.charges.blocked) ? t('charges.member.blocked', { reason: t(`vocab.member_block_reason.${m.charges.blocked}`) }) : t('error.CIRC_MEMBER_BLOCKED');
     default:
       return null;
   }
+}
+
+/** "N days late", with the days its fine counted when they differ (closed days are not fined); "on time" at 0. */
+function lateText(t: Translate, daysLate: number, finedDays: number | null): string {
+  if (daysLate <= 0) return t('circulation.due.on_time');
+  return finedDays === null ? t('circulation.due.late', { count: daysLate }) : t('circulation.due.late_fined', { count: daysLate, fined: finedDays });
 }
 
 /** The warnings of an action that went through, as one sentence each. */
@@ -206,6 +271,8 @@ function warningTexts(t: Translate, day: (d: string) => string, warnings: readon
         return t('circulation.warning.expires_soon', { date: day(w.expiresOn ?? '') });
       case 'return_to_branch':
         return t('circulation.warning.return_to_branch', { code: w.branchCode ?? '' });
+      case 'due_moved_closed':
+        return t('circulation.warning.due_moved_closed', { date: day(dueOn ?? '') });
       default:
         return t(`vocab.circulation_warning.${w.code}`);
     }
@@ -252,7 +319,12 @@ export function QuickReturnScreen() {
   return <Desk quickReturn />;
 }
 
-function Desk({ quickReturn }: { quickReturn: boolean }) {
+/** Baca di Tempat (`/admin/layanan/baca`): the desk's read-in-place mode as a page of its own. */
+export function InLibraryScreen() {
+  return <Desk quickReturn={false} inLibrary />;
+}
+
+function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibrary?: boolean }) {
   const t = useT();
   const me = useMe();
   const day = useCalendarDate();
@@ -266,8 +338,9 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
   const input = useRef<HTMLInputElement>(null);
   const loanRows = useRef<(HTMLTableRowElement | null)[]>([]);
 
-  const [mode, setMode] = useState<Mode>(quickReturn ? 'return' : 'member');
-  const [memberId, setMemberId] = useState<string | null>(quickReturn ? null : (search.member ?? null));
+  const homeMode: Mode = quickReturn ? 'return' : inLibrary ? 'read' : 'member';
+  const [mode, setMode] = useState<Mode>(homeMode);
+  const [memberId, setMemberId] = useState<string | null>(quickReturn || inLibrary ? null : (search.member ?? null));
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>({ tone: 'idle', title: t('circulation.feedback.ready'), seq: 0 });
@@ -280,6 +353,25 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
   const [sound, setSound] = useState(() => readStored(DESK_SOUND_KEY) !== '0');
   const [extendOpen, setExtendOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [slip, setSlip] = useState<HoldSlip | null>(null);
+  const [printing, setPrinting] = useState(0);
+  // ---- Komunitas (circulation core) ----
+  const [reads, setReads] = useState<ReadRow[]>([]);
+  const [forcing, setForcing] = useState<{ barcode: string; reasons: ForceableReason[] } | null>(null);
+  const [forceNote, setForceNote] = useState('');
+  const [backdate, setBackdate] = useState<{ on: boolean; date: string; note: string }>({ on: false, date: '', note: '' });
+  const [lastLoan, setLastLoan] = useState<{ id: string; title: string; barcode: string } | null>(null);
+  const [lostLoan, setLostLoan] = useState<DeskLoanView | null>(null);
+  const [dueLoan, setDueLoan] = useState<DeskLoanView | null>(null);
+  // ---- Komunitas (charges and payments) ----
+  const [chargesDialog, setChargesDialog] = useState(false);
+  // ---- Komunitas (holds): the Reservasi tab's dialogs (place a hold, cancel one) ----
+  const [holdsDialog, setHoldsDialog] = useState(false);
+  const [payNow, setPayNow] = useState(0);
+  const [receipt, setReceipt] = useState<{ href: string; number: string } | null>(null);
+  const [visitPayments, setVisitPayments] = useState<string[]>([]);
+  const money = useMoney();
+  const forceInput = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(-1);
   const seq = useRef(0);
@@ -288,11 +380,12 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
   const canExtend = holds(me, 'members.records.manage');
   const canReadMembers = holds(me, 'members.records.read');
   const canReadLoans = holds(me, 'circulation.records.read');
-  const dialogOpen = extendOpen || helpOpen;
+  const canOverride = branchId !== null && holdsAt(me, 'circulation.desk.override', branchId);
+  const dialogOpen = extendOpen || helpOpen || lostLoan !== null || dueLoan !== null || chargesDialog || holdsDialog;
 
   // A member opened from another page (`?member=`): its panel, once the branch is known.
   useEffect(() => {
-    if (!quickReturn && search.member !== undefined) {
+    if (!quickReturn && !inLibrary && search.member !== undefined) {
       setMemberId(search.member);
       setMode('member');
     }
@@ -311,7 +404,7 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
     const id = setTimeout(() => setQuery(value.trim()), 250);
     return () => clearTimeout(id);
   }, [value]);
-  const suggesting = !quickReturn && (mode === 'name' || (mode === 'member' && memberId === null));
+  const suggesting = !quickReturn && !inLibrary && (mode === 'name' || (mode === 'member' && memberId === null));
   const searchKey = (q: string) => ['circulation', 'desk', branchId ?? '', 'search', q] as const;
   const searchFor = (q: string) => api<DeskMemberSearchResponse>('POST', `branches/${encodeURIComponent(branchId!)}/circulation/members/search`, { q });
   const suggestions = useQuery({
@@ -382,6 +475,8 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
     setTab('visit');
     setValue('');
     setActive(-1);
+    setReceipt(null);
+    setVisitPayments([]);
     const refusal = borrowRefusalText(t, view);
     const notes = warningTexts(t, day, view.warnings);
     if (refusal !== null) say(view.borrowRefusal === 'CIRC_LIMIT_REACHED' || view.borrowRefusal === 'MEMBER_SUSPENDED' ? 'warning' : 'error', t('circulation.feedback.member_loaded', { name: view.name }), refusal);
@@ -419,49 +514,147 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
     }
   };
 
-  const lend = async (panel: DeskMemberView, barcode: string): Promise<void> => {
+  const lend = async (panel: DeskMemberView, barcode: string, force?: { reasons: ForceableReason[]; note: string }): Promise<void> => {
     if (branchId === null) return;
-    const body = { memberId: panel.id, barcode };
+    const dated = backdate.on && backdate.date !== '';
+    const note = force?.note ?? (dated ? backdate.note.trim() : '');
+    if (dated && note === '') {
+      say('error', t('circulation.backdate.note_required'));
+      return;
+    }
+    const body = {
+      memberId: panel.id,
+      barcode,
+      ...(dated ? { loanedOn: backdate.date } : {}),
+      ...(force !== undefined || dated ? { override: { reasons: force?.reasons ?? [], note } } : {}),
+    };
     try {
       const loan = await api<LoanResponse>('POST', `branches/${encodeURIComponent(branchId)}/circulation/loans`, body, { idempotencyKey: keyFor('desk-loan', body) });
       settle();
       const notes = warningTexts(t, day, loan.warnings, loan.dueOn);
+      if (loan.overrides !== undefined && loan.overrides.length > 0) {
+        notes.push(t('circulation.override.recorded', { reasons: loan.overrides.map((r) => t(`vocab.override_reason.${r}`)).join(', ') }));
+      }
       const limit = panel.type.loanLimit;
       const next = limit === null ? t('circulation.feedback.scan_next') : t('circulation.feedback.loan_count', { count: panel.counts.openLoans + 1, limit });
-      addVisit({ kind: 'loan', title: loan.record.title, barcode: loan.item.barcode, note: t('circulation.visit.due', { date: day(loan.dueOn) }) });
+      addVisit({ kind: 'loan', title: loan.record.title, barcode: loan.item.barcode, note: t('circulation.visit.due', { date: day(loan.dueOn) }), refId: loan.id });
+      setLastLoan({ id: loan.id, title: loan.record.title, barcode: loan.item.barcode });
       say(notes.length > 0 ? 'warning' : 'success', t('circulation.feedback.lent', { title: loan.record.title, date: day(loan.dueOn) }), [...notes, next].join(' '));
       await refreshPanel();
     } catch (e) {
       settle(e);
       const refusal = deskRefusal(t, e, { action: 'loan', code: barcode, member: panel });
       addVisit({ kind: 'refused', title: refusal.title, barcode, note: t('circulation.visit.refused') });
+      const reason = forceableOf(e);
+      if (refusal.offer === undefined && reason !== null && canOverride) {
+        setOffer({ kind: 'force', barcode, reasons: [...new Set([...(force?.reasons ?? []), reason])] });
+        if (force !== undefined) setForceNote(force.note);
+        say('warning', refusal.title, t('circulation.override.hint'));
+        return;
+      }
       if (refusal.offer !== undefined) setOffer(refusal.offer);
       say(refusal.offer !== undefined ? 'warning' : 'error', refusal.title, refusal.offer === undefined ? undefined : t('circulation.offer.hint'));
     }
   };
 
-  const giveBack = async (barcode: string): Promise<void> => {
+  /** Ctrl+Z: voids the last loan of this visit. */
+  const voidLast = async (): Promise<void> => {
+    if (branchId === null || lastLoan === null || busy) return;
+    const target = lastLoan;
+    setBusy(true);
+    try {
+      await api<LoanVoidResponse>('POST', `branches/${encodeURIComponent(branchId)}/circulation/loans/${encodeURIComponent(target.id)}/void`, undefined, {
+        idempotencyKey: keyFor('desk-void', { id: target.id }),
+      });
+      settle();
+      setLastLoan(null);
+      addVisit({ kind: 'voided', title: target.title, barcode: target.barcode, note: t('circulation.void.visit') });
+      say('success', t('circulation.void.done', { title: target.title }));
+      await refreshPanel();
+    } catch (e) {
+      settle(e);
+      const why = e instanceof ApiError && e.code === 'CIRC_VOID_REFUSED' && isVoidRefusal(e.reason) ? t(`vocab.void_refusal.${e.reason}`) : deskRefusal(t, e, { action: 'renew', code: '', member }).title;
+      say('error', t('circulation.void.refused'), why);
+    } finally {
+      setBusy(false);
+      focusBox();
+    }
+  };
+
+  /** Baca di tempat: counts one item read in the library. */
+  const readUse = async (barcode: string): Promise<void> => {
     if (branchId === null) return;
     const body = { barcode };
+    try {
+      const done = await api<InLibraryUseResponse>('POST', `branches/${encodeURIComponent(branchId)}/circulation/in-library-uses`, body, { idempotencyKey: keyFor('desk-read', body) });
+      settle();
+      const onLoan = done.warnings?.some((w) => w.code === 'item_on_loan') === true;
+      const offShelf = done.warnings?.some((w) => w.code === 'item_status') === true;
+      const note = onLoan ? t('circulation.read.on_loan') : offShelf ? t('circulation.read.off_shelf', { status: t(`vocab.item_status.${done.status as 'missing'}`) }) : null;
+      say(note === null ? 'success' : 'warning', t('circulation.read.done', { title: done.record.title }), note ?? done.item.barcode);
+      seq.current += 1;
+      const row: ReadRow = { seq: seq.current, barcode: done.item.barcode, title: done.record.title, note };
+      setReads((rows) => [row, ...rows].slice(0, 200));
+    } catch (e) {
+      settle(e);
+      say('error', deskRefusal(t, e, { action: 'return', code: barcode, member: null }).title);
+    }
+  };
+
+  const giveBack = async (barcode: string, foundLost = false): Promise<void> => {
+    if (branchId === null) return;
+    const body = foundLost ? { barcode, foundLost: true } : { barcode };
     try {
       const done = await api<ReturnResponse>('POST', `branches/${encodeURIComponent(branchId)}/circulation/returns`, body, { idempotencyKey: keyFor('desk-return', body) });
       settle();
       const otherBranch = done.warnings?.find((w) => w.code === 'return_to_branch')?.branchCode ?? null;
+      // The fine leaves out the days the library was closed: say both counts when they differ, or the fine looks wrong.
+      const finedDays = done.finedDays !== undefined && done.finedDays !== done.daysLate ? done.finedDays : null;
       const title =
-        otherBranch !== null
+        done.foundLost === true
+          ? t('circulation.lost.found')
+          : otherBranch !== null
           ? t('circulation.feedback.returned_branch', { code: otherBranch })
           : done.daysLate > 0
-            ? t('circulation.feedback.returned_late', { count: done.daysLate })
+            ? finedDays !== null
+              ? t('circulation.feedback.returned_late_fined', { count: done.daysLate, fined: finedDays })
+              : t('circulation.feedback.returned_late', { count: done.daysLate })
             : t('circulation.feedback.returned');
       const detail = `${done.record.title} · ${done.item.barcode}`;
-      say(otherBranch !== null || done.daysLate > 0 ? 'warning' : 'success', title, detail);
-      addVisit({ kind: 'return', title: done.record.title, barcode: done.item.barcode, note: done.daysLate > 0 ? t('circulation.due.late', { count: done.daysLate }) : t('circulation.due.on_time') });
+      if (done.hold !== undefined) {
+        // The copy is kept for a hold: that is what the desk must do now, whatever else the return says.
+        setSlip({ trap: done.hold, title: done.record.title, barcode: done.item.barcode });
+        say(
+          'warning',
+          t('holds.desk.keep_for', { no: done.hold.memberNo }),
+          [t('holds.desk.keep_detail', { name: done.hold.memberName, date: day(done.hold.pickupUntil), title: done.record.title }), done.daysLate > 0 ? title : ''].join(' ').trim(),
+        );
+      } else {
+        setSlip(null);
+        say(otherBranch !== null || done.daysLate > 0 ? 'warning' : 'success', title, detail);
+      }
+      addVisit({ kind: 'return', title: done.record.title, barcode: done.item.barcode, note: lateText(t, done.daysLate, finedDays), refId: done.id });
       seq.current += 1;
-      const row: ReturnRow = { seq: seq.current, barcode: done.item.barcode, title: done.record.title, memberNo: done.memberNo, dueOn: done.dueOn, daysLate: done.daysLate, otherBranch };
+      const row: ReturnRow = {
+        seq: seq.current,
+        barcode: done.item.barcode,
+        title: done.record.title,
+        memberNo: done.memberNo,
+        dueOn: done.dueOn,
+        daysLate: done.daysLate,
+        finedDays,
+        otherBranch,
+        keptFor: done.hold?.memberNo ?? null,
+      };
       setReturns((rows) => [row, ...rows].slice(0, 200));
       await refreshPanel();
     } catch (e) {
       settle(e);
+      if (e instanceof ApiError && e.code === 'CIRC_LOAN_NOT_OPEN' && e.reason === 'lost_item') {
+        setOffer({ kind: 'found_lost', barcode });
+        say('warning', t('circulation.lost.offer_title'), t('circulation.offer.hint'));
+        return;
+      }
       const refusal = deskRefusal(t, e, { action: 'return', code: barcode, member });
       if (!quickReturn) addVisit({ kind: 'refused', title: refusal.title, barcode, note: t('circulation.visit.refused') });
       say('error', refusal.title);
@@ -477,7 +670,7 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
       });
       settle();
       const notes = warningTexts(t, day, done.warnings, done.dueOn);
-      addVisit({ kind: 'renew', title: loan.record.title, barcode: loan.item.barcode, note: t('circulation.visit.due', { date: day(done.dueOn) }) });
+      addVisit({ kind: 'renew', title: loan.record.title, barcode: loan.item.barcode, note: t('circulation.visit.due', { date: day(done.dueOn) }), refId: done.id });
       say(notes.length > 0 ? 'warning' : 'success', t('circulation.feedback.renewed', { date: day(done.dueOn) }), [loan.record.title, ...notes].join(' · '));
       await refreshPanel();
     } catch (e) {
@@ -522,12 +715,35 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
     setMemberId(null);
     setVisit([]);
     setOffer(null);
-    setMode(quickReturn ? 'return' : 'member');
+    setMode(homeMode);
     setValue('');
     setTab('visit');
+    setLastLoan(null);
+    setForcing(null);
+    setReceipt(null);
+    setVisitPayments([]);
     if (search.member !== undefined) void navigate({ href: '/admin/layanan', replace: true });
     say('info', name === undefined ? t('circulation.feedback.ready') : t('circulation.feedback.done', { name }));
     focusBox();
+  };
+
+  /** F9: the slip of this visit (the loans, renewals and returns of the list, and the payments taken). */
+  const slipNow = async (): Promise<void> => {
+    if (branchId === null) return;
+    const ids = (kinds: VisitRow['kind'][]) => [...new Set(visit.filter((r) => kinds.includes(r.kind) && r.refId !== undefined).map((r) => r.refId!))].slice(0, 50);
+    const body = { loanIds: ids(['loan', 'renew']), returnedLoanIds: ids(['return']), paymentIds: visitPayments.slice(0, 10) };
+    if (body.loanIds.length + body.returnedLoanIds.length + body.paymentIds.length === 0) {
+      say('info', t('charges.slip.empty'));
+      return;
+    }
+    try {
+      await printSlip(branchId, body);
+      say('success', t('charges.slip.printed'));
+    } catch (e) {
+      say('error', deskRefusal(t, e, { action: 'renew', code: '', member }).title);
+    } finally {
+      focusBox();
+    }
   };
 
   const confirmOffer = async (): Promise<void> => {
@@ -537,7 +753,14 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
     setBusy(true);
     try {
       if (current.kind === 'switch') await lookup(current.memberNo);
-      else await giveBack(current.barcode);
+      else if (current.kind === 'return') await giveBack(current.barcode);
+      else if (current.kind === 'found_lost') await giveBack(current.barcode, true);
+      else {
+        // Forcing: the reason is asked for first (the panel under the feedback); Enter there sends the loan again.
+        setForcing({ barcode: current.barcode, reasons: current.reasons });
+        requestAnimationFrame(() => forceInput.current?.focus());
+        return;
+      }
     } finally {
       setBusy(false);
       focusBox();
@@ -569,6 +792,9 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
       if (mode === 'return') {
         setValue('');
         await giveBack(code);
+      } else if (mode === 'read') {
+        setValue('');
+        await readUse(code);
       } else if (mode === 'name' || memberId === null) {
         let list: { items: DeskMemberSummary[]; shown: boolean };
         try {
@@ -625,12 +851,15 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
     focusBox();
   };
 
-  const tabs: PanelTab[] = ['visit', 'loans', ...(canReadLoans ? (['history'] as const) : [])];
+  const tabs: PanelTab[] = ['visit', 'loans', 'holds', 'charges', ...(canReadLoans ? (['history'] as const) : [])];
 
   // The function keys and Esc work wherever the focus is (also in the scan box, where shortcuts usually rest).
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (dialogOpen || e.isComposing) return;
+      // A key another layer already used is not the desk's: a dialog closes on Esc (and marks the key as used) before
+      // this listener runs, by which time the desk may already see the dialog as closed; that Esc must not also end
+      // the visit.
+      if (dialogOpen || e.isComposing || e.defaultPrevented) return;
       const key = e.key;
       if (key === 'F2') {
         e.preventDefault();
@@ -639,6 +868,15 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
       } else if (key === 'F3' && !quickReturn) {
         e.preventDefault();
         switchMode('return');
+      } else if (key === 'F4' && !quickReturn) {
+        e.preventDefault();
+        switchMode('read');
+      } else if ((key === 'z' || key === 'Z') && (e.ctrlKey || e.metaKey) && !e.shiftKey && value === '' && forcing === null && lastLoan !== null) {
+        e.preventDefault();
+        void voidLast();
+      } else if (key === 'F9' && !quickReturn && !inLibrary) {
+        e.preventDefault();
+        void slipNow();
       } else if (key === 'F6' && !quickReturn) {
         e.preventDefault();
         switchMode('name');
@@ -651,12 +889,15 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
         if (options.length > 0 && value !== '') {
           setValue('');
           setActive(-1);
+        } else if (forcing !== null) {
+          setForcing(null);
+          say('info', t('circulation.offer.cancelled'));
         } else if (offer !== null) {
           setOffer(null);
           say('info', t('circulation.offer.cancelled'));
         } else if (mode === 'name') {
           switchMode('member');
-        } else if (mode === 'return' && !quickReturn) {
+        } else if ((mode === 'return' && !quickReturn) || (mode === 'read' && !inLibrary)) {
           switchMode('member');
         } else if (memberId !== null) {
           done();
@@ -711,6 +952,14 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
     } else if (e.key === 'p') {
       e.preventDefault();
       void renew(loan);
+    } else if (e.key === 'h' || e.key === 'H') {
+      e.preventDefault();
+      setLostLoan(loan);
+    } else if (e.key === 'b' || e.key === 'B') {
+      // Pay: the member's open charges at this branch (the Denda tab opens with the pay dialog).
+      e.preventDefault();
+      setTab('charges');
+      setPayNow((n) => n + 1);
     }
   };
 
@@ -726,7 +975,9 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
   const scanLabel =
     mode === 'return'
       ? t('circulation.scan.return')
-      : mode === 'name'
+      : mode === 'read'
+        ? t('circulation.scan.read')
+        : mode === 'name'
         ? t('circulation.scan.name')
         : member !== null
           ? t('circulation.scan.item', { name: member.name })
@@ -753,7 +1004,7 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
       </div>
 
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-semibold">{t(quickReturn ? 'nav.circulation.quick_return' : 'nav.circulation.desk')}</h1>
+        <h1 className="text-2xl font-semibold">{t(quickReturn ? 'nav.circulation.quick_return' : inLibrary ? 'nav.circulation.in_library' : 'nav.circulation.desk')}</h1>
         <div className="flex flex-wrap items-end gap-2">
           {desk.branches !== undefined && desk.branches.length > 1 && (
             <div className="grid gap-1">
@@ -795,9 +1046,9 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
         <>
           {quickReturn && <ReturnCounts rows={returns} />}
           <form noValidate onSubmit={submit} className={cn('flex flex-col gap-3 rounded-lg border border-t-4 bg-card p-4', TONE_CARD[feedback.tone])}>
-            {!quickReturn && (
+            {!quickReturn && !inLibrary && (
               <div role="group" aria-label={t('circulation.mode.label')} className="flex flex-wrap gap-2">
-                {(['member', 'return', 'name'] as const).map((m) => (
+                {(['member', 'return', 'read', 'name'] as const).map((m) => (
                   <Button key={m} type="button" size="sm" variant={mode === m ? 'default' : 'outline'} aria-pressed={mode === m} onClick={() => switchMode(m)}>
                     {t(`circulation.mode.${m}`)}
                   </Button>
@@ -863,8 +1114,11 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
               )}
             </div>
             <p id={`${ids}-scan-hint`} className="text-xs text-muted-foreground">
-              {t(quickReturn ? 'circulation.scan.hint_return' : 'circulation.scan.hint')}
+              {t(quickReturn ? 'circulation.scan.hint_return' : inLibrary ? 'circulation.scan.hint_read' : 'circulation.scan.hint')}
             </p>
+            {canOverride && !quickReturn && !inLibrary && mode === 'member' && member !== null && (
+              <BackdatePanel value={backdate} onChange={setBackdate} />
+            )}
           </form>
 
           <div className={cn('flex items-start gap-3 rounded-lg border p-4', TONE_FEEDBACK[feedback.tone])} data-testid="desk-feedback">
@@ -872,10 +1126,32 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
             <div className="grid min-w-0 flex-1 gap-1">
               <p className="text-xl leading-snug font-semibold">{feedback.title}</p>
               {feedback.detail !== undefined && <p className="text-sm">{feedback.detail}</p>}
+              {slip !== null && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={() => setPrinting((n) => n + 1)}>
+                    {t('holds.action.print_slip')}
+                  </Button>
+                </div>
+              )}
+              {receipt !== null && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button asChild variant="outline">
+                    <a href={receipt.href} target="_blank" rel="noopener">
+                      {t('charges.pay.print', { number: receipt.number })}
+                    </a>
+                  </Button>
+                </div>
+              )}
               {offer !== null && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Button type="button" onClick={() => void confirmOffer()}>
-                    {offer.kind === 'switch' ? t('circulation.offer.switch', { no: offer.memberNo }) : t('circulation.offer.return')}
+                    {offer.kind === 'switch'
+                      ? t('circulation.offer.switch', { no: offer.memberNo })
+                      : offer.kind === 'force'
+                        ? t('circulation.override.offer')
+                        : offer.kind === 'found_lost'
+                          ? t('circulation.lost.offer')
+                          : t('circulation.offer.return')}
                   </Button>
                   <Button
                     type="button"
@@ -891,8 +1167,45 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
             </div>
           </div>
 
+          {forcing !== null && member !== null && (
+            <form
+              noValidate
+              className="flex flex-wrap items-end gap-2 rounded-lg border border-warning-foreground/30 bg-warning p-3 text-warning-foreground"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const note = forceNote.trim();
+                if (note === '') return;
+                const target = forcing;
+                setForcing(null);
+                setBusy(true);
+                void lend(member, target.barcode, { reasons: target.reasons, note }).finally(() => {
+                  setBusy(false);
+                  focusBox();
+                });
+              }}>
+              <div className="grid min-w-64 flex-1 gap-1">
+                <Label htmlFor={`${ids}-force`}>{t('circulation.override.note', { reasons: forcing.reasons.map((r) => t(`vocab.override_reason.${r}`)).join(', ') })}</Label>
+                <Input id={`${ids}-force`} ref={forceInput} maxLength={191} autoComplete="off" value={forceNote} onChange={(e) => setForceNote(e.target.value)} className="bg-background text-foreground" />
+              </div>
+              <Button type="submit" disabled={forceNote.trim() === ''}>
+                {t('circulation.override.submit')}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setForcing(null);
+                  focusBox();
+                }}>
+                {t('circulation.offer.cancel')}
+              </Button>
+            </form>
+          )}
+
           {quickReturn ? (
             <ReturnsTable rows={returns} />
+          ) : mode === 'read' ? (
+            <ReadsTable rows={reads} />
           ) : (
             <div className="grid gap-4 min-[1100px]:grid-cols-[320px_minmax(0,1fr)]">
               <MemberCard
@@ -910,9 +1223,16 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
                   <TabsList>
                     <TabsTrigger value="visit">{t('circulation.tab.visit', { count: visit.length })}</TabsTrigger>
                     <TabsTrigger value="loans">{t('circulation.tab.loans', { count: member.loans.length })}</TabsTrigger>
+                    <TabsTrigger value="holds">{t('holds.member.tab', { count: member.holds.length })}</TabsTrigger>
+                    <TabsTrigger value="charges">{t('charges.member.tab', { count: member.charges.charges.length })}</TabsTrigger>
                     {canReadLoans && <TabsTrigger value="history">{t('circulation.tab.history')}</TabsTrigger>}
                   </TabsList>
-                  <TabsContent value="visit">
+                  <TabsContent value="visit" className="flex flex-col gap-2">
+                    <div className="flex justify-end">
+                      <Button type="button" variant="outline" size="sm" onClick={() => void slipNow()}>
+                        {t('charges.slip.print')}
+                      </Button>
+                    </div>
                     <VisitList rows={visit} />
                   </TabsContent>
                   <TabsContent value="loans" className="flex flex-col gap-2">
@@ -968,6 +1288,9 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
                                 <td className="px-3 py-2 whitespace-nowrap">
                                   <p>{day(loan.dueOn)}</p>
                                   <DueBadge dueOn={loan.dueOn} daysLate={loan.daysLate} />
+                                  {loan.finePreview !== null && (
+                                    <p className="mt-1 text-xs text-destructive">{t('charges.fine_preview', { amount: money(loan.finePreview.amount, loan.finePreview.currency), days: loan.finePreview.days })}</p>
+                                  )}
                                 </td>
                                 <td className="px-3 py-2 whitespace-nowrap">{t('circulation.loans.renewals', { count: loan.renewals, limit: loan.renewLimit })}</td>
                                 <td className="px-3 py-2">
@@ -978,6 +1301,14 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
                                     <Button type="button" size="sm" variant="outline" tabIndex={-1} disabled={busy} onClick={() => void renew(loan)}>
                                       {t('circulation.action.renew')}
                                     </Button>
+                                    <Button type="button" size="sm" variant="outline" tabIndex={-1} disabled={busy || loan.branchId !== branchId} onClick={() => setLostLoan(loan)}>
+                                      {t('circulation.action.lost')}
+                                    </Button>
+                                    {canOverride && (
+                                      <Button type="button" size="sm" variant="outline" tabIndex={-1} disabled={busy || loan.branchId !== branchId} onClick={() => setDueLoan(loan)}>
+                                        {t('circulation.action.due')}
+                                      </Button>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -987,6 +1318,41 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
                       </table>
                     </div>
                   </TabsContent>
+                  {branchId !== null && (
+                    <TabsContent value="holds">
+                      <MemberHoldsPanel
+                        member={member}
+                        branchId={branchId}
+                        onChanged={async () => {
+                          await refreshPanel();
+                          focusBox();
+                        }}
+                        onSaid={(tone, text) => say(tone === 'success' ? 'success' : 'error', text)}
+                        onDialog={setHoldsDialog}
+                      />
+                    </TabsContent>
+                  )}
+                  {branchId !== null && (
+                    <TabsContent value="charges">
+                      <MemberChargesPanel
+                        member={member}
+                        branchId={branchId}
+                        payNow={payNow}
+                        onDialog={setChargesDialog}
+                        onChanged={async () => {
+                          await refreshPanel();
+                          focusBox();
+                        }}
+                        onPaid={(p: PaymentView) => {
+                          const number = p.receiptNo ?? '-';
+                          setReceipt({ href: receiptHref(p.branchId, p.id), number });
+                          setVisitPayments((list) => [...list, p.id]);
+                          say('success', t('charges.pay.done', { amount: money(p.amount, p.currency), number }));
+                        }}
+                        onSaid={(tone, text) => say(tone, text)}
+                      />
+                    </TabsContent>
+                  )}
                   {canReadLoans && (
                     <TabsContent value="history" className="flex flex-col gap-2">
                       <LoanHistory query={history} />
@@ -1009,6 +1375,41 @@ function Desk({ quickReturn }: { quickReturn: boolean }) {
           }}
           onDone={() => say('success', t('circulation.feedback.extended'), t('circulation.feedback.scan_items'))}
         />
+      )}
+      <HoldSlipPrint slip={slip} printing={printing} onPrinted={() => setPrinting(0)} />
+      {branchId !== null && (
+        <>
+          <LostDialog
+            branchId={branchId}
+            loan={lostLoan}
+            onClose={() => {
+              setLostLoan(null);
+              focusBox();
+            }}
+            onDone={(r, loan) => {
+              setLostLoan(null);
+              addVisit({ kind: 'refused', title: loan.record.title, barcode: loan.item.barcode, note: t('circulation.lost.visit') });
+              say('warning', t('circulation.lost.done', { title: loan.record.title }), t(r.charged ? 'circulation.lost.charged' : 'circulation.lost.not_charged', { amount: r.replacement, currency: r.currency }));
+              void refreshPanel();
+              focusBox();
+            }}
+          />
+          <DueDialog
+            branchId={branchId}
+            loan={dueLoan}
+            onClose={() => {
+              setDueLoan(null);
+              focusBox();
+            }}
+            onDone={(r, loan) => {
+              setDueLoan(null);
+              const closedDay = r.warnings?.some((w) => w.code === 'due_on_closed_day') === true;
+              say(closedDay ? 'warning' : 'success', t('circulation.due_change.done', { title: loan.record.title, date: day(r.dueOn) }), closedDay ? t('vocab.circulation_warning.due_on_closed_day') : undefined);
+              void refreshPanel();
+              focusBox();
+            }}
+          />
+        </>
       )}
       <ShortcutsDialog
         open={helpOpen}
@@ -1097,6 +1498,17 @@ function MemberCard({
         </div>
       </dl>
       <p className="text-xs text-muted-foreground">{t('circulation.member.limit', { limit: limitText(t, limit) })}</p>
+      {member.counts.holdsReady > 0 && (
+        <Badge tone="info" className="w-fit">
+          {t('holds.member.ready_count', { count: member.counts.holdsReady })}
+        </Badge>
+      )}
+      {Number(member.charges.balance) > 0 && <MemberBalance member={member} />}
+      {refusal === 'CIRC_MEMBER_BLOCKED' && member.charges.blocked !== null && (
+        <Badge tone="danger" className="w-fit">
+          {t('charges.member.blocked', { reason: t(`vocab.member_block_reason.${member.charges.blocked}`) })}
+        </Badge>
+      )}
       {refusal === 'MEMBER_EXPIRED' && (
         <Alert variant="destructive">
           <CircleAlertIcon aria-hidden="true" />
@@ -1139,11 +1551,23 @@ function MemberCard({
   );
 }
 
+/** The member's unpaid balance on the desk card. */
+function MemberBalance({ member }: { member: DeskMemberView }) {
+  const t = useT();
+  const money = useMoney();
+  return (
+    <Badge tone="warning" className="w-fit">
+      {t('charges.member.balance_value', { amount: money(member.charges.balance, member.charges.currency) })}
+    </Badge>
+  );
+}
+
 const VISIT_TONE: Record<VisitRow['kind'], 'info' | 'neutral' | 'danger' | 'warning'> = {
   loan: 'info',
   return: 'neutral',
   renew: 'neutral',
   refused: 'danger',
+  voided: 'warning',
 };
 
 /** "Transaksi kali ini": what happened since the member was loaded, the newest first. */
@@ -1287,8 +1711,9 @@ function ReturnsTable({ rows }: { rows: readonly ReturnRow[] }) {
                 <td className="px-3 py-2 whitespace-nowrap">{day(row.dueOn)}</td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
-                    {row.daysLate > 0 ? <Badge tone="danger">{t('circulation.due.late', { count: row.daysLate })}</Badge> : <Badge tone="info">{t('circulation.due.on_time')}</Badge>}
+                    {row.daysLate > 0 ? <Badge tone="danger">{lateText(t, row.daysLate, row.finedDays)}</Badge> : <Badge tone="info">{t('circulation.due.on_time')}</Badge>}
                     {row.otherBranch !== null && <Badge tone="warning">{t('circulation.returns.to_branch', { code: row.otherBranch })}</Badge>}
+                    {row.keptFor !== null && <Badge tone="warning">{t('holds.returns.kept', { no: row.keptFor })}</Badge>}
                   </div>
                 </td>
               </tr>
@@ -1303,6 +1728,7 @@ function ReturnsTable({ rows }: { rows: readonly ReturnRow[] }) {
 const SHORTCUTS: readonly [string, TKey, boolean][] = [
   ['F2', 'circulation.help.f2', true],
   ['F3', 'circulation.help.f3', false],
+  ['F4', 'circulation.help.f4', false],
   ['F6', 'circulation.help.f6', false],
   ['F7 / F8', 'circulation.help.f7', false],
   ['Enter', 'circulation.help.enter', true],
@@ -1311,6 +1737,11 @@ const SHORTCUTS: readonly [string, TKey, boolean][] = [
   ['K', 'circulation.help.k', false],
   ['P', 'circulation.help.p', false],
   ['Shift+P', 'circulation.help.shift_p', false],
+  ['H', 'circulation.help.h', false],
+  // ---- Komunitas (charges and payments) ----
+  ['B', 'charges.help.b', false],
+  ['F9', 'charges.help.f9', false],
+  ['Ctrl+Z', 'circulation.help.ctrl_z', false],
   ['?', 'circulation.help.question', true],
 ];
 
@@ -1340,5 +1771,72 @@ function ShortcutsDialog({ open, quickReturn, onClose }: { open: boolean; quickR
         </DialogContent>
       )}
     </Dialog>
+  );
+}
+
+/** "Pinjaman tercatat mundur": loans entered after the fact carry this day and the note (override holders only). */
+function BackdatePanel({ value, onChange }: { value: { on: boolean; date: string; note: string }; onChange(v: { on: boolean; date: string; note: string }): void }) {
+  const t = useT();
+  const ids = useId();
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-dashed p-2">
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" className="size-4 accent-primary" checked={value.on} onChange={(e) => onChange({ ...value, on: e.target.checked })} />
+        {t('circulation.backdate.toggle')}
+      </label>
+      {value.on && (
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="grid gap-1">
+            <Label htmlFor={`${ids}-date`}>{t('circulation.backdate.date')}</Label>
+            <Input id={`${ids}-date`} type="date" max={todayLocal()} value={value.date} onChange={(e) => onChange({ ...value, date: e.target.value })} className="w-44" />
+          </div>
+          <div className="grid min-w-64 flex-1 gap-1">
+            <Label htmlFor={`${ids}-note`}>{t('circulation.backdate.note')}</Label>
+            <Input id={`${ids}-note`} maxLength={191} autoComplete="off" value={value.note} onChange={(e) => onChange({ ...value, note: e.target.value })} />
+          </div>
+        </div>
+      )}
+      {value.on && <p className="text-xs text-muted-foreground">{t('circulation.backdate.hint')}</p>}
+    </div>
+  );
+}
+
+/** Baca di tempat's list of this session's reads, the newest first; one that warns stands out. */
+function ReadsTable({ rows }: { rows: readonly ReadRow[] }) {
+  const t = useT();
+  return (
+    <div className="overflow-x-auto rounded-md border">
+      <table className="w-full text-sm">
+        <caption className="sr-only">{t('circulation.read.caption')}</caption>
+        <thead className="bg-muted/50 text-left">
+          <tr>
+            {(['circulation.col.item', 'circulation.col.state'] as const).map((key) => (
+              <th key={key} scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+                {t(key)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={2} className="px-3 py-6 text-center text-muted-foreground">
+                {t('circulation.read.empty')}
+              </td>
+            </tr>
+          ) : (
+            rows.map((row) => (
+              <tr key={row.seq} className={cn('border-t align-top', row.note !== null && 'bg-warning/30')}>
+                <td className="px-3 py-2">
+                  <p className="font-medium">{row.title}</p>
+                  <p className="font-mono text-xs text-muted-foreground">{row.barcode}</p>
+                </td>
+                <td className="px-3 py-2">{row.note === null ? <Badge tone="info">{t('circulation.read.counted')}</Badge> : <Badge tone="warning">{row.note}</Badge>}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }

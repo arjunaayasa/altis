@@ -1,6 +1,6 @@
 import fsp from 'node:fs/promises';
 import { type DB } from '@altis/db';
-import { isDomainError, newId, normalizeKey } from '@altis/shared';
+import { addDays, isDomainError, localDate, newId, normalizeKey } from '@altis/shared';
 import type { Insertable, Kysely } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDbContext } from '../../../../tools/test/test-db.js';
@@ -8,10 +8,12 @@ import { titleKey } from '../../src/catalog/lib/title-key.js';
 import { REPORTS } from '../../src/reports/registry.js';
 import type { ReportDefinition } from '../../src/reports/types.js';
 import { seedSmaContoh, type GoldenFixture } from '../support/accreditation-golden.js';
+// ---- Komunitas (member, visit and circulation reports) ----
+import { masterId, seedCharge, seedCopy, seedHold, seedLoan, seedMember, seedPayment, seedUse, seedVisit } from '../support/circulation-seed.js';
 import { checkPdf } from '../support/pdf-check.js';
 import { csvCells, csvLines, drive, exportPath, openExportDb, runRow, sheetRows, startRun, xlsxParts, type ExportDb } from './reports-export-support.js';
 
-// Every table report of this edition (the eight collection reports and the ten accreditation annexes) exported to CSV,
+// Every table report of this edition (the collection reports, the accreditation annexes, the member, visit and circulation reports) exported to CSV,
 // XLSX and PDF on the golden school dataset, each run started as the run routes start it and written by the real export
 // job, on the engine picked by ALTIS_TEST_DB:
 // - every CSV starts with the UTF-8 byte order mark, and a title that starts with `=` is written with a quote before it;
@@ -143,13 +145,82 @@ describe.skipIf(!ctx.available)(`every report in every format on the golden data
         .values({ id: newId(at), record_id: recordId, kind: 'url', file_id: null, url: 'https://perpus.sma-contoh.sch.id/baca', title: 'Baca daring', description: null, access: 'public', legacy_access_limit: null, read_count: reads, archived_at: null, created_at: at, created_by: null, updated_at: at, updated_by: null })
         .execute();
     }
+    // ---- Komunitas K2 (members) ----
+    // Two members for the member list: one with the formula name a spreadsheet must not run.
+    const type = (await db.h.db.selectFrom('member_types').select('id').where('code_key', '=', 'SISWA').executeTakeFirstOrThrow()).id;
+    for (const [n, name] of [[1, 'Siti Aminah'], [2, FORMULA]] as const) {
+      await db.h.db
+        .insertInto('members')
+        .values({
+          id: newId(at + n),
+          member_no_display: `S-00${n}`,
+          member_no_key: `S-00${n}`,
+          member_type_id: type,
+          home_branch_id: null,
+          status: 'active',
+          status_note: null,
+          name,
+          name_key: name.toLowerCase(),
+          gender: n === 1 ? 'female' : null,
+          birth_date: null,
+          identity_no: null,
+          institution: null,
+          class_name: 'X-1',
+          email: null,
+          phone: null,
+          address: null,
+          postal_code: null,
+          mailing_address: null,
+          notes: null,
+          photo_file_id: null,
+          locale: 'id',
+          joined_on: '2025-07-14',
+          valid_from: '2025-07-14',
+          expires_on: '2099-07-14',
+          password_hash: null,
+          must_reset_password: 0,
+          session_version: 0,
+          last_login_at: null,
+          anonymized_at: null,
+          source: 'manual',
+          archived_at: null,
+          version: 0,
+          created_at: at,
+          created_by: null,
+          updated_at: at,
+          updated_by: null,
+        })
+        .execute();
+    }
+    // ---- Komunitas (member, visit and circulation reports) ----
+    // Today's circulation at the golden branch: an overdue loan, a loan due tomorrow, a returned one, an in-library use,
+    // a member's and a guest's visit, a hold, a charge and its payment, a member expiring soon and a migrated member
+    // whose number changed, so that every member, visit and circulation report has rows on its default filters.
+    const h = db.h.db;
+    const today = localDate('Asia/Jakarta', Date.now());
+    const siswa = await masterId(h, 'member_types', 'SISWA');
+    const reader = await seedMember(h, { no: 'S-101', name: 'Rina Pembaca', className: 'XI-1', expiresOn: addDays(today, 10), joinedOn: addDays(today, -40) });
+    await seedMember(h, { no: 'B001-2', name: 'Hana Migrasi', source: 'slims:b 001' });
+    const one = await seedCopy(h, { branchId: fx.branchId, title: 'Biologi Dasar', barcode: 'CIRC-0001', classification: '570', price: 7_500_000 });
+    const two = await seedCopy(h, { branchId: fx.branchId, title: 'Tafsir Ringkas', barcode: 'CIRC-0002', classification: '2X1' });
+    const three = await seedCopy(h, { branchId: fx.branchId, title: 'Laskar Pelangi', barcode: 'CIRC-0003', classification: null });
+    const common = { memberId: reader, branchId: fx.branchId, memberTypeId: siswa, className: 'XI-1' };
+    await seedLoan(h, { ...one, ...common, loanedOn: addDays(today, -12), dueOn: addDays(today, -5), statDdc: '570', finePerDayMinor: 50_000 });
+    await seedLoan(h, { ...two, ...common, loanedOn: today, dueOn: addDays(today, 1), statDdc: '2X' });
+    await seedLoan(h, { ...three, ...common, loanedOn: addDays(today, -20), dueOn: addDays(today, -13), returnedOn: addDays(today, -14) });
+    await seedUse(h, { ...one, branchId: fx.branchId, usedOn: today, statDdc: '570' });
+    await seedVisit(h, { branchId: fx.branchId, visitedOn: today, memberId: reader, memberTypeId: siswa, className: 'XI-1' });
+    await seedVisit(h, { branchId: fx.branchId, visitedOn: today, guestName: 'Tamu Undangan', source: 'manual' });
+    await seedHold(h, { recordId: three.recordId, memberId: reader, branchId: fx.branchId, placedOn: today });
+    await seedCharge(h, { memberId: reader, branchId: fx.branchId, amountMinor: 1_000_000, paidMinor: 400_000, chargedOn: today });
+    await seedPayment(h, { memberId: reader, branchId: fx.branchId, amountMinor: 400_000, paidOn: today, staffId: db.staffId, seq: 1 });
   }, 120_000);
 
   afterAll(async () => {
     await db?.close();
   });
 
-  it('covers the eight collection reports and the ten accreditation annexes', () => {
+  it('covers the eight collection reports, the ten accreditation annexes, and the member, visit and circulation reports', () => {
     expect(TABLES.map((d) => d.id)).toEqual([
       'collection.summary',
       'collection.ddc_recap',
@@ -169,6 +240,27 @@ describe.skipIf(!ctx.available)(`every report in every format on the golden data
       'accreditation.annex.activities',
       'accreditation.annex.partnerships',
       'accreditation.annex.documents',
+      'members.list',
+      // ---- Komunitas (member, visit and circulation reports) ----
+      'members.summary',
+      'members.expiring',
+      'members.reprint_list',
+      'visits.monthly',
+      'visits.daily',
+      'visits.list',
+      'circulation.summary',
+      'circulation.loans_by_class',
+      'circulation.item_usage',
+      'circulation.top_titles',
+      'circulation.in_library',
+      'circulation.loan_history',
+      'circulation.open_loans',
+      'circulation.overdue',
+      'circulation.due_soon',
+      'circulation.holds',
+      'circulation.charges',
+      'circulation.payments_daily',
+      'circulation.top_borrowers',
     ]);
     for (const def of TABLES) expect([def.id, [...def.formats].sort()]).toEqual([def.id, ['csv', 'pdf', 'xlsx']]);
   });

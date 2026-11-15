@@ -209,4 +209,55 @@ export type {
   NotLoanableReason,
   RenewRefusal,
 } from './circulation-vocab.js';
+// ---- Komunitas (holds) ----
+export { ACTIVE_HOLD_STATUSES, HOLD_CLOSE_REASONS, HOLD_REFUSALS, HOLD_SOURCES, HOLD_STATUSES } from './circulation-vocab.js';
+export type { HoldCloseReason, HoldRefusal, HoldSource, HoldStatus } from './circulation-vocab.js';
+// ---- Komunitas (circulation core) ----
+export {
+  CALENDAR_KINDS,
+  CLEARANCE_PURPOSES,
+  CLEARANCE_REFUSALS,
+  FORCEABLE_REASONS,
+  OVERRIDE_REASONS,
+  POLICY_RANK_REASONS,
+  VOID_REFUSALS,
+} from './circulation-vocab.js';
+export type { CalendarKind, ClearancePurpose, ClearanceRefusal, ForceableReason, OverrideReason, PolicyRankReason, VoidRefusal } from './circulation-vocab.js';
+// ---- Komunitas K2 (members extended and visits) ----
+export {
+  CARD_FIELDS,
+  CARD_SHEETS,
+  MEMBER_BULK_ACTIONS,
+  MEMBER_BULK_REFUSALS,
+  VISIT_GROUP_EXTRA,
+  VISIT_PURPOSES,
+  VISIT_SOURCES,
+} from './visits-vocab.js';
+export type { CardField, CardSheet, MemberBulkAction, MemberBulkRefusal, VisitPurpose, VisitSource } from './visits-vocab.js';
+export { QR_MAX_VERSION, qrMatrix } from './qr.js';
+export type { QrMatrix } from './qr.js';
+// ---- Komunitas (charges and payments) ----
+export {
+  CHARGE_ADJUSTMENT_KINDS,
+  CHARGE_KINDS,
+  CHARGE_SOURCES,
+  CHARGE_STATE_REFUSALS,
+  CHARGE_STATUSES,
+  MANUAL_CHARGE_KINDS,
+  MEMBER_BLOCK_REASONS,
+  PAYMENT_METHODS,
+} from './circulation-vocab.js';
+export type {
+  ChargeAdjustmentKind,
+  ChargeKind,
+  ChargeSource,
+  ChargeStateRefusal,
+  ChargeStatus,
+  ManualChargeKind,
+  MemberBlockReason,
+  PaymentMethod,
+} from './circulation-vocab.js';
+// ---- Komunitas (notices) ----
+export { MANUAL_NOTICE_KINDS, NOTICE_KINDS, NOTICE_REASONS, NOTICE_STATUSES } from './circulation-vocab.js';
+export type { ManualNoticeKind, NoticeKind, NoticeReason, NoticeStatus } from './circulation-vocab.js';
 export type { ReportCell, ReportColumnType, ReportColumnView, ReportParamKind, ReportParamSpec } from './api/reports.js';

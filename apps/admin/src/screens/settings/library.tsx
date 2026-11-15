@@ -49,6 +49,11 @@ const SECTIONS: readonly { to: string; labelKey: AdminKey }[] = [
   { to: '/admin/settings/catalog', labelKey: 'catalog.settings.tab' },
   // ---- Komunitas K1 (settings) ----
   { to: '/admin/settings/accreditation', labelKey: 'settings.tab.accreditation' },
+  // ---- Komunitas (circulation core) ----
+  { to: '/admin/settings/circulation', labelKey: 'settings.tab.circulation' },
+  // ---- Komunitas K2 (visits, privacy) ----
+  { to: '/admin/settings/kunjungan', labelKey: 'visits.settings.tab' },
+  { to: '/admin/settings/privasi', labelKey: 'visits.settings.privacy_tab' },
 ];
 
 /** The frame of the settings pages: the title and the links between the groups. */

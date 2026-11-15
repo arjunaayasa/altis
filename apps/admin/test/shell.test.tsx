@@ -246,11 +246,20 @@ describe('navigation and language', () => {
       // The Layanan and Anggota groups: the desk and its lists, the members.
       ['Meja Layanan', '/admin/layanan'],
       ['Kembali Cepat', '/admin/layanan/kembali'],
+      ['Rak Tunggu & Reservasi', '/admin/layanan/rak-tunggu'],
+      ['Baca di Tempat', '/admin/layanan/baca'],
+      ['Denda & Pembayaran', '/admin/layanan/denda'],
       ['Terlambat & Jatuh Tempo', '/admin/layanan/terlambat'],
+      ['Pengingat E-mail', '/admin/layanan/pengingat'],
       ['Aturan Peminjaman', '/admin/layanan/aturan'],
+      ['Kalender', '/admin/layanan/kalender'],
+      ['Kunjungan', '/admin/layanan/kunjungan'],
+      ['Perangkat Buku Tamu', '/admin/layanan/buku-tamu'],
       ['Daftar Anggota', '/admin/anggota'],
       ['Tipe Anggota', '/admin/anggota/tipe'],
       ['Impor Anggota', '/admin/anggota/impor'],
+      ['Surat Bebas Pustaka', '/admin/anggota/bebas-pustaka'],
+      ['Cetak Kartu', '/admin/anggota/kartu'],
       // The Laporan group: the report catalogue and the accreditation workspace.
       ['Laporan', '/admin/reports'],
       ['Akreditasi', '/admin/accreditation'],
@@ -266,6 +275,23 @@ describe('navigation and language', () => {
       ['Diagnostik', '/admin/diagnostics'],
       ['Tentang', '/admin/about'],
     ]);
+  });
+
+  it('the menu marks one item: the page’s own, else the closest one above it', async () => {
+    const marked = async (path: string): Promise<(string | null)[]> => {
+      const { view } = setup(signedIn({ permissions: systemRolePermissions('super_admin'), superAdmin: true }), path);
+      await waitFor(() => within(mainNav()).getByRole('link', { name: 'Kembali Cepat' }));
+      const links = within(mainNav())
+        .getAllByRole('link')
+        .filter((a) => a.getAttribute('aria-current') === 'page')
+        .map((a) => a.textContent);
+      view.unmount();
+      return links;
+    };
+    expect(await marked('/admin/layanan/kembali')).toEqual(['Kembali Cepat']);
+    expect(await marked('/admin/layanan?member=01J0000000000000000000000A')).toEqual(['Meja Layanan']);
+    expect(await marked('/admin/anggota/tipe')).toEqual(['Tipe Anggota']);
+    expect(await marked('/admin/anggota/01J0000000000000000000000A')).toEqual(['Daftar Anggota']);
   });
 
   it('a super admin sees Konfigurasi Sistem', async () => {
@@ -287,8 +313,20 @@ describe('navigation and language', () => {
     // The Laporan heading and the Laporan item read the same.
     expect(within(nav).getAllByText('Laporan', { selector: 'p' })).toHaveLength(1);
     expect(within(groups[0]!).getAllByRole('link').map((a) => a.textContent)).toContain('Migrasi SLiMS');
-    expect(within(groups[1]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Meja Layanan', 'Kembali Cepat', 'Terlambat & Jatuh Tempo', 'Aturan Peminjaman']);
-    expect(within(groups[2]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Daftar Anggota', 'Tipe Anggota', 'Impor Anggota']);
+    expect(within(groups[1]!).getAllByRole('link').map((a) => a.textContent)).toEqual([
+      'Meja Layanan',
+      'Kembali Cepat',
+      'Rak Tunggu & Reservasi',
+      'Baca di Tempat',
+      'Denda & Pembayaran',
+      'Terlambat & Jatuh Tempo',
+      'Pengingat E-mail',
+      'Aturan Peminjaman',
+      'Kalender',
+      'Kunjungan',
+      'Perangkat Buku Tamu',
+    ]);
+    expect(within(groups[2]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Daftar Anggota', 'Tipe Anggota', 'Impor Anggota', 'Surat Bebas Pustaka', 'Cetak Kartu']);
     expect(within(groups[3]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Laporan', 'Akreditasi']);
     expect(within(groups[4]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Halaman & Berita']);
     expect(within(groups[5]!).getByRole('link', { name: 'Konfigurasi Sistem' })).toBeTruthy();

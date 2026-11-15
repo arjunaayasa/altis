@@ -161,6 +161,9 @@ const CATALOG: Readonly<Record<string, string>> = {
   // ---- Komunitas K1 (settings) ----
   'settings.accreditation.put':
     'PUT /api/v1/settings/accreditation | P:system.settings.manage | - | - | write | deny | store | settings.update | handler | -',
+  // ---- Komunitas (circulation core) ----
+  'settings.circulation.put': 'PUT /api/v1/settings/circulation | P:system.settings.manage | - | - | write | deny | store | settings.update | handler | -',
+  'settings.members.put': 'PUT /api/v1/settings/members | P:system.settings.manage | - | - | write | deny | store | settings.update | handler | -',
   'system.config.get': 'GET /api/v1/system/config | P:system.config.manage | - | - | read | deny | none | null | - | -',
   'system.config.put': 'PUT /api/v1/system/config | P:system.config.manage | - | reauth | write | deny | none | system.config.update | self | -',
   'system.config.email_test':
@@ -202,7 +205,8 @@ const CATALOG: Readonly<Record<string, string>> = {
   'files.uploads.complete': 'POST /api/v1/files/uploads/:id/complete | pub+s | - | - | system | deny | none | null | self | -',
   'files.uploads.delete': 'DELETE /api/v1/files/uploads/:id | pub+s | - | - | system | deny | none | null | self | -',
   // Phase 2 (L10): `allow`, as every OPAC route whose covers, images and media it serves (spec §12.3).
-  'files.get': 'GET /files/:id | pub | - | - | read | allow | none | null | - | -',
+  // Komunitas (member area): `member: optional`, for an attachment of access `members`.
+  'files.get': 'GET /files/:id | pub | - | - | read | allow | none | null | - | member:optional',
   // ---- 1c: backups (`backups.restore` audits nothing itself: the op writes `backup.restore` when it ends, C25) ----
   'backups.list': 'GET /api/v1/backups | P:system.backup.read | - | - | read | deny | none | null | - | -',
   'backups.create': 'POST /api/v1/backups | P:system.backup.create | - | - | system | deny | none | backup.create | self | -',
@@ -294,6 +298,11 @@ function catalogRow(d: RouteDecl): string {
     d.rawBody === undefined ? null : 'rawBody',
     d.alsoAudits === undefined ? null : `also:${d.alsoAudits.join(',')}`,
     d.ipLimits === undefined ? null : `ip:${d.ipLimits.join(',')}`,
+    // ---- Komunitas K2 (visits): a guestbook station's page and its HTML form body ----
+    d.visitStation === true ? 'station' : null,
+    // ---- Komunitas (member area): the member session a route reads, and an HTML form body ----
+    d.member === undefined ? null : `member:${d.member}`,
+    d.form === true ? 'form' : null,
   ].filter((x): x is string => x !== null);
   return [
     `${d.method} ${d.path}`,
@@ -451,6 +460,10 @@ describe.skipIf(!ctx.available)(`permission matrix, escalation, audit once [${en
 
   describe('route × persona: the gate outcome of every call is expected()', () => {
     for (const decl of ALL_ROUTES) {
+      // ---- Komunitas K2 (visits) ----
+      // A guestbook station's page reads no staff session: its gate is the station's own cookie and, for its forms, the
+      // station's (or the pre-session) CSRF token in the form body, which visit-station.test.ts checks.
+      if (decl.visitStation === true) continue;
       it(`${decl.id} (${decl.method} ${decl.path})`, async () => {
         const fixture = MATRIX_FIXTURES[decl.id];
         if (fixture === undefined) throw new Error(`MATRIX_FIXTURES has no fixture for ${decl.id}`);

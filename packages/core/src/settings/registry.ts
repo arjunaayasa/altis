@@ -23,8 +23,19 @@ import {
   undatedShareMaxPctField,
   unknownMemberGroupField,
   visitsDedupeMinutesField,
+  // ---- Komunitas (circulation core) ----
+  ClearanceProfile,
+  clearancePrefixField,
+  loanVoidMinutesField,
+  minorAmountField,
+  anonymizeYearsField,
+  receiptFooterField,
+  receiptPaperField,
+  // ---- Komunitas (notices) ----
+  noticeTemplateBodyField,
 } from '@altis/shared/api/settings';
 import { z } from 'zod';
+import { CardProfile, DEFAULT_CARD_PROFILE } from '@altis/shared/api/member-ops';
 
 // The registry of settings (spec §6.5, §7.6; D26, D41): every key the `settings` table may hold, with the group
 // the admin screens file it under, its scope, its Zod schema and its default. A row that is absent reads as the
@@ -56,7 +67,12 @@ export type SettingsGroup =
   | 'catalog'
   // ---- Komunitas K1 (settings) ----
   | 'accreditation'
-  | 'visits';
+  | 'visits'
+  // ---- Komunitas (holds, circulation core) ----
+  | 'circulation'
+  // ---- Komunitas K2 (members extended, visits, privacy) ----
+  | 'members'
+  | 'privacy';
 
 /** Every registered key. The compiler checks {@link SETTINGS} against it both ways (no missing key, no extra one). */
 export type SettingKey =
@@ -97,7 +113,31 @@ export type SettingKey =
   | 'accreditation.k7.processedThresholdPct'
   | 'accreditation.visits.dedupeLegacy'
   | 'accreditation.unknownMemberGroup.default'
-  | 'visits.dedupeMinutes';
+  | 'visits.dedupeMinutes'
+  // ---- Komunitas (holds) ----
+  | `circulation.holds.${'enabled' | 'opac' | 'onlyWhenNoneAvailable' | 'pickupDays'}`
+  // ---- Komunitas (circulation core) ----
+  | 'circulation.loanVoidMinutes'
+  | `circulation.lost.${'useItemPrice' | 'processingFeeMinor'}`
+  | `members.clearance.${'prefix' | 'profile'}`
+  // ---- Komunitas K2 (members extended, visits, privacy) ----
+  | 'members.card.profile'
+  | `visits.${'fromDesk' | 'fromOnline' | 'askPurpose'}`
+  | `visits.station.${'showPhoto' | 'welcome.id' | 'welcome.en'}`
+  | `privacy.${'loans' | 'visits'}.anonymizeAfterYears`
+  | 'privacy.members.anonymizeArchivedAfterYears'
+  // ---- Komunitas (member area) ----
+  | 'members.password.minLength'
+  | 'members.opac.enabled'
+  | `members.session.${'idleMinutes' | 'absoluteHours'}`
+  | 'circulation.renew.opac'
+  // ---- Komunitas (charges and payments) ----
+  | `circulation.block.${'unpaidOverMinor' | 'overdue'}`
+  | 'circulation.fines.skipClosedDays'
+  | `circulation.receipt.${'paperMm' | 'footer.id' | 'footer.en'}`
+  // ---- Komunitas (notices) ----
+  | `circulation.notices.${'dueSoonDays' | 'overdueEveryDays' | 'overdueMax' | 'holdReady'}`
+  | `email.template.${'circulation_due_soon' | 'circulation_overdue' | 'circulation_hold_ready'}.${'id' | 'en'}.${'subject' | 'body'}`;
 
 export interface SettingDef {
   group: SettingsGroup;
@@ -520,6 +560,81 @@ export const SETTINGS: Readonly<Record<SettingKey, SettingDef>> = Object.freeze(
   }),
   // Visits: a member's check-in within this many minutes of an earlier one is a repeat (0 turns the rule off).
   'visits.dedupeMinutes': def({ group: 'visits', schema: visitsDedupeMinutesField, default: 60 }),
+
+  // ---- Komunitas (holds) ----
+  // Holds: open or not (at the desk and, `opac`, for members), refused while a copy is on the shelf
+  // (`onlyWhenNoneAvailable`), and the days a kept copy waits on the hold shelf (`pickupDays`, 1-30).
+  'circulation.holds.enabled': def({ group: 'circulation', schema: z.boolean(), default: true }),
+  'circulation.holds.opac': def({ group: 'circulation', schema: z.boolean(), default: true }),
+  'circulation.holds.onlyWhenNoneAvailable': def({ group: 'circulation', schema: z.boolean(), default: true }),
+  'circulation.holds.pickupDays': def({ group: 'circulation', schema: z.int().min(1).max(30), default: 3 }),
+  // ---- Komunitas (circulation core) ----
+  // How long the desk may still void a loan; a lost item's replacement charge (the item's price when it has one) and
+  // processing fee (minor units, 0: none); then, in group `members`, the clearance letters' number prefix and profile.
+  'circulation.loanVoidMinutes': def({ group: 'circulation', schema: loanVoidMinutesField, default: 10 }),
+  'circulation.lost.useItemPrice': def({ group: 'circulation', schema: z.boolean(), default: true }),
+  'circulation.lost.processingFeeMinor': def({ group: 'circulation', schema: minorAmountField, default: 0 }),
+  'members.clearance.prefix': def({ group: 'members', schema: clearancePrefixField, default: 'BP' }),
+  'members.clearance.profile': def({
+    group: 'members',
+    schema: ClearanceProfile,
+    default: seed(ClearanceProfile, { paper: 'A4', city: '', signerTitle: 'Kepala Perpustakaan', signerName: '', signerId: '', bodyText: '' }),
+  }),
+  // ---- Komunitas K2 (members extended, visits, privacy) ----
+  // How member cards are printed (the barcode and QR code hold the member number only).
+  'members.card.profile': def({ group: 'members', schema: CardProfile, default: seed(CardProfile, DEFAULT_CARD_PROFILE) }),
+  // Visits: a member's first desk action of the day, and an OPAC sign-in, count as a visit; the station asks why one
+  // came, shows the member's photo, and greets with the library's own words (null: the built-in greeting).
+  'visits.fromDesk': def({ group: 'visits', schema: z.boolean(), default: true }),
+  'visits.fromOnline': def({ group: 'visits', schema: z.boolean(), default: true }),
+  'visits.askPurpose': def({ group: 'visits', schema: z.boolean(), default: false }),
+  'visits.station.showPhoto': def({ group: 'visits', schema: z.boolean(), default: false }),
+  'visits.station.welcome.id': def({ group: 'visits', schema: textOrNull(300), default: null }),
+  'visits.station.welcome.en': def({ group: 'visits', schema: textOrNull(300), default: null }),
+  // Personal data is kept this many years after a loan closed, a visit, or a member was archived; then the history
+  // rows lose the link to the person (an archived member is anonymised in full). null: never.
+  'privacy.loans.anonymizeAfterYears': def({ group: 'privacy', schema: anonymizeYearsField, default: 5 }),
+  'privacy.visits.anonymizeAfterYears': def({ group: 'privacy', schema: anonymizeYearsField, default: 2 }),
+  'privacy.members.anonymizeArchivedAfterYears': def({ group: 'privacy', schema: anonymizeYearsField, default: null }),
+  // ---- Komunitas (member area) ----
+  // The OPAC member area: the shortest member password (6-64), whether members may sign in at all, how long a member
+  // session lasts without activity (5-120 minutes) and at most (1-24 hours), and whether members may renew their loans
+  // online (their type must allow it too).
+  'members.password.minLength': def({ group: 'members', schema: z.int().min(6).max(64), default: 8 }),
+  'members.opac.enabled': def({ group: 'members', schema: z.boolean(), default: true }),
+  'members.session.idleMinutes': def({ group: 'members', schema: z.int().min(5).max(120), default: 20 }),
+  'members.session.absoluteHours': def({ group: 'members', schema: z.int().min(1).max(24), default: 8 }),
+  'circulation.renew.opac': def({ group: 'circulation', schema: z.boolean(), default: true }),
+  // ---- Komunitas (charges and payments) ----
+  // The optional blocks (both off by default): an unpaid balance above this many minor units blocks loans and
+  // renewals, an overdue loan blocks loans. Overdue fines count only the days the library is open (the loan branch's
+  // calendar). The receipt roll's width (58 or 80 mm) and the receipt's closing line in each language.
+  'circulation.block.unpaidOverMinor': def({ group: 'circulation', schema: minorAmountField.nullable(), default: null }),
+  'circulation.block.overdue': def({ group: 'circulation', schema: z.boolean(), default: false }),
+  'circulation.fines.skipClosedDays': def({ group: 'circulation', schema: z.boolean(), default: true }),
+  'circulation.receipt.paperMm': def({ group: 'circulation', schema: receiptPaperField, default: 80 }),
+  'circulation.receipt.footer.id': def({ group: 'circulation', schema: receiptFooterField, default: null }),
+  'circulation.receipt.footer.en': def({ group: 'circulation', schema: receiptFooterField, default: null }),
+  // ---- Komunitas (notices) ----
+  // E-mail reminders to members: a loan due in this many days (0: off), an overdue loan on its first day late and then
+  // every `overdueEveryDays` days, at most `overdueMax` times (0: off), and a hold ready for pickup. Then, in group
+  // `email`, the library's own subject and body of each of the three mails per language (null: the built-in text).
+  'circulation.notices.dueSoonDays': def({ group: 'circulation', schema: z.int().min(0).max(14), default: 2 }),
+  'circulation.notices.overdueEveryDays': def({ group: 'circulation', schema: z.int().min(1).max(60), default: 7 }),
+  'circulation.notices.overdueMax': def({ group: 'circulation', schema: z.int().min(0).max(10), default: 3 }),
+  'circulation.notices.holdReady': def({ group: 'circulation', schema: z.boolean(), default: true }),
+  'email.template.circulation_due_soon.id.subject': def({ group: 'email', schema: textOrNull(200), default: null }),
+  'email.template.circulation_due_soon.id.body': def({ group: 'email', schema: noticeTemplateBodyField, default: null }),
+  'email.template.circulation_due_soon.en.subject': def({ group: 'email', schema: textOrNull(200), default: null }),
+  'email.template.circulation_due_soon.en.body': def({ group: 'email', schema: noticeTemplateBodyField, default: null }),
+  'email.template.circulation_overdue.id.subject': def({ group: 'email', schema: textOrNull(200), default: null }),
+  'email.template.circulation_overdue.id.body': def({ group: 'email', schema: noticeTemplateBodyField, default: null }),
+  'email.template.circulation_overdue.en.subject': def({ group: 'email', schema: textOrNull(200), default: null }),
+  'email.template.circulation_overdue.en.body': def({ group: 'email', schema: noticeTemplateBodyField, default: null }),
+  'email.template.circulation_hold_ready.id.subject': def({ group: 'email', schema: textOrNull(200), default: null }),
+  'email.template.circulation_hold_ready.id.body': def({ group: 'email', schema: noticeTemplateBodyField, default: null }),
+  'email.template.circulation_hold_ready.en.subject': def({ group: 'email', schema: textOrNull(200), default: null }),
+  'email.template.circulation_hold_ready.en.body': def({ group: 'email', schema: noticeTemplateBodyField, default: null }),
 });
 
 /** The registered keys in registry order. */

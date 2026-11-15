@@ -309,16 +309,16 @@ describe('splitUsageDump', () => {
     expect((await extra.rows('biblio', null, 10)).rows).toEqual([{ biblio_id: 1, classification: '301' }]);
   });
 
-  it('leaves the catalogue split as it was: without the options no usage-only table is staged and read tables stay whole', async () => {
+  it('without the options the split is the migration\'s: the member and circulation tables are staged whole for its people stages', async () => {
     const r = await placeDump(dump);
     const result = await splitDump({ ...r, gz: false, checkpoint: null, budgetMs: 600_000, ensureHeadroom: noHeadroom });
     const files = await filesOf(r.stagingDir);
-    for (const table of ['member', 'loan', 'loan_history', 'visitor_count', 'mst_member_type', 'read_counter']) expect(Object.hasOwn(files, `${table}.ndjson`), table).toBe(false);
+    for (const table of ['member', 'loan', 'loan_history', 'visitor_count', 'mst_member_type', 'read_counter']) expect(Object.hasOwn(files, `${table}.ndjson`), table).toBe(true);
     expect(Object.keys(stagedRows(files['item.ndjson']!)[0]!)).toEqual(expect.arrayContaining(['item_id', 'item_code', 'price', 'received_date', 'input_date']));
     expect(Object.keys(stagedRows(files['item.ndjson']!)[0]!).length).toBeGreaterThan(SLIMS_USAGE_COLUMNS.item.length);
     expect(result.tables.find((t) => t.name === 'member')?.columns).toContain('member_name');
     const source = openStagedDumpSource(r.stagingDir, result.tables);
-    expect((await source.rows('member', null, 10)).rows).toEqual([]);
+    expect((await source.rows('member', null, 1)).rows[0]).toHaveProperty('member_name');
     expect((await source.rows('biblio', null, 1)).rows[0]).toHaveProperty('title');
   });
 });

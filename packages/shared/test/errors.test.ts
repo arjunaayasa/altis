@@ -201,6 +201,37 @@ describe('ERROR_CODES', () => {
     CIRC_RENEW_REFUSED: 409,
   };
 
+  // ---- Komunitas (holds) ----
+  const holds: Record<string, number> = {
+    CIRC_ITEM_ON_HOLD: 409,
+    CIRC_HOLD_REFUSED: 409,
+  };
+
+  // ---- Komunitas (circulation core) ----
+  const circulationCore: Record<string, number> = {
+    CIRC_VOID_REFUSED: 409,
+    CIRC_CALENDAR_CLOSED: 422,
+  };
+
+  // ---- Komunitas K2 (members extended and visits) ----
+  const membersVisits: Record<string, number> = {
+    MEMBER_ANONYMIZED: 409,
+    MEMBER_CARD_LIMIT: 422,
+    VISIT_STATION_UNPAIRED: 401,
+    VISIT_ACTIVATION_INVALID: 422,
+  };
+
+  // ---- Komunitas (charges and payments) ----
+  const charges: Record<string, number> = {
+    CIRC_MEMBER_BLOCKED: 409,
+    CIRC_CHARGE_STATE: 409,
+  };
+
+  // ---- Komunitas (SLiMS members and circulation) ----
+  const slimsPeople: Record<string, number> = {
+    MIGRATION_CIRCULATION_LIVE: 409,
+  };
+
   const expected: Record<ErrorCode, number> = {
     ...phase1a,
     ...phase1b,
@@ -210,6 +241,11 @@ describe('ERROR_CODES', () => {
     ...k1EditionLane,
     ...komunitasK1,
     ...membersCirculation,
+    ...holds,
+    ...circulationCore,
+    ...membersVisits,
+    ...charges,
+    ...slimsPeople,
   } as Record<ErrorCode, number>;
 
   it('registers exactly the Phase 1a, 1b, 1c, 1d, 2 and Komunitas codes (edition lane, reports and accreditation, members and circulation) with their HTTP status', () => {
@@ -227,6 +263,8 @@ describe('ERROR_CODES', () => {
     expect(Object.keys(phase2)).toHaveLength(13);
     expect(Object.keys(komunitasK1)).toHaveLength(7);
     expect(Object.keys(membersCirculation)).toHaveLength(12);
+    expect(Object.keys(circulationCore)).toHaveLength(2);
+    expect(Object.keys(membersVisits)).toHaveLength(4);
     expect(Object.keys(ERROR_CODES)).toEqual([
       ...Object.keys(phase1a),
       ...Object.keys(phase1b),
@@ -236,6 +274,11 @@ describe('ERROR_CODES', () => {
       ...Object.keys(k1EditionLane),
       ...Object.keys(komunitasK1),
       ...Object.keys(membersCirculation),
+      ...Object.keys(holds),
+      ...Object.keys(circulationCore),
+      ...Object.keys(membersVisits),
+      ...Object.keys(charges),
+      ...Object.keys(slimsPeople),
     ]);
     for (const [code, status] of Object.entries(phase1a)) {
       expect(ERROR_CODES[code as ErrorCode].status, code).toBe(status);

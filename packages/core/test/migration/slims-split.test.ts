@@ -110,7 +110,9 @@ describe('splitDump', () => {
     expect(checkpoints[0]!.offset).toBe(dump.length);
     const files = await staged(r.stagingDir);
     expect(Object.keys(files)).toContain('biblio.ndjson');
-    for (const table of ['member', 'loan', 'loan_history', 'search_biblio', 'read_counter']) expect(Object.keys(files)).not.toContain(`${table}.ndjson`);
+    // The member and circulation tables are staged for the people stages; a derived table and the system log are not.
+    for (const table of ['search_biblio', 'system_log']) expect(Object.keys(files)).not.toContain(`${table}.ndjson`);
+    for (const table of ['member', 'loan', 'loan_history', 'read_counter']) expect(Object.keys(files)).toContain(`${table}.ndjson`);
     for (const table of expected.roles.read) expect(Object.keys(files)).toContain(`${table}.ndjson`);
     const counts = Object.fromEntries(tables.map((t) => [t.name, t.rows]));
     expect(counts).toEqual(Object.fromEntries(Object.entries(expected.tables).map(([t, { source }]) => [t, source])));
@@ -245,7 +247,7 @@ describe('splitDump', () => {
   });
 
   it('refuses rows that cannot be named, keeps bytes as $hex, and ignores tables it does not read', async () => {
-    const r = await run(Buffer.from("INSERT INTO `member` VALUES ('M1','x');\nINSERT INTO `biblio` VALUES (1,'t');\n"));
+    const r = await run(Buffer.from("INSERT INTO `search_biblio` VALUES (1,'x');\nINSERT INTO `biblio` VALUES (1,'t');\n"));
     const error = await splitAll(r).then(
       () => null,
       (e: unknown) => e,
@@ -448,7 +450,7 @@ describe('openStagedDumpSource', () => {
     await expect(source.rows('item', null, 0)).rejects.toThrow(TypeError);
     await expect(source.rows('item', '999999', 10)).resolves.toEqual({ rows: [], next: null });
     // A table it was not given, or did not stage (not read in Phase 2), has no rows.
-    expect(await source.rows('member', null, 10)).toEqual({ rows: [], next: null });
+    expect(await source.rows('search_biblio', null, 10)).toEqual({ rows: [], next: null });
     expect(await source.rows('no_such_table', null, 10)).toEqual({ rows: [], next: null });
   });
 });
