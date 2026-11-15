@@ -246,6 +246,40 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     expect(en).toContain(`<span lang="en">(${opacText('en', 'home.visit.today')})</span>`);
   });
 
+  it('a day the library calendar closes: no row of the hours is today\'s and no time is given for today; the page says it is closed', async () => {
+    const before = (await h.db.selectFrom('settings').select('value').where('key', '=', 'opac.home').executeTakeFirst())?.value ?? null;
+    await setHome({
+      ...OPAC_HOME_DEFAULT,
+      hours: [
+        { days: 'Senin–Sabtu', time: '07.00–15.00', weekdays: [1, 2, 3, 4, 5, 6] },
+        { days: 'Minggu', time: '08.00–12.00', weekdays: [7] },
+      ],
+    });
+    const open = (await get('/')).text;
+    expect(open).toContain(esc(opacText('id', 'home.search.today', { time: '08.00–12.00' })));
+    expect(open).not.toContain(esc(opacText('id', 'home.search.closed_today')));
+    // A holiday covering NOW (Sunday 15 November 2026 in the library's time zone).
+    const holiday = newId(NOW);
+    await h.db
+      .insertInto('calendars')
+      .values({ id: holiday, branch_id: null, kind: 'dates', weekday: null, date_from: '2026-11-14', date_to: '2026-11-16', month_day_from: null, month_day_to: null, name: 'Libur semester', archived_at: null, created_at: NOW, created_by: null, updated_at: NOW, updated_by: null })
+      .execute();
+    try {
+      for (const locale of ['id', 'en'] as const) {
+        const html = (await get(locale === 'id' ? '/' : '/?lang=en')).text;
+        expect(html, locale).not.toContain(esc(opacText(locale, 'home.search.today', { time: '08.00–12.00' })));
+        expect(html, locale).toContain(`<span>${esc(opacText(locale, 'home.search.closed_today'))}</span>`);
+        const visit = section(html, 'kunjungi-judul')!;
+        expect(visit, locale).not.toContain('class="today"');
+        expect(visit, locale).toContain(esc(opacText(locale, 'home.visit.closed_today')));
+        expect(visit, locale).toContain('<tr><th scope="row">Minggu</th><td>08.00–12.00</td></tr>');
+      }
+    } finally {
+      await h.db.deleteFrom('calendars').where('id', '=', holiday).execute();
+      if (before !== null) await setSettings({ 'opac.home': JSON.parse(before) as unknown });
+    }
+  });
+
   it('the overlay never lighter than its floor; the library colour without a photo as a nonce style of six hex digits, nothing else', async () => {
     const stored = (await h.db.selectFrom('settings').select('value').where('key', '=', 'opac.home').executeTakeFirstOrThrow()).value!;
     const home = JSON.parse(stored) as OpacHomeContent;

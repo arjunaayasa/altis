@@ -1,4 +1,4 @@
-import { recordUrlPath, topClasses, type ClassActivity } from '@altis/core';
+import { closedBy, loadClosedDayRules, recordUrlPath, topClasses, type ClassActivity } from '@altis/core';
 import { isLocale, localDate, t, type Locale } from '@altis/shared';
 import {
   OPAC_HOME_DEFAULT,
@@ -198,12 +198,16 @@ function countText(n: number, locale: Locale): string {
 /** The local path of a stored photo. */
 const fileSrc = (fileId: string): string => `/files/${encodeURIComponent(fileId)}`;
 
-/** The page's search card, floating at the hero's lower edge: the search form, the number of titles and today's hours. */
-function SearchCard(props: { locale: Locale; lang: Locale | null; titles: number; today: readonly OpacHomeHours[] }) {
-  const { locale, lang, titles, today } = props;
+/**
+ * The page's search card, floating at the hero's lower edge: the search form, the number of titles and today's hours,
+ * or that the library is closed today (`closed`: a closed day of the library calendar).
+ */
+function SearchCard(props: { locale: Locale; lang: Locale | null; titles: number; today: readonly OpacHomeHours[]; closed: boolean }) {
+  const { locale, lang, titles, today, closed } = props;
   const facts: string[] = [];
   if (titles > 0) facts.push(opacText(locale, 'home.search.titles', { count: countText(titles, locale) }));
-  if (today.length > 0) facts.push(opacText(locale, 'home.search.today', { time: today.map((h) => h.time).join(', ') }));
+  if (closed) facts.push(opacText(locale, 'home.search.closed_today'));
+  else if (today.length > 0) facts.push(opacText(locale, 'home.search.today', { time: today.map((h) => h.time).join(', ') }));
   return (
     <div class="home-search">
       <SearchForm locale={locale} lang={lang} id="cari-beranda" hero />
@@ -328,8 +332,11 @@ function Services(props: { home: OpacHomeContent; locale: Locale; contentLang: L
   );
 }
 
-/** The visit block: the library's address and its opening hours, today's row (by its weekdays) in bold and named so. */
-function Visit(props: { address: string | null; home: OpacHomeContent; weekday: number; locale: Locale; contentLang: Locale | undefined }) {
+/**
+ * The visit block: the library's address and its opening hours, today's row (by its weekdays) in bold and named so; on
+ * a day the library calendar closes (`weekday` null), no row is today's and the block says the library is closed.
+ */
+function Visit(props: { address: string | null; home: OpacHomeContent; weekday: number | null; locale: Locale; contentLang: Locale | undefined }) {
   const { home, weekday, locale, contentLang } = props;
   const address = props.address === null || props.address.trim() === '' ? null : props.address;
   if (address === null && home.hours.length === 0) return null;
@@ -348,6 +355,7 @@ function Visit(props: { address: string | null; home: OpacHomeContent; weekday: 
         {home.hours.length === 0 ? null : (
           <div class="visit-block">
             <h3 id="jam-buka">{opacText(locale, 'home.visit.hours')}</h3>
+            {weekday === null ? <p class="section-note">{opacText(locale, 'home.visit.closed_today')}</p> : null}
             <table class="hours" aria-labelledby="jam-buka">
               <thead class="visually-hidden">
                 <tr>
@@ -357,7 +365,7 @@ function Visit(props: { address: string | null; home: OpacHomeContent; weekday: 
               </thead>
               <tbody lang={contentLang}>
                 {home.hours.map((h) =>
-                  h.weekdays.includes(weekday) ? (
+                  weekday !== null && h.weekdays.includes(weekday) ? (
                     <tr class="today">
                       <th scope="row">
                         {h.days} <span lang={locale}>({opacText(locale, 'home.visit.today')})</span>
@@ -460,7 +468,7 @@ export async function homeResponse(rc: HomeSource): Promise<Response> {
   } catch {
     today = localDate('UTC', rc.now);
   }
-  const [fresh, promoted, news, popular, titles, members, classes] = await Promise.all([
+  const [fresh, promoted, news, popular, titles, members, classes, closedDays] = await Promise.all([
     blocks.newTitles ? newTitles(handle, newCount) : [],
     blocks.promoted ? promotedTitles(handle, PROMOTED_MAX) : [],
     blocks.news ? latestNews(handle, rc.now, locale, HOME_NEWS) : [],
@@ -468,6 +476,7 @@ export async function homeResponse(rc: HomeSource): Promise<Response> {
     publicRecordCount(handle),
     blocks.about ? activeMemberCount(handle, today) : 0,
     blocks.readingClasses ? topClasses(handle, HOME_CLASSES) : [],
+    blocks.visit ? loadClosedDayRules(handle, null) : [],
   ]);
   const [popularPills, freshPills] = await subjectPills(
     handle,
@@ -476,8 +485,10 @@ export async function homeResponse(rc: HomeSource): Promise<Response> {
   );
   const lang = requestLang(rc.c);
   const contentLang = isLocale(libraryLocale) && libraryLocale !== locale ? libraryLocale : undefined;
-  const weekday = isoWeekday(today);
-  const todayHours = home.hours.filter((h) => h.weekdays.includes(weekday));
+  // A day the library calendar closes (a holiday, a break) is nobody's opening day, whatever the hours say.
+  const closedToday = closedBy(closedDays)(today);
+  const weekday = closedToday ? null : isoWeekday(today);
+  const todayHours = weekday === null ? [] : home.hours.filter((h) => h.weekdays.includes(weekday));
   return opacPage(rc, ctx, {
     title: `${ctx.libraryName} · ${t(locale, 'opac.home.title')}`,
     description: opacText(locale, 'shell.home.description', { library: ctx.libraryName }),
@@ -489,7 +500,7 @@ export async function homeResponse(rc: HomeSource): Promise<Response> {
     jsonLd: [libraryJsonLd({ name: ctx.libraryName, address, baseUrl: ctx.baseUrl }), webSiteJsonLd({ name: ctx.libraryName, baseUrl: ctx.baseUrl, locale })],
     body: () => (
       <>
-        <SearchCard locale={locale} lang={lang} titles={titles} today={blocks.visit ? todayHours : []} />
+        <SearchCard locale={locale} lang={lang} titles={titles} today={blocks.visit ? todayHours : []} closed={blocks.visit && closedToday} />
         {blocks.classes ? <Classes locale={locale} lang={lang} /> : null}
         {blocks.popular ? <Popular cards={popular} pills={popularPills ?? []} locale={locale} lang={lang} /> : null}
         <Titles id="judul-baru" heading={opacText(locale, 'shell.home.new_titles')} cards={fresh} pills={freshPills ?? []} locale={locale} lang={lang} />
