@@ -60,8 +60,11 @@ export function OpacHomeScreen() {
     queryKey: OPAC_HOME_KEY,
     path: 'opac/home',
     enabled: canManage,
-    // The draft must not be replaced under the admin's hands: the content is read again only after a save or a reload.
+    // The draft must not be replaced under the admin's hands: while the screen is open the content is read again only
+    // after a save or a reload. Nothing is kept once it closes, so opening it again reads what the server holds now
+    // (the welcome texts and the accent also change under Pengaturan › OPAC).
     staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 0,
     refetchOnWindowFocus: false,
   });
   const [notice, setNotice] = useState<string | null>(null);

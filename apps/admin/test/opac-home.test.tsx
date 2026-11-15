@@ -1,5 +1,5 @@
 import { OPAC_HOME_DEFAULT, type OpacHomeView } from '@altis/shared/api/opac-home';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ADMIN_MESSAGES, type AdminKey } from '@/i18n';
 import { uploadFile } from '@/lib/upload';
@@ -143,6 +143,32 @@ describe('OPAC › Halaman awal', () => {
     expect(vi.mocked(uploadFile)).toHaveBeenCalledTimes(1);
     expect(screen.getByText(t('opacHome.dirty'))).toBeTruthy();
     expect(puts(requests)).toEqual([]);
+  });
+
+  it('opened again after another screen, it reads the content afresh: a change saved meanwhile is shown and its revision sent', async () => {
+    let current = view();
+    const { router, requests } = startApp({
+      me: adminMe(),
+      path: '/admin/opac/beranda',
+      routes: {
+        'GET opac/home': () => current,
+        'PUT opac/home': (r) =>
+          (r.body as { revision: string }).revision === current.revision ? { revision: 'fedcba9876543210', changed: ['opac.home'] } : problem(409, 'CONFLICT_STALE'),
+      },
+    });
+    await screen.findByLabelText(t('opacHome.text.heading'), undefined, FIRST);
+    await act(() => router.navigate({ to: '/admin/about' }));
+    await waitFor(() => expect(screen.queryByLabelText(t('opacHome.text.heading'))).toBeNull());
+    // Saved meanwhile under Pengaturan › OPAC (the welcome text is part of this screen's revision), while the admin is
+    // on another screen for a moment.
+    current = { ...view(), welcome: { id: 'Halo dari pengaturan.', en: null }, accent: 'red', revision: 'aaaaaaaaaaaaaaaa' };
+    await new Promise((r) => setTimeout(r, 50));
+    await act(() => router.navigate({ to: '/admin/opac/beranda' }));
+    expect(await screen.findByDisplayValue('Halo dari pengaturan.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(t('opacHome.text.heading')), { target: { value: 'Ruang baca' } });
+    fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
+    await screen.findByText(t('opacHome.saved'));
+    expect(puts(requests).map((b) => (b as { revision: string }).revision)).toEqual(['aaaaaaaaaaaaaaaa']);
   });
 
   it('without opac.pages.manage the screen says so and reads nothing', async () => {
