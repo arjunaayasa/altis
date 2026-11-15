@@ -65,6 +65,7 @@ export const CHARGES_ID = {
   'slip.due': 'Jatuh tempo',
   'slip.renewed': 'diperpanjang',
   'slip.late': 'Terlambat (hari)',
+  'slip.late_fined': '{days} ({fined} didenda)',
 } as const;
 
 export const CHARGES_EN: Record<keyof typeof CHARGES_ID, string> = {
@@ -118,4 +119,5 @@ export const CHARGES_EN: Record<keyof typeof CHARGES_ID, string> = {
   'slip.due': 'Due',
   'slip.renewed': 'renewed',
   'slip.late': 'Days late',
+  'slip.late_fined': '{days} ({fined} fined)',
 };

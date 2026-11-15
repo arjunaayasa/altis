@@ -90,7 +90,7 @@ export type { CirculationChargeSeam, CirculationHoldSeam } from './seams.js';
 // hand at the desk), waives, payments with numbered receipts, voided payments, the receipt PDF, the member's balance
 // and the optional blocks, and the lists staff read.
 export { FinePreviewer, finesSkipClosedDays, overdueFineMinor } from './fines.js';
-export type { FineTerms, PreviewLoan } from './fines.js';
+export type { FineTerms, Lateness, PreviewLoan } from './fines.js';
 export {
   CHARGES_SEAM,
   anonymizeLoanCharges,
