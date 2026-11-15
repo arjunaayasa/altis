@@ -51,7 +51,7 @@ function session(o: Partial<StocktakeView> = {}): StocktakeView {
     source: 'altis',
     counts: COUNTS,
     startedAt: Date.UTC(2026, 10, 15, 2),
-    startedBy: { id: 'U1', name: 'Ani' },
+    startedBy: { id: '01JZ0000000000000000000A01', name: 'Ani' },
     finishedAt: null,
     finishedBy: null,
     options: null,
