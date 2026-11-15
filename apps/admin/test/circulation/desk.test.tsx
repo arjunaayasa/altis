@@ -124,6 +124,31 @@ describe('Meja Layanan', () => {
     expect(await screen.findByRole('tab', { name: 'Dipinjam (1)' })).toBeTruthy();
   });
 
+  it('Ctrl+Z voids the last loan, and the slip (F9) then leaves that loan out', async () => {
+    let member = deskMember();
+    const app = start({
+      'POST branches/:branchId/circulation/members/lookup': () => member,
+      'GET branches/:branchId/circulation/members/:memberId': () => member,
+      'POST branches/:branchId/circulation/loans': () => {
+        member = deskMember({ counts: { openLoans: 1, overdue: 0, holdsReady: 0 }, loans: [{ id: LOAN.id, version: 1, branchId: BRANCH, item: LOAN.item, record: LOAN.record, loanedOn: '2026-11-15', dueOn: LOAN.dueOn, daysLate: 0, renewals: 0, renewLimit: 1, finePreview: null }] });
+        return new Response(JSON.stringify(LOAN), { status: 201, headers: { 'Content-Type': 'application/json', 'X-Altis-Build': '0.1.0' } });
+      },
+      'POST branches/:branchId/circulation/loans/:id/void': () => {
+        member = deskMember();
+        return { id: LOAN.id, version: 2 };
+      },
+    });
+    await scan('a001');
+    expect(await screen.findByText('Anggota dimuat: Budi Santoso')).toBeTruthy();
+    await scan('B0001');
+    expect(await screen.findByText(/^Dipinjam: Laskar Pelangi — jatuh tempo/, { selector: 'p.text-xl' })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    expect(await screen.findByText('Pinjaman dibatalkan: Laskar Pelangi', { selector: 'p.text-xl' })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'F9' });
+    expect(await screen.findByText('Belum ada transaksi untuk dicetak di slip.', { selector: 'p.text-xl' })).toBeTruthy();
+    expect(app.fetchMock.mock.calls.some(([url]) => String(url).endsWith('/circulation/slips'))).toBe(false);
+  });
+
   it('says a refusal in words from its code, and offers to return an item the member already holds', async () => {
     const held = deskMember({
       counts: { openLoans: 1, overdue: 0, holdsReady: 0 },
