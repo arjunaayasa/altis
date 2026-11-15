@@ -235,7 +235,13 @@ export interface ReturnResponse {
   loanedOn: string;
   dueOn: string;
   returnedOn: string;
+  /** Calendar days past `dueOn` at the return (0 when on time). */
   daysLate: number;
+  /**
+   * The days late the overdue fine booked by this return counted: the open days only when the library's closed days are
+   * not fined, so it may be less than `daysLate`. Absent when no fine was booked.
+   */
+  finedDays?: number;
   /** The copy is kept on the hold shelf for this member: put it there, with the slip. */
   hold?: ReturnHoldTrap;
   warnings?: CirculationWarningView[];

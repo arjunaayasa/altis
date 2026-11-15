@@ -493,8 +493,9 @@ export async function returnItem(tx: TxCtx, input: { branchId: string; barcode: 
 
   const { item, record, row: itemRow } = await itemRefs(trx, locked.id);
   const daysLate = Math.max(0, diffDays(loan.due_on, today));
-  // Only once the loan is closed: its overdue fine (the charges module counts the days in the loan branch's calendar).
-  if (daysLate > 0) await chargeSeam().bookOverdue(tx, { loanId: loan.id, dueOn: loan.due_on, until: today });
+  // Only once the loan is closed: its overdue fine (the charges module counts the days in the loan branch's calendar,
+  // so the days it fined may be fewer than the calendar days late when closed days are not fined).
+  const finedDays = daysLate > 0 ? await chargeSeam().bookOverdue(tx, { loanId: loan.id, dueOn: loan.due_on, until: today }) : null;
   const warnings: CirculationWarningView[] = [];
   if (itemRow.branch_id !== input.branchId) {
     const b = await trx.selectFrom('branches').select('code_display').where('id', '=', itemRow.branch_id).executeTakeFirst();
@@ -523,6 +524,7 @@ export async function returnItem(tx: TxCtx, input: { branchId: string; barcode: 
     dueOn: loan.due_on,
     returnedOn: today,
     daysLate,
+    ...(finedDays === null ? {} : { finedDays }),
     ...(hold === null ? {} : { hold }),
     ...(warnings.length === 0 ? {} : { warnings }),
   };

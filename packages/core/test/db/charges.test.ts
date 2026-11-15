@@ -104,6 +104,7 @@ describe.skipIf(!ctx.available)(`charges and payments [${engineLabel()}]`, () =>
       expect(loan.dueOn).toBe(due);
       const returned = await back(book.barcode, 7 + late);
       expect(returned.daysLate).toBe(late);
+      expect(returned.finedDays).toBe(fine === null ? undefined : late);
       const rows = await charges(reader);
       expect(rows.map((r) => Number(r.amount_minor))).toEqual(fine === null ? [] : [fine]);
       if (fine !== null) {
@@ -119,14 +120,15 @@ describe.skipIf(!ctx.available)(`charges and payments [${engineLabel()}]`, () =>
     const reader = await member();
     const book = await item();
     await lend(reader, book.barcode);
-    await back(book.barcode, 12);
+    // The return says both: the calendar days late and the days its fine counted.
+    expect(await back(book.barcode, 12)).toMatchObject({ daysLate: 5, finedDays: 4 });
     expect((await charges(reader)).map((r) => Number(r.amount_minor))).toEqual([200_000]);
 
     await settings({ 'circulation.fines.skipClosedDays': false } as Settings);
     const other = await member();
     const second = await item();
     await lend(other, second.barcode);
-    await back(second.barcode, 12);
+    expect(await back(second.barcode, 12)).toMatchObject({ daysLate: 5, finedDays: 5 });
     expect((await charges(other)).map((r) => Number(r.amount_minor))).toEqual([250_000]);
     await settings({ 'circulation.fines.skipClosedDays': true } as Settings);
     await db.h.db.updateTable('calendars').set({ archived_at: NOW }).where('id', '=', sunday).execute();

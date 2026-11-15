@@ -133,6 +133,8 @@ interface ReturnRow {
   memberNo: string | null;
   dueOn: string;
   daysLate: number;
+  /** The days its overdue fine counted, when a fine was booked and they differ from `daysLate` (closed days). */
+  finedDays: number | null;
   otherBranch: string | null;
   /** The member number the copy is kept for on the hold shelf. */
   keptFor: string | null;
@@ -251,6 +253,12 @@ function borrowRefusalText(t: Translate, m: DeskMemberView): string | null {
     default:
       return null;
   }
+}
+
+/** "N days late", with the days its fine counted when they differ (closed days are not fined); "on time" at 0. */
+function lateText(t: Translate, daysLate: number, finedDays: number | null): string {
+  if (daysLate <= 0) return t('circulation.due.on_time');
+  return finedDays === null ? t('circulation.due.late', { count: daysLate }) : t('circulation.due.late_fined', { count: daysLate, fined: finedDays });
 }
 
 /** The warnings of an action that went through, as one sentence each. */
@@ -600,13 +608,17 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
       const done = await api<ReturnResponse>('POST', `branches/${encodeURIComponent(branchId)}/circulation/returns`, body, { idempotencyKey: keyFor('desk-return', body) });
       settle();
       const otherBranch = done.warnings?.find((w) => w.code === 'return_to_branch')?.branchCode ?? null;
+      // The fine leaves out the days the library was closed: say both counts when they differ, or the fine looks wrong.
+      const finedDays = done.finedDays !== undefined && done.finedDays !== done.daysLate ? done.finedDays : null;
       const title =
         done.foundLost === true
           ? t('circulation.lost.found')
           : otherBranch !== null
           ? t('circulation.feedback.returned_branch', { code: otherBranch })
           : done.daysLate > 0
-            ? t('circulation.feedback.returned_late', { count: done.daysLate })
+            ? finedDays !== null
+              ? t('circulation.feedback.returned_late_fined', { count: done.daysLate, fined: finedDays })
+              : t('circulation.feedback.returned_late', { count: done.daysLate })
             : t('circulation.feedback.returned');
       const detail = `${done.record.title} · ${done.item.barcode}`;
       if (done.hold !== undefined) {
@@ -621,7 +633,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
         setSlip(null);
         say(otherBranch !== null || done.daysLate > 0 ? 'warning' : 'success', title, detail);
       }
-      addVisit({ kind: 'return', title: done.record.title, barcode: done.item.barcode, note: done.daysLate > 0 ? t('circulation.due.late', { count: done.daysLate }) : t('circulation.due.on_time'), refId: done.id });
+      addVisit({ kind: 'return', title: done.record.title, barcode: done.item.barcode, note: lateText(t, done.daysLate, finedDays), refId: done.id });
       seq.current += 1;
       const row: ReturnRow = {
         seq: seq.current,
@@ -630,6 +642,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
         memberNo: done.memberNo,
         dueOn: done.dueOn,
         daysLate: done.daysLate,
+        finedDays,
         otherBranch,
         keptFor: done.hold?.memberNo ?? null,
       };
@@ -1698,7 +1711,7 @@ function ReturnsTable({ rows }: { rows: readonly ReturnRow[] }) {
                 <td className="px-3 py-2 whitespace-nowrap">{day(row.dueOn)}</td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
-                    {row.daysLate > 0 ? <Badge tone="danger">{t('circulation.due.late', { count: row.daysLate })}</Badge> : <Badge tone="info">{t('circulation.due.on_time')}</Badge>}
+                    {row.daysLate > 0 ? <Badge tone="danger">{lateText(t, row.daysLate, row.finedDays)}</Badge> : <Badge tone="info">{t('circulation.due.on_time')}</Badge>}
                     {row.otherBranch !== null && <Badge tone="warning">{t('circulation.returns.to_branch', { code: row.otherBranch })}</Badge>}
                     {row.keptFor !== null && <Badge tone="warning">{t('holds.returns.kept', { no: row.keptFor })}</Badge>}
                   </div>
