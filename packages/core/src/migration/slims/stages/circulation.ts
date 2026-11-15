@@ -1124,9 +1124,11 @@ export async function circulationMatches(c: SlimsStageContext, db: Db): Promise<
   const altisOpen = await count(db.selectFrom('loans').where('source', '=', 'migrated').where('open_item_id', 'is not', null));
   out.push(row('open_loans', '', open.length, altisOpen, unresolved.length + doubles.length));
   const openCodes = new Set(open.map((x) => x.itemCode));
-  const resolvedCodes = new Set(open.filter((x) => items.has(x.itemCode) && members.has(x.member)).map((x) => x.itemCode));
+  // A copy stays on loan only through its winning open loan (the latest): when that one cannot come over (its copy or
+  // its member is missing), the copy's other open loans are closed as doubles, and the copy is not on loan in ALTIS.
+  const keptCodes = new Set(open.filter((x) => openWinner.get(x.itemCode) === x.id && items.has(x.itemCode) && members.has(x.member)).map((x) => x.itemCode));
   const altisItems = await count(db.selectFrom('loans').where('source', '=', 'migrated').where('open_item_id', 'is not', null));
-  out.push(row('items_on_loan', '', openCodes.size, altisItems, openCodes.size - resolvedCodes.size));
+  out.push(row('items_on_loan', '', openCodes.size, altisItems, openCodes.size - keptCodes.size));
   const missing = open.filter((x) => !items.has(x.itemCode)).length;
   out.push(row('open_loans_item_missing', '', missing, 0, 0, missing === 0));
   const overdue = open.filter((x) => x.dueDate !== null && x.dueDate < todayIs);
