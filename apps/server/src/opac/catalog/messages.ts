@@ -9,6 +9,8 @@ import { SHELL_MESSAGES } from './messages/shell.js';
 import { VISITS_MESSAGES } from './messages/visits.js';
 // ---- Komunitas (member area) ----
 import { AKUN_MESSAGES } from './messages/akun.js';
+// ---- Komunitas (OPAC home page) ----
+import { HOME_MESSAGES } from './messages/home.js';
 
 // The OPAC's own copy (Phase 2 Task 3, decision P2-04): the catalogue pages are server-rendered, so their texts live
 // here, one file per area (messages/<area>.ts, each owned by its task), not in the shared `opac.*` family of
@@ -29,6 +31,8 @@ export const OPAC_MESSAGE_AREAS = Object.freeze({
   visits: VISITS_MESSAGES,
   // ---- Komunitas (member area) ----
   akun: AKUN_MESSAGES,
+  // ---- Komunitas (OPAC home page) ----
+  home: HOME_MESSAGES,
 });
 
 type Areas = typeof OPAC_MESSAGE_AREAS;

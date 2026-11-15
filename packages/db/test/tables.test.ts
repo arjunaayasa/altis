@@ -150,6 +150,16 @@ import {
   STOCKTAKE_UNIQUE,
   stocktakeSampleRows,
 } from './fixtures/komunitas-stocktake-tables.js';
+// ---- Komunitas (OPAC home page) ----
+import {
+  OPAC_HOME_CLASSES,
+  OPAC_HOME_COLUMNS,
+  OPAC_HOME_DEFAULTS,
+  OPAC_HOME_INDEXES,
+  OPAC_HOME_PRIMARY_KEYS,
+  OPAC_HOME_TABLES_BY_MIGRATION,
+  opacHomeSampleRows,
+} from './fixtures/komunitas-opac-home-tables.js';
 import { MIGRATION_NAME, runMigrations } from '../src/migrator.js';
 import { PHASE1_MIGRATIONS } from '../src/migrations/index.js';
 import { SECRET_COLUMNS, SETTINGS_SCOPE_CLASS, TABLE_CLASSES, type SettingsScope, type TableName } from '../src/registry.js';
@@ -234,6 +244,8 @@ const EXPECTED_CLASSES = {
   ...NOTICES_CLASSES,
   // ---- Komunitas K4 (stocktake) ----
   ...STOCKTAKE_CLASSES,
+  // ---- Komunitas (OPAC home page) ----
+  ...OPAC_HOME_CLASSES,
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping, made by the runner ----
   schema_migrations_edition: 'migrator',
   schema_migrations_edition_lock: 'migrator',
@@ -274,6 +286,8 @@ const TABLES_BY_MIGRATION: Record<string, TableName[]> = {
   ...(SLIMS_PEOPLE_TABLES_BY_MIGRATION as Record<string, TableName[]>),
   // ---- Komunitas K4 (stocktake) ----
   ...STOCKTAKE_TABLES_BY_MIGRATION,
+  // ---- Komunitas (OPAC home page) ----
+  ...OPAC_HOME_TABLES_BY_MIGRATION,
 };
 
 /** The created_by of the tables the runner makes itself (ensureBootstrap, ruling R27). */
@@ -341,6 +355,8 @@ const EXPECTED_PRIMARY_KEYS: Record<TableName, string[]> = {
   ...NOTICES_PRIMARY_KEYS,
   // ---- Komunitas K4 (stocktake) ----
   ...STOCKTAKE_PRIMARY_KEYS,
+  // ---- Komunitas (OPAC home page) ----
+  ...OPAC_HOME_PRIMARY_KEYS,
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: ['name'],
   schema_migrations_edition_lock: ['id'],
@@ -434,6 +450,8 @@ const EXPECTED_INDEXES: IndexFacts[] = [
   ...SLIMS_PEOPLE_INDEXES,
   // ---- Komunitas K4 (stocktake) ----
   ...STOCKTAKE_INDEXES,
+  // ---- Komunitas (OPAC home page) ----
+  ...OPAC_HOME_INDEXES,
 ].sort((a, b) => a.table.localeCompare(b.table) || a.name.localeCompare(b.name));
 
 /** The full-text indexes, which {@link indexes} leaves out (an expression index has no column list on PostgreSQL). */
@@ -778,6 +796,8 @@ const EXPECTED_COLUMNS: Record<Phase1Table, Record<string, string>> = {
   ...NOTICES_COLUMNS,
   // ---- Komunitas K4 (stocktake) ----
   ...STOCKTAKE_COLUMNS,
+  // ---- Komunitas (OPAC home page) ----
+  ...OPAC_HOME_COLUMNS,
 };
 
 /**
@@ -860,8 +880,10 @@ describe('the table-class registry and the Phase 1 migration list (spec §6.5)',
       ...Object.keys(SLIMS_PEOPLE_TABLES_BY_MIGRATION),
       // Komunitas K4, stocktake: 0048 after them.
       ...Object.keys(STOCKTAKE_TABLES_BY_MIGRATION),
+      // Komunitas, OPAC home page: 0049 after them.
+      ...Object.keys(OPAC_HOME_TABLES_BY_MIGRATION),
     ]);
-    expect(circulation.at(-1)).toBe('0048_stocktakes');
+    expect(circulation.at(-1)).toBe('0049_opac_popular');
     for (const [name, m] of Object.entries(PHASE1_MIGRATIONS)) {
       expect(name).toMatch(MIGRATION_NAME);
       expect(typeof m.up).toBe('function');
@@ -1454,6 +1476,8 @@ function sampleRows(): { [T in RoundTripTable]: Selectable<DB[T]>[] } {
     ...noticesSampleRows(),
     // ---- Komunitas K4 (stocktake) ----
     ...stocktakeSampleRows({ branchId, staffId }),
+    // ---- Komunitas (OPAC home page) ----
+    ...opacHomeSampleRows({ branchId }),
   };
 }
 
@@ -1521,6 +1545,8 @@ const DEFAULTS: { [T in RoundTripTable]: { [K in GeneratedKeys<DB[T]>]: SelectTy
   ...NOTICES_DEFAULTS,
   // ---- Komunitas K4 (stocktake) ----
   ...STOCKTAKE_DEFAULTS,
+  // ---- Komunitas (OPAC home page) ----
+  ...OPAC_HOME_DEFAULTS,
 };
 
 /** One row of each table the runner fills itself, typed by `DB`: their keys are the columns the type declares. */

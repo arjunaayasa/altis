@@ -139,9 +139,9 @@ describe.skipIf(!ctx.available)(`settings API [${engineLabel()}]`, () => {
         newTitlesCount: 12,
       });
 
-      // Every registered key of the group is in its view, once.
+      // Every registered key of the group is in its view, once (the OPAC home page's content has a screen of its own).
       for (const [group, res] of [['library', library], ['email', email], ['security', security], ['opac', opac]] as const) {
-        expect(leaves(res.json)).toHaveLength(groupKeys(group).length);
+        expect(leaves(res.json)).toHaveLength(groupKeys(group).filter((key) => key !== 'opac.home').length);
       }
     });
 

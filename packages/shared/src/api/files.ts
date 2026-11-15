@@ -39,6 +39,9 @@ export const UPLOAD_CONTEXT_NAMES = [
   // ---- Komunitas K4 (stocktake) ----
   // A list of scanned codes stays staged for the session's code job.
   'stocktake.codes',
+  // ---- Komunitas (OPAC home page) ----
+  // The photos of the OPAC home page (the hero, the "about" photo, the facility photos), stored as public files.
+  'opac.home_photo',
 ] as const;
 
 export type UploadContextName = (typeof UPLOAD_CONTEXT_NAMES)[number];
