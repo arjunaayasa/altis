@@ -338,6 +338,8 @@ export const libraryAnnualReport: DocumentReport = Object.freeze<DocumentReport>
   kind: 'document',
   titleKey: 'report.library.annual_report.title',
   permission: 'reports.statistics.read',
+  // The budget, staff and activity registers it prints are otherwise read only in the accreditation workspace.
+  extraPermission: () => 'accreditation.workspace.read',
   personal: false,
   formats: ['pdf'],
   orientation: 'portrait',

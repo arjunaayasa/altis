@@ -284,12 +284,13 @@ describe('REPORTS', () => {
     );
   });
 
-  it('the copies of the reprint list also take the catalogue permission; no other definition asks for one more', () => {
+  it('the copies of the reprint list also take the catalogue permission, the annual report the accreditation one; no other definition asks for one more', () => {
     const reprint = table('members.reprint_list');
     expect(reprint.extraPermission?.({ kind: 'items' })).toBe('catalog.records.read');
     expect(reprint.extraPermission?.({ kind: 'members' })).toBeNull();
     expect(reprint.extraPermission?.({})).toBeNull();
-    expect(REPORTS.filter((d) => d.extraPermission !== undefined).map((d) => d.id)).toEqual(['members.reprint_list']);
+    expect(reportById('library.annual_report')?.extraPermission?.({})).toBe('accreditation.workspace.read');
+    expect(REPORTS.filter((d) => d.extraPermission !== undefined).map((d) => d.id)).toEqual(['members.reprint_list', 'library.annual_report']);
   });
 
   it('the stock scans: the acquisitions always, four lists with a date of their own, and three annexes', () => {

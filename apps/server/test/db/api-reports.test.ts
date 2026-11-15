@@ -333,12 +333,22 @@ describe.skipIf(!ctx.available)(`reports API [${engineLabel()}]`, () => {
 
     // ---- Komunitas K5 (reports) ----
     it('the annual library report, a document of these routes, is started as a PDF on /runs; another format or route is refused', async () => {
-      const id = await started(stats, { reportId: 'library.annual_report', format: 'pdf', params: { year: 2026 } });
+      const both = await signedIn('statistik_akreditasi', { permissions: ['reports.statistics.read', 'accreditation.workspace.read'], reauthAt: NOW });
+      const id = await started(both, { reportId: 'library.annual_report', format: 'pdf', params: { year: 2026 } });
       expect(await runRow(id)).toMatchObject({ report_id: 'library.annual_report', format: 'pdf', personal: 0, status: 'queued' });
-      const csv = await stats.post(`${REPORTS_API}/runs`, { reportId: 'library.annual_report', format: 'csv', params: {} });
+      const csv = await both.post(`${REPORTS_API}/runs`, { reportId: 'library.annual_report', format: 'csv', params: {} });
       expect([csv.status, errors(csv)]).toEqual([422, [{ path: 'format', code: 'invalid_value' }]]);
-      const personal = await stats.post(`${REPORTS_API}/runs/personal`, { reportId: 'library.annual_report', format: 'pdf', params: {} });
+      const personal = await both.post(`${REPORTS_API}/runs/personal`, { reportId: 'library.annual_report', format: 'pdf', params: {} });
       expect([personal.status, errors(personal)]).toEqual([422, [{ path: 'reportId', code: 'not_personal' }]]);
+    });
+
+    it('the annual library report prints the budget, staff and activity registers: the statistics permission alone does not start it', async () => {
+      const before = await runCount();
+      const refused = await stats.post(`${REPORTS_API}/runs`, { reportId: 'library.annual_report', format: 'pdf', params: { year: 2026 } });
+      expect([refused.status, code(refused)]).toEqual([403, 'AUTHZ_DENIED']);
+      expect(await runCount()).toBe(before);
+      const catalog = await stats.get(`${REPORTS_API}/catalog`);
+      expect((catalog.json as { reports: { id: string; canExport: boolean }[] }).reports.find((r) => r.id === 'library.annual_report')).toMatchObject({ canExport: false });
     });
 
     it('refuses an export over its format’s row limit and parameters over 8 000 bytes, writing no run', async () => {
