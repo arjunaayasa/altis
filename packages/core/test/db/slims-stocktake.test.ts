@@ -26,9 +26,10 @@ import { ACTOR, NOW, openItemsDb, seedItem, seedRecord, type ItemsDb } from './c
 // catalogue stages would leave it). SLiMS 9 table/column names (interoperability facts, no SLiMS code). Checked: every
 // session comes in (an older one with the totals SLiMS kept, one without a start date skipped), the last one with its
 // rows mapped to ALTIS copies (found by the officer's name, missing, on loan; a copy ALTIS lacks, a second row of one
-// copy and a row of an older session skipped) and its counters counted from them; a session still active comes in
-// cancelled and is named in the report; both tables are also archived, and the reconciliation balances; a re-run skips
-// what an earlier run brought; a dry run writes nothing and counts alike; a run stopped after every batch, with its
+// copy and a row of an older session skipped), keeping the totals SLiMS kept for it as it finished it; a session still
+// active comes in cancelled, its counters counted from its rows, and is named in the report; both tables are also
+// archived, and the reconciliation balances; a re-run skips what an earlier run brought, row by row, and a run after one
+// that ended within the rows brings the rest; a dry run writes nothing and counts alike; a run stopped after every batch, with its
 // counts lost after every other commit, ends as one that never stopped; a source without the tables reads the rows an
 // earlier run archived, outside the reconciliation.
 
@@ -231,7 +232,7 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
     expect([older.total, older.found, older.on_loan, older.misplaced]).toEqual([50, 45, 3, 0]);
     expect(Number(older.finished_at)).toBeGreaterThan(Number(older.started_at));
     expect(await db.h.db.selectFrom('stocktake_items').select('item_id').where('stocktake_id', '=', older.id).execute()).toEqual([]);
-    // The last one: its rows mapped to the ALTIS copies, its counters counted from them.
+    // The last one: its rows mapped to the ALTIS copies.
     const rows = await db.h.db.selectFrom('stocktake_items').selectAll().where('stocktake_id', '=', last.id).execute();
     const byItem = new Map(rows.map((r) => [r.item_id, r]));
     expect(rows).toHaveLength(3);
@@ -239,7 +240,8 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
     expect(byItem.get(items.get(101)!)!.scanned_at).not.toBeNull();
     expect(byItem.get(items.get(102)!)).toMatchObject({ state: 'pending', result: 'marked_missing', scanned_by_name: null, scanned_at: null });
     expect(byItem.get(items.get(103)!)).toMatchObject({ state: 'on_loan', result: 'none' });
-    expect([last.total, last.found, last.on_loan, last.misplaced, last.unexpected, last.unknown_codes]).toEqual([3, 1, 1, 0, 0, 0]);
+    // Finished in SLiMS, it keeps the totals SLiMS kept, which also count B005 and the second B001 row ALTIS has no copy for.
+    expect([last.total, last.found, last.on_loan, last.misplaced, last.unexpected, last.unknown_codes]).toEqual([5, 3, 1, 0, 0, 0]);
     // Both tables are kept whole in the archive too.
     const archived = await db.h.db.selectFrom('migration_archive').select('table_name').where('run_id', '=', runId).execute();
     expect(archived.filter((a) => a.table_name === 'stock_take')).toHaveLength(3);
@@ -261,7 +263,35 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
     const s = await summaryOf(again.runId);
     expect(s.reconciliation?.ok).toBe(true);
     expect(s.tables['stock_take']?.skipped).toEqual({ already_migrated: 2, invalid_date: 1 });
-    expect(s.tables['stock_take_item']?.skipped).toEqual({ already_migrated: 5, older_session: 1 });
+    // Row by row: the rows the earlier run brought; the copy ALTIS lacks and the second row of one copy as before.
+    expect(s.tables['stock_take_item']?.skipped).toEqual({ already_migrated: 3, item_missing: 1, duplicate_item: 1, older_session: 1 });
+  });
+
+  it('a run that ended within the rows (its job dead): the next run brings the rows it had not', async () => {
+    await wipe();
+    __setSlimsStageBBatch(1);
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables() }));
+    const ended = await start();
+    const rowsOfLast = async () => {
+      const last = await db.h.db.selectFrom('stocktakes').select('id').where('name', '=', 'Inventarisasi 2023').executeTakeFirst();
+      return last === undefined ? [] : db.h.db.selectFrom('stocktake_items').select(['item_id', 'state']).where('stocktake_id', '=', last.id).orderBy('item_id').execute();
+    };
+    for (let slices = 0; (await rowsOfLast()).length === 0; slices += 1) {
+      if (slices > 50) throw new Error('the run never brought a row');
+      const job = await claimById(db.h, registry, ended.jobId, { worker: 'test', now: NOW });
+      if (job === null) throw new Error('the job cannot be claimed');
+      expect((await runSlice(db.h, registry, job, { mode: 'worker', budgetMs: 1, keyring, log: silent, clock: () => NOW, env: {} })).outcome).toBe('continued');
+    }
+    expect(await rowsOfLast()).toHaveLength(1);
+    await db.h.db.updateTable('jobs').set({ status: 'dead', unique_key: null, finished_at: NOW }).where('id', '=', ended.jobId).execute();
+    __setSlimsStageBBatch(null);
+    const next = await start();
+    expect((await db.h.db.selectFrom('catalog_runs').select('status').where('id', '=', ended.runId).executeTakeFirstOrThrow()).status).toBe('failed');
+    expect(await runToEnd(next.jobId)).toBe('succeeded');
+    expect((await rowsOfLast()).map((r) => r.state).sort()).toEqual(['found', 'on_loan', 'pending']);
+    const s = await summaryOf(next.runId);
+    expect(s.reconciliation?.ok).toBe(true);
+    expect(s.tables['stock_take_item']).toEqual({ source: 6, migrated: 2, merged: 0, skipped: { already_migrated: 1, item_missing: 1, duplicate_item: 1, older_session: 1 }, archived: 0 });
   });
 
   it('a session SLiMS still has active comes in cancelled, with its rows unfinished, and the report names it', async () => {
@@ -271,6 +301,8 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
     expect(await runToEnd(jobId)).toBe('succeeded');
     const last = await db.h.db.selectFrom('stocktakes').selectAll().where('name', '=', 'Inventarisasi 2023').executeTakeFirstOrThrow();
     expect([last.status, last.active_key, last.finished_at]).toEqual(['cancelled', null, null]);
+    // SLiMS had not finished it: its counters are counted from its rows.
+    expect([last.total, last.found, last.on_loan]).toEqual([3, 1, 1]);
     const rows = await db.h.db.selectFrom('stocktake_items').select(['state', 'result']).where('stocktake_id', '=', last.id).orderBy('state').execute();
     expect(rows).toEqual([
       { state: 'found', result: null },
@@ -336,7 +368,7 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
     const sessions = await db.h.db.selectFrom('stocktakes').select(['id', 'name', 'total', 'found', 'on_loan']).orderBy('started_at').execute();
     expect(sessions.map((x) => [x.name, x.total, x.found, x.on_loan])).toEqual([
       ['Inventarisasi 2019', 50, 45, 3],
-      ['Inventarisasi 2023', 3, 1, 1],
+      ['Inventarisasi 2023', 5, 3, 1],
     ]);
     expect(await reportText(runId)).toContain('"stock_take_item","2|105","item_missing","B005"');
   });

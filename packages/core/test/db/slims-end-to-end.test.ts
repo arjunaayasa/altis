@@ -446,7 +446,8 @@ describe.skipIf(!ctx.available)(`SLiMS migration end to end (K15) [${engineLabel
     for (const table of roles.archived) expect([table, s.tables[table]!.archived]).toEqual([table, fixture.expected.tables[table]!.source]);
     // ---- Komunitas K4 (stocktake) ----
     // The stocktake sessions: the last one with its rows (one of an item the catalogue lacks skipped), the older one a
-    // header, the row of the older session skipped; both tables archived whole besides.
+    // header, the row of the older session skipped; both tables archived whole besides. Both were finished in SLiMS and
+    // keep the totals SLiMS kept for them.
     const take = traps.stocktake;
     expect(s.tables['stock_take']).toMatchObject({ migrated: fixture.expected.tables['stock_take']!.source, archived: 0 });
     expect(s.tables['stock_take_item']).toMatchObject({
@@ -466,7 +467,7 @@ describe.skipIf(!ctx.available)(`SLiMS migration end to end (K15) [${engineLabel
     const sessions = await h.db.selectFrom('stocktakes').select(['status', 'source', 'total', 'found', 'on_loan']).orderBy('started_at').execute();
     expect(sessions).toEqual([
       { status: 'finished', source: 'migrated', total: 580, found: 560, on_loan: 8 },
-      { status: 'finished', source: 'migrated', total: takeRows.length, found: take.found.length, on_loan: take.onLoan.length },
+      { status: 'finished', source: 'migrated', total: 10, found: 9, on_loan: 0 },
     ]);
     expect(await h.db.selectFrom('migration_archive').select('id').where('table_name', '=', 'stock_take_item').execute()).toHaveLength(fixture.expected.tables['stock_take_item']!.source);
     for (const table of [...roles.phase3, ...roles.derived]) {
