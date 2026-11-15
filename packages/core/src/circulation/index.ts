@@ -128,6 +128,8 @@ export {
 export type { PaymentInput, ReceiptData } from './payments.js';
 export { memberBlocked } from './desk.js';
 export { buildSlipPdf, slipData } from './slips.js';
+export { buildHoldSlipPdf, holdSlipData } from './hold-slip.js';
+export type { HoldSlipData } from './hold-slip.js';
 export type { SlipData } from './slips.js';
 // ---- Komunitas (member, visit and circulation reports) ----
 export { circulationDaySummary } from './day-summary.js';

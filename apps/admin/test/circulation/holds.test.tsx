@@ -117,7 +117,8 @@ describe('holds at the desk', () => {
     await scan('B0001');
     expect(await screen.findByText('Simpan di rak tunggu untuk A001', { selector: 'p.text-xl' })).toBeTruthy();
     expect(screen.getByText(/^Budi Santoso, ambil paling lambat .+\. Bumi Manusia$/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Cetak slip rak tunggu' })).toBeTruthy();
+    // The slip is the roll PDF of that hold, opened in a tab (no browser print of the page).
+    expect(screen.getByRole('link', { name: 'Cetak slip rak tunggu' }).getAttribute('href')).toBe(`/api/v1/branches/${BRANCH}/circulation/holds/01JZ0000000000000000000H01/slip`);
     expect(screen.getByText('Rak tunggu: A001')).toBeTruthy();
   });
 
@@ -229,6 +230,7 @@ describe('Rak Tunggu & Reservasi', () => {
     expect(await screen.findByRole('heading', { name: 'Siap diambil (1)' })).toBeTruthy();
     expect(screen.getByText('Lewat batas ambil')).toBeTruthy();
     expect(screen.getByText('Tidak diambil sampai batas ambil')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /^Cetak slip rak tunggu / }).getAttribute('href')).toBe(`/api/v1/branches/${BRANCH}/circulation/holds/01JZ0000000000000000000H02/slip`);
 
     fireEvent.click(screen.getByRole('button', { name: 'Sudah di rak' }));
     expect(await screen.findByText('Eksemplar dicatat sudah kembali di rak.')).toBeTruthy();
