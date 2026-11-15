@@ -123,6 +123,8 @@ describe('the chart of a preview', { timeout: 20_000 }, () => {
     fireEvent.click(screen.getByRole('button', { name: 'Terapkan' }));
     const chart = await screen.findByRole('img', { name: /^Jumlah per Tanggal/ });
     expect(chart.querySelectorAll('[data-bar]')).toHaveLength(2);
+    // A date labels its bar as the table under it says it.
+    expect([...chart.querySelectorAll('[data-bar]')].map((b) => b.getAttribute('data-bar'))).toEqual(['2 Mar 2026', '4 Mar 2026']);
     expect(chart.querySelector('desc')?.textContent).toContain('tertinggi 31');
     rows = [];
     fireEvent.click(screen.getByRole('button', { name: 'Terapkan' }));
