@@ -28,6 +28,8 @@ export type SlimsStageName =
   | 'attachments'
   | 'covers'
   | 'content'
+  // ---- Komunitas K4 (stocktake) ----
+  | 'stocktake'
   | 'archive'
   | 'report';
 
