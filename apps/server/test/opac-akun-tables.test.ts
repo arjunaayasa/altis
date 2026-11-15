@@ -44,6 +44,9 @@ const loan = (id: string, o: Partial<MemberLoanPage['rows'][number]> = {}): Memb
   renewals: 0,
   renewLimit: 2,
   daysLate: 0,
+  finedDays: null,
+  fineMinor: 0,
+  currency: 'IDR',
   ...o,
 });
 
@@ -95,6 +98,26 @@ describe('the member area tables stack into cards on a phone', () => {
     ]);
     const history = render(HistoryView, { locale: 'id', keep: (p: string) => p, loans: { rows: [loan('L3', { returnedOn: '2026-11-09', outcome: 'returned' })], total: 1, page: 1, pages: 1 } });
     expect(labelsPerRow(history, 5)).toEqual([['Barkod', 'Dipinjam', 'Dikembalikan', 'Keterangan']]);
+  });
+
+  it('a late loan says its days late as the desk does: the days its fine counts when they differ, and the running fine', () => {
+    const loans: MemberLoanPage = {
+      rows: [loan('L1', { daysLate: 10, finedDays: 8, fineMinor: 400_000 }), loan('L2', { daysLate: 3, finedDays: 3, fineMinor: 150_000 }), loan('L3', { daysLate: 2 })],
+      total: 3,
+      page: 1,
+      pages: 1,
+    };
+    const id = render(OpenLoans, { locale: 'id', keep: (p: string) => p, csrf: 'token', loans, canRenew: false });
+    expect(id).toContain('Terlambat 10 hari (8 hari dikenai denda)');
+    expect(id).toMatch(/Denda berjalan Rp\s?4\.000/);
+    expect(id).toContain('Terlambat 3 hari</span>');
+    expect(id).toContain('Terlambat 2 hari</span>');
+    expect(id.match(/Denda berjalan/g)).toHaveLength(2);
+    const en = render(OpenLoans, { locale: 'en', keep: (p: string) => p, csrf: 'token', loans, canRenew: false });
+    expect(en).toContain('10 days late (8 days fined)');
+    const history = render(HistoryView, { locale: 'en', keep: (p: string) => p, loans: { rows: [loan('L4', { returnedOn: '2026-11-18', outcome: 'returned', daysLate: 10, finedDays: 8 })], total: 1, page: 1, pages: 1 } });
+    expect(history).toContain('10 days late (8 days fined)');
+    expect(history).not.toContain('Running fine');
   });
 
   it('the stylesheet turns those tables into cards below 48 rem: the header row only for screen readers, each cell labelled, the button across the card', () => {

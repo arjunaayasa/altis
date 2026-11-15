@@ -2,7 +2,6 @@ import { normalizeDbError, type DB } from '@altis/db';
 import {
   LOCALES,
   addDays,
-  diffDays,
   isDomainError,
   isUlid,
   localDate,
@@ -27,7 +26,7 @@ import { localDayStart } from '../reports/collection/common.js';
 import { readSettings } from '../settings/service.js';
 import { memberBalances } from './charge-views.js';
 import { branchToday } from './dates.js';
-import { FinePreviewer, overdueFineMinor } from './fines.js';
+import { FinePreviewer } from './fines.js';
 import { HOLD_READY_HOOKS } from './holds.js';
 
 // Member notices (e-mail only): a loan due soon, an overdue loan, a hold ready for pickup.
@@ -438,8 +437,12 @@ export interface NoticeLoanLine {
   title: string;
   barcode: string;
   dueOn: string;
-  /** Overdue mails: the days late and the running fine (minor units, 0: none). */
+  /**
+   * Overdue mails: the calendar days late, the days the running fine counts (fines.ts lateness; null: no fine) and the
+   * running fine (minor units, 0: none).
+   */
   daysLate?: number;
+  finedDays?: number | null;
   fineMinor?: number;
 }
 
@@ -471,7 +474,13 @@ export async function renderNotice(
     for (const l of content.loans) {
       const due = mailDate(locale, l.dueOn);
       if (content.kind === 'overdue') {
-        lines.push(t(locale, 'mail.circulation.line.overdue', { title: l.title, barcode: l.barcode, due, days: l.daysLate ?? 0 }));
+        // The days the fine counts are named when they differ from the days late (closed days are not fined), as at the desk.
+        const fined = l.finedDays ?? null;
+        lines.push(
+          fined !== null && fined !== (l.daysLate ?? 0)
+            ? t(locale, 'mail.circulation.line.overdue_fined', { title: l.title, barcode: l.barcode, due, days: l.daysLate ?? 0, fined })
+            : t(locale, 'mail.circulation.line.overdue', { title: l.title, barcode: l.barcode, due, days: l.daysLate ?? 0 }),
+        );
         if ((l.fineMinor ?? 0) > 0) lines.push(t(locale, 'mail.circulation.line.fine', { amount: mailMoney(locale, l.fineMinor!, library.currency) }));
       } else {
         lines.push(t(locale, 'mail.circulation.line.due_soon', { title: l.title, barcode: l.barcode, due }));
@@ -592,9 +601,19 @@ export async function noticeContent(
     if (row.kind === 'overdue' ? !late : late) continue;
     const line: NoticeLoanLine = { title: l.title ?? '', barcode: l.barcode_display ?? '', dueOn: l.due_on };
     if (fines !== null) {
-      line.daysLate = Math.max(0, diffDays(l.due_on, today));
-      const terms = { finePerDayMinor: Number(l.fine_per_day_minor), fineCapMinor: l.fine_cap_minor === null ? null : Number(l.fine_cap_minor), graceDays: Number(l.grace_days) };
-      line.fineMinor = terms.finePerDayMinor > 0 ? overdueFineMinor(await fines.lateDays(l.branch_id, l.due_on, today), terms) : 0;
+      const late = await fines.lateness(
+        {
+          branchId: l.branch_id,
+          dueOn: l.due_on,
+          finePerDayMinor: Number(l.fine_per_day_minor),
+          fineCapMinor: l.fine_cap_minor === null ? null : Number(l.fine_cap_minor),
+          graceDays: Number(l.grace_days),
+        },
+        today,
+      );
+      line.daysLate = late.daysLate;
+      line.finedDays = late.finedDays;
+      line.fineMinor = late.fineMinor;
     }
     lines.push(line);
   }
