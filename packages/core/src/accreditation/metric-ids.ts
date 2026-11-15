@@ -9,7 +9,15 @@ import type { AccredMetricUnit, AccredWindow } from './types.js';
 // before it" is `period_and_previous`.
 
 /** The providers of this edition's metrics. */
-export const ACCRED_PROVIDER_IDS = Object.freeze(['collection', 'registers', 'period', 'system', 'usage'] as const);
+export const ACCRED_PROVIDER_IDS = Object.freeze([
+  'collection',
+  'registers',
+  'period',
+  'system',
+  'usage',
+  // ---- Komunitas K4 (stocktake) ----
+  'stocktake',
+] as const);
 
 export type AccredProviderId = (typeof ACCRED_PROVIDER_IDS)[number];
 
@@ -24,7 +32,8 @@ const m = (provider: AccredProviderId, unit: AccredMetricUnit, window: AccredWin
 
 /**
  * Every metric of this edition, by id. `usage.collection_used_pct` is computed by the collection provider: its
- * denominator is the stock.
+ * denominator is the stock. `registers.stocktake_weeding_3y` is computed by the stocktake provider: a finished
+ * stocktake session is a stock-take besides the register's.
  */
 export const ACCRED_METRICS = Object.freeze({
   // ---- Komunitas K1 (collection) ----
@@ -74,7 +83,7 @@ export const ACCRED_METRICS = Object.freeze({
   'registers.head_qualification': m('registers', 'code', 'current'),
   'registers.staff_roles': m('registers', 'code', 'current'),
   'registers.founding_decree_registered': m('registers', 'count', 'current'),
-  'registers.stocktake_weeding_3y': m('registers', 'count', 'three_years'),
+  'registers.stocktake_weeding_3y': m('stocktake', 'count', 'three_years'),
   'registers.profile_staff': m('registers', 'count', 'current'),
   'registers.profile_counts': m('registers', 'count', 'period'),
   'registers.profile_budget': m('registers', 'count', 'budget_years'),
