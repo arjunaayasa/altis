@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { withTx, type DbHandle } from '@altis/db';
 import { DDC_MAINS, localDate, newId, t, type Locale, type MessageKey } from '@altis/shared';
+import { formatPrice } from '../catalog/items/service.js';
 import type { StorageDriver } from '../files/serve.js';
 import { PdfLayout } from '../print/layout.js';
 import { localDateTime } from '../reports/circulation/common.js';
@@ -12,8 +13,9 @@ import { getStocktake } from './sessions.js';
 
 // The minutes of a stocktake session (berita acara inventarisasi), a PDF in the library's language: the session (name,
 // branch, start and end, status, scope, the finish's options), its counts, the officers with what each scanned, the
-// counts per DDC main class and per collection type, the missing or lost copies found and restored, and the signature
-// blocks of the head of the library and the stocktake officer.
+// counts per DDC main class and per collection type, the missing or lost copies found and restored (with the lost
+// charge the finish cancelled for each, and their total), and the signature blocks of the head of the library and the
+// stocktake officer.
 //
 // The finish stores the minutes as a file (`stocktakes.minutes_file_id`; a `files` row of the session, staff only, that
 // `/files/:id` never serves: the branch-checked minutes route is its only way out), in the transaction that marks the
@@ -37,6 +39,32 @@ interface Tally {
 
 function tally(): Tally {
   return { expected: 0, found: 0, misplaced: 0, onLoan: 0, pending: 0 };
+}
+
+/** The restored copies the minutes list by name (the count of the rest is said). */
+const RESTORED_LISTED = 1000;
+
+/**
+ * The lost charges the finish of the session `id` cancelled, per restored copy of the session (minor units): the
+ * `cancel` adjustments, with the stocktake's reason (in either language), of the `lost` charges of the copy's loans,
+ * made between the session's start and its end.
+ */
+async function cancelledLostCharges(db: Db, id: string, startedAt: number, finishedAt: number | null): Promise<Map<string, number>> {
+  let q = db
+    .selectFrom('charge_adjustments as a')
+    .innerJoin('charges as c', 'c.id', 'a.charge_id')
+    .innerJoin('loans as l', 'l.id', 'c.loan_id')
+    .innerJoin('stocktake_items as s', (j) => j.onRef('s.item_id', '=', 'l.item_id').on('s.stocktake_id', '=', id).on('s.result', '=', 'restored'))
+    .select('s.item_id')
+    .select((eb) => eb.fn.sum<number | string>('a.amount_minor').as('amount'))
+    .where('a.kind', '=', 'cancel')
+    .where('c.kind', '=', 'lost')
+    .where('a.reason_text', 'in', [t('id', 'charge.text.stocktake_found'), t('en', 'charge.text.stocktake_found')])
+    .where('a.at', '>=', startedAt);
+  if (finishedAt !== null) q = q.where('a.at', '<=', finishedAt);
+  const out = new Map<string, number>();
+  for (const r of await q.groupBy('s.item_id').execute()) out.set(r.item_id, Number(r.amount));
+  return out;
 }
 
 /** The context and owner type of a stored minutes file. */
@@ -84,12 +112,19 @@ export async function stocktakeMinutesPdf(db: Db, branchId: string, id: string, 
     .selectFrom('stocktake_items as s')
     .innerJoin('items as i', 'i.id', 's.item_id')
     .innerJoin('records as r', 'r.id', 'i.record_id')
-    .select(['i.barcode_display', 'r.title', 's.expected_status'])
+    .select(['i.id', 'i.barcode_display', 'r.title', 's.expected_status'])
     .where('s.stocktake_id', '=', id)
     .where('s.result', '=', 'restored')
     .orderBy('i.barcode_key')
-    .limit(1000)
+    .limit(RESTORED_LISTED)
     .execute();
+  const restoredCount =
+    restored.length < RESTORED_LISTED
+      ? restored.length
+      : Number(
+          (await db.selectFrom('stocktake_items').select((eb) => eb.fn.countAll<number | string>().as('n')).where('stocktake_id', '=', id).where('result', '=', 'restored').executeTakeFirstOrThrow()).n,
+        );
+  const cancelled = restored.length === 0 ? new Map<string, number>() : await cancelledLostCharges(db, id, view.startedAt, view.finishedAt);
   const officers = await stocktakeOfficers(db, id);
 
   const pdf = new PdfLayout({
@@ -176,9 +211,20 @@ export async function stocktakeMinutesPdf(db: Db, branchId: string, id: string, 
   if (restored.length === 0) pdf.paragraph(tr('stocktake.minutes.restored_none'));
   else {
     pdf.table(
-      [{ header: tr('report.column.barcode') }, { header: tr('report.column.title'), weight: 3 }, { header: tr('report.column.status') }],
-      restored.map((r) => [r.barcode_display, r.title, r.expected_status === null ? '' : t(locale, `vocab.item_status.${r.expected_status}` as MessageKey)]),
+      [
+        { header: tr('report.column.barcode') },
+        { header: tr('report.column.title'), weight: 3 },
+        { header: tr('report.column.status') },
+        { header: tr('stocktake.minutes.cancelled_charge'), align: 'right' },
+      ],
+      restored.map((r) => {
+        const amount = cancelled.get(r.id);
+        return [r.barcode_display, r.title, r.expected_status === null ? '' : t(locale, `vocab.item_status.${r.expected_status}` as MessageKey), amount === undefined ? '-' : formatPrice(amount)];
+      }),
     );
+    if (restoredCount > restored.length) pdf.paragraph(tr('stocktake.minutes.restored_cut', { shown: restored.length, total: restoredCount }));
+    const total = [...cancelled.values()].reduce((sum, x) => sum + x, 0);
+    if (total > 0) pdf.paragraph(tr('stocktake.minutes.cancelled_total', { count: cancelled.size, amount: formatPrice(total) }), { bold: true });
   }
 
   pdf.paragraph(tr('stocktake.minutes.closing'));
