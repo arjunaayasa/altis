@@ -44,6 +44,11 @@ export const HOLDS_ID = {
   'vocab.hold_refusal.available': 'Ada eksemplar yang tersedia di rak',
   'vocab.hold_refusal.closed': 'Reservasi ini sudah selesai',
   'vocab.hold_refusal.not_on_shelf': 'Tidak ada eksemplar reservasi ini yang perlu dikembalikan ke rak',
+  // ---- hold_slip.*: the hold shelf slip (a receipt roll, in the library's language) ----
+  'hold_slip.title': 'RAK TUNGGU',
+  'hold_slip.for': 'Untuk',
+  'hold_slip.until': 'Ambil paling lambat',
+  'hold_slip.item': 'Eksemplar',
 } as const;
 
 export const HOLDS_EN: Record<keyof typeof HOLDS_ID, string> = {
@@ -80,4 +85,8 @@ export const HOLDS_EN: Record<keyof typeof HOLDS_ID, string> = {
   'vocab.hold_refusal.available': 'A copy is on the shelf now',
   'vocab.hold_refusal.closed': 'This hold is no longer active',
   'vocab.hold_refusal.not_on_shelf': 'No copy of this hold has to go back to the shelf',
+  'hold_slip.title': 'HOLD SHELF',
+  'hold_slip.for': 'For',
+  'hold_slip.until': 'Pick up by',
+  'hold_slip.item': 'Copy',
 };

@@ -5,10 +5,12 @@ import { engineLabel, testDbContext } from '../../../../tools/test/test-db.js';
 import { updateItem } from '../../src/catalog/items/index.js';
 import {
   archiveMember,
+  buildHoldSlipPdf,
   cancelHold,
   clearHoldShelf,
   createMember,
   holdShelf,
+  holdSlipData,
   lendItem,
   listHolds,
   markHoldReady,
@@ -18,6 +20,7 @@ import {
   returnItem,
   runHoldExpiry,
 } from '../../src/index.js';
+import { checkPdf } from '../support/pdf-check.js';
 import { DAY, NOW, failure, fieldErrors, openItemsDb, seedItem, seedRecord, type ItemsDb } from './catalog-items-support.js';
 
 // Holds and the hold shelf on the engine picked by ALTIS_TEST_DB: the queue per title and pickup branch, the refusals,
@@ -102,6 +105,20 @@ describe.skipIf(!ctx.available)(`holds [${engineLabel()}]`, () => {
     expect(await hold(a.id)).toMatchObject({ status: 'ready', trap_item_id: book.id, item_id: book.id, pickup_until: addDays(TODAY, 4) });
     expect(await available(book.recordId)).toBe(false);
     expect(await failure(lend(second, book.barcode, NOW + DAY))).toMatchObject({ code: 'CIRC_ITEM_ON_HOLD', meta: { holdId: a.id } });
+
+    // Its slip: a roll PDF as long as its content, in the library's language; no slip at another branch or once lent.
+    const slip = await holdSlipData(db.h.db, { branchId: db.branchId, holdId: a.id });
+    expect(slip).toMatchObject({ memberNo: back.hold!.memberNo, memberName: back.hold!.memberName, pickupUntil: addDays(TODAY, 4), barcode: book.barcode, locale: 'id' });
+    const MM = 72 / 25.4;
+    for (const paper of ['58', '80'] as const) {
+      const pages = checkPdf(buildHoldSlipPdf({ ...slip, paper })).pages;
+      expect(pages).toHaveLength(1);
+      expect(pages[0]!.width).toBeCloseTo(Number(paper) * MM, 2);
+      expect(pages[0]!.height).toBeLessThan(120 * MM);
+      expect(pages[0]!.texts.map((x) => x.text)).toEqual(expect.arrayContaining(['RAK TUNGGU', slip.memberNo]));
+    }
+    expect(await failure(holdSlipData(db.h.db, { branchId: db.otherBranchId, holdId: a.id }))).toMatchObject({ code: 'NOT_FOUND' });
+    expect(await failure(holdSlipData(db.h.db, { branchId: db.branchId, holdId: b.id }))).toMatchObject({ code: 'NOT_FOUND' });
 
     // The member it is kept for borrows it: the hold is fulfilled, the next one moves up.
     const loan = await lend(first, book.barcode, NOW + DAY);
