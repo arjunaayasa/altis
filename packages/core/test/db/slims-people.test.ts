@@ -517,4 +517,24 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
     expect(await about(m1.id)).toEqual(['comment', 'reserve']);
     expect(await db.h.db.selectFrom('migration_map').select('legacy_key').where('target_id', '=', m2.id).execute()).toEqual([]);
   });
+
+  it('a copy whose latest open loan belongs to a member who is gone is explained in "Cocokkan dengan SLiMS", not left as a difference', async () => {
+    await wipe();
+    const tables = slimsTables();
+    const loan = (id: number, member: string, on: string) => ({ loan_id: id, item_code: 'B003', member_id: member, loan_date: on, due_date: on, renewed: 0, loan_rules_id: 2, is_lent: 1, is_return: 0, return_date: null, uid: 2 });
+    // B003: an older open loan of a member who comes over, and the latest one of a member SLiMS no longer has.
+    tables['loan']!.rows.push(loan(20, 'M001', '2026-08-03'), loan(21, 'M999', '2026-08-12'));
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables }));
+    const run = await start();
+    expect(await runToEnd(run.jobId)).toBe('succeeded');
+    const s = await summaryOf(run.runId);
+    // The latest loan is skipped (its member is gone), the older one is closed as the copy's second open loan: B003 is
+    // not on loan in ALTIS, and both rows say why.
+    const b3 = await db.h.db.selectFrom('loans').select(['open_item_id', 'outcome']).where('item_id', '=', items.get(103)!).where('loaned_on', '=', '2026-08-03').executeTakeFirstOrThrow();
+    expect(b3).toEqual({ open_item_id: null, outcome: 'closed_migration' });
+    const byKey = (key: string) => s.matches?.find((m) => m.key === key);
+    expect(byKey('open_loans')?.ok).toBe(true);
+    expect(byKey('items_on_loan'), JSON.stringify(byKey('items_on_loan'))).toMatchObject({ ok: true });
+    expect((s.matches ?? []).filter((m) => !m.ok)).toEqual([]);
+  });
 });
