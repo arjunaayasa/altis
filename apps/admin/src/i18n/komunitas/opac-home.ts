@@ -90,7 +90,7 @@ export const OPAC_HOME_ADMIN_ID = {
   // Blocks
   'opacHome.blocks.title': 'Bagian yang tampil',
   'opacHome.blocks.description': 'Matikan bagian yang belum siap. Bagian tanpa isi selalu disembunyikan otomatis.',
-  'opacHome.blocks.classes': 'Jelajahi menurut subjek',
+  'opacHome.blocks.classes': 'Jelajahi menurut kelas',
   'opacHome.blocks.popular': 'Paling sering dipinjam',
   'opacHome.blocks.newTitles': 'Judul baru',
   'opacHome.blocks.promoted': 'Judul unggulan',
@@ -188,7 +188,7 @@ export const OPAC_HOME_ADMIN_EN: Record<keyof typeof OPAC_HOME_ADMIN_ID, string>
   'opacHome.hours.remove_label': 'Remove opening hours row {n}',
   'opacHome.blocks.title': 'Sections shown',
   'opacHome.blocks.description': 'Switch off the sections that are not ready. A section without content is always hidden.',
-  'opacHome.blocks.classes': 'Browse by subject',
+  'opacHome.blocks.classes': 'Browse by class',
   'opacHome.blocks.popular': 'Most borrowed',
   'opacHome.blocks.newTitles': 'New titles',
   'opacHome.blocks.promoted': 'Featured titles',
