@@ -27,6 +27,7 @@ import {
   type JobHandler,
   type StocktakeJobDeps,
 } from '../../src/index.js';
+import { formatPrice } from '../../src/catalog/items/service.js';
 import { checkPdf } from '../support/pdf-check.js';
 import { NOW, failure, openItemsDb, seedItem, seedLocation, seedRecord, type ItemsDb } from './catalog-items-support.js';
 
@@ -226,6 +227,15 @@ describe.skipIf(!ctx.available)(`stocktake [${engineLabel()}]`, () => {
       .pages.flatMap((p) => p.texts.map((t) => t.text))
       .join('\n');
     for (const want of ['Berita Acara Inventarisasi', 'Inventarisasi Rak', 'Per kelas DDC', 'Per tipe koleksi', 'Petugas Inventarisasi', 'Kepala Perpustakaan', lost.barcode, 'Selesai']) expect(text).toContain(want);
+    // The restored lost copy with the lost charge the finish cancelled, and their total.
+    const cancelledMinor = (
+      await db.h.db.selectFrom('charge_adjustments as a').innerJoin('charges as c', 'c.id', 'a.charge_id').select('a.amount_minor').where('c.loan_id', '=', lostLoan.id).where('a.kind', '=', 'cancel').executeTakeFirstOrThrow()
+    ).amount_minor;
+    const amount = formatPrice(Number(cancelledMinor));
+    expect(Number(cancelledMinor)).toBeGreaterThan(0);
+    expect(text.replace(/\s+/g, ' ')).toContain(`Biaya hilang dibatalkan ${lost.barcode}`);
+    expect(text).toContain(`\n${amount}\n`);
+    expect(text).toContain(`Biaya hilang yang dibatalkan untuk 1 eksemplar, jumlah ${amount}.`);
     expect(await failure(stocktakeMinutes(db.h.db, storage, db.otherBranchId, s.id))).toMatchObject({ code: 'NOT_FOUND' });
   });
 
