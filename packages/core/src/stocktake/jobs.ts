@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { bulkUpdateItems } from '../catalog/items/bulk.js';
 import { lockItemRecords, lockItemRows } from '../catalog/items/service.js';
 import { cancelLostCharges } from '../circulation/charges.js';
-import { lockMemberRow } from '../circulation/desk.js';
+import { locking, lockMemberRow } from '../circulation/desk.js';
 import { txCtx, type Actor, type TxCtx } from '../context.js';
 import type { JobHandler, JobOutcome } from '../jobs/types.js';
 import { lockSession, matchesClass, parseScope, withDescendants } from './common.js';
@@ -26,9 +26,12 @@ import { scanLocked } from './scan.js';
 //   no longer active ends it; the staged file is removed at the end.
 // - `stocktake.finish`: 500 rows per transaction, the rows whose `result` is still empty (so a run again continues
 //   where it stopped): a pending copy on loan now becomes `on_loan`; a pending one, when the finish marks missing
-//   copies, becomes `missing` when its status may change that way, else its status is kept (`status_kept`); a found
-//   or misplaced copy that is `missing` or `lost`, when the finish restores found copies, becomes `available`, and a
-//   lost one has what is left of its last loan's lost charge cancelled ("found during a stocktake"). Status changes go
+//   copies, becomes `missing` when its status may change that way and it is not kept on the hold shelf for a ready
+//   hold, else its status is kept (`status_kept`); a found or misplaced copy that is `missing` or `lost`, when the
+//   finish restores found copies, becomes `available` unless its status changed or it was lent after the scan (then
+//   `status_kept`), and a lost one has what is left of its last loan's lost charge cancelled ("found during a
+//   stocktake"). The batch's rows are read with a locking read, so the first plain read of the transaction (which
+//   fixes a MySQL/MariaDB snapshot) comes after the copies' locks and sees a loan committed meanwhile. Status changes go
 //   through bulkUpdateItems (the item lifecycle, the item → record lock order, the history rows with `via:
 //   stocktake`). At the end the session is `finished` and its branch free for the next one.
 
@@ -273,14 +276,14 @@ async function lastLoans(trx: Transaction<DB>, ids: readonly string[]): Promise<
 /** One batch of the finish (see the top of this file); false when no row was left. */
 export async function finishBatch(tx: TxCtx, branchId: string, id: string, o: { markMissing: boolean; restoreFound: boolean }): Promise<boolean> {
   const { trx } = tx;
-  const rows = await trx
+  const read = trx
     .selectFrom('stocktake_items')
-    .select(['item_id', 'state', 'expected'])
+    .select(['item_id', 'state', 'expected', 'scanned_at'])
     .where('stocktake_id', '=', id)
     .where('result', 'is', null)
     .orderBy('item_id')
-    .limit(FINISH_BATCH)
-    .execute();
+    .limit(FINISH_BATCH);
+  const rows = await (locking(trx) ? read.forUpdate() : read).execute();
   if (rows.length === 0) return false;
   const candidates = rows.filter((r) => r.state === 'pending' || r.state === 'found' || r.state === 'misplaced').map((r) => r.item_id);
   // Items first, then their records (the order every item writer takes), before anything is read.
@@ -288,12 +291,26 @@ export async function finishBatch(tx: TxCtx, branchId: string, id: string, o: { 
   await lockItemRecords(trx, branchId, candidates);
   const status = new Map<string, string>();
   const loaned = new Set<string>();
+  const held = new Set<string>();
   for (let i = 0; i < candidates.length; i += FINISH_BATCH) {
     const chunk = candidates.slice(i, i + FINISH_BATCH);
     for (const it of await trx.selectFrom('items').select(['id', 'status']).where('id', 'in', chunk).where('branch_id', '=', branchId).where('archived_at', 'is', null).execute()) {
       status.set(it.id, it.status);
     }
     for (const l of await trx.selectFrom('loans').select('open_item_id').where('open_item_id', 'in', chunk).execute()) if (l.open_item_id !== null) loaned.add(l.open_item_id);
+    for (const h of await trx.selectFrom('holds').select('trap_item_id').where('trap_item_id', 'in', chunk).where('status', '=', 'ready').execute()) if (h.trap_item_id !== null) held.add(h.trap_item_id);
+  }
+  // A found copy whose status changed, or that was lent, after its scan: the scan does not speak for that status.
+  const scannedAt = new Map(rows.filter((r) => r.scanned_at !== null && (r.state === 'found' || r.state === 'misplaced')).map((r) => [r.item_id, Number(r.scanned_at)]));
+  const changedSince = new Set<string>();
+  if (o.restoreFound) {
+    const restorable = [...scannedAt.keys()].filter((itemId) => status.get(itemId) === 'missing' || status.get(itemId) === 'lost');
+    for (let i = 0; i < restorable.length; i += FINISH_BATCH) {
+      const chunk = restorable.slice(i, i + FINISH_BATCH);
+      const events = await trx.selectFrom('item_events').select('item_id').select((eb) => eb.fn.max('at').as('at')).where('item_id', 'in', chunk).where('type', '=', 'status').groupBy('item_id').execute();
+      const loans = await trx.selectFrom('loans').select('item_id').select((eb) => eb.fn.max('loaned_at').as('at')).where('item_id', 'in', chunk).groupBy('item_id').execute();
+      for (const e of [...events, ...loans]) if (e.item_id !== null && e.at !== null && Number(e.at) > (scannedAt.get(e.item_id) ?? Infinity)) changedSince.add(e.item_id);
+    }
   }
   const result = new Map<string, 'marked_missing' | 'restored' | 'status_kept' | 'none'>();
   const nowOnLoan: string[] = [];
@@ -306,10 +323,11 @@ export async function finishBatch(tx: TxCtx, branchId: string, id: string, o: { 
         nowOnLoan.push(r.item_id);
         result.set(r.item_id, 'none');
       } else if (!o.markMissing) result.set(r.item_id, 'none');
-      else if (st === 'available' || st === 'not_for_loan') toMissing.push(r.item_id);
+      else if (!held.has(r.item_id) && (st === 'available' || st === 'not_for_loan')) toMissing.push(r.item_id);
       else result.set(r.item_id, 'status_kept');
     } else if ((r.state === 'found' || r.state === 'misplaced') && o.restoreFound && (st === 'missing' || st === 'lost')) {
-      toAvailable.push(r.item_id);
+      if (changedSince.has(r.item_id)) result.set(r.item_id, 'status_kept');
+      else toAvailable.push(r.item_id);
     } else result.set(r.item_id, 'none');
   }
   if (toMissing.length > 0) {
