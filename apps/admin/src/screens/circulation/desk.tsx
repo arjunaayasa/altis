@@ -1391,7 +1391,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
             onDone={(r, loan) => {
               setLostLoan(null);
               addVisit({ kind: 'refused', title: loan.record.title, barcode: loan.item.barcode, note: t('circulation.lost.visit') });
-              say('warning', t('circulation.lost.done', { title: loan.record.title }), t(r.charged ? 'circulation.lost.charged' : 'circulation.lost.not_charged', { amount: r.replacement, currency: r.currency }));
+              say('warning', t('circulation.lost.done', { title: loan.record.title }), t(r.charged ? 'circulation.lost.charged' : 'circulation.lost.not_charged', { amount: money(r.replacement, r.currency) }));
               void refreshPanel();
               focusBox();
             }}

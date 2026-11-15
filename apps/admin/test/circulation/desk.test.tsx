@@ -337,5 +337,7 @@ describe('Meja Layanan', () => {
     const [lostKey] = keyOf('POST', `/loans/${LOAN.id}/lost`);
     expect(idempotencyKeyField.safeParse(lostKey).success).toBe(true);
     expect(lostKey).toMatch(/^desk-lost:[0-9a-f]{32}$/);
+    // The charge booked is said as the member's card says money.
+    expect(await screen.findByText('Biaya penggantian Rp 85.000 dibukukan.')).toBeTruthy();
   });
 });
