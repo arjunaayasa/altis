@@ -14,6 +14,8 @@ import { CHARGES_TABLES_BY_MIGRATION } from './fixtures/komunitas-charges-tables
 import { NOTICES_TABLES_BY_MIGRATION } from './fixtures/komunitas-notices-tables.js';
 // ---- Komunitas K4 (stocktake) ----
 import { STOCKTAKE_TABLES_BY_MIGRATION } from './fixtures/komunitas-stocktake-tables.js';
+// ---- Komunitas (OPAC home page) ----
+import { OPAC_HOME_TABLES_BY_MIGRATION } from './fixtures/komunitas-opac-home-tables.js';
 
 // The personal-data dictionary (PERSONAL_COLUMNS): which columns hold personal data, so that public output, events,
 // logs and exports can leave them out or ask for re-authentication. Every registered column must exist; every column of
@@ -471,6 +473,17 @@ describe('PERSONAL_COLUMNS', () => {
       (c) => !personal.has(c) && !Object.hasOwn(K1_CODE_COLUMNS, c) && !Object.hasOwn(K1_NON_PERSONAL, c),
     );
     expect(unclassified).toEqual(['library_activities.speaker_name']);
+  });
+
+  // ---- Komunitas (OPAC home page) ----
+  it('the OPAC home aggregates hold no personal column: their one text column is a class shared by several borrowers', () => {
+    const tables = Object.values(OPAC_HOME_TABLES_BY_MIGRATION).flat() as TableName[];
+    expect(tables).toEqual(['opac_popular_titles', 'opac_class_activity']);
+    const personal = new Set(registered());
+    const text = textColumnsOf(tables);
+    expect(text.filter((c) => personal.has(c))).toEqual([]);
+    // A class name, as `loans.stat_class_name` (not personal either), kept only when five or more members borrowed in it.
+    expect(text).toEqual(['opac_class_activity.class_name']);
   });
 
   it('isPersonalColumn answers for a registered column only', () => {

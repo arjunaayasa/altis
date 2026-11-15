@@ -1,8 +1,9 @@
 import { defineOpacMessages } from './define.js';
 
-// The OPAC copy of the home page as the library's profile site: the search card, the popular titles, the "about"
-// block with its facts, the services and facilities, and the visit block (location, opening hours). Keys start with
-// `home.`; the same keys and {placeholders} in both languages.
+// The OPAC copy of the home page as the library's profile site: the search card, the subject pills and availability
+// of the title lists, the popular titles, the "about" block with its facts, the services and facilities, the loans per
+// class, and the visit block (location, opening hours with today's marked). Keys start with `home.`; the same keys and
+// {placeholders} in both languages.
 
 export const HOME_MESSAGES = defineOpacMessages(
   {
@@ -25,6 +26,19 @@ export const HOME_MESSAGES = defineOpacMessages(
     'home.visit.hours': 'Jam buka',
     'home.visit.days': 'Hari',
     'home.visit.time': 'Jam',
+    'home.search.today': 'Jam buka hari ini: {time}',
+    'home.pills.label': 'Subjek judul-judul ini, dengan jumlah judul di katalog',
+    'home.pills.count': '{count} judul',
+    'home.pills.count_one': '{count} judul',
+    'home.card.available': 'Tersedia di rak',
+    'home.card.unavailable': 'Tidak di rak',
+    'home.visit.today': 'hari ini',
+    'home.classes.title': 'Kelas paling rajin membaca',
+    'home.classes.note':
+      'Dua belas bulan terakhir, dihitung dari jumlah peminjaman per kelas. Nama anggota tidak pernah ditampilkan; sebuah kelas tampil bila sedikitnya lima anggotanya meminjam.',
+    'home.classes.place': 'Peringkat {n}',
+    'home.classes.counts': '{loans} pinjaman · {titles} judul berbeda',
+    'home.classes.counts_one': '{loans} pinjaman · {titles} judul',
   },
   {
     'home.search.titles': '{count} titles in the catalogue',
@@ -46,5 +60,18 @@ export const HOME_MESSAGES = defineOpacMessages(
     'home.visit.hours': 'Opening hours',
     'home.visit.days': 'Days',
     'home.visit.time': 'Hours',
+    'home.search.today': 'Opening hours today: {time}',
+    'home.pills.label': 'Subjects of these titles, with their number of titles in the catalogue',
+    'home.pills.count': '{count} titles',
+    'home.pills.count_one': '{count} title',
+    'home.card.available': 'On the shelf',
+    'home.card.unavailable': 'Not on the shelf',
+    'home.visit.today': 'today',
+    'home.classes.title': 'Classes that read the most',
+    'home.classes.note':
+      'The last twelve months, counted from the number of loans per class. Members are never named; a class shows only when at least five of its members borrowed.',
+    'home.classes.place': 'Rank {n}',
+    'home.classes.counts': '{loans} loans · {titles} different titles',
+    'home.classes.counts_one': '{loans} loans · {titles} title',
   },
 );
