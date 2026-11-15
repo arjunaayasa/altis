@@ -289,7 +289,7 @@ export const MIGRATION_ID = {
   'catalog.migration.people.circulation_live': 'Perpustakaan sudah melayani di ALTIS atau ALTIS sudah mencatat sirkulasi sendiri, jadi mode Ganti tidak dapat dipakai lagi.',
   'catalog.migration.people.matches': 'Cocokkan dengan SLiMS',
   'catalog.migration.people.matches_hint':
-    'Setiap angka SLiMS dibandingkan dengan ALTIS. Kolom "terjelaskan" menghitung baris yang dilewati dan dicatat di laporan, serta pinjaman, denda, dan reservasi hasil migrasi yang sudah diselesaikan di ALTIS sendiri.',
+    'Setiap angka SLiMS dibandingkan dengan ALTIS. Kolom "terjelaskan" menghitung baris yang dilewati dan dicatat di laporan, serta yang diubah di ALTIS sendiri sesudah migrasi: pinjaman yang dikembalikan, diperpanjang, atau diubah tanggal kembalinya, denda yang dibayar atau dihapuskan, reservasi yang selesai, dan anggota yang diperpanjang atau diarsipkan. Angka negatif berarti ALTIS sendiri menambah baris ke angka itu.',
   'catalog.migration.people.col_number': 'Angka',
   'catalog.migration.people.col_explained': 'Terjelaskan',
   'catalog.migration.people.col_status': 'Hasil',
@@ -593,7 +593,7 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.people.circulation_live': 'The library serves in ALTIS, or ALTIS already records circulation of its own, so the Replace mode can no longer be used.',
   'catalog.migration.people.matches': 'Match with SLiMS',
   'catalog.migration.people.matches_hint':
-    'Each SLiMS number against ALTIS. The "explained" column counts the rows skipped and listed in the report, and the migrated loans, fines and holds ALTIS has settled itself.',
+    'Each SLiMS number against ALTIS. The "explained" column counts the rows skipped and listed in the report, and what ALTIS itself changed after the migration: loans returned, renewed or given another due date, fines paid or waived, holds ended, and members extended or archived. A negative number means ALTIS itself added rows to that number.',
   'catalog.migration.people.col_number': 'Number',
   'catalog.migration.people.col_explained': 'Explained',
   'catalog.migration.people.col_status': 'Result',
