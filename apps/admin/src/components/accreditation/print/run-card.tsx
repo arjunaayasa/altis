@@ -19,7 +19,8 @@ import { confirmReauth, failureText } from '@/screens/reports/run-history';
  *
  * - The warnings are the codes the export wrote into the run (`component_over_limit:<component>:<bytes>`,
  *   `generated_too_large:<code>`, `file_missing:<file id>` for an evidence file gone from the storage, named by its
- *   file name from the period's evidence list); each is shown as a sentence, an unknown one with its code.
+ *   file name from the period's evidence list, `report_withheld:<code>` for a drafted report the requester may not
+ *   export); each is shown as a sentence, an unknown one with its code.
  * - A file is a plain same-origin link (the browser downloads it with the session cookie; the server audits each
  *   download). A run holding personal data (the evidence file, the simulation, the staff annex) is downloaded only right
  *   after a password confirmation: a link cannot open the dialog, so its button asks first and then loads the file.
@@ -67,6 +68,8 @@ export function warningText(t: Translate, o: WarningWords, code: string): string
   }
   const large = /^generated_too_large:(.+)$/.exec(code);
   if (large !== null) return t('accreditation.print.warning.generated_too_large', { code: large[1]! });
+  const withheld = /^report_withheld:(.+)$/.exec(code);
+  if (withheld !== null) return t('accreditation.print.warning.report_withheld', { code: withheld[1]! });
   return t('accreditation.print.warning.other', { code });
 }
 
