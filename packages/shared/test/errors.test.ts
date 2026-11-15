@@ -227,6 +227,11 @@ describe('ERROR_CODES', () => {
     CIRC_CHARGE_STATE: 409,
   };
 
+  // ---- Komunitas (SLiMS members and circulation) ----
+  const slimsPeople: Record<string, number> = {
+    MIGRATION_CIRCULATION_LIVE: 409,
+  };
+
   const expected: Record<ErrorCode, number> = {
     ...phase1a,
     ...phase1b,
@@ -240,6 +245,7 @@ describe('ERROR_CODES', () => {
     ...circulationCore,
     ...membersVisits,
     ...charges,
+    ...slimsPeople,
   } as Record<ErrorCode, number>;
 
   it('registers exactly the Phase 1a, 1b, 1c, 1d, 2 and Komunitas codes (edition lane, reports and accreditation, members and circulation) with their HTTP status', () => {
@@ -272,6 +278,7 @@ describe('ERROR_CODES', () => {
       ...Object.keys(circulationCore),
       ...Object.keys(membersVisits),
       ...Object.keys(charges),
+      ...Object.keys(slimsPeople),
     ]);
     for (const [code, status] of Object.entries(phase1a)) {
       expect(ERROR_CODES[code as ErrorCode].status, code).toBe(status);
