@@ -120,9 +120,9 @@ describe('the community routes are covered: matrix rows, personas, audit scripts
     for (const [area, script] of Object.entries(KOMUNITAS_AUDIT_SCRIPTS)) expect([area, script.run === null]).toEqual([area, false]);
     const scripted = new Set(Object.values(KOMUNITAS_AUDIT_SCRIPTS).flatMap((s) => [...s.actions]));
     expect(k1Actions.filter((a) => !scripted.has(a))).toEqual([]);
-    // The members, visits and circulation routes audit actions of their own (audit/members-circulation.ts and the
-    // scripts after it).
-    const own = ['members.', 'visits.', 'circulation.'];
+    // The members, visits, circulation and stocktake routes audit actions of their own (audit/members-circulation.ts
+    // and the scripts after it).
+    const own = ['members.', 'visits.', 'circulation.', 'stocktake.'];
     for (const d of KOMUNITAS_ROUTES.filter((r) => !own.some((p) => r.id.startsWith(p)))) {
       if (d.audit === null) continue;
       expect([d.id, (k1Actions as readonly string[]).includes(d.audit)]).toEqual([d.id, true]);
