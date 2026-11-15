@@ -1,8 +1,9 @@
 import type { DB } from '@altis/db';
-import { DomainError, type Locale, type MemberStatus } from '@altis/shared';
+import { DomainError, type ChargeKind, type Locale, type MemberStatus, type PaymentMethod } from '@altis/shared';
 import type { Kysely, Transaction } from 'kysely';
 import type { TxCtx } from '../../context.js';
 import { readSettings } from '../../settings/service.js';
+import { chargeLeft, libraryCurrency, memberBalances } from '../../circulation/charge-views.js';
 import { branchToday } from '../../circulation/dates.js';
 import { renewLoan } from '../../circulation/desk.js';
 import { FinePreviewer } from '../../circulation/fines.js';
@@ -11,9 +12,13 @@ import { registerMemberDataSection, registerMemberErasureStep } from '../ext/hoo
 import { memberDataSectionsOf } from '../ext/privacy.js';
 
 // What a signed-in member sees and does in the OPAC member area, besides the password (auth.ts): the account and its
-// card, the open loans and the loan history (paged), the online renewal, the bookmarks, the attachments of access
-// `members` and the download of the member's own data. Every read is keyed by the session's member: a row of another
-// member is the same NOT_FOUND as a row that does not exist (the pages answer the OPAC 404 for both).
+// card, the open loans and the loan history (paged), the online renewal, the open charges and the payments, the
+// bookmarks, the attachments of access `members` and the download of the member's own data. Every read is keyed by the
+// session's member: a row of another member is the same NOT_FOUND as a row that does not exist (the pages answer the
+// OPAC 404 for both).
+//
+// - Charges and payments: read only (no payment online); the open charges at every branch with the balance, and the
+//   payments paged, without the staff who took them or their notes.
 //
 // - Online renewal: a loan of the member only; the member type must allow online renewal (`online_renewal`) and
 //   `circulation.renew.opac` must be on (else CIRC_RENEW_REFUSED `{reason: 'not_online'}`); then the desk's renewal
@@ -248,6 +253,113 @@ export async function ownLoanForRenewal(db: Db, input: { memberId: string; loanI
     throw new DomainError('CIRC_RENEW_REFUSED', { detail: 'Perpanjangan daring tidak tersedia / Online renewal is not available', meta: { reason: 'not_online' } });
   }
   return { branchId: loan.branch_id };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Charges and payments (read only)
+
+/** Payments per page of the member's charges page. */
+export const MEMBER_PAYMENTS_PER_PAGE = 20;
+/** The most open charges the member's charges page lists (the balance counts them all). */
+export const MEMBER_OPEN_CHARGES_MAX = 200;
+
+/** An open charge as the member sees it (minor units of `currency`). */
+export interface MemberOwnChargeRow {
+  id: string;
+  /** Null: a migrated charge whose day was not known. */
+  chargedOn: string | null;
+  kind: ChargeKind;
+  /** The line the desk wrote (for a fine or a lost copy: the copy's barcode and title). */
+  description: string;
+  amountMinor: number;
+  paidMinor: number;
+  waivedMinor: number;
+  leftMinor: number;
+  currency: string;
+}
+
+/** A payment as the member sees it: no staff name, no note. */
+export interface MemberOwnPaymentRow {
+  id: string;
+  /** Null: a migrated payment whose day was not known. */
+  paidOn: string | null;
+  receiptNo: string | null;
+  method: PaymentMethod;
+  amountMinor: number;
+  currency: string;
+  voided: boolean;
+}
+
+export interface MemberOwnChargesPage {
+  /** The open charges, oldest first. */
+  charges: MemberOwnChargeRow[];
+  /** More open charges than listed. */
+  chargesCut: boolean;
+  /** What is left to pay of every open charge. */
+  balanceMinor: number;
+  currency: string;
+  /** One page of the payments, newest first. */
+  payments: MemberOwnPaymentRow[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
+/** The member's open charges and one page of their payments, at every branch (read only). */
+export async function memberOwnCharges(db: Db, memberId: string, o: { page: number }): Promise<MemberOwnChargesPage> {
+  const open = await db
+    .selectFrom('charges')
+    .select(['id', 'charged_on', 'date_unknown', 'kind', 'description', 'amount_minor', 'paid_minor', 'waived_minor', 'currency'])
+    .where('member_id', '=', memberId)
+    .where('status', '=', 'open')
+    .orderBy('charged_at')
+    .orderBy('id')
+    .limit(MEMBER_OPEN_CHARGES_MAX + 1)
+    .execute();
+  const charges = open.slice(0, MEMBER_OPEN_CHARGES_MAX).map(
+    (r): MemberOwnChargeRow => ({
+      id: r.id,
+      chargedOn: Number(r.date_unknown) === 1 ? null : r.charged_on,
+      kind: r.kind as ChargeKind,
+      description: r.description,
+      amountMinor: Number(r.amount_minor),
+      paidMinor: Number(r.paid_minor),
+      waivedMinor: Number(r.waived_minor),
+      leftMinor: chargeLeft(r),
+      currency: r.currency,
+    }),
+  );
+  const counted = await db.selectFrom('payments').select((eb) => eb.fn.countAll<number>().as('n')).where('member_id', '=', memberId).executeTakeFirst();
+  const total = Number(counted?.n ?? 0);
+  const pages = Math.max(1, Math.ceil(total / MEMBER_PAYMENTS_PER_PAGE));
+  const page = Math.min(Math.max(1, Math.trunc(o.page)), pages);
+  const paid = await db
+    .selectFrom('payments')
+    .select(['id', 'paid_on', 'date_unknown', 'receipt_no', 'method', 'amount_minor', 'currency', 'voided_at'])
+    .where('member_id', '=', memberId)
+    .orderBy('paid_at', 'desc')
+    .orderBy('id', 'desc')
+    .limit(MEMBER_PAYMENTS_PER_PAGE)
+    .offset((page - 1) * MEMBER_PAYMENTS_PER_PAGE)
+    .execute();
+  return {
+    charges,
+    chargesCut: open.length > MEMBER_OPEN_CHARGES_MAX,
+    balanceMinor: (await memberBalances(db, [memberId])).get(memberId) ?? 0,
+    currency: charges[0]?.currency ?? (await libraryCurrency(db)),
+    payments: paid.map((p) => ({
+      id: p.id,
+      paidOn: Number(p.date_unknown) === 1 ? null : p.paid_on,
+      receiptNo: p.receipt_no,
+      method: p.method as PaymentMethod,
+      amountMinor: Number(p.amount_minor),
+      currency: p.currency,
+      voided: p.voided_at !== null,
+    })),
+    total,
+    page,
+    pages,
+  };
 }
 
 /**
