@@ -45,15 +45,19 @@ export function visibleReports(holds: (p: Permission) => boolean): ReportDefinit
   return REPORTS.filter((def) => holds(def.permission));
 }
 
-/** A definition as the catalogue lists it for a user (`canExport` from the export permission). */
+/**
+ * A definition as the catalogue lists it for a user (`canExport` from the export permission, and the further permission
+ * the definition needs whatever its parameters).
+ */
 export function reportCatalogEntry(def: ReportDefinition, holds: (p: Permission) => boolean): ReportCatalogEntry {
+  const extra = def.extraPermission?.({}) ?? null;
   return {
     id: def.id,
     module: def.module,
     kind: def.kind,
     titleKey: def.titleKey,
     personal: def.personal,
-    canExport: (def.kind === 'table' || def.runRoutes === true) && holds(exportPermissionOf(def)),
+    canExport: (def.kind === 'table' || def.runRoutes === true) && holds(exportPermissionOf(def)) && (extra === null || holds(extra)),
     formats: [...def.formats],
     orientation: def.orientation,
     params: def.params.map((p) => ({ ...p, ...(p.options === undefined ? {} : { options: [...p.options] }) })),
