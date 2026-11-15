@@ -2,6 +2,8 @@ import type { PeriodListResponse } from '@altis/shared/api/accreditation';
 import type { BranchListResponse } from '@altis/shared/api/branches';
 import type { LocationListResponse } from '@altis/shared/api/catalog/locations';
 import type { MemberTypeListResponse } from '@altis/shared/api/members';
+import type { StocktakeListResponse, StocktakeView } from '@altis/shared/api/stocktake';
+import { useQuery } from '@tanstack/react-query';
 import type { CollectionTypeView, LanguageView, MasterListResponse, MaterialTypeView } from '@altis/shared/api/catalog/masters';
 import type { ReportCatalogEntry, ReportParamKind, ReportParamSpec } from '@altis/shared/api/reports';
 import { RotateCcwIcon } from 'lucide-react';
@@ -11,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT, type TKey, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
-import { ApiError } from '@/lib/api';
+import { ApiError, api } from '@/lib/api';
 import { fieldErrorKey, isMessageKey } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 
@@ -59,7 +61,7 @@ export interface Choice {
 }
 
 /** The kinds whose control is a select of a list the server keeps. */
-const LIST_KINDS = ['period', 'branch', 'location', 'collectionType', 'materialType', 'language', 'memberType'] as const;
+const LIST_KINDS = ['period', 'branch', 'location', 'collectionType', 'materialType', 'language', 'memberType', 'stocktake'] as const;
 
 type ListKind = (typeof LIST_KINDS)[number];
 
@@ -328,7 +330,26 @@ export function useParamOptions(entry: ReportCatalogEntry): ParamOptions {
     staleTime: 60_000,
   });
 
+  // ---- Komunitas K4 (stocktake) ----
+  // The sessions of every branch the user may see (a report on one session).
+  const stocktakeReadable = me !== undefined && me.authenticated && (holds(me, 'stocktake.scan.use') || Object.values(me.branchPermissions).some((p) => p.includes('stocktake.scan.use')));
+  const stocktakes = useQuery<StocktakeView[]>({
+    queryKey: ['reports', 'options', 'stocktakes'],
+    queryFn: async () => {
+      const list = await api<BranchListResponse>('GET', 'branches?includeArchived=true');
+      const out: StocktakeView[] = [];
+      for (const b of list.items) {
+        const r = await api<StocktakeListResponse>('GET', `branches/${b.id}/stocktakes`).catch(() => null);
+        if (r !== null) out.push(...r.items);
+      }
+      return out.sort((a, b) => b.startedAt - a.startedAt);
+    },
+    enabled: uses('stocktake') && stocktakeReadable,
+    staleTime: 60_000,
+  });
+
   const wanted = {
+    stocktake: uses('stocktake') && stocktakeReadable,
     period: uses('period') && accreditation,
     branch: uses('branch'),
     location: uses('location') && catalog,
@@ -346,6 +367,7 @@ export function useParamOptions(entry: ReportCatalogEntry): ParamOptions {
   const materialTypeState = state(materialTypes, wanted.materialType);
   const languageState = state(languages, wanted.language);
   const memberTypeState = state(memberTypes, wanted.memberType);
+  const stocktakeState = state(stocktakes, wanted.stocktake);
 
   return useMemo((): ParamOptions => {
     const states: Record<ListKind, 'loading' | 'unavailable' | 'ready'> = {
@@ -356,6 +378,7 @@ export function useParamOptions(entry: ReportCatalogEntry): ParamOptions {
       materialType: materialTypeState,
       language: languageState,
       memberType: memberTypeState,
+      stocktake: stocktakeState,
     };
     const name = (n: { nameId: string; nameEn: string }): string => (locale === 'en' ? n.nameEn : n.nameId);
     const archived = (label: string, isArchived: boolean): string => (isArchived ? t('reports.params.archived_option', { name: label }) : label);
@@ -396,6 +419,9 @@ export function useParamOptions(entry: ReportCatalogEntry): ParamOptions {
           label: archived(`${locale === 'en' ? (m.nameEn ?? m.nameId) : m.nameId} (${m.code})`, m.archived),
         })),
       ),
+      stocktake: listOf('stocktake', () =>
+        (stocktakes.data ?? []).map((st) => ({ value: st.id, label: `${st.name} (${st.branch.code}, ${new Date(st.startedAt).toISOString().slice(0, 10)})` })),
+      ),
     };
     return { lists, locations: locationChoices };
   }, [
@@ -406,6 +432,8 @@ export function useParamOptions(entry: ReportCatalogEntry): ParamOptions {
     materialTypeState,
     languageState,
     memberTypeState,
+    stocktakeState,
+    stocktakes.data,
     periods.data,
     branches.data,
     locations.data,

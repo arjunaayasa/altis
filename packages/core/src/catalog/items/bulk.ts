@@ -45,13 +45,25 @@ const ID_BATCH = 500;
 /** The fields of the change that show in the record's public representation (the receiving date does not). */
 const PUBLIC_FIELDS: ReadonlySet<string> = new Set(['status', 'locationId', 'collectionTypeId']);
 
+// ---- Komunitas K4 (stocktake) ----
+/**
+ * How a caller other than the bulk route runs a change: `via` is written into each history row's `meta.via`; `audit:
+ * false` leaves out the `catalog.item.bulk_update` entry (the caller's own action is audited), `publish: false` the
+ * per-item events (the stocktake finish publishes nothing per copy).
+ */
+export interface BulkItemsOptions {
+  via?: 'stocktake';
+  audit?: boolean;
+  publish?: boolean;
+}
+
 /**
  * Applies `body.set` to the items `body.ids` of `branchId` (see the top of this file); `updated` counts the items not
  * refused.
  *
  * @throws DomainError VALIDATION_FAILED `{path: 'set.collectionTypeId', code: 'not_found' | 'archived'}`
  */
-export async function bulkUpdateItems(tx: TxCtx, branchId: string, body: ItemBulkBody): Promise<ItemBulkResponse> {
+export async function bulkUpdateItems(tx: TxCtx, branchId: string, body: ItemBulkBody, o: BulkItemsOptions = {}): Promise<ItemBulkResponse> {
   const { trx } = tx;
   const b = parseItemBody(ItemBulkBody, body);
   const ids = [...new Set(b.ids)];
@@ -143,10 +155,8 @@ export async function bulkUpdateItems(tx: TxCtx, branchId: string, body: ItemBul
       .where('id', '=', id)
       .execute();
     changed.sort();
-    await writeItemEvents(
-      tx,
-      changeEvents(id, changed, { status: from, locationId: row.location_id }, { status: to, locationId: locationId === undefined ? row.location_id : locationId }),
-    );
+    const events = changeEvents(id, changed, { status: from, locationId: row.location_id }, { status: to, locationId: locationId === undefined ? row.location_id : locationId });
+    await writeItemEvents(tx, o.via === undefined ? events : events.map((e) => ({ ...e, via: o.via })));
     written.push({ id, recordId: row.record_id, public: changed.some((f) => PUBLIC_FIELDS.has(f)) });
   }
 
@@ -155,14 +165,17 @@ export async function bulkUpdateItems(tx: TxCtx, branchId: string, body: ItemBul
     written,
     {
       publicRecords: written.flatMap((w) => (w.public ? [w.recordId] : [])),
-      audit: {
-        action: 'catalog.item.bulk_update',
-        entity: 'items',
-        entityId: null,
-        branchId,
-        meta: { count: ids.length, updated, refused: refused.length, fields: Object.keys(b.set).sort() },
-      },
-      publish: true,
+      audit:
+        o.audit === false
+          ? null
+          : {
+              action: 'catalog.item.bulk_update',
+              entity: 'items',
+              entityId: null,
+              branchId,
+              meta: { count: ids.length, updated, refused: refused.length, fields: Object.keys(b.set).sort() },
+            },
+      publish: o.publish !== false,
     },
   );
   return { updated, refused };

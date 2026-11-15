@@ -204,6 +204,8 @@ const CHARGES = ['circulation.charge.create', 'circulation.charge.waive', 'circu
 const NOTICES = ['circulation.notice.send', 'circulation.notices.run'];
 /** The SLiMS migration's members and circulation, appended after charges: 1 action (a cut-over checklist step). */
 const SLIMS_PEOPLE = ['catalog.migration.cutover'];
+/** Stocktake, appended last in this order: 5 actions. */
+const STOCKTAKE = ['stocktake.session.create', 'stocktake.session.finish', 'stocktake.session.cancel', 'stocktake.upload', 'stocktake.scan.cancel_other'];
 
 describe('AUDIT_ACTIONS', () => {
   it('is exactly the Phase 1b list followed by the 18 actions of Phase 1c, the 5 of Phase 1d, the 30 of Phase 2, the 18 of reports and accreditation, then the 15 of members and circulation, in order', () => {
@@ -218,7 +220,8 @@ describe('AUDIT_ACTIONS', () => {
     expect(CHARGES).toHaveLength(4);
     expect(NOTICES).toHaveLength(2);
     expect(SLIMS_PEOPLE).toHaveLength(1);
-    expect([...AUDIT_ACTIONS]).toEqual([...PHASE_1B, ...PHASE_1C, ...PHASE_1D, ...PHASE_2, ...KOMUNITAS_K1, ...MEMBERS_CIRCULATION, ...HOLDS, ...CIRCULATION_CORE, ...MEMBERS_VISITS, ...MEMBER_AREA, ...CHARGES, ...NOTICES, ...SLIMS_PEOPLE]);
+    expect(STOCKTAKE).toHaveLength(5);
+    expect([...AUDIT_ACTIONS]).toEqual([...PHASE_1B, ...PHASE_1C, ...PHASE_1D, ...PHASE_2, ...KOMUNITAS_K1, ...MEMBERS_CIRCULATION, ...HOLDS, ...CIRCULATION_CORE, ...MEMBERS_VISITS, ...MEMBER_AREA, ...CHARGES, ...NOTICES, ...SLIMS_PEOPLE, ...STOCKTAKE]);
   });
 
   it('every action is dotted lower-case and fits audit_log.action (64)', () => {

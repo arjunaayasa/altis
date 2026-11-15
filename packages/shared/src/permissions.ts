@@ -73,6 +73,11 @@ export const PERMISSIONS = Object.freeze([
   // ---- Komunitas (charges and payments) ----
   // Waiving a charge and voiding a payment, at a branch (taking payments and booking a charge by hand is the desk's).
   'circulation.charges.waive',
+  // ---- Komunitas K4 (stocktake) ----
+  // Stocktake at a branch: managing its sessions (create, finish, cancel, undoing another officer's scan), and seeing
+  // the sessions and scanning.
+  'stocktake.sessions.manage',
+  'stocktake.scan.use',
 ] as const);
 
 /** A catalog key. The second member exists only in the test profile (spec §12.5): see {@link permissionCatalog}. */
@@ -82,7 +87,7 @@ export type Permission = (typeof PERMISSIONS)[number] | 'test.branch.manage';
 export type PermissionScope = 'global' | 'branch';
 
 /** The module of a permission: its key's first segment. */
-export type PermissionModule = 'system' | 'test' | 'catalog' | 'opac' | 'reports' | 'accreditation' | 'members' | 'circulation' | 'visits';
+export type PermissionModule = 'system' | 'test' | 'catalog' | 'opac' | 'reports' | 'accreditation' | 'members' | 'circulation' | 'visits' | 'stocktake';
 
 export interface PermissionDef {
   key: Permission;
@@ -111,6 +116,10 @@ const BRANCH_SCOPED: ReadonlySet<string> = new Set([
   'visits.stations.manage',
   // ---- Komunitas (charges and payments) ----
   'circulation.charges.waive',
+  // ---- Komunitas K4 (stocktake) ----
+  // A stocktake session belongs to a branch (`branches/:branchId/stocktakes/...`).
+  'stocktake.sessions.manage',
+  'stocktake.scan.use',
 ]);
 
 /** The module of a production key: its prefix (`system`, `catalog`, `opac`, `reports`, `accreditation`, `members` or `circulation`). */

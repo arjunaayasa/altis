@@ -10,6 +10,8 @@ import { AUDIT as MEMBER_AREA } from './komunitas-member-area.js';
 import { AUDIT as NOTICES } from './komunitas-notices.js';
 // ---- Komunitas (SLiMS members and circulation) ----
 import { AUDIT as SLIMS_PEOPLE } from './komunitas-slims-people.js';
+// ---- Komunitas K4 (stocktake) ----
+import { AUDIT as STOCKTAKE } from './komunitas-stocktake.js';
 
 // The audit scripts of the members and circulation actions: one script per area, each in a file of its own that only
 // its owning change fills. db/audit-coverage.test.ts runs them after the community's, on the same installation and in
@@ -33,6 +35,8 @@ export const MEMBERS_CIRCULATION_AUDIT_SCRIPTS: Readonly<Record<string, AreaAudi
   notices: NOTICES,
   // ---- Komunitas (SLiMS members and circulation): the cut-over checklist ----
   'slims-people': SLIMS_PEOPLE,
+  // ---- Komunitas K4 (stocktake) ----
+  stocktake: STOCKTAKE,
 });
 
 /** While true, a script that is still null lists its actions as pending; both scripts are written, so every action is covered. */

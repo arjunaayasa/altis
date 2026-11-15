@@ -138,6 +138,18 @@ import {
 } from './fixtures/komunitas-notices-tables.js';
 // ---- Komunitas (SLiMS members and circulation) ----
 import { SLIMS_PEOPLE_INDEXES, SLIMS_PEOPLE_TABLES_BY_MIGRATION } from './fixtures/komunitas-slims-people-tables.js';
+// ---- Komunitas K4 (stocktake) ----
+import {
+  STOCKTAKE_CLASSES,
+  STOCKTAKE_COLUMNS,
+  STOCKTAKE_DEFAULTS,
+  STOCKTAKE_FOREIGN_KEYS,
+  STOCKTAKE_INDEXES,
+  STOCKTAKE_PRIMARY_KEYS,
+  STOCKTAKE_TABLES_BY_MIGRATION,
+  STOCKTAKE_UNIQUE,
+  stocktakeSampleRows,
+} from './fixtures/komunitas-stocktake-tables.js';
 import { MIGRATION_NAME, runMigrations } from '../src/migrator.js';
 import { PHASE1_MIGRATIONS } from '../src/migrations/index.js';
 import { SECRET_COLUMNS, SETTINGS_SCOPE_CLASS, TABLE_CLASSES, type SettingsScope, type TableName } from '../src/registry.js';
@@ -220,6 +232,8 @@ const EXPECTED_CLASSES = {
   ...CHARGES_CLASSES,
   // ---- Komunitas (notices) ----
   ...NOTICES_CLASSES,
+  // ---- Komunitas K4 (stocktake) ----
+  ...STOCKTAKE_CLASSES,
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping, made by the runner ----
   schema_migrations_edition: 'migrator',
   schema_migrations_edition_lock: 'migrator',
@@ -258,6 +272,8 @@ const TABLES_BY_MIGRATION: Record<string, TableName[]> = {
   ...NOTICES_TABLES_BY_MIGRATION,
   // ---- Komunitas (SLiMS members and circulation): a column and an index only ----
   ...(SLIMS_PEOPLE_TABLES_BY_MIGRATION as Record<string, TableName[]>),
+  // ---- Komunitas K4 (stocktake) ----
+  ...STOCKTAKE_TABLES_BY_MIGRATION,
 };
 
 /** The created_by of the tables the runner makes itself (ensureBootstrap, ruling R27). */
@@ -323,6 +339,8 @@ const EXPECTED_PRIMARY_KEYS: Record<TableName, string[]> = {
   ...CHARGES_PRIMARY_KEYS,
   // ---- Komunitas (notices) ----
   ...NOTICES_PRIMARY_KEYS,
+  // ---- Komunitas K4 (stocktake) ----
+  ...STOCKTAKE_PRIMARY_KEYS,
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: ['name'],
   schema_migrations_edition_lock: ['id'],
@@ -414,6 +432,8 @@ const EXPECTED_INDEXES: IndexFacts[] = [
   ...NOTICES_INDEXES,
   // ---- Komunitas (SLiMS members and circulation) ----
   ...SLIMS_PEOPLE_INDEXES,
+  // ---- Komunitas K4 (stocktake) ----
+  ...STOCKTAKE_INDEXES,
 ].sort((a, b) => a.table.localeCompare(b.table) || a.name.localeCompare(b.name));
 
 /** The full-text indexes, which {@link indexes} leaves out (an expression index has no column list on PostgreSQL). */
@@ -454,6 +474,8 @@ const EXPECTED_FOREIGN_KEYS: ForeignKeyFacts[] = [
   ...CHARGES_FOREIGN_KEYS,
   // ---- Komunitas (notices) ----
   ...NOTICES_FOREIGN_KEYS,
+  // ---- Komunitas K4 (stocktake) ----
+  ...STOCKTAKE_FOREIGN_KEYS,
 ].sort((a, b) => a.table.localeCompare(b.table) || a.column.localeCompare(b.column));
 
 type MigratorTable =
@@ -754,6 +776,8 @@ const EXPECTED_COLUMNS: Record<Phase1Table, Record<string, string>> = {
   ...CHARGES_COLUMNS,
   // ---- Komunitas (notices) ----
   ...NOTICES_COLUMNS,
+  // ---- Komunitas K4 (stocktake) ----
+  ...STOCKTAKE_COLUMNS,
 };
 
 /**
@@ -834,8 +858,10 @@ describe('the table-class registry and the Phase 1 migration list (spec §6.5)',
       ...Object.keys(CHARGES_TABLES_BY_MIGRATION),
       ...Object.keys(NOTICES_TABLES_BY_MIGRATION),
       ...Object.keys(SLIMS_PEOPLE_TABLES_BY_MIGRATION),
+      // Komunitas K4, stocktake: 0048 after them.
+      ...Object.keys(STOCKTAKE_TABLES_BY_MIGRATION),
     ]);
-    expect(circulation.at(-1)).toBe('0047_migration_subject');
+    expect(circulation.at(-1)).toBe('0048_stocktakes');
     for (const [name, m] of Object.entries(PHASE1_MIGRATIONS)) {
       expect(name).toMatch(MIGRATION_NAME);
       expect(typeof m.up).toBe('function');
@@ -1426,6 +1452,8 @@ function sampleRows(): { [T in RoundTripTable]: Selectable<DB[T]>[] } {
     ...chargesSampleRows({ branchId, staffId }),
     // ---- Komunitas (notices) ----
     ...noticesSampleRows(),
+    // ---- Komunitas K4 (stocktake) ----
+    ...stocktakeSampleRows({ branchId, staffId }),
   };
 }
 
@@ -1491,6 +1519,8 @@ const DEFAULTS: { [T in RoundTripTable]: { [K in GeneratedKeys<DB[T]>]: SelectTy
   ...CHARGES_DEFAULTS,
   // ---- Komunitas (notices) ----
   ...NOTICES_DEFAULTS,
+  // ---- Komunitas K4 (stocktake) ----
+  ...STOCKTAKE_DEFAULTS,
 };
 
 /** One row of each table the runner fills itself, typed by `DB`: their keys are the columns the type declares. */
@@ -1811,6 +1841,8 @@ describe.skipIf(!ctx.available)(`Phase 1 tables [${engineLabel()}]`, () => {
     ...CHARGES_UNIQUE,
     // ---- Komunitas (notices) ----
     ...NOTICES_UNIQUE,
+    // ---- Komunitas K4 (stocktake) ----
+    ...STOCKTAKE_UNIQUE,
       ].sort(),
     );
   });
