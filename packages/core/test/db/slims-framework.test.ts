@@ -1008,6 +1008,34 @@ describe.skipIf(!ctx.available)(`SLiMS migration framework [${engineLabel()}]`, 
     expect(finish.map((e) => JSON.parse(e.meta).status)).toEqual(['cancelled']);
   });
 
+  it('a stage heartbeat with no progress of its own keeps the bar where the stages of the run are, not back at 0', async () => {
+    let t = NOW;
+    let jobId = '';
+    const seen: number[] = [];
+    __setSlimsStages([
+      fakeCountingStage('masters', 'mst_author'),
+      fakeCountingStage('members', 'mst_author', {
+        async onCall(c) {
+          // A people stage's batch loop beats with 0, as the member, visit and circulation stages do.
+          t += JOB_HEARTBEAT_MS + 1;
+          await c.heartbeat(0, 'members');
+          seen.push(Number((await h.db.selectFrom('jobs').select('progress').where('id', '=', jobId).executeTakeFirstOrThrow()).progress));
+        },
+      }),
+    ]);
+    const started = await start({ dryRun: true });
+    jobId = started.jobId;
+    let outcome = 'continued';
+    for (let slices = 0; outcome === 'continued' && slices < 20; slices += 1) {
+      const job = await claimById(h, registry, jobId, { worker: 'test', now: t });
+      outcome = (await runSlice(h, registry, job!, { mode: 'worker', budgetMs: 2_000, keyring, log: silent, clock: () => t, env: {} })).outcome;
+    }
+    expect(outcome).toBe('succeeded');
+    // Past the stages before it (the pipeline's own stages count too), never 0.
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((p) => p > 0), JSON.stringify(seen)).toBe(true);
+  });
+
   it('C17: a run whose job was cancelled while queued is ended by the next start as its job ended, with its finish audited and the index ready again', async () => {
     const first = await start();
     // As the run's take recorded it (pipeline.ts): its index held documents of this token format.

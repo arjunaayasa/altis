@@ -921,7 +921,8 @@ export async function runSlimsMigrationSlice(
       counters,
       report: addRow,
       budgetLeftMs: budgetLeft,
-      heartbeat: (value, message) => ctx.heartbeat({ progress: value, message }),
+      // The run's progress is where its stages are: a stage's heartbeat never takes the bar back below it.
+      heartbeat: (value, message) => ctx.heartbeat({ progress: Math.max(value, progress()), message }),
       pipeline,
     };
   }
