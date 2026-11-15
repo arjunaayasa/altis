@@ -66,6 +66,8 @@ const REPORT_KEYS = [
   'oai',
   // ---- Komunitas K1 (edition lane) ----
   'editionLane',
+  // ---- Komunitas K4 (stocktake) ----
+  'stocktakes',
 ].sort();
 
 describe.skipIf(!ctx.available)(`the Diagnostik report [${engineLabel()}]`, () => {
@@ -191,6 +193,82 @@ describe.skipIf(!ctx.available)(`the Diagnostik report [${engineLabel()}]`, () =
       expect((await collectDiagnostics(options())).editionLane).toEqual({ applied: 1 });
     } finally {
       await h.db.deleteFrom('schema_migrations_edition').execute();
+    }
+  });
+
+  // ---- Komunitas K4 (stocktake) ----
+  it('stocktakes lists the sessions under way with their jobs, and names a preparation or finish that does not move', async () => {
+    expect((await collectDiagnostics(options())).stocktakes).toEqual([]);
+    const at = (n: number) => NOW - 3 * 86_400_000 + n;
+    const branchIds: string[] = [];
+    const session = async (n: number, status: string): Promise<string> => {
+      const branchId = newId(at(n));
+      branchIds.push(branchId);
+      await h.db
+        .insertInto('branches')
+        .values({ id: branchId, code_key: `DIAG-${n}`, code_display: `DIAG-${n}`, name: `Cabang ${n}`, address: null, timezone: 'Asia/Jakarta', created_at: NOW, created_by: null, updated_at: NOW, updated_by: null })
+        .execute();
+      const id = newId(at(n));
+      const live = status === 'preparing' || status === 'active' || status === 'finishing';
+      await h.db
+        .insertInto('stocktakes')
+        .values({
+          id,
+          branch_id: branchId,
+          name: `Sesi ${n}`,
+          scope: '{}',
+          status,
+          active_key: live ? branchId : null,
+          options: null,
+          total: 10,
+          found: 4,
+          on_loan: 1,
+          started_at: at(n),
+          started_by: null,
+          finished_at: null,
+          finished_by: null,
+          minutes_file_id: null,
+          report_file_id: null,
+          source: 'altis',
+          created_at: at(n),
+          created_by: null,
+          updated_at: at(n),
+          updated_by: null,
+        })
+        .execute();
+      return id;
+    };
+    const job = async (type: string, stocktakeId: string, status: string, updatedAt: number, uniqueKey: string | null): Promise<string> => {
+      const id = newId(updatedAt);
+      await h.db
+        .insertInto('jobs')
+        .values({ id, type, payload: JSON.stringify({ stocktakeId }), status, run_at: updatedAt, max_attempts: 5, unique_key: uniqueKey, created_at: updatedAt, updated_at: updatedAt })
+        .execute();
+      return id;
+    };
+    const orphan = await session(1, 'preparing');
+    const ended = await session(2, 'finishing');
+    const stalled = await session(3, 'finishing');
+    const active = await session(4, 'active');
+    await session(5, 'finished');
+    try {
+      await job('stocktake.finish', ended, 'dead', NOW - 60_000, null);
+      const stalledJob = await job('stocktake.finish', stalled, 'running', NOW - 11 * 60_000, `stocktake.finish:${stalled}`);
+      const preparedJob = await job('stocktake.prepare', active, 'succeeded', NOW - 86_400_000, null);
+      await job('stocktake.apply_codes', active, 'queued', NOW - 1000, `stocktake.codes:${active}:${newId(NOW)}`);
+      const listed = (await collectDiagnostics(options())).stocktakes;
+      expect(listed.map((s) => [s.id, s.status, s.stuck, s.job?.id ?? null, s.pendingUploads])).toEqual([
+        [orphan, 'preparing', 'no_job', null, 0],
+        [ended, 'finishing', 'job_ended', expect.any(String), 0],
+        [stalled, 'finishing', 'stalled', stalledJob, 0],
+        [active, 'active', null, preparedJob, 1],
+      ]);
+      expect(listed[0]).toMatchObject({ name: 'Sesi 1', branch: { code: 'DIAG-1', name: 'Cabang 1' }, counts: { total: 10, found: 4, pending: 5 } });
+      expect(listed[2]!.job).toMatchObject({ type: 'stocktake.finish', status: 'running', updatedAt: NOW - 11 * 60_000 });
+    } finally {
+      await h.db.deleteFrom('jobs').where('type', 'like', 'stocktake.%').execute();
+      await h.db.deleteFrom('stocktakes').execute();
+      await h.db.deleteFrom('branches').where('id', 'in', branchIds).execute();
     }
   });
 

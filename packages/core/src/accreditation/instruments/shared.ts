@@ -220,6 +220,8 @@ export const SCHOOL_INDICATORS: readonly ConceptIndicator[] = deepFreeze<Concept
       photo('shelf_photos'),
       generated('data_quality', 'collection.data_quality'),
       photo('scanner_photo'),
+      // ---- Komunitas K4 (stocktake) ----
+      signed('stocktake_minutes'),
     ],
     options: true,
   },
@@ -233,6 +235,8 @@ export const SCHOOL_INDICATORS: readonly ConceptIndicator[] = deepFreeze<Concept
     evidence: [
       primary(generated('preservation_list', ACTIVITIES, { kinds: ['preservation'], window: 'three_periods' })),
       photo('preservation_photos'),
+      // ---- Komunitas K4 (stocktake) ----
+      signed('stocktake_minutes'),
     ],
   },
   // ---- Sarana dan Prasarana ----

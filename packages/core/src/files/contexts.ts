@@ -131,8 +131,9 @@ export const UPLOAD_CONTEXTS: Readonly<Partial<Record<UploadContextName, UploadC
 
   // ---- Komunitas K4 (stocktake) ----
   // A list of scanned codes (text or CSV, one code per line), staged until `POST …/stocktakes/:id/uploads` takes it.
-  // Scanning is a branch permission, so the route that takes the file at its branch is the gate (any staff may stage).
-  'stocktake.codes': context({ name: 'stocktake.codes', permission: null, maxBytes: 10 * MIB, magic: ['text'], kind: 'staged' }),
+  // Scanning is a branch permission: the declaration names the session's branch and is checked there (files.ts), and
+  // the route that takes the file checks it at the session's branch again.
+  'stocktake.codes': context({ name: 'stocktake.codes', permission: 'stocktake.scan.use', maxBytes: 10 * MIB, magic: ['text'], kind: 'staged' }),
 });
 
 /** The context `name` of this build, or null (an unknown name, or `test` outside the test profile). */

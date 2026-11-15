@@ -2,6 +2,7 @@ import type { DB } from '@altis/db';
 import { newId } from '@altis/shared';
 import type { Kysely, Transaction } from 'kysely';
 import type { SlimsRow, SlimsTableInfo } from '../source/types.js';
+import type { SlimsPipelineContext } from '../pipeline.js';
 import type { SlimsStage, SlimsStageContext } from '../stage.js';
 import {
   TEXT_MAX_BYTES,
@@ -27,7 +28,8 @@ import {
 // the run's `sourceName`, S13), so a later phase (serials, stock taking) can still read them:
 //
 // - `serial`, `kardex`, `mst_frequency`, `stock_take`, `stock_take_item`, `mst_label`, `biblio_log`, `mst_item_status`:
-//   every row, counted `archived`;
+//   every row, counted `archived` (the two stocktake tables only archived when the run has the stocktake stage, which
+//   counts them: stocktake.ts);
 // - `biblio.labels` and `biblio.frequency_id`: a row `{biblio_id, labels, frequency_id}` for each record that has one
 //   of them (the rows of `biblio` are the records stage's to count);
 // - `biblio_log` (M12, UU PDP): its IP address columns and `realname` are personal data with no Phase 2 purpose, so
@@ -47,6 +49,14 @@ const BIBLIO_KEPT = ['labels', 'frequency_id'] as const;
 const PERSONAL = /^(?:ip|ip_address|client_ip|user_ip|realname)$/i;
 
 type Db = Kysely<DB> | Transaction<DB>;
+
+// ---- Komunitas K4 (stocktake) ----
+const STOCKTAKE_TABLES: ReadonlySet<string> = new Set(['stock_take', 'stock_take_item']);
+
+/** Whether the run's stage list has the stocktake stage (a framework context only; a bare call counts as without). */
+function runHasStocktake(c: SlimsStageContext): boolean {
+  return (c as Partial<SlimsPipelineContext>).pipeline?.stages.some((s) => s.name === 'stocktake') === true;
+}
 
 /** The archive rows of `keys` of `table` under the run's source: the run that wrote each, by key. */
 async function archivedRuns(c: SlimsStageContext, db: Db, table: string, keys: readonly string[]): Promise<Map<string, string>> {
@@ -105,8 +115,9 @@ async function archiveBatch(
   const keyColumns = info.primaryKey.length > 0 ? info.primaryKey : table === 'biblio' ? ['biblio_id'] : [];
   const dropped = table === 'biblio_log' ? info.columns.filter((column) => PERSONAL.test(column)).sort() : [];
   if (first && dropped.length > 0) l.report(table, null, 'columns_dropped', dropped.join(', '));
-  // `biblio`'s rows are the records stage's to count: here they are only archived.
-  const counted = table !== 'biblio';
+  // `biblio`'s rows are the records stage's to count, the stocktake tables' the stocktake stage's (when the run has it):
+  // here they are only archived.
+  const counted = table !== 'biblio' && !(STOCKTAKE_TABLES.has(table) && runHasStocktake(c));
   const filled = (v: SlimsRow[string] | undefined): boolean => keyOf(v) !== '' && keyOf(v) !== '0';
   const candidates: { key: string; row: SlimsRow; columns: readonly string[] }[] = [];
   const seen = new Set<string>();

@@ -8,8 +8,9 @@ import {
   listStocktakeItems,
   listStocktakes,
   listStocktakeUnknown,
+  localStorageDriver,
   scanStocktake,
-  stocktakeMinutesPdf,
+  stocktakeMinutes,
   stocktakeOfficers,
   assertStocktakeOfBranch,
   undoStocktakeScan,
@@ -56,7 +57,8 @@ import { jobHandlers } from '../jobs/runtime.js';
 //   POST   branches/:branchId/stocktakes/:id/uploads                  StocktakeUploadBody → 202        stocktake.upload
 //   POST   branches/:branchId/stocktakes/:id/finish                   StocktakeFinishBody → 202        sessions.manage, reauth   stocktake.session.finish
 //   POST   branches/:branchId/stocktakes/:id/cancel                   → StocktakeActionResponse        sessions.manage   stocktake.session.cancel
-//   GET    branches/:branchId/stocktakes/:id/minutes                  → application/pdf (mode system: a download)
+//   GET    branches/:branchId/stocktakes/:id/minutes                  → application/pdf (mode system: a download): the
+//                                                                       file stored at the finish, else built now
 //
 // A session named by id must be of the branch in the path; any other is 404, as one that does not exist.
 
@@ -284,7 +286,7 @@ const minutes = route({
   audit: null,
   params: IdParams,
   handler: async (rc) => {
-    const pdf = await stocktakeMinutesPdf(rc.db.db, rc.params.branchId, rc.params.id);
+    const pdf = await stocktakeMinutes(rc.db.db, localStorageDriver(rc.services.dataDir), rc.params.branchId, rc.params.id);
     return new Response(pdf.bytes, {
       status: 200,
       headers: {

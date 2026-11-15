@@ -24,8 +24,8 @@ const WINDOWS: readonly AccredWindow[] = [
 const ids = Object.keys(ACCRED_METRICS) as AccredMetricId[];
 
 describe('ACCRED_METRICS', () => {
-  it('every metric has one of the five providers, a unit and exactly one window', () => {
-    expect(ACCRED_PROVIDER_IDS).toEqual(['collection', 'registers', 'period', 'system', 'usage']);
+  it('every metric has one of the six providers, a unit and exactly one window', () => {
+    expect(ACCRED_PROVIDER_IDS).toEqual(['collection', 'registers', 'period', 'system', 'usage', 'stocktake']);
     for (const id of ids) {
       const m = ACCRED_METRICS[id];
       expect(ACCRED_PROVIDER_IDS, id).toContain(m.provider);
@@ -36,17 +36,19 @@ describe('ACCRED_METRICS', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('each id starts with its provider, but the share of the collection used, whose base is the stock', () => {
+  it('each id starts with its provider, but the share of the collection used (its base is the stock) and the recount standard (finished stocktake sessions count)', () => {
     for (const id of ids) {
       if (id === 'usage.collection_used_pct') expect(ACCRED_METRICS[id].provider).toBe('collection');
+      else if (id === 'registers.stocktake_weeding_3y') expect(ACCRED_METRICS[id].provider).toBe('stocktake');
       else expect(id.split('.')[0], id).toBe(ACCRED_METRICS[id].provider);
     }
     expect(Object.fromEntries(ACCRED_PROVIDER_IDS.map((p) => [p, metricsOfProvider(p).length]))).toEqual({
       collection: 17,
-      registers: 32,
+      registers: 31,
       period: 11,
       system: 3,
       usage: 7,
+      stocktake: 1,
     });
   });
 
@@ -65,8 +67,8 @@ describe('ACCRED_METRICS', () => {
 });
 
 describe('the metric providers', () => {
-  it('the five providers in order, each computing exactly the metrics of its id', () => {
-    expect(ACCRED_METRIC_PROVIDERS.map((p) => p.id)).toEqual(['collection', 'registers', 'period', 'system', 'usage']);
+  it('the six providers in order, each computing exactly the metrics of its id', () => {
+    expect(ACCRED_METRIC_PROVIDERS.map((p) => p.id)).toEqual(['collection', 'registers', 'period', 'system', 'usage', 'stocktake']);
     for (const p of ACCRED_METRIC_PROVIDERS) expect([...p.metrics], p.id).toEqual(ids.filter((id) => ACCRED_METRICS[id].provider === p.id));
     const all = ACCRED_METRIC_PROVIDERS.flatMap((p) => [...p.metrics]);
     expect([...all].sort()).toEqual([...ids].sort());
@@ -74,7 +76,7 @@ describe('the metric providers', () => {
 
   it('a provider not written yet answers no value at once', async () => {
     const ctx = {} as AccredMetricContext;
-    const written = new Set(['collection', 'registers', 'period', 'system', 'usage']);
+    const written = new Set(['collection', 'registers', 'period', 'system', 'usage', 'stocktake']);
     for (const p of ACCRED_METRIC_PROVIDERS.filter((q) => !written.has(q.id))) {
       const step = await p.compute(ctx, p.metrics, null);
       expect(step.done, p.id).toBe(true);

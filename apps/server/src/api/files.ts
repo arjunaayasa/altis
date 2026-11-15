@@ -14,7 +14,7 @@ import {
   uploadOwner,
   type UploadContext,
 } from '@altis/core';
-import { DomainError, isUlid } from '@altis/shared';
+import { DomainError, isUlid, permissionCatalog } from '@altis/shared';
 import { ulidField } from '@altis/shared/api/common';
 import {
   UploadCompleteBody,
@@ -81,13 +81,16 @@ function ownerOf(rc: RouteContext<unknown, unknown, unknown>): string {
  * is counted and audited as step 9's are (§7.8, rc.authzDenied).
  *
  * @throws DomainError `VALIDATION_FAILED` (`context`) for a context this build does not have (`test` outside the test
- *   profile), `AUTHZ_DENIED` without the context's permission
+ *   profile), `AUTHZ_DENIED` without the context's permission (a branch permission at the declared branch)
  */
-async function contextFor(rc: RouteContext<unknown, unknown, unknown>, name: string): Promise<UploadContext> {
+async function contextFor(rc: RouteContext<unknown, unknown, unknown>, name: string, branchId?: string): Promise<UploadContext> {
   const context = uploadContext(name);
   if (context === null) throw validationFailed([{ path: 'context', code: 'invalid_value' }]);
   if (rc.auth === null) throw new DomainError('AUTH_REQUIRED');
-  if (context.permission !== null && !can(rc.auth.grants, context.permission)) throw await rc.authzDenied(context.permission);
+  // ---- Komunitas K4 (stocktake) ----
+  // A branch permission is checked at the branch the declaration names (globally without one).
+  const atBranch = context.permission !== null && permissionCatalog().some((d) => d.key === context.permission && d.scope === 'branch') ? (branchId ?? null) : null;
+  if (context.permission !== null && !can(rc.auth.grants, context.permission, atBranch)) throw await rc.authzDenied(context.permission);
   return context;
 }
 
@@ -135,7 +138,7 @@ const uploadsCreate = route({
   audit: null,
   body: UploadCreateBody,
   prepare: async (rc) => {
-    const context = await contextFor(rc, rc.body.context);
+    const context = await contextFor(rc, rc.body.context, rc.body.branchId);
     await prepareUpload(rc.db, { context, size: rc.body.size, dataDir: rc.services.dataDir, now: rc.now });
     return context;
   },

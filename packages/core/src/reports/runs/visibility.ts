@@ -34,6 +34,12 @@ export function exportPermissionOf(def: ReportDefinition): Permission {
   return def.exportPermission ?? def.permission;
 }
 
+// ---- Komunitas K4 (stocktake) ----
+/** The branch `params` of `def` address (ReportBase.branchOf), or null. */
+export async function reportBranchOf(db: Kysely<DB>, def: ReportDefinition, params: Readonly<Record<string, unknown>>): Promise<string | null> {
+  return def.branchOf === undefined ? null : def.branchOf(db, params);
+}
+
 /** The definitions whose `permission` the user holds. */
 export function visibleReports(holds: (p: Permission) => boolean): ReportDefinition[] {
   return REPORTS.filter((def) => holds(def.permission));

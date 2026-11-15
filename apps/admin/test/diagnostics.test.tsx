@@ -61,6 +61,8 @@ function report(o: Partial<DiagnosticsReport> = {}): DiagnosticsReport {
     oai: null,
     // ---- Komunitas K1 (edition lane) ----
     editionLane: { applied: 0 },
+    // ---- Komunitas K4 (stocktake) ----
+    stocktakes: [],
     ...o,
   };
 }
@@ -192,6 +194,37 @@ describe('the migrations of another lane', () => {
     expect(block.getAttribute('data-diagnostics-block')).toBe('editionLane');
     expect(within(block).getByRole('heading', { name: 'Jalur migrasi lain' })).toBeTruthy();
     expect(translate('en', 'diagnostics.edition_lane.applied', { count: 0 })).toBe('Migrations from another lane installed: 0');
+  });
+});
+
+// ---- Komunitas K4 (stocktake) ----
+describe('the stocktake sessions under way', () => {
+  it('shows each session with its job, and a warning for a finish whose job ended', async () => {
+    const stocktakes = [
+      {
+        id: '01J0000000000000000000ST01',
+        branch: { id: '01J0000000000000000000BR01', code: 'PUSAT', name: 'Pusat' },
+        name: 'Inventarisasi Rak A',
+        status: 'finishing' as const,
+        startedAt: AT - 86_400_000,
+        counts: { total: 120, found: 100, pending: 15 },
+        job: { id: '01J0000000000000000000JB01', type: 'stocktake.finish' as const, status: 'dead', progress: 50, updatedAt: AT - 3_600_000 },
+        pendingUploads: 1,
+        stuck: 'job_ended' as const,
+      },
+    ];
+    startApp({ me: adminMe(), path: '/admin/diagnostics', routes: routes(() => report({ stocktakes })) });
+    const line = await screen.findByText('100 dari 120 ditemukan, 15 tertunda');
+    const block = line.closest('[data-diagnostics-block]') as HTMLElement;
+    expect(block.getAttribute('data-diagnostics-block')).toBe('stocktakes');
+    expect(within(block).getByText('Inventarisasi Rak A (cabang PUSAT)')).toBeTruthy();
+    expect(within(block).getByText('Tugas sesi ini berhenti sebelum selesai. Periksa Tugas dan jalankan ulang tugasnya.')).toBeTruthy();
+    expect(within(block).getByText('Daftar kode yang masih diproses: 1')).toBeTruthy();
+  });
+
+  it('says when no session is under way', async () => {
+    startApp({ me: adminMe(), path: '/admin/diagnostics', routes: routes(() => report()) });
+    expect(await screen.findByText('Tidak ada sesi inventarisasi yang berjalan.')).toBeTruthy();
   });
 });
 

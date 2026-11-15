@@ -399,7 +399,7 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
 
     // The cut-over checklist holds "Mulai melayani" back.
     const view = await slimsCutover(db.h.db);
-    expect(view).toMatchObject({ runId, reconciled: false, ready: false, rooms: 1, roomsWithStation: 0, reprintOpenedAt: null, stocktakeAvailable: false, circulationLive: false });
+    expect(view).toMatchObject({ runId, reconciled: false, ready: false, rooms: 1, roomsWithStation: 0, reprintOpenedAt: null, stocktakeAvailable: true, circulationLive: false });
     const refused = await withTx(db.h, (trx) => markSlimsCutoverStep(txCtx(trx, NOW, ACTOR), 'serve')).catch((e: unknown) => e);
     expect(isDomainError(refused) && refused.code === 'MIGRATION_PRECHECK_FAILED' && refused.meta?.['reason'] === 'cutover_incomplete').toBe(true);
     const marked = await withTx(db.h, (trx) => markSlimsCutoverStep(txCtx(trx, NOW, ACTOR), 'reprint_opened'));

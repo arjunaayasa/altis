@@ -1,6 +1,6 @@
 import type { ReindexResponse } from '@altis/shared/api/catalog/search';
 import type { DashboardResponse } from '@altis/shared/api/dashboard';
-import type { DiagnosticsReport, DiagnosticsRunMode, DiagnosticsRuntime, RealtimeResponse } from '@altis/shared/api/diagnostics';
+import type { DiagnosticsReport, DiagnosticsRunMode, DiagnosticsRuntime, DiagnosticsStocktake, RealtimeResponse } from '@altis/shared/api/diagnostics';
 import { opCliLines, type OpView } from '@altis/shared/api/ops';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -657,6 +657,53 @@ function EditionLaneBlock({ report }: BlockProps) {
   return <p className="text-sm">{t('diagnostics.edition_lane.applied', { count: report.editionLane.applied })}</p>;
 }
 
+// ---- Komunitas K4 (stocktake) ------------------------------------------------------------------------------------
+
+const STUCK_TEXT: Readonly<Record<NonNullable<DiagnosticsStocktake['stuck']>, AdminKey>> = {
+  no_job: 'stocktake.ui.diag.stuck.no_job',
+  job_ended: 'stocktake.ui.diag.stuck.job_ended',
+  stalled: 'stocktake.ui.diag.stuck.stalled',
+};
+
+/** The stocktake sessions under way, each with its preparation or finish job, and a warning for one that is stuck. */
+function StocktakeBlock({ report }: BlockProps) {
+  const t = useT();
+  const me = useMe();
+  const dateTime = useDateTime();
+  if (report.stocktakes.length === 0) return <p className="text-sm text-muted-foreground">{t('stocktake.ui.diag.none')}</p>;
+  return (
+    <>
+      {report.stocktakes.map((s) => (
+        <div key={s.id} data-stocktake={s.id} className="flex flex-col gap-2">
+          <dl className="flex flex-col gap-2">
+            <Row label={t('stocktake.ui.diag.session', { name: s.name, branch: s.branch.code })}>{t(`vocab.stocktake_status.${s.status}`)}</Row>
+            <Row label={t('stocktake.ui.col.started')}>
+              <When ms={s.startedAt} />
+            </Row>
+            <Row label={t('stocktake.ui.diag.job')}>
+              {s.job === null
+                ? t('stocktake.ui.diag.no_job')
+                : t('stocktake.ui.diag.job_value', { status: t(`jobs.status.${s.job.status}` as AdminKey), progress: s.job.progress, time: dateTime(s.job.updatedAt) })}
+            </Row>
+          </dl>
+          <p className="text-sm">{t('stocktake.ui.diag.counts', { found: s.counts.found, total: s.counts.total, pending: s.counts.pending })}</p>
+          {s.pendingUploads > 0 && <p className="text-sm text-muted-foreground">{t('stocktake.ui.diag.uploads', { count: s.pendingUploads })}</p>}
+          {s.stuck !== null && (
+            <BlockWarning>
+              <p>{t(STUCK_TEXT[s.stuck], { status: t(`vocab.stocktake_status.${s.status}`) })}</p>
+            </BlockWarning>
+          )}
+          {holds(me, 'system.jobs.read') && s.job !== null && (
+            <Link to="/admin/jobs/$jobId" params={{ jobId: s.job.id }} className="self-start text-sm text-primary underline-offset-4 hover:underline">
+              {t('diagnostics.queue.open')}
+            </Link>
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
 /** One block per section of the report, in this order; typed by the report's keys (a new section needs its block). */
 const BLOCKS: { readonly [K in keyof DiagnosticsReport]: { title: TKey; Body(props: BlockProps): ReactNode } } = {
   release: { title: 'diagnostics.release.title', Body: ReleaseBlock },
@@ -679,6 +726,8 @@ const BLOCKS: { readonly [K in keyof DiagnosticsReport]: { title: TKey; Body(pro
   oai: { title: 'diagnostics.oai.title', Body: OaiBlock },
   // ---- Komunitas K1 (edition lane) ----
   editionLane: { title: 'diagnostics.edition_lane.title', Body: EditionLaneBlock },
+  // ---- Komunitas K4 (stocktake) ----
+  stocktakes: { title: 'stocktake.ui.diag.title', Body: StocktakeBlock },
 };
 
 const BLOCK_ORDER = Object.keys(BLOCKS) as (keyof DiagnosticsReport)[];
