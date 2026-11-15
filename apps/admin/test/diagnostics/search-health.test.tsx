@@ -52,6 +52,8 @@ function report(o: Partial<DiagnosticsReport> = {}): DiagnosticsReport {
     oai: { enabled: true, adminEmailSet: true },
     // ---- Komunitas K1 (edition lane) ----
     editionLane: { applied: 0 },
+    // ---- Komunitas K4 (stocktake) ----
+    stocktakes: [],
     ...o,
   };
 }

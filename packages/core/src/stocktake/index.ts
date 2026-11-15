@@ -14,3 +14,4 @@ export { scanStocktake, undoStocktakeScan } from './scan.js';
 export { assertStocktakeOfBranch, listStocktakeItems, listStocktakeUnknown, stocktakeOfficers } from './lists.js';
 export { codesOf, finishBatch, prepareBatch, stocktakeCodesJob, stocktakeFinishJob, stocktakePrepareJob } from './jobs.js';
 export { closeStocktakeFinish, stocktakeMinutes, stocktakeMinutesPdf, STOCKTAKE_MINUTES_CONTEXT, STOCKTAKE_MINUTES_OWNER } from './minutes.js';
+export { stocktakeDiagnostics, STOCKTAKE_JOB_STALL_MS } from './diagnostics.js';

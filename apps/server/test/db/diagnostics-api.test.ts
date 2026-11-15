@@ -56,6 +56,8 @@ const REPORT_KEYS = [
   'oai',
   // ---- Komunitas K1 (edition lane) ----
   'editionLane',
+  // ---- Komunitas K4 (stocktake) ----
+  'stocktakes',
 ].sort();
 
 describe.skipIf(!ctx.available)(`Diagnostik API [${engineLabel()}]`, () => {
