@@ -512,14 +512,27 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
     expect(await snapshot()).toEqual(wholeRows);
   });
 
-  it('member numbers that collide once normalised: the dry run lists them, a real run taking it over is refused 422', async () => {
+  it('member numbers that collide once normalised: the dry run lists them (and the circulation lists to check), a real run taking it over is refused 422', async () => {
     await wipe();
-    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ collide: true }) }));
+    const tables = slimsTables({ collide: true });
+    // An open loan exactly as many open days late as its grace (2): SLiMS fines it, ALTIS ("within 2 days is free") not.
+    tables['loan']!.rows.push({ loan_id: 30, item_code: 'B003', member_id: 'M001', loan_date: '2026-08-21', due_date: '2026-08-31', renewed: 0, loan_rules_id: 2, is_lent: 1, is_return: 0, return_date: null, uid: 2 });
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables }));
     const dry = await start({ dryRun: true });
     expect(await runToEnd(dry.jobId)).toBe('succeeded');
     const s = await summaryOf(dry.runId);
     expect(s.memberNoCollisions).toBe(2);
     expect(s.tables['member']?.skipped).toMatchObject({ member_no_collision: 2 });
+    // The lists to check before the real run: M003's loans under the archived "every" rule of Guru take the type's
+    // fallback rule (14 days, not 21; limit 0, which his two open loans pass); Siswa has rules of its own; nothing
+    // names a member by name.
+    expect(s.dryLists).toEqual([
+      { key: 'loan_terms_differ', count: 3, samples: ['M003 · B002', 'M003 · B005', 'M001 · B003'] },
+      { key: 'type_limit_changes', count: 1, samples: ['1 Siswa'] },
+      { key: 'members_over_limit', count: 1, samples: ['M003'] },
+      { key: 'all_rule_unused', count: 1, samples: ['1'] },
+      { key: 'open_loan_item_missing', count: 0, samples: [] },
+    ]);
     expect(await count('members')).toBe(0);
     const refused = await start({ fromRunId: dry.runId }).catch((e: unknown) => e);
     expect(isDomainError(refused) && refused.code === 'MIGRATION_PRECHECK_FAILED' && refused.meta?.['reason'] === 'member_no_collision' && refused.meta?.['count'] === 2).toBe(true);

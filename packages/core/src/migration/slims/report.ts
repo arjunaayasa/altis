@@ -263,6 +263,7 @@ export function slimsSummaryRows(o: {
     rows.push(['', m.scope, m.ok ? 'match' : 'match_diff', `${m.key}: ${pairs({ source: m.source, altis: m.altis, explained: m.explained })}`]);
   }
   for (const t of s.memberTypes ?? []) rows.push(['mst_member_type', t.id, 'member_type_group', pairs({ group: t.group, members: t.members })]);
+  for (const d of s.dryLists ?? []) rows.push(['', d.key, 'dry_list', `count=${d.count}; samples=${d.samples.join(', ')}`]);
   rows.push([
     '',
     '',
