@@ -27,6 +27,8 @@ import { NOTICES_EN } from './notices.js';
 import { SLIMS_PEOPLE_EN } from './slims-people.js';
 // ---- Komunitas K4 (stocktake) ----
 import { STOCKTAKE_EN } from './stocktake.js';
+// ---- Komunitas K5 (reports) ----
+import { REPORTS_K5_EN } from './reports-k5.js';
 
 const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   // ---- error.<CODE> ---------------------------------------------------------------------------------------
@@ -1556,6 +1558,8 @@ const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   ...SLIMS_PEOPLE_EN,
   // ---- Komunitas K4 (stocktake) ----
   ...STOCKTAKE_EN,
+  // ---- Komunitas K5 (reports) ----
+  ...REPORTS_K5_EN,
 };
 
 /** Spread in only under the test profile, like the Indonesian one (see `id.ts`). */

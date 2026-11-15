@@ -21,6 +21,8 @@ import { MATRIX as SlimsUsage } from './komunitas-slims-usage.js';
 // ---- Komunitas K4 (stocktake) ----
 import { MATRIX as Stocktake } from './komunitas-stocktake.js';
 import { MATRIX as Usage } from './komunitas-usage.js';
+// ---- Komunitas K5 (reports) ----
+import { MATRIX as LibraryStatistics } from './komunitas-library-statistics.js';
 import { mergeAreaMatrices, type AreaMatrix } from './catalog.js';
 
 // The community rows of the permission matrix (reports and accreditation): one file per area
@@ -62,6 +64,8 @@ const AREAS: Readonly<Record<string, AreaMatrix>> = Object.freeze({
   notices: Notices,
   // ---- Komunitas K4 (stocktake) ----
   stocktake: Stocktake,
+  // ---- Komunitas K5 (reports) ----
+  'library-statistics': LibraryStatistics,
 });
 
 /** Every community area, merged. */
