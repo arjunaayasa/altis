@@ -17,9 +17,14 @@ import {
   lendItem,
   markLoanLost,
   memberCharges,
+  memberLoans,
+  noticeContent,
+  noticeLibrary,
+  noticeMember,
   openBalances,
   paymentSummary,
   receiptData,
+  renderNotice,
   renewLoan,
   returnItem,
   slipData,
@@ -123,6 +128,20 @@ describe.skipIf(!ctx.available)(`charges and payments [${engineLabel()}]`, () =>
     // The return says both: the calendar days late and the days its fine counted.
     expect(await back(book.barcode, 12)).toMatchObject({ daysLate: 5, finedDays: 4 });
     expect((await charges(reader)).map((r) => Number(r.amount_minor))).toEqual([200_000]);
+    // The slip of that return, the member's history and the overdue mail of a loan still open say them the same way.
+    const returned = (await db.h.db.selectFrom('loans').select('id').where('member_id', '=', reader).executeTakeFirstOrThrow()).id;
+    const slip = await slipData(db.h.db, { branchId: db.branchId, loanIds: [], returnedLoanIds: [returned], paymentIds: [], now: at(12) });
+    expect(slip.returns[0]).toMatchObject({ daysLate: 5, finedDays: 4, fine: '2000.00' });
+    expect((await memberLoans(db.h.db, reader, { open: false, page: 1, now: at(12) })).rows[0]).toMatchObject({ daysLate: 5, finedDays: 4, fineMinor: 0 });
+    const late = await item();
+    await lend(reader, late.barcode);
+    expect((await memberLoans(db.h.db, reader, { open: true, page: 1, now: at(12) })).rows[0]).toMatchObject({ daysLate: 5, finedDays: 4, fineMinor: 200_000 });
+    const lateId = (await db.h.db.selectFrom('loans').select('id').where('item_id', '=', late.id).executeTakeFirstOrThrow()).id;
+    const content = await noticeContent(db.h.db, { kind: 'overdue', member_id: reader, loan_ids: JSON.stringify([lateId]), hold_id: null }, at(12));
+    expect(content).toMatchObject({ kind: 'overdue', loans: [{ daysLate: 5, finedDays: 4, fineMinor: 200_000 }] });
+    const mail = await renderNotice(db.h.db, { ...(await noticeMember(db.h.db, reader))!, locale: 'id' }, await noticeLibrary(db.h.db, 'https://perpus.test'), content!);
+    expect(mail.text).toContain('terlambat 5 hari (4 hari dikenai denda)');
+    await back(late.barcode, 12);
 
     await settings({ 'circulation.fines.skipClosedDays': false } as Settings);
     const other = await member();
@@ -317,7 +336,7 @@ describe.skipIf(!ctx.available)(`charges and payments [${engineLabel()}]`, () =>
     const loanId = (await db.h.db.selectFrom('loans').select('id').where('member_id', '=', reader).executeTakeFirstOrThrow()).id;
     const paid = (await db.h.db.selectFrom('payments').select('id').where('member_id', '=', reader).execute()).map((p) => p.id);
     const slip = await slipData(db.h.db, { branchId: db.branchId, loanIds: [], returnedLoanIds: [loanId], paymentIds: paid, now: at(10) });
-    expect(slip.returns).toEqual([{ barcode: book.barcode, title: expect.any(String), returnedOn: day, daysLate: 3, fine: '1500.00' }]);
+    expect(slip.returns).toEqual([{ barcode: book.barcode, title: expect.any(String), returnedOn: day, daysLate: 3, finedDays: 3, fine: '1500.00' }]);
     expect(slip.payments.map((p) => p.amount)).toEqual(['1000.00', '500.00']);
     expect(slip.member?.memberNo).toMatch(/^CH-/);
     for (const paper of ['58', '80'] as const) expect(Buffer.from(buildSlipPdf({ ...slip, paper })).subarray(0, 5).toString('latin1')).toBe('%PDF-');

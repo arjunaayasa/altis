@@ -10,7 +10,7 @@ import { readSettings } from '../settings/service.js';
 import { chargeLeft, chargeViews, libraryCurrency, memberBalances } from './charge-views.js';
 import { branchToday } from './dates.js';
 import { itemNotFound, locking, lockMemberRow, scannedBarcode } from './desk.js';
-import { FinePreviewer, overdueFineMinor } from './fines.js';
+import { FinePreviewer } from './fines.js';
 import { registerCirculationChargeSeam, type CirculationChargeSeam } from './seams.js';
 
 // Charges: what a member owes, and the writers of it.
@@ -153,9 +153,10 @@ export async function bookOverdueFine(tx: TxCtx, i: { loanId: string; dueOn: str
   if (loan === undefined || loan.member_id === null) return null;
   const terms = { finePerDayMinor: ok(loan.fine_per_day_minor), fineCapMinor: loan.fine_cap_minor === null ? null : ok(loan.fine_cap_minor), graceDays: ok(loan.grace_days) };
   if (terms.finePerDayMinor <= 0) return null;
-  const days = await (await FinePreviewer.open(tx.trx)).lateDays(loan.branch_id, i.dueOn, i.until);
-  const amount = overdueFineMinor(days, terms);
-  if (amount <= 0) return null;
+  const late = await (await FinePreviewer.open(tx.trx)).lateness({ branchId: loan.branch_id, dueOn: i.dueOn, ...terms }, i.until);
+  if (late.finedDays === null || late.fineMinor <= 0) return null;
+  const days = late.finedDays;
+  const amount = late.fineMinor;
   const locale = await libraryLocale(tx.trx);
   const item = await itemLine(tx.trx, loan.item_id);
   const id = await insertCharge(tx, {

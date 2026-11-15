@@ -2,6 +2,7 @@ import type { DB } from '@altis/db';
 import { localDate, newId, type AccredGroup } from '@altis/shared';
 import type { Selectable, Transaction, Updateable } from 'kysely';
 import { bcryptCost, isBcryptHash, BCRYPT_MAX_COST, BCRYPT_MIN_COST } from '../../../crypto/bcrypt.js';
+import { readCustomValues, writeCustomValues } from '../../../catalog/data/custom-fields.js';
 import { codeKey } from '../../../catalog/data/keys.js';
 import { mapLegacy, type LegacyMapping } from '../../../catalog/data/legacy-map.js';
 import { setAttachmentMemberTypes } from '../../../members/area/account.js';
@@ -12,6 +13,7 @@ import { writeSettings } from '../../../settings/service.js';
 import type { SettingKey } from '../../../settings/registry.js';
 import type { SlimsRow } from '../source/types.js';
 import type { SlimsStage, SlimsStageContext } from '../stage.js';
+import { slimsCustomDefs, slimsCustomValues } from './custom-values.js';
 import {
   cachedForRun,
   cutChars,
@@ -24,6 +26,7 @@ import {
   sha256Of,
   stateOf,
   storeBlob,
+  tableOf,
   textOf,
   againOnRace,
   keyFits,
@@ -67,7 +70,10 @@ import {
 //    `membersMode = update` re-synced field by field (see syncMember).
 // 3. photos: `member.member_image` → `images/persons/<name>` of the files source (JPEG, at most 500 KB) as the
 //    member's photo, unless the member has one; a missing file is reported (`missing_photo`).
-// 4. `member_custom` → counted, not migrated (`custom_fields_not_migrated`).
+// 4. `member_custom` → the members' custom values, through the member field definitions the masters stage made from
+//    the `member` rows of `mst_custom_field` (custom-values.ts; reported without their text: a member's field is
+//    personal data); a row of a member SLiMS no longer has (a changed or deleted id) is skipped `orphan`. With
+//    `membersMode = update` a mapped member's values are synced again, unless edited in ALTIS since.
 // 5. `biblio_mark` → bookmarks (an orphan member or title skipped `orphan`).
 // 6. `comment` → `migration_archive` with the member's subject key (OPAC comments are not built).
 // 7. the member and visit keys of `setting` (written by a real run): `password_policy_min_length` →
@@ -839,9 +845,111 @@ async function commentsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io
   await archiveRows(c, io, l, T, out);
 }
 
-async function customBatch(c: SlimsStageContext, rows: readonly SlimsRow[], _io: BatchIo, l: Ledger, at: { c: string | null; n: number }): Promise<void> {
-  if (at.c === null && at.n === 0) l.report('member_custom', null, 'custom_fields_not_migrated', 'Ruas tambahan anggota SLiMS belum dipindahkan / SLiMS member custom fields are not moved yet');
-  l.skipped('member_custom', 'custom_fields_not_migrated', rows.length);
+// ---- 4. member custom values ----------------------------------------------------------------------------------------
+
+/** The source's member custom values (one `cf_*` column per field, defined by the masters stage). */
+const TC = 'member_custom';
+
+/** The `cf_*` columns of the source's `member_custom`. */
+async function customColumns(c: SlimsStageContext): Promise<string[]> {
+  return ((await tableOf(c, TC))?.columns ?? []).filter((column) => /^cf_/i.test(column));
+}
+
+async function customBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: BatchIo, l: Ledger, at: { c: string | null; n: number }): Promise<void> {
+  const columns = await customColumns(c);
+  const { defs, byColumn } = await slimsCustomDefs(c, io, 'members', columns);
+  if (at.c === null && at.n === 0) {
+    for (const column of columns) if (!byColumn.has(column)) l.report(TC, null, 'custom_column_unmapped', `${column}: tanpa definisi ruas / no field definition`);
+  }
+  const keyed: { key: string; row: SlimsRow }[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const key = keyOf(row['member_id']);
+    if (!keyFits(key)) {
+      l.skipped(TC, 'empty_key');
+      l.report(TC, null, 'empty_key', 'member_id kosong / empty');
+    } else if (seen.has(key)) {
+      l.skipped(TC, 'duplicate_key');
+      l.report(TC, key, 'duplicate_key', 'member_id ganda / repeated');
+    } else {
+      seen.add(key);
+      keyed.push({ key, row });
+    }
+  }
+  const keys = keyed.map((k) => k.key);
+  const maps = await mappedRows(c, io.db, TC, keys);
+  const members = await mapped(c, io.db, TM, keys);
+  const known = io.trx === null ? await sourceMemberKeys(c) : new Set<string>();
+  // `membersMode = update`: a member's values are synced again, unless staff or the member edited them in ALTIS since.
+  const update = c.options.people.membersMode === 'update';
+  const doneIds = keyed.flatMap((k) => (stateOf(c, maps.get(k.key)) === 'done' ? [maps.get(k.key)!.targetId] : []));
+  const edited = update && doneIds.length > 0 ? await editedSince(io.db, doneIds, await previousRunStart(c)) : new Map<string, Set<string>>();
+  const current = update && doneIds.length > 0 ? await readCustomValues(io.db, 'members', doneIds) : new Map<string, Record<string, unknown>>();
+  const toMap: LegacyMapping[] = [];
+  for (const { key, row } of keyed) {
+    const m = maps.get(key);
+    const state = stateOf(c, m);
+    if (state === 'done' && !update) {
+      l.skipped(TC, 'already_migrated');
+      continue;
+    }
+    const memberId = state === 'fresh' ? (members.get(key) ?? (io.trx === null && known.has(key) ? `~${key}` : null)) : m!.targetId;
+    if (memberId === null) {
+      // A row of a member SLiMS no longer has (a member id changed or deleted): an orphan.
+      l.skipped(TC, 'orphan');
+      l.report(TC, key, 'member_missing', `member_id=${cutChars(key, 40)}`);
+      continue;
+    }
+    const values = slimsCustomValues(l, TC, key, row, defs, byColumn, { personal: true });
+    if (state === 'done') {
+      await syncCustom(c, io, l, key, memberId, values, defs, current.get(memberId) ?? {}, edited.get(memberId)?.has('custom') === true);
+      continue;
+    }
+    if (Object.keys(values).length === 0) {
+      l.skipped(TC, 'no_values');
+      continue;
+    }
+    l.migrated(TC);
+    if (io.trx === null || state === 'replay') continue;
+    await writeCustomValues(io.trx, 'members', memberId, values, defs, { now: c.now, actor: null });
+    toMap.push({ source: c.options.sourceName, entity: TC, legacyKey: key, targetId: memberId, runId: c.runId });
+  }
+  if (io.trx !== null && toMap.length > 0) await mapLegacy(io.trx, toMap);
+}
+
+/**
+ * The re-sync of a mapped member's custom values (`membersMode = update`): the source's values that differ are written
+ * (a field the source leaves empty is kept), unless the values were edited in ALTIS since the previous run (kept,
+ * `sync_conflict` when the source differs); a change writes the history row `synced` with the field `custom`.
+ */
+async function syncCustom(
+  c: SlimsStageContext,
+  io: BatchIo,
+  l: Ledger,
+  key: string,
+  memberId: string,
+  values: Record<string, unknown>,
+  defs: Parameters<typeof writeCustomValues>[4],
+  stored: Record<string, unknown>,
+  editedInAltis: boolean,
+): Promise<void> {
+  const changed = Object.fromEntries(Object.entries(values).filter(([code, v]) => JSON.stringify(stored[code] ?? null) !== JSON.stringify(v)));
+  l.migrated(TC);
+  if (Object.keys(changed).length === 0) return;
+  if (editedInAltis) {
+    l.report(TC, key, 'sync_conflict', 'custom');
+    return;
+  }
+  l.changed(TC);
+  if (io.trx === null) {
+    l.report(TC, key, 'sync_change', Object.keys(changed).sort().join(','));
+    return;
+  }
+  await writeCustomValues(io.trx, 'members', memberId, changed, defs, { now: c.now, actor: null });
+  await io.trx
+    .insertInto('member_events')
+    .values({ id: newId(c.now), member_id: memberId, at: c.now, type: 'synced', actor_type: 'system', actor_id: null, meta: JSON.stringify({ fields: ['custom'] }) })
+    .execute();
 }
 
 // ---- 7. settings, 8. attachment access ------------------------------------------------------------------------------
@@ -914,7 +1022,7 @@ const PHASES: readonly PeoplePhase[] = Object.freeze([
   { table: TT, run: (c, rows, io, l) => typesBatch(c, rows, io, l) },
   { table: TM, run: (c, rows, io, l, at) => membersBatch(c, rows, io, l, at) },
   { table: TM, before: photosBefore, undo: undoPhotos, run: (c, rows, io, l, _at, pre) => photosBatch(c, rows, io, l, pre) },
-  { table: 'member_custom', run: (c, rows, io, l, at) => customBatch(c, rows, io, l, at) },
+  { table: TC, run: (c, rows, io, l, at) => customBatch(c, rows, io, l, at) },
   { table: 'biblio_mark', run: (c, rows, io, l) => bookmarksBatch(c, rows, io, l) },
   { table: 'comment', run: (c, rows, io, l) => commentsBatch(c, rows, io, l) },
   { table: null, run: (c, rows, io, l) => settingsOnce(c, rows, io, l) },
@@ -929,6 +1037,6 @@ async function undoPhotos(c: SlimsStageContext, pre: unknown): Promise<void> {
 /** The members stage (see the top of this file). */
 export const membersStage: SlimsStage = Object.freeze({
   name: 'members' as const,
-  reads: Object.freeze([TT, TM, 'member_custom', 'biblio_mark', 'comment']) as readonly string[],
+  reads: Object.freeze([TT, TM, TC, 'biblio_mark', 'comment']) as readonly string[],
   run: (c: SlimsStageContext, cursor: string | null) => runPeoplePhases(c, 'members', PHASES, cursor, (x) => previousRunStart(x)),
 });

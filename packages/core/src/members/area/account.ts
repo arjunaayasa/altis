@@ -3,7 +3,9 @@ import { DomainError, type Locale, type MemberStatus } from '@altis/shared';
 import type { Kysely, Transaction } from 'kysely';
 import type { TxCtx } from '../../context.js';
 import { readSettings } from '../../settings/service.js';
+import { branchToday } from '../../circulation/dates.js';
 import { renewLoan } from '../../circulation/desk.js';
+import { FinePreviewer } from '../../circulation/fines.js';
 import { libraryToday, lockLiveMember, memberStatusOf } from '../common.js';
 import { registerMemberDataSection, registerMemberErasureStep } from '../ext/hooks.js';
 import { memberDataSectionsOf } from '../ext/privacy.js';
@@ -134,8 +136,16 @@ export interface MemberLoanRow {
   outcome: string | null;
   renewals: number;
   renewLimit: number;
-  /** Days past due on the library's today (open) or on the return day (closed). */
+  /** Calendar days past due on the loan branch's today (open) or on the return day (closed). */
   daysLate: number;
+  /**
+   * The days the overdue fine counts on that day, as the desk says them (circulation/fines.ts lateness: the open days
+   * when closed days are not fined); null when no fine (none per day, or within the grace days).
+   */
+  finedDays: number | null;
+  /** The running overdue fine of an open loan (minor units of `currency`, 0: none); 0 for a closed loan. */
+  fineMinor: number;
+  currency: string;
 }
 
 export interface MemberLoanPage {
@@ -143,13 +153,6 @@ export interface MemberLoanPage {
   total: number;
   page: number;
   pages: number;
-}
-
-const DAY_MS = 86_400_000;
-
-/** Whole days from `a` to `b` (calendar dates). */
-function daysBetween(a: string, b: string): number {
-  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY_MS);
 }
 
 /** One page of the member's open loans (oldest due date first) or closed loans (newest return first). */
@@ -177,34 +180,54 @@ export async function memberLoans(db: Db, memberId: string, o: { open: boolean; 
       'l.outcome',
       'l.renewals',
       'l.renew_limit',
+      'l.currency',
+      'l.fine_per_day_minor',
+      'l.fine_cap_minor',
+      'l.grace_days',
     ])
     .$call((q) => (o.open ? q.orderBy('l.due_on').orderBy('l.id') : q.orderBy('l.returned_at', 'desc').orderBy('l.id', 'desc')))
     .limit(MEMBER_LOANS_PER_PAGE)
     .offset((page - 1) * MEMBER_LOANS_PER_PAGE)
     .execute();
-  const today = await libraryToday(db, o.now);
-  return {
-    rows: rows.map((r) => {
-      const end = r.returned_on ?? today;
-      return {
-        id: r.id,
-        recordId: r.record_id,
-        title: r.title,
-        barcode: r.barcode_display,
+  // Every date of a loan is its branch's (circulation/dates.ts); the days late and fined are the desk's (fines.ts).
+  const todays = new Map<string, string>();
+  const fines = await FinePreviewer.open(db);
+  const out: MemberLoanRow[] = [];
+  for (const r of rows) {
+    let end = r.returned_on;
+    if (end === null) {
+      end = todays.get(r.branch_id) ?? (await branchToday(db, r.branch_id, o.now));
+      todays.set(r.branch_id, end);
+    }
+    const late = await fines.lateness(
+      {
         branchId: r.branch_id,
-        loanedOn: r.loaned_on,
         dueOn: r.due_on,
-        returnedOn: r.returned_on,
-        outcome: r.outcome,
-        renewals: Number(r.renewals),
-        renewLimit: Number(r.renew_limit),
-        daysLate: Math.max(0, daysBetween(r.due_on, end)),
-      };
-    }),
-    total,
-    page,
-    pages,
-  };
+        finePerDayMinor: Number(r.fine_per_day_minor),
+        fineCapMinor: r.fine_cap_minor === null ? null : Number(r.fine_cap_minor),
+        graceDays: Number(r.grace_days),
+      },
+      end,
+    );
+    out.push({
+      id: r.id,
+      recordId: r.record_id,
+      title: r.title,
+      barcode: r.barcode_display,
+      branchId: r.branch_id,
+      loanedOn: r.loaned_on,
+      dueOn: r.due_on,
+      returnedOn: r.returned_on,
+      outcome: r.outcome,
+      renewals: Number(r.renewals),
+      renewLimit: Number(r.renew_limit),
+      daysLate: late.daysLate,
+      finedDays: late.finedDays,
+      fineMinor: r.returned_on === null ? late.fineMinor : 0,
+      currency: r.currency,
+    });
+  }
+  return { rows: out, total, page, pages };
 }
 
 /** Whether members may renew online at all (`circulation.renew.opac`) and the member's type allows it. */

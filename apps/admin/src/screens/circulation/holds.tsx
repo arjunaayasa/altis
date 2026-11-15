@@ -1,24 +1,22 @@
 import { HOLD_REFUSALS, type HoldRefusal } from '@altis/shared';
 import type { RecordListResponse } from '@altis/shared/api/catalog/records';
 import type { DeskMemberView } from '@altis/shared/api/circulation';
-import type { HoldActionResponse, HoldCreateResponse, HoldShelfResponse, HoldView, ReturnHoldTrap, WaitingTitleView } from '@altis/shared/api/holds';
+import type { HoldActionResponse, HoldCreateResponse, HoldShelfResponse, HoldView, WaitingTitleView } from '@altis/shared/api/holds';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useState, type FormEvent } from 'react';
-import { createPortal } from 'react-dom';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Badge, Notice, SELECT_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useLocale, useT, type Translate } from '@/i18n';
+import { useT, type Translate } from '@/i18n';
 import { holds as holdsPermission } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { cn } from '@/lib/utils';
 import { newTransactionKey, todayLocal, useCalendarDate, useDeskBranch } from './common';
-import './hold-slip.css';
 
 /**
  * Holds at the desk and on the hold shelf (rak tunggu).
@@ -30,8 +28,8 @@ import './hold-slip.css';
  * - The desk's **Reservasi** tab (`MemberHoldsPanel`): the member's active holds with their place in the queue or
  *   pickup deadline, cancel (at the hold's own pickup branch), and "Tambah reservasi…" (`PlaceHoldDialog`: a title
  *   search over the catalogue, then "Pesan").
- * - The **slip** of a return that kept the copy for a hold: printed on its own (hold-slip.css) with the member number,
- *   the name, the title and the pickup deadline, to put in the book on the hold shelf.
+ * - The **slip** of a copy kept for a hold (after the return that kept it, and on each ready row of the shelf): a
+ *   58/80 mm roll PDF with the member number, the name, the title and the pickup deadline, to put in the book.
  *
  * A member is named by id in every request; the search for titles sends only the words typed.
  */
@@ -183,9 +181,18 @@ export function HoldShelfScreen() {
                             {late && <Badge tone="danger">{t('holds.overdue_pickup')}</Badge>}
                           </td>
                           <td className="px-3 py-2">
-                            <Button type="button" size="sm" variant="outline" onClick={() => setCancelling(h)}>
-                              {t('holds.action.cancel')}
-                            </Button>
+                            <div className="flex flex-wrap gap-2">
+                              {branchId !== null && (
+                                <Button asChild size="sm" variant="outline">
+                                  <a href={holdSlipHref(branchId, h.id)} target="_blank" rel="noopener" aria-label={t('holds.action.slip_named', { title: h.record.title })}>
+                                    {t('holds.action.slip')}
+                                  </a>
+                                </Button>
+                              )}
+                              <Button type="button" size="sm" variant="outline" onClick={() => setCancelling(h)}>
+                                {t('holds.action.cancel')}
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -633,55 +640,9 @@ export function PlaceHoldDialog({
   );
 }
 
-// ---- the hold shelf slip -------------------------------------------------------------------------------------------
+// ---- the hold shelf slip ------------------------------------------------------------------------------------------
 
-/** The attribute on `<html>` that hold-slip.css reads while a slip prints. */
-const PRINT_ATTRIBUTE = 'data-print';
-
-/** A slip to print for a copy kept on the hold shelf. */
-export interface HoldSlip {
-  trap: ReturnHoldTrap;
-  title: string;
-  barcode: string;
-}
-
-/**
- * Prints `slip` once each time `printing` grows: the slip is put at the end of <body> and <html> is marked, so the
- * print holds the slip only; the mark goes once the browser says it printed.
- */
-export function HoldSlipPrint({ slip, printing, onPrinted }: { slip: HoldSlip | null; printing: number; onPrinted(): void }) {
-  const t = useT();
-  const locale = useLocale();
-  const day = useCalendarDate();
-  useEffect(() => {
-    if (printing === 0 || slip === null) return;
-    const root = document.documentElement;
-    const done = (): void => {
-      window.removeEventListener('afterprint', done);
-      root.removeAttribute(PRINT_ATTRIBUTE);
-      onPrinted();
-    };
-    root.setAttribute(PRINT_ATTRIBUTE, 'hold-slip');
-    window.addEventListener('afterprint', done);
-    window.print();
-    return () => window.removeEventListener('afterprint', done);
-  }, [printing, slip, onPrinted]);
-  if (slip === null) return null;
-  return createPortal(
-    <div className="hold-slip-copy" lang={locale} aria-hidden="true">
-      <p className="hold-slip-heading">{t('holds.slip.heading')}</p>
-      <p className="hold-slip-number">{slip.trap.memberNo}</p>
-      <p>
-        {t('holds.slip.for')}: {slip.trap.memberName}
-      </p>
-      <p>
-        {t('holds.slip.until')}: {day(slip.trap.pickupUntil)}
-      </p>
-      <p>
-        {t('holds.slip.item')}: {slip.barcode}
-      </p>
-      <p>{slip.title}</p>
-    </div>,
-    document.body,
-  );
+/** The hold shelf slip of the ready hold `holdId` as a roll PDF the browser opens (the session cookie authorises it). */
+export function holdSlipHref(branchId: string, holdId: string): string {
+  return `/api/v1/branches/${encodeURIComponent(branchId)}/circulation/holds/${encodeURIComponent(holdId)}/slip`;
 }
