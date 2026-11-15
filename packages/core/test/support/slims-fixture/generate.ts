@@ -116,6 +116,12 @@ export interface SlimsFixtureTraps {
   readCounts: Record<string, number>;
   /** `biblio_log` columns that are personal data and must not be archived (M12). */
   biblioLogPersonal: string[];
+  // ---- Komunitas K4 (stocktake) ----
+  /**
+   * The stocktake sessions: the last one (the latest start) with its rows by SLiMS item id (found, missing, on loan,
+   * and one of an item the catalogue lacks), the older ones (headers only) and the rows of an older session.
+   */
+  stocktake: { last: number; older: number[]; found: number[]; missing: number[]; onLoan: number[]; unmapped: number[]; olderRows: number };
 }
 
 export interface SlimsFixtureExpected {
@@ -230,6 +236,7 @@ export function buildData(seed: number): FixtureData {
     content: { pages: [], news: [], drafts: [], translations: [], images: { present: [], missing: [] } },
     readCounts: {},
     biblioLogPersonal: ['ip', 'realname'],
+    stocktake: { last: 1, older: [2], found: [], missing: [], onLoan: [], unmapped: [], olderRows: 0 },
   };
   const zip: RawEntry[] = [];
   const file = (name: string, data: Buffer): void => {
@@ -856,22 +863,47 @@ export function buildData(seed: number): FixtureData {
     is_active: 0,
     report_file: null,
   });
-  for (let i = 1; i <= 10; i += 1) {
+  // An older session (2019, started before the last one though its id is higher): its header only.
+  add('stock_take', {
+    stock_take_id: 2,
+    stock_take_name: 'Inventarisasi 2019',
+    start_date: '2019-06-03 08:00:00',
+    end_date: '2019-06-05 15:00:00',
+    init_user: 'admin',
+    total_item_stock_taked: 580,
+    total_item_lost: 12,
+    total_item_exists: 560,
+    total_item_loan: 8,
+    stock_take_users: phpSerialize(['admin']),
+    is_active: 0,
+    report_file: null,
+  });
+  // The last session's rows: found, one missing, one on loan, and one of an item the catalogue lacks.
+  const takeRow = (session: number, itemId: number, status: string): void =>
     add('stock_take_item', {
-      stock_take_id: 1,
-      item_id: i + 100,
-      item_code: `B${pad(i + 100, 5)}`,
-      title: `Judul ${i}`,
+      stock_take_id: session,
+      item_id: itemId,
+      item_code: `B${pad(itemId, 5)}`,
+      title: `Judul ${itemId}`,
       gmd_name: 'Text',
       classification: '020',
       coll_type_name: 'Textbook',
       call_number: '020 A',
       location: 'My Library',
-      status: i === 3 ? 'm' : 'e',
+      status,
       checked_by: 'admin',
       last_update: '2022-06-02 10:00:00',
     });
+  for (let i = 1; i <= 10; i += 1) {
+    const status = i === 3 ? 'm' : i === 5 ? 'l' : 'e';
+    takeRow(1, i + 100, status);
+    (status === 'm' ? traps.stocktake.missing : status === 'l' ? traps.stocktake.onLoan : traps.stocktake.found).push(i + 100);
   }
+  takeRow(1, 9101, 'e');
+  traps.stocktake.unmapped.push(9101);
+  // A row of the older session (SLiMS keeps the last session's only): skipped.
+  takeRow(2, 120, 'e');
+  traps.stocktake.olderRows += 1;
   [
     [1, 'label-new', 'New Title', 'label-new.png'],
     [2, 'label-favorite', 'Favorite Title', 'label-favorite.png'],
@@ -1088,7 +1120,8 @@ export function generateSlimsFixture(
   const filesZip = rawZip(data.zip);
   const tables: Record<string, { source: number }> = {};
   for (const table of FIXTURE_TABLES) tables[table.name] = { source: data.rows.get(table.name)?.length ?? 0 };
-  const archived = ['serial', 'kardex', 'mst_frequency', 'stock_take', 'stock_take_item', 'mst_label', 'biblio_log', 'mst_item_status'];
+  // The stocktake tables are archived too, but counted by the migration's stocktake stage (`read`).
+  const archived = ['serial', 'kardex', 'mst_frequency', 'mst_label', 'biblio_log', 'mst_item_status'];
   // The member and circulation tables are read by the migration's member, visit and circulation stages (`people`),
   // apart from the catalogue's (`read`): the usage option adds rows to them.
   const phase3: string[] = [];

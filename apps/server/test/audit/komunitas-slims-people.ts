@@ -13,7 +13,7 @@ export const AUDIT: AreaAuditScript = {
   run: async (s) => {
     const view = await s.admin.send('get', API);
     expect(view.status, view.text).toBe(200);
-    expect(view.json).toMatchObject({ ready: false, stocktakeAvailable: false });
+    expect(view.json).toMatchObject({ ready: false, stocktakeAvailable: true });
     const reauth = await s.admin.send('post', '/api/v1/auth/reauth', { password: s.admin.password });
     expect(reauth.status, reauth.text).toBeLessThan(300);
     const reprint = await s.admin.send('post', `${API}/steps`, { step: 'reprint_opened' });

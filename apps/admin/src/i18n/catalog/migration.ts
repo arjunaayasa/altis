@@ -246,6 +246,8 @@ export const MIGRATION_ID = {
   'catalog.migration.stage.staff': 'akun staf',
   'catalog.migration.stage.visits': 'kunjungan',
   'catalog.migration.stage.circulation': 'sirkulasi',
+  // ---- Komunitas K4 (stocktake) ----
+  'catalog.migration.stage.stocktake': 'inventarisasi',
   'catalog.migration.warning.matches_diff': 'Ada angka "Cocokkan dengan SLiMS" yang belum sama.',
   'catalog.migration.warning.member_no_collision': 'Ada nomor anggota SLiMS yang bertabrakan setelah dinormalkan. Ubah nomornya di SLiMS lebih dulu.',
   'catalog.migration.warning.circulation_live': 'ALTIS sudah mencatat sirkulasi sendiri, jadi sirkulasi SLiMS tidak diganti.',
@@ -536,6 +538,8 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.stage.staff': 'staff accounts',
   'catalog.migration.stage.visits': 'visits',
   'catalog.migration.stage.circulation': 'circulation',
+  // ---- Komunitas K4 (stocktake) ----
+  'catalog.migration.stage.stocktake': 'stocktake',
   'catalog.migration.warning.matches_diff': 'Some "Match with SLiMS" numbers differ.',
   'catalog.migration.warning.member_no_collision': 'Some SLiMS member numbers collide once normalised. Change them in SLiMS first.',
   'catalog.migration.warning.circulation_live': 'ALTIS already records circulation of its own, so the SLiMS circulation was not replaced.',

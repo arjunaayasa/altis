@@ -301,7 +301,7 @@ export interface SlimsCutoverView {
   reprintOpenedAt: number | null;
   /** The run's matches all hold (0 unexplained differences, no open loan whose item ALTIS lacks). */
   reconciled: boolean;
-  /** Stocktaking is not part of this release: finish a scheduled one in SLiMS before moving. */
+  /** Whether this release has stocktaking (without it: finish a scheduled one in SLiMS before moving). */
   stocktakeAvailable: boolean;
   /** Every required item holds: "Mulai melayani" may be pressed. */
   ready: boolean;

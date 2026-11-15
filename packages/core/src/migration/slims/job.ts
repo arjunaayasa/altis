@@ -38,6 +38,7 @@ import { circulationStage, liveCirculationCount } from './stages/circulation.js'
 import { membersStage } from './stages/members.js';
 import { staffStage } from './stages/staff.js';
 import { visitsStage } from './stages/visits.js';
+import { stocktakeStage } from './stages/stocktake.js';
 
 // The SLiMS migration job `catalog.migrate_slims` and how a migration starts (Phase 2 spec §11.1–§11.3, §12.6;
 // plan Task 23; decisions D2-25, D2-26; preflight S3, S13, M15).
@@ -75,7 +76,7 @@ import { visitsStage } from './stages/visits.js';
 /** One migration at a time per installation (§11.2). */
 export const SLIMS_MIGRATION_UNIQUE_KEY = 'catalog.migrate_slims';
 
-/** The stages of a migration run in their order: the catalogue's, then members, staff, visits and circulation. */
+/** The stages of a migration run in their order: the catalogue's, then members, staff, visits and circulation; stocktake before the archive. */
 export const SLIMS_STAGES: readonly SlimsStage[] = Object.freeze([
   slimsSplitStage,
   slimsAnalyzeStage,
@@ -91,6 +92,8 @@ export const SLIMS_STAGES: readonly SlimsStage[] = Object.freeze([
   attachmentsStage,
   coversStage,
   contentStage,
+  // ---- Komunitas K4 (stocktake) ----
+  stocktakeStage,
   archiveStage,
   slimsReportStage,
 ]);
