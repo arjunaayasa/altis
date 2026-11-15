@@ -28,8 +28,8 @@ import { scanLocked } from './scan.js';
 //   no longer active ends it; the staged file is removed at the end.
 // - `stocktake.finish`: 500 rows per transaction, the rows whose `result` is still empty (so a run again continues
 //   where it stopped): a pending copy on loan now becomes `on_loan`; a pending one, when the finish marks missing
-//   copies, becomes `missing` when its status may change that way and it is not kept on the hold shelf for a ready
-//   hold, else its status is kept (`status_kept`); a found or misplaced copy that is `missing` or `lost`, when the
+//   copies, becomes `missing` when its status may change that way, it is not kept on the hold shelf for a ready hold
+//   and it was not lent or returned since the session started, else its status is kept (`status_kept`); a found or misplaced copy that is `missing` or `lost`, when the
 //   finish restores found copies, becomes `available` unless its status changed or it was lent after the scan (then
 //   `status_kept`), and a lost one has what is left of its last loan's lost charge cancelled ("found during a
 //   stocktake"). The batch's rows are read with a locking read, so the first plain read of the transaction (which
@@ -315,6 +315,23 @@ export async function finishBatch(tx: TxCtx, branchId: string, id: string, o: { 
       for (const e of [...events, ...loans]) if (e.item_id !== null && e.at !== null && Number(e.at) > (scannedAt.get(e.item_id) ?? Infinity)) changedSince.add(e.item_id);
     }
   }
+  // A pending copy lent or returned since the session started went through the desk meanwhile: it may have been away
+  // when its shelf was checked, so its absence says nothing and its status is kept.
+  const handledSince = new Set<string>();
+  const unlent = rows.filter((r) => r.state === 'pending' && !loaned.has(r.item_id)).map((r) => r.item_id);
+  if (o.markMissing && unlent.length > 0) {
+    const session = await trx.selectFrom('stocktakes').select('started_at').where('id', '=', id).executeTakeFirst();
+    const since = session === undefined ? null : Number(session.started_at);
+    for (let i = 0; since !== null && i < unlent.length; i += FINISH_BATCH) {
+      const recent = await trx
+        .selectFrom('loans')
+        .select('item_id')
+        .where('item_id', 'in', unlent.slice(i, i + FINISH_BATCH))
+        .where((eb) => eb.or([eb('loaned_at', '>=', since), eb('returned_at', '>=', since)]))
+        .execute();
+      for (const l of recent) if (l.item_id !== null) handledSince.add(l.item_id);
+    }
+  }
   const result = new Map<string, 'marked_missing' | 'restored' | 'status_kept' | 'none'>();
   const nowOnLoan: string[] = [];
   const toMissing: string[] = [];
@@ -326,7 +343,7 @@ export async function finishBatch(tx: TxCtx, branchId: string, id: string, o: { 
         nowOnLoan.push(r.item_id);
         result.set(r.item_id, 'none');
       } else if (!o.markMissing) result.set(r.item_id, 'none');
-      else if (!held.has(r.item_id) && (st === 'available' || st === 'not_for_loan')) toMissing.push(r.item_id);
+      else if (!held.has(r.item_id) && !handledSince.has(r.item_id) && (st === 'available' || st === 'not_for_loan')) toMissing.push(r.item_id);
       else result.set(r.item_id, 'status_kept');
     } else if ((r.state === 'found' || r.state === 'misplaced') && o.restoreFound && (st === 'missing' || st === 'lost')) {
       if (changedSince.has(r.item_id)) result.set(r.item_id, 'status_kept');

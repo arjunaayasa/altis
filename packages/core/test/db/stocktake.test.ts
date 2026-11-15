@@ -14,6 +14,7 @@ import {
   markHoldReady,
   markLoanLost,
   placeHold,
+  returnItem,
   scanStocktake,
   stocktakeCodesJob,
   stocktakeFinishJob,
@@ -34,7 +35,7 @@ import { NOW, failure, openItemsDb, seedItem, seedLocation, seedRecord, type Ite
 // copy, two unknown codes, the same unexpected copy); undoing a scan; the finish never marks a copy on loan missing,
 // keeps a status that may not become missing (`status_kept`), restores a lost copy found and cancels its lost charge;
 // a finish waits for code lists still being applied; and the minutes PDF. A copy kept on the hold shelf is not marked
-// missing (its hold stays ready); a found copy lent and declared lost after its scan is not restored. The finish stores
+// missing (its hold stays ready), nor one lent and returned during the session; a found copy lent and declared lost after its scan is not restored. The finish stores
 // the minutes as a staff file the minutes route serves; a session finished without them has them built on request.
 
 const ctx = testDbContext();
@@ -274,5 +275,22 @@ describe.skipIf(!ctx.available)(`stocktake [${engineLabel()}]`, () => {
     expect((await db.h.db.selectFrom('items').select('status').where('id', '=', book.id).executeTakeFirstOrThrow()).status).toBe('lost');
     expect((await db.h.db.selectFrom('stocktake_items').select('result').where('stocktake_id', '=', s.id).where('item_id', '=', book.id).executeTakeFirstOrThrow()).result).toBe('status_kept');
     expect((await db.h.db.selectFrom('charges').select('status').where('loan_id', '=', loan.id).where('kind', '=', 'lost').executeTakeFirstOrThrow()).status).not.toBe('cancelled');
+  });
+
+  it('a pending copy lent and returned during the session keeps its status; one the desk never saw is marked missing', async () => {
+    const shelf = await seedLocation(db, { code: `R${seq}`, kind: 'room' });
+    const book = await copy({ locationId: shelf });
+    const untouched = await copy({ locationId: shelf });
+    const s = await db.run((tx) => createStocktake(tx, db.branchId, { name: 'Sesi Meja', scope: { locationIds: [shelf] } }, deps));
+    await prepare(s.id);
+    const memberId = await newReader();
+    await db.run((tx) => lendItem(tx, { branchId: db.branchId, memberId, barcode: book.barcode }), NOW + 60_000);
+    await db.run((tx) => returnItem(tx, { branchId: db.branchId, barcode: book.barcode }), NOW + 120_000);
+    await db.run((tx) => finishStocktake(tx, db.branchId, s.id, { confirmName: 'Sesi Meja', markMissing: true, restoreFound: false }, deps), NOW + 180_000);
+    await runJob(db, stocktakeFinishJob(), { stocktakeId: s.id });
+    const statusOf = async (id: string) => (await db.h.db.selectFrom('items').select('status').where('id', '=', id).executeTakeFirstOrThrow()).status;
+    const resultOf = async (id: string) => (await db.h.db.selectFrom('stocktake_items').select('result').where('stocktake_id', '=', s.id).where('item_id', '=', id).executeTakeFirstOrThrow()).result;
+    expect([await statusOf(book.id), await resultOf(book.id)]).toEqual(['available', 'status_kept']);
+    expect([await statusOf(untouched.id), await resultOf(untouched.id)]).toEqual(['missing', 'marked_missing']);
   });
 });
