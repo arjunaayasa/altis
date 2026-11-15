@@ -674,6 +674,12 @@ const REPORT_IDS = [
   'circulation.charges',
   'circulation.payments_daily',
   'circulation.top_borrowers',
+  // ---- Komunitas K4 (stocktake) ----
+  'stocktake.progress',
+  'stocktake.missing',
+  'stocktake.misplaced',
+  'stocktake.by_officer',
+  'stocktake.history',
   'test.rows',
   'test.personal',
   'test.document',
@@ -701,6 +707,9 @@ const REPORT_COLUMNS = [
   ...['date', 'weekday', 'members', 'guests', 'visited_at', 'institution', 'purpose', 'rank'],
   ...['loaned_on', 'due_on', 'returned_on', 'renewals', 'outcome', 'days_late', 'fine', 'placed_on', 'queue_position', 'pickup_until'],
   ...['charged_on', 'description', 'paid', 'waived', 'balance', 'paid_on', 'method', 'staff', 'payments', 'receipt_no', 'voided'],
+  // ---- Komunitas K4 (stocktake) ----
+  ...['expected', 'found', 'misplaced', 'on_loan', 'pending', 'unexpected', 'unknown_codes', 'material_type', 'expected_location'],
+  ...['scanned_location', 'scanned_at', 'officer', 'session', 'branch', 'started_at', 'finished_at'],
 ];
 
 /** Every parameter name of the report definitions. */
@@ -715,6 +724,8 @@ const REPORT_PARAMS = [
   ...['range', 'mainClass', 'year', 'month', 'search', 'minLoans', 'top', 'member', 'titleWords', 'barcode', 'loaned', 'loanState'],
   ...['overdueOnly', 'groupBy', 'minDaysLate', 'due', 'days', 'holdStatus', 'placed', 'chargeStatus', 'charged', 'method'],
   ...['view', 'kind', 'guestsOnly', 'institution', 'visited', 'source', 'rowsBy'],
+  // ---- Komunitas K4 (stocktake) ----
+  ...['stocktakeId'],
 ];
 
 /** The options of every `status` parameter that has no vocabulary list of its own. */

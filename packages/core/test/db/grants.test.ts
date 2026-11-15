@@ -170,7 +170,7 @@ describe.skipIf(!ctx.available)(`grants and system roles [${engineLabel()}]`, ()
         .filter((d) => d.scope === 'branch')
         .map((d) => d.key);
       // Members and circulation add the desk, circulation.desk.use.
-      // The circulation core adds the desk's override, circulation.desk.override; visits add visit records and guestbook stations; charges add the waive, circulation.charges.waive.
+      // The circulation core adds the desk's override, circulation.desk.override; visits add visit records and guestbook stations; charges add the waive, circulation.charges.waive; stocktake adds its two keys.
       expect(branchScoped).toEqual([
         'catalog.locations.manage',
         'catalog.items.manage',
@@ -179,6 +179,8 @@ describe.skipIf(!ctx.available)(`grants and system roles [${engineLabel()}]`, ()
         'visits.records.manage',
         'visits.stations.manage',
         'circulation.charges.waive',
+        'stocktake.sessions.manage',
+        'stocktake.scan.use',
         'test.branch.manage',
       ]);
       expect(sorted(g.branches.get(B)!)).toEqual([...branchScoped].sort());

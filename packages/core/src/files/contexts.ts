@@ -128,6 +128,11 @@ export const UPLOAD_CONTEXTS: Readonly<Partial<Record<UploadContextName, UploadC
   'members.photo': context({ name: 'members.photo', permission: 'members.records.manage', maxBytes: 500 * 1024, magic: ['jpeg'], kind: 'file' }),
   // The card's logo, signature and stamp (JPEG, converted in the browser), claimed when the card profile is saved.
   'members.card_asset': context({ name: 'members.card_asset', permission: 'system.settings.manage', maxBytes: 500 * 1024, magic: ['jpeg'], kind: 'file' }),
+
+  // ---- Komunitas K4 (stocktake) ----
+  // A list of scanned codes (text or CSV, one code per line), staged until `POST …/stocktakes/:id/uploads` takes it.
+  // Scanning is a branch permission, so the route that takes the file at its branch is the gate (any staff may stage).
+  'stocktake.codes': context({ name: 'stocktake.codes', permission: null, maxBytes: 10 * MIB, magic: ['text'], kind: 'staged' }),
 });
 
 /** The context `name` of this build, or null (an unknown name, or `test` outside the test profile). */

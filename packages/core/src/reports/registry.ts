@@ -34,6 +34,14 @@ import { membersReprintListReport } from './members/reprint-list.js';
 import { membersSummaryReport } from './members/summary.js';
 import { visitsListReport } from './visits/list.js';
 import { visitsDailyReport, visitsMonthlyReport } from './visits/statistics.js';
+// ---- Komunitas K4 (stocktake) ----
+import {
+  stocktakeByOfficerReport,
+  stocktakeHistoryReport,
+  stocktakeMisplacedReport,
+  stocktakeMissingReport,
+  stocktakeProgressReport,
+} from './stocktake/index.js';
 import { TEST_REPORTS } from './test-reports.js';
 import type { ReportDefinition } from './types.js';
 
@@ -89,6 +97,12 @@ export const REPORTS: readonly ReportDefinition[] = Object.freeze([
   circulationChargesReport,
   circulationPaymentsDailyReport,
   circulationTopBorrowersReport,
+  // ---- Komunitas K4 (stocktake) ----
+  stocktakeProgressReport,
+  stocktakeMissingReport,
+  stocktakeMisplacedReport,
+  stocktakeByOfficerReport,
+  stocktakeHistoryReport,
   // The test build profile only; the condition stays inline, so a production build drops the spread.
   ...(typeof __BUILD_PROFILE__ !== 'undefined' && __BUILD_PROFILE__ === 'test' ? TEST_REPORTS : []),
 ]);

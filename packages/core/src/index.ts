@@ -649,4 +649,6 @@ export * from './members/index.js';
 export * from './circulation/index.js';
 // ---- Komunitas K2 (members extended and visits) ----
 export * from './visits/index.js';
+// ---- Komunitas K4 (stocktake) ----
+export * from './stocktake/index.js';
 export * from './members/ext/index.js';

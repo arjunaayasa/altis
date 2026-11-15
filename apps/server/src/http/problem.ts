@@ -159,6 +159,9 @@ export const PROBLEM_REASONS: Readonly<Partial<Record<ErrorCode, readonly string
   // payment cannot be changed (no longer open, voided already).
   CIRC_MEMBER_BLOCKED: Object.freeze(['unpaid', 'overdue']),
   CIRC_CHARGE_STATE: Object.freeze(['settled', 'cancelled', 'voided']),
+  // ---- Komunitas K4 (stocktake) ----
+  // The status of the session that refused the action, or a code list still being applied before a finish.
+  STOCKTAKE_STATE: Object.freeze(['preparing', 'active', 'finishing', 'finished', 'cancelled', 'pending_uploads']),
 });
 
 /** The 5xx codes whose `reason` is sent (S7): all the others keep it out, as R53 says. */

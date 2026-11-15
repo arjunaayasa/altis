@@ -143,6 +143,8 @@ describe('reason (PROBLEM_REASONS, S30)', () => {
       // Komunitas (charges and payments)
       CIRC_MEMBER_BLOCKED: ['unpaid', 'overdue'],
       CIRC_CHARGE_STATE: ['settled', 'cancelled', 'voided'],
+      // Komunitas K4 (stocktake)
+      STOCKTAKE_STATE: ['preparing', 'active', 'finishing', 'finished', 'cancelled', 'pending_uploads'],
     });
   });
 

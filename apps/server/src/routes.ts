@@ -29,6 +29,8 @@ import { INSTALL_ROUTES } from './install/routes.js';
 import { OPAC_CATALOG_ROUTES } from './opac/catalog/index.js';
 import { OPAC_ROUTES } from './opac/routes.js';
 import { VISITS_ROUTES } from './api/visits/index.js';
+// ---- Komunitas K4 (stocktake) ----
+import { STOCKTAKE_ROUTES } from './api/stocktake.js';
 import { VISIT_STATION_ROUTES } from './opac/visits/routes.js';
 // ---- Komunitas (member area) ----
 import { AKUN_ROUTES } from './opac/akun/routes.js';
@@ -65,6 +67,8 @@ export const KOMUNITAS_ROUTES: RouteDecl[] = [
   ...CIRCULATION_ROUTES,
   // ---- Komunitas K2 (visits) ----
   ...VISITS_ROUTES,
+  // ---- Komunitas K4 (stocktake) ----
+  ...STOCKTAKE_ROUTES,
 ];
 
 export const ALL_ROUTES: RouteDecl[] = defineRoutes([
