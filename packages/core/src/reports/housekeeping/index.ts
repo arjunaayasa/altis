@@ -11,6 +11,8 @@ import { reportFilesStep } from './report-files.js';
 import { workDirsStep } from './work-dirs.js';
 // ---- Komunitas (notices) ----
 import { noticesRetentionStep } from '../../circulation/notices-retention.js';
+// ---- Komunitas (OPAC home page) ----
+import { popularTitlesStep } from '../../opac-home/popular.js';
 
 // `reports.housekeeping` (spec §4.15, §5.6): the reports' daily upkeep, scheduled at 03:50 (scheduler/registry.ts). It
 // sweeps only `exports/reports/` and `tmp/reports/` (the catalogue's housekeeping never looks there, and this one never
@@ -66,6 +68,8 @@ export const REPORTS_HOUSEKEEPING_STEPS: readonly ReportsHousekeepingStep[] = Ob
   orphanUploadsReportsStep,
   // ---- Komunitas (notices): member notices kept 400 days ----
   noticesRetentionStep,
+  // ---- Komunitas (OPAC home page): the popular titles rebuilt from the last year's loans ----
+  popularTitlesStep,
 ]);
 
 /** No step of this job queues a job. */

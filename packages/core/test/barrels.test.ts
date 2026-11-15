@@ -89,8 +89,8 @@ describe('the barrels of @altis/core (M14)', () => {
   });
 
   // ---- Komunitas K1 (reports and accreditation) ----
-  it('src/index.ts joins the reports and accreditation barrels, then members and circulation, then visits and the member tools, then stocktake, with export *, at its end', () => {
-    expect(barrels.slice(-7)).toEqual([
+  it('src/index.ts joins the reports and accreditation barrels, then members and circulation, then visits and the member tools, then stocktake, then the OPAC home page, with export *, at its end', () => {
+    expect(barrels.slice(-8)).toEqual([
       './reports/index.js',
       './accreditation/index.js',
       './members/index.js',
@@ -98,6 +98,7 @@ describe('the barrels of @altis/core (M14)', () => {
       './visits/index.js',
       './members/ext/index.js',
       './stocktake/index.js',
+      './opac-home/index.js',
     ]);
   });
 

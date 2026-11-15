@@ -70,6 +70,19 @@ describe('UPLOAD_CONTEXTS', () => {
     for (const c of named) expect(Object.hasOwn(SETTINGS, c!.maxBytesSetting!), c!.name).toBe(true);
   });
 
+  // ---- Komunitas (OPAC home page) ----
+  it('the home page photos: JPEG of at most 500 KB and 240-2400 px a side, for whoever manages the OPAC pages; the only context that bounds dimensions', () => {
+    expect(uploadContext('opac.home_photo')).toEqual({
+      name: 'opac.home_photo',
+      permission: 'opac.pages.manage',
+      maxBytes: 500 * 1024,
+      magic: ['jpeg'],
+      kind: 'file',
+      imageSides: { min: 240, max: 2400 },
+    });
+    expect(Object.values(UPLOAD_CONTEXTS).filter((c) => c?.imageSides !== undefined).map((c) => c!.name)).toEqual(['opac.home_photo']);
+  });
+
   it('every name of UPLOAD_CONTEXT_NAMES is a context of the test build, and nothing else is', () => {
     expect(Object.keys(UPLOAD_CONTEXTS).sort()).toEqual([...UPLOAD_CONTEXT_NAMES].sort());
     for (const name of UPLOAD_CONTEXT_NAMES) expect(uploadContext(name)?.name).toBe(name);
@@ -88,7 +101,7 @@ describe('UPLOAD_CONTEXTS', () => {
 });
 
 describe('ORPHAN_UPLOAD_CONTEXTS', () => {
-  it('lists the four catalogue file contexts for the catalogue housekeeping, then the evidence files, member photos and card pictures for the reports housekeeping', () => {
+  it('lists the four catalogue file contexts for the catalogue housekeeping, then the evidence files, member photos, card pictures and home page photos for the reports housekeeping', () => {
     expect(ORPHAN_UPLOAD_CONTEXTS).toEqual([
       { context: 'catalog.cover', sweptBy: 'catalog.housekeeping' },
       { context: 'catalog.attachment', sweptBy: 'catalog.housekeeping' },
@@ -97,6 +110,7 @@ describe('ORPHAN_UPLOAD_CONTEXTS', () => {
       { context: 'accreditation.evidence', sweptBy: 'reports.housekeeping' },
       { context: 'members.photo', sweptBy: 'reports.housekeeping' },
       { context: 'members.card_asset', sweptBy: 'reports.housekeeping' },
+      { context: 'opac.home_photo', sweptBy: 'reports.housekeeping' },
     ]);
     expect(Object.isFrozen(ORPHAN_UPLOAD_CONTEXTS)).toBe(true);
   });

@@ -39,8 +39,11 @@ export interface CatalogSearchQuery {
     /** Admin only: records with `opac_visible = 0`. */
     includeHidden?: boolean;
   };
-  /** Default `relevance` with a query text, `newest` without. */
-  sort?: 'relevance' | 'newest' | 'title' | 'year_desc' | 'year_asc';
+  /**
+   * Default `relevance` with a query text, `newest` without. `popular` (the OPAC's "most borrowed"): the loans of the
+   * popular titles' aggregate, summed over the filtered branches when the search names some, else over all.
+   */
+  sort?: 'relevance' | 'newest' | 'title' | 'year_desc' | 'year_asc' | 'popular';
   /** 1-based; at most 50 for relevance (§4.5). */
   page?: number;
   pageSize?: number;

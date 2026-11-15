@@ -548,7 +548,8 @@ describe.skipIf(!ctx.available)(`OPAC shell: home, robots, sitemaps, old SLiMS l
       await setSettings({ 'opac.welcome.id': 'Selamat datang <di> perpustakaan.', 'opac.newTitlesCount': 0 });
       try {
         const html = (await get('/')).text;
-        expect(html).toContain('<p class="welcome">Selamat datang &lt;di&gt; perpustakaan.</p>');
+        // The welcome text is the hero's lead sentence (the OPAC home page as the library's profile site).
+        expect(html).toContain('<p class="hero-lead">Selamat datang &lt;di&gt; perpustakaan.</p>');
         expect(section(html, 'judul-baru')).toBeUndefined();
         expect(section(html, 'judul-unggulan')).toBeDefined();
       } finally {

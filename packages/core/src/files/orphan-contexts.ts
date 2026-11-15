@@ -25,4 +25,7 @@ export const ORPHAN_UPLOAD_CONTEXTS: readonly OrphanUploadContext[] = Object.fre
   // A member photo never claimed by a member, and card pictures no card profile names.
   Object.freeze<OrphanUploadContext>({ context: 'members.photo', sweptBy: 'reports.housekeeping' }),
   Object.freeze<OrphanUploadContext>({ context: 'members.card_asset', sweptBy: 'reports.housekeeping' }),
+  // ---- Komunitas (OPAC home page) ----
+  // A home page photo never saved with the page, or one the saved page no longer names.
+  Object.freeze<OrphanUploadContext>({ context: 'opac.home_photo', sweptBy: 'reports.housekeeping' }),
 ]);

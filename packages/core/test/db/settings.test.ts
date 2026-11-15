@@ -224,6 +224,16 @@ const SAMPLE: Record<SettingKey, unknown> = {
   'email.template.circulation_hold_ready.id.body': 'Halo {name}\n{title}',
   'email.template.circulation_hold_ready.en.subject': 'Hold ready',
   'email.template.circulation_hold_ready.en.body': 'Hello {name}\n{title}',
+  // ---- Komunitas (OPAC home page) ----
+  'opac.home': {
+    title: 'Ruang baca dan layanan perpustakaan',
+    hero: { fileId: '01J0000000000000000000000D', alt: 'Ruang baca dengan rak buku', position: 60 },
+    about: { text: 'Berdiri sejak 1987.', photo: null, founded: 1987, librarians: 3 },
+    services: [{ title: 'Peminjaman', text: null }],
+    facilities: [],
+    hours: [{ days: 'Senin–Jumat', time: '07.00–15.00' }],
+    blocks: { classes: true, popular: true, newTitles: true, promoted: false, about: true, services: true, news: true, visit: true },
+  },
 };
 
 /** Every key of scope `instance` (machine state of this installation, kept by a restore), in registry order; all are in group `system`. */
@@ -319,7 +329,8 @@ describe('SETTINGS registry', () => {
     ]);
     expect(groupKeys('email')).toHaveLength(17); // the sender name, the password reset (4) and the three member notices (12)
     expect(groupKeys('security')).toEqual(['security.password_min_length', 'security.session_idle_minutes']);
-    expect(groupKeys('opac')).toEqual(['opac.welcome.id', 'opac.welcome.en', 'opac.accent', ...PHASE2_OPAC_KEYS]);
+    // The OPAC home page's content comes last; its own screen edits it (not `settings/opac`).
+    expect(groupKeys('opac')).toEqual(['opac.welcome.id', 'opac.welcome.en', 'opac.accent', ...PHASE2_OPAC_KEYS, 'opac.home']);
     expect(groupKeys('catalog')).toEqual(CATALOG_KEYS);
     expect(groupKeys('smtp')).toEqual([
       'smtp.host',
