@@ -1,5 +1,5 @@
 import fsp from 'node:fs/promises';
-import { type DB } from '@altis/db';
+import { auditAppend, withTx, type DB } from '@altis/db';
 import { addDays, isDomainError, localDate, newId, normalizeKey } from '@altis/shared';
 import type { Insertable, Kysely } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -22,7 +22,9 @@ import { csvCells, csvLines, drive, exportPath, openExportDb, runRow, sheetRows,
 // - every PDF passes the structural checker;
 // - an Arabic title is kept byte for byte in the CSV and the XLSX, and its PDF row is counted as non-Latin;
 // - the staff annex is a personal report (its run is stored personal, as the personal run route starts it);
-// - a title list of 10 001 titles is refused as a PDF when its run is created, before anything is written.
+// - a title list of 10 001 titles is refused as a PDF when its run is created, before anything is written;
+// - the annual library report, a document of the generic run routes, is a PDF that passes the checker, for this year
+//   and for the golden period.
 
 const ctx = testDbContext();
 
@@ -244,6 +246,15 @@ describe.skipIf(!ctx.available)(`every report in every format on the golden data
       ],
       unknown: [{ code: 'TIDAK-ADA-1', scannedBy: officer }],
     });
+    // ---- Komunitas K5 (reports) ----
+    // The audit entries of the staff activity: a record and a loan by the requester, a batch of copies by the officer.
+    for (const [actorId, action, meta] of [
+      [db.staffId, 'catalog.record.create', {}],
+      [db.staffId, 'circulation.loan.create', {}],
+      [officer, 'catalog.item.batch_create', { count: 3, skipped: 0, patternId: null }],
+    ] as const) {
+      await withTx(db.h, (trx) => auditAppend(trx, { at: Date.now() - 60_000, actorType: 'staff', actorId, action, entity: null, entityId: null, branchId: null, ip: null, meta }));
+    }
   }, 120_000);
 
   afterAll(async () => {
@@ -297,6 +308,9 @@ describe.skipIf(!ctx.available)(`every report in every format on the golden data
       'stocktake.misplaced',
       'stocktake.by_officer',
       'stocktake.history',
+      // ---- Komunitas K5 (reports) ----
+      'visits.by_hour',
+      'system.staff_activity',
     ]);
     for (const def of TABLES) expect([def.id, [...def.formats].sort()]).toEqual([def.id, ['csv', 'pdf', 'xlsx']]);
   });
@@ -371,6 +385,17 @@ describe.skipIf(!ctx.available)(`every report in every format on the golden data
     const pdfText = pages.flatMap((page) => page.texts.map((t) => t.text)).join('\n');
     expect(pdfText).toContain('teks non-Latin');
   });
+
+  // ---- Komunitas K5 (reports) ----
+  it('the annual library report: a PDF that passes the checker, for this year and for the golden period', async () => {
+    for (const params of [{}, { periodId: fx.periods.sma }]) {
+      const run = await startRun(db, 'library.annual_report', { format: 'pdf', params, locale: 'id' });
+      expect((await drive(db, run.jobId)).at(-1)).toBe('succeeded');
+      const row = await runRow(db, run.id);
+      expect([row.status, row.error_code, row.personal]).toEqual(['succeeded', null, 0]);
+      expect(checkPdf(await fsp.readFile(exportPath(db, run.id, 'pdf'))).pages.length).toBeGreaterThan(0);
+    }
+  }, 300_000);
 
   it('a title list of 10 001 titles as a PDF is refused when its run is created, and nothing is written', async () => {
     const titles = Number((await db.h.db.selectFrom('records').select((eb) => eb.fn.countAll<number>().as('n')).where('archived_at', 'is', null).executeTakeFirstOrThrow()).n);
