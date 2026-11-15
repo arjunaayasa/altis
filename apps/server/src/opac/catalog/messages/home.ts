@@ -2,8 +2,8 @@ import { defineOpacMessages } from './define.js';
 
 // The OPAC copy of the home page as the library's profile site: the search card, the subject pills and availability
 // of the title lists, the popular titles, the "about" block with its facts, the services and facilities, the loans per
-// class, and the visit block (location, opening hours with today's marked). Keys start with `home.`; the same keys and
-// {placeholders} in both languages.
+// class, and the visit block (location, opening hours with today's marked, or a closed day of the library calendar).
+// Keys start with `home.`; the same keys and {placeholders} in both languages.
 
 export const HOME_MESSAGES = defineOpacMessages(
   {
@@ -27,6 +27,8 @@ export const HOME_MESSAGES = defineOpacMessages(
     'home.visit.days': 'Hari',
     'home.visit.time': 'Jam',
     'home.search.today': 'Jam buka hari ini: {time}',
+    'home.search.closed_today': 'Hari ini perpustakaan tutup',
+    'home.visit.closed_today': 'Hari ini perpustakaan tutup menurut kalender perpustakaan (hari libur).',
     'home.pills.label': 'Subjek judul-judul ini, dengan jumlah judul di katalog',
     'home.pills.count': '{count} judul',
     'home.pills.count_one': '{count} judul',
@@ -61,6 +63,8 @@ export const HOME_MESSAGES = defineOpacMessages(
     'home.visit.days': 'Days',
     'home.visit.time': 'Hours',
     'home.search.today': 'Opening hours today: {time}',
+    'home.search.closed_today': 'The library is closed today',
+    'home.visit.closed_today': 'The library is closed today by the library calendar (a holiday).',
     'home.pills.label': 'Subjects of these titles, with their number of titles in the catalogue',
     'home.pills.count': '{count} titles',
     'home.pills.count_one': '{count} title',
