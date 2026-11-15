@@ -544,6 +544,21 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
     expect(await count('members')).toBe(0);
   });
 
+  it('a dry run before any real run (no copy mapped yet) counts the open loans the real run brings, as its check list does', async () => {
+    await wipe();
+    const tables = slimsTables();
+    // An open loan of a copy the source has no `item` row for: the one open loan the real run would skip.
+    tables['loan']!.rows.push({ loan_id: 31, item_code: 'B077', member_id: 'M001', loan_date: '2026-08-21', due_date: '2026-08-31', renewed: 0, loan_rules_id: 2, is_lent: 1, is_return: 0, return_date: null, uid: 2 });
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables }));
+    // Another source name: nothing of the catalogue is mapped under it, as on a fresh installation.
+    const dry = await start({ dryRun: true, sourceName: 'slims-baru' });
+    expect(await runToEnd(dry.jobId)).toBe('succeeded');
+    const s = await summaryOf(dry.runId);
+    expect(s.tables['loan']).toMatchObject({ source: 8, migrated: 7, skipped: { open_loan_unresolved: 1 } });
+    expect(s.dryLists?.find((x) => x.key === 'open_loan_item_missing')).toMatchObject({ count: 1 });
+    expect(await count('loans')).toBe(0);
+  });
+
   it('anonymising a migrated member removes the archived rows about them', async () => {
     await wipe();
     __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables() }));
