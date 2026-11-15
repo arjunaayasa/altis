@@ -154,6 +154,30 @@ describe('Migrasi SLiMS: members, visits and circulation', () => {
     expect(within(section).getByText('Pinjaman terbuka yang eksemplarnya tidak ada di ALTIS')).toBeTruthy();
   });
 
+  it('a dry run\'s report lists what to check before the real run, each with its count and samples, and asks for a catalogue re-sync when copies will be missing', async () => {
+    const dry = run({
+      id: DRY_ID,
+      dryRun: true,
+      summary: summary({
+        dryLists: [
+          { key: 'loan_terms_differ', count: 2, samples: ['M003 · B002', 'M003 · B005'] },
+          { key: 'type_limit_changes', count: 1, samples: ['1 Siswa'] },
+          { key: 'members_over_limit', count: 0, samples: [] },
+          { key: 'all_rule_unused', count: 1, samples: ['1'] },
+          { key: 'open_loan_item_missing', count: 3, samples: ['M001 · B009'] },
+        ],
+      }),
+    });
+    startApp({ me: ME, path: `/admin/catalog/migration?run=${DRY_ID}`, routes: routes({ runs: [dry] }) });
+    const title = await screen.findByRole('heading', { name: 'Periksa sebelum run nyata' }, FIRST);
+    const section = title.closest('section') as HTMLElement;
+    const rows = within(section).getAllByRole('row').filter((r) => r.getAttribute('data-dry-list') !== null);
+    expect(rows.map((r) => r.getAttribute('data-dry-list'))).toEqual(['loan_terms_differ', 'type_limit_changes', 'members_over_limit', 'all_rule_unused', 'open_loan_item_missing']);
+    expect(within(rows[0]!).getByText('M003 · B002, M003 · B005')).toBeTruthy();
+    expect(within(rows[0]!).getByText('Pinjaman terbuka yang jatuh tempo atau dendanya akan berbeda menurut aturan ALTIS')).toBeTruthy();
+    expect(within(section).getByText(/jalankan dengan mode katalog Selaraskan/)).toBeTruthy();
+  });
+
   it('the cut-over checklist holds "Mulai melayani" back; opening the reprint list marks its item, and a ready checklist serves', async () => {
     let state = cutover({ deskStaff: 1, rooms: 1, roomsWithStation: 1 });
     const steps: string[] = [];

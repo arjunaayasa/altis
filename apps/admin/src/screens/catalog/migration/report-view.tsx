@@ -1,5 +1,5 @@
 import { isUlid } from '@altis/shared';
-import { MIGRATION_MATCH_KEYS, type MigrationSummary } from '@altis/shared/api/catalog/migration';
+import { MIGRATION_DRY_LIST_KEYS, MIGRATION_MATCH_KEYS, type MigrationSummary } from '@altis/shared/api/catalog/migration';
 import type { RunView } from '@altis/shared/api/catalog/runs';
 import { Link } from '@tanstack/react-router';
 import { DownloadIcon } from 'lucide-react';
@@ -10,7 +10,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { useLocale, useT, type Translate } from '@/i18n';
 import { isMessageKey } from '@/lib/form-errors';
 import { cn } from '@/lib/utils';
-import { MatchesReport } from './people';
+import { DryListsReport, MatchesReport } from './people';
 
 /**
  * The report of a SLiMS migration run (Phase 2 spec §11.6; plan Task 30; summary of Task 23): what `catalog_runs.summary`
@@ -82,6 +82,10 @@ const ReportSummary = z.object({
   memberNoCollisions: z.number().int().nonnegative().optional().catch(undefined),
   matches: z
     .array(z.object({ key: z.enum(MIGRATION_MATCH_KEYS), scope: z.string(), source: count, altis: count, explained: count, ok: z.boolean() }))
+    .optional()
+    .catch(undefined),
+  dryLists: z
+    .array(z.object({ key: z.enum(MIGRATION_DRY_LIST_KEYS), count, samples: z.array(z.string()).max(20).catch([]) }))
     .optional()
     .catch(undefined),
 });
@@ -223,6 +227,7 @@ export function ReportView({ run }: { run: RunView }) {
           )}
 
           <MatchesReport matches={report.matches} collisions={report.memberNoCollisions} />
+          <DryListsReport lists={report.dryLists} />
           {report.reconciliation === null ? (
             <NoticeAlert>{t('catalog.migration.report.reconcile_none')}</NoticeAlert>
           ) : (
