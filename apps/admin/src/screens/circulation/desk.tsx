@@ -843,7 +843,10 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
   // The function keys and Esc work wherever the focus is (also in the scan box, where shortcuts usually rest).
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (dialogOpen || e.isComposing) return;
+      // A key another layer already used is not the desk's: a dialog closes on Esc (and marks the key as used) before
+      // this listener runs, by which time the desk may already see the dialog as closed; that Esc must not also end
+      // the visit.
+      if (dialogOpen || e.isComposing || e.defaultPrevented) return;
       const key = e.key;
       if (key === 'F2') {
         e.preventDefault();
