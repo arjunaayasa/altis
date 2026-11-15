@@ -13,8 +13,10 @@ import {
   claimById,
   closeJobSessions,
   createJobRegistry,
+  createStocktake,
   enqueueEvaluate,
   evaluateJob,
+  finishStocktake,
   importSlimsUsageJob,
   loadAccredSettings,
   localStorageDriver,
@@ -25,9 +27,15 @@ import {
   reportsExportJob,
   retryDelayMs,
   runSlice,
+  scanStocktake,
   startDocumentRun,
   startReportRun,
   startSlimsUsageImport,
+  stocktakeCodesJob,
+  stocktakeFinishJob,
+  stocktakePrepareJob,
+  txCtx,
+  type Actor,
   type JobHandler,
   type JobRegistry,
   type KeyringEntry,
@@ -36,18 +44,18 @@ import {
 } from '../../../packages/core/src/index.js';
 import { dataPath, reportExportPath } from '../../../packages/platform/src/index.js';
 import { REPORT_PDF_MAX_ROWS, REPORT_SCAN_PREVIEW_MAX_RECORDS, REPORT_XLSX_MAX_ROWS } from '../../../packages/shared/src/api/reports.js';
-import { addDays, isDomainError, newId } from '../../../packages/shared/src/index.js';
+import { STOCKTAKE_ITEM_STATUSES, addDays, isDomainError, newId } from '../../../packages/shared/src/index.js';
 import { p95 } from '../../release/perf/measure.js';
 import { SmokeError, messageOf, provisionDb } from '../../release/smoke/run.js';
 import { TEST_ENGINES, type TestEngine } from '../test-db.js';
 import { PERF_PHASE2_SEED } from '../perf-phase2/seed.js';
-import { PERF_KOMUNITAS_SEED, PERF_MEMBER_TYPES, jakartaDate, komunitasCounts, seedExtraItems, seedKomunitas, seedUnclassified } from './seed.js';
+import { PERF_KOMUNITAS_SEED, PERF_MEMBER_TYPES, jakartaDate, komunitasCounts, seedExtraItems, seedKomunitas, seedOpenLoans, seedUnclassified } from './seed.js';
 import { USAGE_DUMP_ROWS, writeUsageDump } from './usage-dump.js';
 
 // The measurement of the community roadmap's performance budgets for the reports and the accreditation workspace:
 //
-//   pnpm perf:komunitas [--mode reports,accred,migrate] [--scale <0..1>] [--db sqlite|mariadb106|…] [--with-evidence]
-//                       [--repeat <n>] [--keep] [--assert]
+//   pnpm perf:komunitas [--mode reports,accred,migrate,stocktake] [--scale <0..1>] [--db sqlite|mariadb106|…]
+//                       [--with-evidence] [--repeat <n>] [--keep] [--assert]
 //
 // Each mode runs on a fresh database of its own (SQLite in a temp DATA_DIR, or a database `altis_smoke_k1…` on the
 // tools/test/compose.yml engine `--db` names), migrated by the code of this tree and seeded by seed.ts
@@ -75,6 +83,15 @@ import { USAGE_DUMP_ROWS, writeUsageDump } from './usage-dump.js';
 //   of the straight run and the same bytes for every uploaded file.
 // - migrate: the read-only SLiMS usage import of a dump (usage-dump.ts: 1 000 000 `loan_history` and 1 000 000
 //   `visitor_count` rows at scale 1): ≤ 30 minutes, slices ≤ 20 s.
+// - stocktake: a stocktake session of the first branch over its copies, topped up to 150 000 (at scale 1) whose status
+//   a stocktake takes in, one in 30 available ones on loan. Its preparation as the job runtime runs it, slice by slice:
+//   ≤ 5 minutes, slices ≤ 20 s, every copy listed. Then four officers scan at once, each a child process of its own
+//   started together, each scan a transaction through the domain code (up to 1 000 each: copies of the shelf with
+//   their shelf named, one in 20 on another shelf, the same copy as the next officer one in 30 times, a copy of another
+//   branch, an unknown code and a copy scanned again now and then): p95 per scan < 150 ms, no scan failing, and the
+//   session's counters equal to its rows afterwards. The rest of the shelf is then marked found straight in the
+//   session's rows (one copy in 20 left pending: missing), and the finish, marking missing copies and restoring found
+//   ones, runs slice by slice to the stored minutes: ≤ 10 minutes, slices ≤ 20 s.
 // - every mode: the highest RSS of its children < 300 MB, beside the RSS of a child that only loads and connects (the
 //   measuring process's own weight, the TypeScript loader included, which a release build does not carry).
 //
@@ -87,7 +104,7 @@ import { USAGE_DUMP_ROWS, writeUsageDump } from './usage-dump.js';
 // ---------------------------------------------------------------------------------------------------------------------
 // Budgets, cases and judging (pure)
 
-export const KOMUNITAS_MODES = ['reports', 'accred', 'migrate'] as const;
+export const KOMUNITAS_MODES = ['reports', 'accred', 'migrate', 'stocktake'] as const;
 export type KomunitasMode = (typeof KOMUNITAS_MODES)[number];
 
 /** The budgets (ms and MB). */
@@ -99,6 +116,9 @@ export const KOMUNITAS_BUDGETS = Object.freeze({
   dossierPdfMs: 60_000,
   usageImportMs: 30 * 60_000,
   rssMb: 300,
+  stocktakePrepareMs: 5 * 60_000,
+  stocktakeScanP95Ms: 150,
+  stocktakeFinishMs: 10 * 60_000,
 });
 
 /** The rows of the CSV export at scale 1 (the copies are topped up to this many). */
@@ -180,6 +200,67 @@ export function previewCases(today: string): PreviewCase[] {
   ];
 }
 
+// ---- Komunitas K4 (stocktake) ----
+/** The copies a stocktake session takes in at scale 1. */
+export const STOCKTAKE_COPIES = PERF_PHASE2_SEED.items;
+/** The officers scanning at once (one child process each). */
+export const STOCKTAKE_OFFICERS = 4;
+/** The most scans each officer makes (fewer on a small shelf: up to 90 % of its pending copies in all). */
+export const STOCKTAKE_SCANS_PER_OFFICER = 1_000;
+/** One available copy in this many is on loan. */
+export const STOCKTAKE_LOAN_EVERY = 30;
+/** One pending copy in this many is left unscanned for the finish to mark missing. */
+export const STOCKTAKE_MISSING_EVERY = 20;
+
+/** The copies a stocktake session takes in at `scale`. */
+export function stocktakeCopies(scale: number): number {
+  return Math.max(1, Math.round(STOCKTAKE_COPIES * scale));
+}
+
+/** A copy a scan list can name: its barcode and its shelf. */
+export interface ScanCopy {
+  barcode: string;
+  locationId: string | null;
+}
+
+/** One scan of an officer's list: the code and the shelf being checked (null: none named). */
+export interface PlannedScan {
+  barcode: string;
+  locationId: string | null;
+}
+
+/**
+ * The scan lists of the officers: copy `i` of `shelf` (the pending copies, in a fixed order) goes to officer
+ * `i mod officers`, up to `perOfficer` scans each and 90 % of the shelf in all, each with its own shelf named, or (one in
+ * 20) `otherShelf` (a misplaced copy); one scan in 30 is the next officer's copy as well (two officers on one copy),
+ * one in 50 an unknown code (every second one the same code for every officer), one in 40 a copy of `outside` (another
+ * branch's: unexpected, the same copy for every officer) and one in 25 a copy the officer scanned before (already
+ * found).
+ */
+export function stocktakeScanPlan(
+  shelf: readonly ScanCopy[],
+  o: { officers: number; perOfficer: number; outside: readonly ScanCopy[]; otherShelf: string | null },
+): PlannedScan[][] {
+  const take = Math.min(shelf.length, Math.floor(shelf.length * 0.9), o.officers * o.perOfficer);
+  const lists: PlannedScan[][] = Array.from({ length: o.officers }, () => []);
+  const own = (i: number): PlannedScan => {
+    const c = shelf[i]!;
+    return { barcode: c.barcode, locationId: i % 20 === 19 && o.otherShelf !== null && o.otherShelf !== c.locationId ? o.otherShelf : c.locationId };
+  };
+  for (let i = 0; i < take; i += 1) {
+    const k = i % o.officers;
+    const list = lists[k]!;
+    if (list.length >= o.perOfficer) continue;
+    const n = list.length + 1;
+    if (n % 50 === 0) list.push({ barcode: `ZZ-PERF-${n % 100 === 0 ? 'X' : k}-${n}`, locationId: null });
+    else if (n % 40 === 0 && o.outside.length > 0) list.push({ barcode: o.outside[(n / 40) % o.outside.length]!.barcode, locationId: null });
+    else if (n % 30 === 0 && i + 1 < take) list.push(own(i + 1));
+    else if (n % 25 === 0 && list.length > 0) list.push(list[list.length - 1]!);
+    if (list.length < o.perOfficer) list.push(own(i));
+  }
+  return lists;
+}
+
 /** The scale of a catalogue of `records` records (perfCounts(scale).records = records). */
 export function scaleOfRecords(records: number): number {
   return records / PERF_PHASE2_SEED.records;
@@ -204,7 +285,8 @@ export const SCALE_MAX = 1;
 /** The most preview requests per case. */
 export const REPEAT_MAX = 1_000;
 
-export const USAGE = 'usage: pnpm perf:komunitas [--mode reports,accred,migrate] [--scale <0..1>] [--db <engine>] [--with-evidence] [--repeat <n>] [--keep] [--assert]';
+export const USAGE =
+  'usage: pnpm perf:komunitas [--mode reports,accred,migrate,stocktake] [--scale <0..1>] [--db <engine>] [--with-evidence] [--repeat <n>] [--keep] [--assert]';
 
 /** @throws Error `USAGE: …` */
 export function parseRunArgs(argv: readonly string[]): RunOptions {
@@ -273,7 +355,9 @@ type ChildTask =
   | { kind: 'idle'; ms: number }
   | { kind: 'previews'; cases: PreviewCase[]; repeat: number }
   /** Runs job `jobId` slice by slice to its end; `reclaim` takes over the lease of a dead worker first. */
-  | { kind: 'drive'; jobId: string; budgetMs: number; reclaim: boolean };
+  | { kind: 'drive'; jobId: string; budgetMs: number; reclaim: boolean }
+  /** Scans `scans` in the session `stocktakeId` as staff member `actorId`, once the file `goFile` exists. */
+  | { kind: 'scans'; branchId: string; stocktakeId: string; actorId: string; scans: PlannedScan[]; goFile: string };
 
 /** What a child prints, one JSON object per line. */
 type ChildEvent =
@@ -281,7 +365,11 @@ type ChildEvent =
   | { event: 'slice-start'; n: number; at: number }
   /** `heapMb`, `buffersMb`: the child's JavaScript heap and its array buffers (Node's Buffers) right after the slice. */
   | { event: 'slice'; n: number; at: number; ms: number; outcome: SliceResult['outcome']; error?: string; heapMb: number; buffersMb: number }
-  | { event: 'end'; status: string; slices: number };
+  | { event: 'end'; status: string; slices: number }
+  /** A scanning child is connected and waits for its start. */
+  | { event: 'ready' }
+  /** A scanning child's scans: the time of each (ms), the outcomes, and the scans that failed. */
+  | { event: 'scans'; ms: number[]; outcomes: Record<string, number>; errors: number; firstError: string | null };
 
 const silentLog = {
   info() {},
@@ -296,7 +384,14 @@ const silentLog = {
 /** The community job handlers over DATA_DIR `dataDir` (the server's komunitasJobHandlers, with the runner's facts). */
 function jobRegistry(dataDir: string, keyring: readonly KeyringEntry[]): JobRegistry {
   const deps = (): ReportJobDeps => ({ dataDir, baseUrl: BASE_URL, keyring, storage: localStorageDriver(dataDir), log: silentLog, appVersion: APP_VERSION });
-  return createJobRegistry([reportsExportJob(deps), evaluateJob(deps), importSlimsUsageJob(deps)] as JobHandler<unknown>[]);
+  return createJobRegistry([
+    reportsExportJob(deps),
+    evaluateJob(deps),
+    importSlimsUsageJob(deps),
+    stocktakePrepareJob(),
+    stocktakeCodesJob(() => ({ dataDir })),
+    stocktakeFinishJob(() => ({ storage: localStorageDriver(dataDir) })),
+  ] as JobHandler<unknown>[]);
 }
 
 const openDb = (db: DbConfig, dataDir: string): Promise<DbHandle> => connect(db, { runtime: 'standalone', purpose: 'cli', dataDir });
@@ -375,6 +470,36 @@ async function childDrive(h: DbHandle, reg: JobRegistry, keyring: readonly Keyri
   }
 }
 
+/** The longest a scanning child waits for its start. */
+const SCAN_GO_WAIT_MS = 10 * 60_000;
+
+async function childScans(h: DbHandle, task: Extract<ChildTask, { kind: 'scans' }>): Promise<void> {
+  emit({ event: 'ready' });
+  const waitUntil = Date.now() + SCAN_GO_WAIT_MS;
+  for (;;) {
+    if (await fsp.access(task.goFile).then(() => true, () => false)) break;
+    if (Date.now() > waitUntil) throw new Error('the scans were never started');
+    await sleep(5);
+  }
+  const actor: Actor = { type: 'staff', id: task.actorId, ip: null };
+  const out = { event: 'scans' as const, ms: [] as number[], outcomes: {} as Record<string, number>, errors: 0, firstError: null as string | null };
+  for (const s of task.scans) {
+    const t = performance.now();
+    try {
+      // What `POST …/stocktakes/:id/scans` does in its transaction.
+      const r = await withTx(h, (trx) =>
+        scanStocktake(txCtx(trx, Date.now(), actor), { branchId: task.branchId, id: task.stocktakeId, barcode: s.barcode, ...(s.locationId === null ? {} : { locationId: s.locationId }) }),
+      );
+      out.outcomes[r.outcome] = (out.outcomes[r.outcome] ?? 0) + 1;
+    } catch (error) {
+      out.errors += 1;
+      out.firstError ??= messageOf(error);
+    }
+    out.ms.push(Math.round((performance.now() - t) * 10) / 10);
+  }
+  emit(out);
+}
+
 async function childMain(file: string): Promise<void> {
   const input = JSON.parse(await fsp.readFile(file, 'utf8')) as ChildInput;
   const h = await openDb(input.db, input.dataDir);
@@ -383,6 +508,7 @@ async function childMain(file: string): Promise<void> {
       await sleep(input.task.ms);
       emit({ event: 'end', status: 'idle', slices: 0 });
     } else if (input.task.kind === 'previews') await childPreviews(h, input.task);
+    else if (input.task.kind === 'scans') await childScans(h, input.task);
     else await childDrive(h, jobRegistry(input.dataDir, input.keyring), input.keyring, input.task);
   } finally {
     await closeJobSessions();
@@ -478,7 +604,7 @@ async function runChild(inst: Install, task: ChildTask, onEvent?: (e: ChildEvent
   };
   // Besides every second: at the end of each slice and at the child's end, while it still runs.
   lines.on('line', (line) => {
-    if (line.startsWith('{"event":"slice"') || line.startsWith('{"event":"end"') || line.startsWith('{"event":"preview"')) void sample();
+    if (line.startsWith('{"event":"slice"') || line.startsWith('{"event":"end"') || line.startsWith('{"event":"preview"') || line.startsWith('{"event":"scans"')) void sample();
   });
   const sampling = (async () => {
     // The first sample a second in: a process just spawned has not loaded anything yet.
@@ -809,6 +935,207 @@ async function runMigrate(o: RunOptions, ctx: ModeContext, details: Record<strin
   say(`migrate: ${String(run.d.totalMs)} ms over ${run.d.slices.length} slices (${end.status}, ${rows} usage rows)`);
 }
 
+// ---- Komunitas K4 (stocktake) ----
+/** The value at quantile `q` (nearest rank, as p95), or null for no samples. */
+function quantile(samples: readonly number[], q: number): number | null {
+  if (samples.length === 0) return null;
+  const sorted = [...samples].sort((a, b) => a - b);
+  return sorted[Math.max(0, Math.ceil(q * sorted.length) - 1)]!;
+}
+
+/** A staff member of the seed (an officer); its id. */
+async function addOfficer(h: DbHandle, n: number): Promise<string> {
+  const now = Date.now();
+  const id = newId(now);
+  await h.db
+    .insertInto('staff_users')
+    .values({ id, username_key: `petugas-perf-${n}`, username_display: `petugas-perf-${n}`, name: `Petugas Perf ${n}`, password_hash: 'x', status: 'active', created_at: now, updated_at: now })
+    .execute();
+  return id;
+}
+
+/** The session's counters beside what its rows say (the scans keep them equal). */
+async function countersAgainstRows(h: DbHandle, id: string): Promise<{ equal: boolean; detail: string }> {
+  const counted = await h.db.selectFrom('stocktakes').select(['total', 'found', 'misplaced', 'on_loan', 'unexpected', 'unknown_codes']).where('id', '=', id).executeTakeFirstOrThrow();
+  const rowsIn = async (states: readonly string[] | null): Promise<number> => {
+    let q = h.db.selectFrom('stocktake_items').select((eb) => eb.fn.countAll().as('n')).where('stocktake_id', '=', id);
+    q = states === null ? q.where('expected', '=', 1) : q.where('state', 'in', [...states]);
+    return Number((await q.executeTakeFirstOrThrow()).n);
+  };
+  const rows = {
+    total: await rowsIn(null),
+    found: await rowsIn(['found', 'misplaced']),
+    misplaced: await rowsIn(['misplaced']),
+    on_loan: await rowsIn(['on_loan']),
+    unexpected: await rowsIn(['unexpected']),
+    unknown_codes: Number((await h.db.selectFrom('stocktake_unknown_codes').select((eb) => eb.fn.countAll().as('n')).where('stocktake_id', '=', id).executeTakeFirstOrThrow()).n),
+  };
+  const differ = (Object.keys(rows) as (keyof typeof rows)[]).filter((k) => Number(counted[k]) !== rows[k]);
+  const text = (Object.keys(rows) as (keyof typeof rows)[]).map((k) => `${k} ${String(counted[k])}${differ.includes(k) ? ` (rows ${rows[k]})` : ''}`).join(', ');
+  return { equal: differ.length === 0, detail: text };
+}
+
+/** Mode `stocktake` (see the top of this file). */
+async function runStocktake(o: RunOptions, ctx: ModeContext, details: Record<string, unknown>, cleanups: (() => Promise<void>)[]): Promise<void> {
+  const inst = await install(o, 'stocktake', cleanups);
+  await measureBaseline(ctx, inst);
+  const copies = stocktakeCopies(o.scale);
+  say(`stocktake: seed (scale ${o.scale}, ${copies} copies for the session)…`);
+  const seeded = await seedKomunitas(inst.h, { scale: o.scale, dataDir: inst.dataDir, accreditation: false, say });
+  const added = await seedExtraItems(inst.h, { total: copies, firstBranchOnly: true, say });
+  const lent = await seedOpenLoans(inst.h, { every: STOCKTAKE_LOAN_EVERY, say });
+  const [branchId, otherBranchId] = seeded.branchIds;
+  if (branchId === undefined) throw new SmokeError('the seed made no branch');
+  const officers = [seeded.staffId];
+  for (let n = 2; n <= STOCKTAKE_OFFICERS; n += 1) officers.push(await addOfficer(inst.h, n));
+  const inScope = Number(
+    (
+      await inst.h.db
+        .selectFrom('items')
+        .select((eb) => eb.fn.countAll().as('n'))
+        .where('branch_id', '=', branchId)
+        .where('archived_at', 'is', null)
+        .where('status', 'in', [...STOCKTAKE_ITEM_STATUSES])
+        .executeTakeFirstOrThrow()
+    ).n,
+  );
+  const stocktake: Record<string, unknown> = { copies, inScope, extraCopies: added, openLoans: lent };
+  details['stocktake'] = stocktake;
+  const deps = { registry: inst.registry, keyring: inst.keyring };
+  const head: Actor = { type: 'staff', id: seeded.staffId, ip: null };
+
+  // The preparation, as the job runtime runs it.
+  const name = 'Inventarisasi Perf';
+  const created = await withTx(inst.h, (trx) => createStocktake(txCtx(trx, Date.now(), head), branchId, { name, scope: {} }, deps));
+  const session = () =>
+    inst.h.db.selectFrom('stocktakes').select(['status', 'total', 'on_loan', 'found', 'minutes_file_id']).where('id', '=', created.id).executeTakeFirstOrThrow();
+  say(`stocktake: preparation of ${inScope} copies…`);
+  const prepared = await drive(inst, created.jobId);
+  const afterPrepare = await session();
+  ctx.addDriven('preparation', { ...prepared.d, status: prepared.d.status === 'succeeded' && afterPrepare.status !== 'active' ? `session ${afterPrepare.status}` : prepared.d.status }, { totalBudget: KOMUNITAS_BUDGETS.stocktakePrepareMs });
+  ctx.add({
+    name: 'preparation lists every copy in scope',
+    value: Number(afterPrepare.total) === inScope ? 1 : 0,
+    unit: 'check',
+    budget: 1,
+    op: '=',
+    detail: `${String(afterPrepare.total)} of ${inScope} copies listed, ${String(afterPrepare.on_loan)} on loan`,
+  });
+  say(`stocktake: preparation ${String(prepared.d.totalMs)} ms over ${prepared.d.slices.length} slices (${afterPrepare.status}, ${String(afterPrepare.total)} copies)`);
+  if (afterPrepare.status !== 'active') throw new SmokeError(`the session is ${afterPrepare.status} after its preparation, not active`);
+
+  // Four officers at once.
+  const shelf = (
+    await inst.h.db
+      .selectFrom('stocktake_items as s')
+      .innerJoin('items as i', 'i.id', 's.item_id')
+      .select(['i.barcode_display', 'i.location_id'])
+      .where('s.stocktake_id', '=', created.id)
+      .where('s.state', '=', 'pending')
+      .orderBy('s.item_id')
+      .execute()
+  ).map((r) => ({ barcode: r.barcode_display, locationId: r.location_id }));
+  const outside =
+    otherBranchId === undefined
+      ? []
+      : (await inst.h.db.selectFrom('items').select(['barcode_display', 'location_id']).where('branch_id', '=', otherBranchId).where('archived_at', 'is', null).orderBy('id').limit(4).execute()).map((r) => ({
+          barcode: r.barcode_display,
+          locationId: r.location_id,
+        }));
+  const shelves = await inst.h.db.selectFrom('locations').select('id').where('branch_id', '=', branchId).where('kind', '=', 'shelf').orderBy('code_key').execute();
+  const lists = stocktakeScanPlan(shelf, { officers: STOCKTAKE_OFFICERS, perOfficer: STOCKTAKE_SCANS_PER_OFFICER, outside, otherShelf: shelves.at(-1)?.id ?? null });
+  const goFile = path.join(inst.root, 'scans-go');
+  let ready = 0;
+  let started = false;
+  const go = (): void => {
+    if (started) return;
+    started = true;
+    void fsp.writeFile(goFile, '');
+  };
+  say(`stocktake: ${lists.reduce((n, l) => n + l.length, 0)} scans by ${lists.length} officers at once…`);
+  const runs = await Promise.all(
+    lists.map((scans, k) =>
+      runChild(inst, { kind: 'scans', branchId, stocktakeId: created.id, actorId: officers[k]!, scans, goFile }, (e) => {
+        if (e.event === 'ready' && (ready += 1) === lists.length) go();
+      }).finally(go),
+    ),
+  );
+  const ms: number[] = [];
+  const outcomes: Record<string, number> = {};
+  let errors = 0;
+  const problems: string[] = [];
+  runs.forEach((run, k) => {
+    ctx.rss(run.rssPeakMb);
+    const e = run.events.find((x) => x.event === 'scans');
+    if (e?.event !== 'scans') {
+      problems.push(`officer ${k + 1} ended ${run.signal ?? `with exit code ${String(run.code)}`} without its scans: ${run.stderrTail.slice(-300)}`);
+      return;
+    }
+    ms.push(...e.ms);
+    for (const [outcome, n] of Object.entries(e.outcomes)) outcomes[outcome] = (outcomes[outcome] ?? 0) + n;
+    errors += e.errors;
+    if (e.firstError !== null) problems.push(`officer ${k + 1}: ${e.errors} scans failed (${e.firstError})`);
+  });
+  const scanned = problems.length === 0;
+  const spread = `${ms.length} scans: p50 ${String(round1(quantile(ms, 0.5)))}, p99 ${String(round1(quantile(ms, 0.99)))}, max ${String(round1(quantile(ms, 1)))} ms; ${Object.entries(outcomes)
+    .sort()
+    .map(([outcome, n]) => `${outcome} ${n}`)
+    .join(', ')}`;
+  ctx.add({ name: `scan p95 (${STOCKTAKE_OFFICERS} officers at once)`, value: scanned ? round1(p95(ms)) : null, unit: 'ms', budget: KOMUNITAS_BUDGETS.stocktakeScanP95Ms, op: '<', detail: spread });
+  ctx.add({ name: 'every scan answered', value: scanned && errors === 0 ? 1 : 0, unit: 'check', budget: 1, op: '=', ...(problems.length === 0 ? {} : { detail: problems.join('; ') }) });
+  const counters = await countersAgainstRows(inst.h, created.id);
+  ctx.add({ name: 'session counters equal its rows', value: counters.equal ? 1 : 0, unit: 'check', budget: 1, op: '=', detail: counters.detail });
+  stocktake['scans'] = { count: ms.length, p50: quantile(ms, 0.5), p95: p95(ms), p99: quantile(ms, 0.99), max: quantile(ms, 1), outcomes, errors };
+  say(`stocktake: ${spread}`);
+
+  // The rest of the shelf, found: one pending copy in 20 is left for the finish to mark missing.
+  const pending = (await inst.h.db.selectFrom('stocktake_items').select('item_id').where('stocktake_id', '=', created.id).where('state', '=', 'pending').orderBy('item_id').execute()).map((r) => r.item_id);
+  const rest = pending.filter((_, i) => i % STOCKTAKE_MISSING_EVERY !== STOCKTAKE_MISSING_EVERY - 1);
+  let marked = 0;
+  for (let i = 0; i < rest.length; i += 1_000) {
+    const chunk = rest.slice(i, i + 1_000);
+    marked += await withTx(inst.h, async (trx) => {
+      const r = await trx
+        .updateTable('stocktake_items')
+        .set({ state: 'found', scanned_at: Date.now(), scanned_by: officers[i % officers.length]!, scanned_location_id: null })
+        .where('stocktake_id', '=', created.id)
+        .where('item_id', 'in', chunk)
+        .where('state', '=', 'pending')
+        .executeTakeFirst();
+      const n = Number(r.numUpdatedRows);
+      await trx
+        .updateTable('stocktakes')
+        .set((eb) => ({ found: eb('found', '+', n) }))
+        .where('id', '=', created.id)
+        .execute();
+      return n;
+    });
+  }
+  stocktake['foundInBulk'] = marked;
+  stocktake['leftPending'] = pending.length - marked;
+
+  // The finish, as the job runtime runs it, to the stored minutes.
+  const finish = await withTx(inst.h, (trx) => finishStocktake(txCtx(trx, Date.now(), head), branchId, created.id, { confirmName: name, markMissing: true, restoreFound: true }, deps));
+  say(`stocktake: finish (${pending.length - marked} copies left pending)…`);
+  const finished = await drive(inst, finish.jobId);
+  const end = await session();
+  ctx.addDriven('finish', { ...finished.d, status: finished.d.status === 'succeeded' && end.status !== 'finished' ? `session ${end.status}` : finished.d.status }, { totalBudget: KOMUNITAS_BUDGETS.stocktakeFinishMs });
+  const resultOf = async (result: string): Promise<number> =>
+    Number((await inst.h.db.selectFrom('stocktake_items').select((eb) => eb.fn.countAll().as('n')).where('stocktake_id', '=', created.id).where('result', '=', result).executeTakeFirstOrThrow()).n);
+  const results = { marked_missing: await resultOf('marked_missing'), restored: await resultOf('restored'), status_kept: await resultOf('status_kept') };
+  const minutes = end.minutes_file_id === null ? undefined : await inst.h.db.selectFrom('files').select(['size']).where('id', '=', end.minutes_file_id).executeTakeFirst();
+  ctx.add({
+    name: 'finish stored the minutes',
+    value: minutes !== undefined && Number(minutes.size) > 0 ? 1 : 0,
+    unit: 'check',
+    budget: 1,
+    op: '=',
+    detail: `${results.marked_missing} marked missing, ${results.restored} restored, ${results.status_kept} kept; minutes ${minutes === undefined ? 'missing' : `${String(minutes.size)} bytes`}`,
+  });
+  stocktake['finish'] = { status: end.status, results, minutesBytes: minutes === undefined ? null : Number(minutes.size) };
+  say(`stocktake: finish ${String(finished.d.totalMs)} ms over ${finished.d.slices.length} slices (${end.status}; ${results.marked_missing} marked missing, ${results.restored} restored)`);
+}
+
 export interface KomunitasReport {
   db: TestEngine;
   node: string;
@@ -823,7 +1150,7 @@ export interface KomunitasReport {
 
 /** One JSON line, the budgets beside the measurements. */
 export function formatKomunitasReport(r: KomunitasReport): string {
-  return `${JSON.stringify({ ...r, budgets: KOMUNITAS_BUDGETS, seedCounts: { ...PERF_PHASE2_SEED, ...PERF_KOMUNITAS_SEED, usageDump: USAGE_DUMP_ROWS } })}\n`;
+  return `${JSON.stringify({ ...r, budgets: KOMUNITAS_BUDGETS, seedCounts: { ...PERF_PHASE2_SEED, ...PERF_KOMUNITAS_SEED, usageDump: USAGE_DUMP_ROWS, stocktakeCopies: STOCKTAKE_COPIES } })}\n`;
 }
 
 /** One run (see the top of this file). Never throws for a failure of the run: it is in `failures`. */
@@ -831,7 +1158,7 @@ export async function runKomunitas(o: RunOptions): Promise<KomunitasReport> {
   const measurements: Measurement[] = [];
   const details: Record<string, unknown> = { counts: komunitasCounts(o.scale, { withEvidence: o.withEvidence }) };
   const failures: string[] = [];
-  const modes: Record<KomunitasMode, typeof runReports> = { reports: runReports, accred: runAccred, migrate: runMigrate };
+  const modes: Record<KomunitasMode, typeof runReports> = { reports: runReports, accred: runAccred, migrate: runMigrate, stocktake: runStocktake };
   for (const mode of o.modes) {
     const cleanups: (() => Promise<void>)[] = [];
     const ctx = new ModeContext(mode);
