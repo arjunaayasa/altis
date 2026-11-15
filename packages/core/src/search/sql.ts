@@ -167,6 +167,15 @@ export interface SearchSource {
   where: Expression<SqlBool>[];
   /** The positive text, joined as `ft` with its relevance (only when the order is relevance). */
   ranked: FtExpr | null;
+  // ---- Komunitas (OPAC home page) ----
+  /** The branches whose loans the `popular` order sums (the search's branch filter); null: every branch. */
+  popularBranches?: readonly string[] | null;
+}
+
+// ---- Komunitas (OPAC home page) ----
+/** The branches the `popular` order of `q` sums: its branch filter, or null for every branch. */
+export function popularOrderBranches(q: CatalogSearchQuery): string[] | null {
+  return filterValues(q.filters?.branchIds);
 }
 
 /** The predicates of a text plan (the positive one too unless it is ranked, which its join already restricts). */
@@ -191,9 +200,18 @@ export function fromSource(db: Db, s: SearchSource): SearchQB {
 /** The sort orders of §4.5. */
 export type SearchSort = NonNullable<CatalogSearchQuery['sort']>;
 
-/** `qb` ordered by `sort`, each order ending with `doc_no` (§4.5: the tie-breaker). */
-export function ordered(qb: SearchQB, sort: SearchSort): SearchQB {
+/**
+ * `qb` ordered by `sort`, each order ending with `doc_no` (the tie-breaker). `popular` sums the loans of the popular
+ * titles' aggregate over `popularBranches` (every branch when null); a title outside it counts 0.
+ */
+export function ordered(qb: SearchQB, sort: SearchSort, popularBranches: readonly string[] | null = null): SearchQB {
   switch (sort) {
+    // ---- Komunitas (OPAC home page) ----
+    case 'popular': {
+      const inBranches = popularBranches === null || popularBranches.length === 0 ? sql`` : sql` AND ${sql.ref('p.branch_id')} IN (${sql.join([...popularBranches])})`;
+      const loans = sql`(SELECT COALESCE(SUM(${sql.ref('p.loans')}), 0) FROM ${sql.table('opac_popular_titles')} AS ${sql.id('p')} WHERE ${sql.ref('p.record_id')} = ${sql.ref('search_doc.record_id')}${inBranches})`;
+      return qb.orderBy(loans, 'desc').orderBy('search_doc.doc_no');
+    }
     case 'relevance':
       return qb.orderBy(sql.ref('ft.score'), 'desc').orderBy('search_doc.doc_no');
     case 'title':

@@ -5,10 +5,11 @@ import type { Kysely } from 'kysely';
 import { safeFileName } from '../../files/serve.js';
 import { reportById } from '../registry.js';
 import { libraryTimeZone } from './service.js';
-import { exportPermissionOf, runNotFound, visibleRunRow, type ReportRunViewer } from './visibility.js';
+import { exportPermissionOf, reportBranchOf, runNotFound, storedParamsOf, visibleRunRow, type ReportRunViewer } from './visibility.js';
 
 // The download of a run's file (spec §5.2, §13 "Ekspor"): only the run's creator downloads it, and only while they
-// still hold the definition's export permission; a run that holds personal data also wants a re-authentication within
+// still hold the definition's export permission (a branch permission at the branch the run's parameters address);
+// a run that holds personal data also wants a re-authentication within
 // the usual window. Seeing other staff members' runs (the jobs permission) never opens their files. A run that did
 // not succeed, or whose file is gone, has nothing to serve; one whose file expired answers 410.
 //
@@ -52,7 +53,7 @@ function nothingToServe(): DomainError {
 export async function openReportRunDownload(
   db: Kysely<DB>,
   id: string,
-  viewer: ReportRunViewer & { reauthFresh: boolean; holds(p: Permission): boolean },
+  viewer: ReportRunViewer & { reauthFresh: boolean; holds(p: Permission, branchId?: string | null): boolean },
   now: number,
   dataDir: string,
 ): Promise<ReportRunDownload> {
@@ -63,7 +64,7 @@ export async function openReportRunDownload(
   }
   const def = reportById(row.report_id);
   if (def === null) throw runNotFound();
-  if (!viewer.holds(exportPermissionOf(def))) throw new DomainError('AUTHZ_DENIED');
+  if (!viewer.holds(exportPermissionOf(def), await reportBranchOf(db, def, storedParamsOf(row.params).def))) throw new DomainError('AUTHZ_DENIED');
   if (Number(row.personal) === 1 && !viewer.reauthFresh) throw new DomainError('AUTH_REAUTH_REQUIRED');
   if (row.status !== 'succeeded' || !isReportExt(row.format)) throw nothingToServe();
   if (row.expires_at !== null && Number(row.expires_at) <= now) {

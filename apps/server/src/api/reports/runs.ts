@@ -14,7 +14,7 @@ import {
   type ReportRunViewer,
 } from '@altis/core';
 import { openRead } from '@altis/platform';
-import { DomainError, type Locale } from '@altis/shared';
+import { DomainError, type Locale, type Permission } from '@altis/shared';
 import { ulidField } from '@altis/shared/api/common';
 import {
   ReportRunCreateBody,
@@ -28,7 +28,7 @@ import { byteRange, rangeStream } from '../../http/range.js';
 import { hasRecentReauth } from '../../http/reauth-check.js';
 import { route, type RouteContext, type RouteDecl } from '../../http/route.js';
 import { jobHandlers } from '../../jobs/runtime.js';
-import { definitionOf, holdsOf, outputLocaleOf } from './catalog.js';
+import { definitionOf, holdsAnywhereOf, holdsForReport, holdsOf, outputLocaleOf } from './catalog.js';
 
 // The report runs (spec §4.15, §5.2, §13 "Ekspor"):
 //
@@ -37,7 +37,9 @@ import { definitionOf, holdsOf, outputLocaleOf } from './catalog.js';
 //                                     `reports.run.start {runId, reportId, format}` (never a parameter value): a run of
 //                                     a table report that holds no personal data, and its export job → {id, jobId}.
 //                                     A personal report is refused here (`personal_report`: it has its own route), a
-//                                     document too (`document_report`: the accreditation routes make documents).
+//                                     document too (`document_report`: the accreditation routes make documents),
+//                                     unless the document is made through these routes (`runRoutes`: the annual
+//                                     library report).
 //   POST reports/runs/personal        the same for a table report that holds personal data, behind a fresh
 //                                     re-authentication (declared); any other report is `not_personal`.
 //   GET  reports/runs                 any signed-in staff member: their own runs, newest first; with the jobs
@@ -86,11 +88,11 @@ function prepareStart(personal: boolean) {
   return async (rc: RouteContext<ReportRunCreateBody, unknown, unknown>): Promise<StartPrepared> => {
     const def = definitionOf(rc.body.reportId);
     const permission = def.exportPermission ?? def.permission;
-    if (!holdsOf(rc)(permission)) throw await rc.authzDenied(permission);
+    if (!(await holdsForReport(rc, def, rc.body.params, permission))) throw await rc.authzDenied(permission);
     // ---- Komunitas (member, visit and circulation reports) ----
     const extra = def.extraPermission?.(rc.body.params) ?? null;
     if (extra !== null && !holdsOf(rc)(extra)) throw await rc.authzDenied(extra);
-    if (def.kind === 'document') throw wrongRoute('document_report');
+    if (def.kind === 'document' && def.runRoutes !== true) throw wrongRoute('document_report');
     if (def.personal !== personal) throw wrongRoute(personal ? 'not_personal' : 'personal_report');
     return { def, locale: await outputLocaleOf(rc, def) };
   };
@@ -152,10 +154,13 @@ function viewerOf(rc: RouteContext<unknown, unknown, unknown>): ReportRunViewer 
   return { staffId: rc.auth.subjectId, seeAll: can(rc.auth.grants, 'system.jobs.read') };
 }
 
-/** `view` as the user sees it now: downloadable only before it expires and while they hold the export permission. */
+/**
+ * `view` as the user sees it now: downloadable only before it expires and while they hold the export permission (a
+ * branch permission at some branch: the download checks it at the run's branch).
+ */
 function asSeenNow(rc: RouteContext<unknown, unknown, unknown>, view: ReportRunView): ReportRunView {
   if (!view.downloadable) return view;
-  const holds = holdsOf(rc);
+  const holds = holdsAnywhereOf(rc);
   const def = reportById(view.reportId);
   const expired = view.expiresAt !== null && view.expiresAt <= rc.now;
   const downloadable = def !== null && !expired && holds(def.exportPermission ?? def.permission);
@@ -209,7 +214,10 @@ const runsDownload = route({
   params: RunParams,
   handler: async (rc) => {
     const viewer = viewerOf(rc);
-    const holds = holdsOf(rc);
+    const auth = rc.auth;
+    if (auth === null) throw new DomainError('AUTH_REQUIRED');
+    // A branch permission is checked at the branch the run's parameters address.
+    const holds = (p: Permission, branchId?: string | null): boolean => can(auth.grants, p, branchId ?? null);
     const file = await openReportRunDownload(rc.db.db, rc.params.id, { ...viewer, reauthFresh: hasRecentReauth(rc), holds }, rc.now, rc.services.dataDir);
     let handle: FileHandle;
     try {

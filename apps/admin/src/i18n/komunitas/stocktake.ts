@@ -97,6 +97,18 @@ export const STOCKTAKE_ADMIN_ID = {
   'stocktake.ui.cancel.title': 'Batalkan sesi inventarisasi?',
   'stocktake.ui.cancel.description': 'Sesi "{name}" dibatalkan; tidak ada eksemplar yang diubah dan pindaiannya tetap tersimpan.',
   'stocktake.ui.cancel.confirm': 'Batalkan sesi',
+  // ---- the Diagnostik card ----
+  'stocktake.ui.diag.title': 'Inventarisasi',
+  'stocktake.ui.diag.none': 'Tidak ada sesi inventarisasi yang berjalan.',
+  'stocktake.ui.diag.session': '{name} (cabang {branch})',
+  'stocktake.ui.diag.counts': '{found} dari {total} ditemukan, {pending} tertunda',
+  'stocktake.ui.diag.job': 'Tugas',
+  'stocktake.ui.diag.job_value': '{status}, {progress}%, terakhir {time}',
+  'stocktake.ui.diag.no_job': 'tidak ada',
+  'stocktake.ui.diag.uploads': 'Daftar kode yang masih diproses: {count}',
+  'stocktake.ui.diag.stuck.no_job': 'Sesi ini {status} tetapi tidak punya tugas yang berjalan. Batalkan sesinya, atau periksa Tugas.',
+  'stocktake.ui.diag.stuck.job_ended': 'Tugas sesi ini berhenti sebelum selesai. Periksa Tugas dan jalankan ulang tugasnya.',
+  'stocktake.ui.diag.stuck.stalled': 'Tugas sesi ini tidak bergerak lebih dari 10 menit. Periksa apakah pelaksana tugas berjalan.',
 } as const;
 
 export const STOCKTAKE_ADMIN_EN: Record<keyof typeof STOCKTAKE_ADMIN_ID, string> = {
@@ -193,4 +205,16 @@ export const STOCKTAKE_ADMIN_EN: Record<keyof typeof STOCKTAKE_ADMIN_ID, string>
   'stocktake.ui.cancel.title': 'Cancel the stocktake session?',
   'stocktake.ui.cancel.description': 'The session "{name}" is cancelled; no copy changes and its scans stay recorded.',
   'stocktake.ui.cancel.confirm': 'Cancel the session',
+  // ---- the Diagnostik card ----
+  'stocktake.ui.diag.title': 'Stocktake',
+  'stocktake.ui.diag.none': 'No stocktake session is under way.',
+  'stocktake.ui.diag.session': '{name} (branch {branch})',
+  'stocktake.ui.diag.counts': '{found} of {total} found, {pending} pending',
+  'stocktake.ui.diag.job': 'Job',
+  'stocktake.ui.diag.job_value': '{status}, {progress}%, last {time}',
+  'stocktake.ui.diag.no_job': 'none',
+  'stocktake.ui.diag.uploads': 'Code lists still being applied: {count}',
+  'stocktake.ui.diag.stuck.no_job': 'This session is {status} but has no job running. Cancel the session, or look at Jobs.',
+  'stocktake.ui.diag.stuck.job_ended': 'This session’s job stopped before it was done. Look at Jobs and run the job again.',
+  'stocktake.ui.diag.stuck.stalled': 'This session’s job has not moved for more than 10 minutes. Check that the job runner is running.',
 };

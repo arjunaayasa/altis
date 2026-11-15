@@ -493,8 +493,8 @@ const EVIDENCE: Readonly<Record<string, readonly string[]>> = {
   K4: ['survey_report', 'activity_list'],
   K5: ['used_list', 'use_photo', 'usage_table'],
   K6: ['additions_table', 'additions_signed'],
-  K7: ['processed_list', 'shelf_photos', 'data_quality', 'scanner_photo'],
-  K8: ['preservation_list', 'preservation_photos'],
+  K7: ['processed_list', 'shelf_photos', 'data_quality', 'scanner_photo', 'stocktake_minutes'],
+  K8: ['preservation_list', 'preservation_photos', 'stocktake_minutes'],
   SP1: ['floor_plan', 'room_photos'],
   SP2: ['shelf_photos'],
   SP3: ['furniture_list', 'furniture_photos'],
@@ -680,6 +680,10 @@ const REPORT_IDS = [
   'stocktake.misplaced',
   'stocktake.by_officer',
   'stocktake.history',
+  // ---- Komunitas K5 (reports) ----
+  'visits.by_hour',
+  'system.staff_activity',
+  'library.annual_report',
   'test.rows',
   'test.personal',
   'test.document',
@@ -705,11 +709,13 @@ const REPORT_COLUMNS = [
   ...['registered', 'active', 'expired', 'suspended', 'days_left', 'source_no', 'source_barcode'],
   ...['m01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09', 'm10', 'm11', 'm12'],
   ...['date', 'weekday', 'members', 'guests', 'visited_at', 'institution', 'purpose', 'rank'],
-  ...['loaned_on', 'due_on', 'returned_on', 'renewals', 'outcome', 'days_late', 'fine', 'placed_on', 'queue_position', 'pickup_until'],
+  ...['loaned_on', 'due_on', 'returned_on', 'renewals', 'outcome', 'days_late', 'fine', 'placed_on', 'hold_status', 'queue_position', 'pickup_until'],
   ...['charged_on', 'description', 'paid', 'waived', 'balance', 'paid_on', 'method', 'staff', 'payments', 'receipt_no', 'voided'],
   // ---- Komunitas K4 (stocktake) ----
   ...['expected', 'found', 'misplaced', 'on_loan', 'pending', 'unexpected', 'unknown_codes', 'material_type', 'expected_location'],
-  ...['scanned_location', 'scanned_at', 'officer', 'session', 'branch', 'started_at', 'finished_at'],
+  ...['scanned_location', 'scanned_at', 'officer', 'session', 'session_status', 'branch', 'started_at', 'finished_at'],
+  // ---- Komunitas K5 (reports) ----
+  ...['hour', 'wd1', 'wd2', 'wd3', 'wd4', 'wd5', 'wd6', 'wd7', 'records', 'returns'],
 ];
 
 /** Every parameter name of the report definitions. */

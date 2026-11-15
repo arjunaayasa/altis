@@ -444,6 +444,32 @@ describe.skipIf(!ctx.available)(`SLiMS migration end to end (K15) [${engineLabel
       expect([table, row!.diff, row!.source, row!.unread]).toEqual([table, 0, fixture.expected.tables[table]!.source, false]);
     }
     for (const table of roles.archived) expect([table, s.tables[table]!.archived]).toEqual([table, fixture.expected.tables[table]!.source]);
+    // ---- Komunitas K4 (stocktake) ----
+    // The stocktake sessions: the last one with its rows (one of an item the catalogue lacks skipped), the older one a
+    // header, the row of the older session skipped; both tables archived whole besides. Both were finished in SLiMS and
+    // keep the totals SLiMS kept for them.
+    const take = traps.stocktake;
+    expect(s.tables['stock_take']).toMatchObject({ migrated: fixture.expected.tables['stock_take']!.source, archived: 0 });
+    expect(s.tables['stock_take_item']).toMatchObject({
+      migrated: take.found.length + take.missing.length + take.onLoan.length,
+      skipped: { item_missing: take.unmapped.length, older_session: take.olderRows },
+    });
+    const lastSession = (await legacyTarget(h.db, 'slims', 'stock_take', String(take.last)))!;
+    const takeRows = await h.db.selectFrom('stocktake_items').select(['item_id', 'state', 'result']).where('stocktake_id', '=', lastSession).execute();
+    const takeState = async (itemIds: number[]) => {
+      const ids = await Promise.all(itemIds.map(async (id) => (await legacyTarget(h.db, 'slims', 'item', String(id)))!));
+      return takeRows.filter((r) => ids.includes(r.item_id)).map((r) => `${r.state}:${r.result ?? ''}`);
+    };
+    expect(await takeState(take.found)).toEqual(take.found.map(() => 'found:none'));
+    expect(await takeState(take.missing)).toEqual(['pending:marked_missing']);
+    expect(await takeState(take.onLoan)).toEqual(['on_loan:none']);
+    expect(takeRows).toHaveLength(take.found.length + take.missing.length + take.onLoan.length);
+    const sessions = await h.db.selectFrom('stocktakes').select(['status', 'source', 'total', 'found', 'on_loan']).orderBy('started_at').execute();
+    expect(sessions).toEqual([
+      { status: 'finished', source: 'migrated', total: 580, found: 560, on_loan: 8 },
+      { status: 'finished', source: 'migrated', total: 10, found: 9, on_loan: 0 },
+    ]);
+    expect(await h.db.selectFrom('migration_archive').select('id').where('table_name', '=', 'stock_take_item').execute()).toHaveLength(fixture.expected.tables['stock_take_item']!.source);
     for (const table of [...roles.phase3, ...roles.derived]) {
       expect(s.unread, table).toContain(table);
       expect([table, s.tables[table]?.source]).toEqual([table, fixture.expected.tables[table]!.source]);

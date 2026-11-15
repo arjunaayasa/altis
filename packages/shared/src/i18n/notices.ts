@@ -84,6 +84,7 @@ export const NOTICES_ID = {
   // The lines `{loans}` and `{balance}` are made of.
   'mail.circulation.line.due_soon': '- {title} (barkod {barcode}), jatuh tempo {due}',
   'mail.circulation.line.overdue': '- {title} (barkod {barcode}), jatuh tempo {due}, terlambat {days} hari',
+  'mail.circulation.line.overdue_fined': '- {title} (barkod {barcode}), jatuh tempo {due}, terlambat {days} hari ({fined} hari dikenai denda)',
   'mail.circulation.line.fine': '  Denda sementara: {amount}',
   'mail.circulation.balance': 'Tanggungan biaya Anda saat ini: {amount}.',
   // ---- notification.<x>.title / .body: staff notifications ----
@@ -163,6 +164,7 @@ export const NOTICES_EN: Record<keyof typeof NOTICES_ID, string> = {
   ].join('\n'),
   'mail.circulation.line.due_soon': '- {title} (barcode {barcode}), due {due}',
   'mail.circulation.line.overdue': '- {title} (barcode {barcode}), due {due}, {days} days late',
+  'mail.circulation.line.overdue_fined': '- {title} (barcode {barcode}), due {due}, {days} days late ({fined} days fined)',
   'mail.circulation.line.fine': '  Fine so far: {amount}',
   'mail.circulation.balance': 'You currently owe: {amount}.',
   'notification.circulation_hold_shelf.title': 'Copies on the hold shelf need to go back to the shelves',

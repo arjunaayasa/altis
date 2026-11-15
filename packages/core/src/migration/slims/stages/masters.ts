@@ -60,8 +60,9 @@ import {
 // - `mst_voc_ctrl` → `subject_relations` with their reciprocals (maps/thesaurus.ts); a `scope` row → the subject's
 //   scope note (kept when the subject has one: `scope_note_kept`).
 // - `mst_location` → rooms of the run's branch (code = `location_id`); `mst_coll_type` → collection types (code from
-//   the name); `mst_supplier` → suppliers (`SUP<id>`); `mst_custom_field` (`biblio`, `item`) → custom field definitions
-//   (options from the serialized `data`); `mst_servers` (MARC SRU only) → `catalog.sru.servers`, disabled;
+//   the name); `mst_supplier` → suppliers (`SUP<id>`); `mst_custom_field` (`biblio`, `item`, `member`) → custom field
+//   definitions (options from the serialized `data`; a member's never public nor searchable, its values are the members
+//   stage's); `mst_servers` (MARC SRU only) → `catalog.sru.servers`, disabled;
 //   `setting.batch_item_code_pattern` → `catalog.barcode.patterns`. The settings rows map to the run (a settings entry
 //   has no row id of its own).
 //
@@ -659,13 +660,13 @@ function optionPairs(value: unknown): [string, string][] {
 }
 
 /**
- * The definition a `mst_custom_field` row of `biblio` or `item` becomes (§11.4), or null for another table (a
- * member's field: Phase 3). The option list comes from the serialized `data`; a broken payload keeps the strings it
- * quotes, paired as value and label.
+ * The definition a `mst_custom_field` row of `biblio`, `item` or `member` becomes (§11.4), or null for another table.
+ * The option list comes from the serialized `data`; a broken payload keeps the strings it quotes, paired as value and
+ * label. A member's field is never public nor searchable (what a member's field holds is personal data).
  */
 export function slimsCustomField(row: SlimsRow, text: (column: string) => string): SlimsCustomField | null {
   const table = text('primary_table').toLowerCase();
-  const entity: CustomFieldEntity | null = table === 'biblio' ? 'records' : table === 'item' ? 'items' : null;
+  const entity: CustomFieldEntity | null = table === 'biblio' ? 'records' : table === 'item' ? 'items' : table === 'member' ? 'members' : null;
   if (entity === null) return null;
   const problems: SlimsCustomField['problems'] = [];
   const slimsType = text('type').toLowerCase();
@@ -712,8 +713,8 @@ export function slimsCustomField(row: SlimsRow, text: (column: string) => string
     type,
     label: cutChars(oneLine(text('label')), NAME_MAX) || code,
     options: type === 'select' || type === 'multiselect' ? options : [],
-    isPublic: intOf(text('is_public')) === 1,
-    isSearchable: intOf(text('indexed')) === 1,
+    isPublic: entity !== 'members' && intOf(text('is_public')) === 1,
+    isSearchable: entity !== 'members' && intOf(text('indexed')) === 1,
     sortOrder: Math.max(0, Math.min(2_147_483_647, intOf(text('field_id')) ?? 0)),
     problems,
     broken,

@@ -5,12 +5,16 @@ import { label, offsetPage, textParam, vocabLabel } from '../collection/common.j
 import { reportColumn, reportIdField, reportParam, reportYearField } from '../params.js';
 import type { ReportCtx, ReportRow, TableReport } from '../types.js';
 import { MONTH_COLUMNS, MONTH_KEYS, monthIndexOf, rowLabel, sumOf, yearParam } from '../circulation/common.js';
+// ---- Komunitas K5 (reports) ----
+import { PERIOD_FILTER, monthMatrixSpan } from '../window.js';
 
 // The visit statistics (no personal data): people counted, each visit by its head count (a class visit counts its
 // pupils), a voided visit not at all, by the member type, accreditation group and class a visit kept when it was made.
 //
 // - `visits.monthly`: one row per member type (or accreditation group, class, or source of the visit), the guests in
-//   their own row, one column per month of the year and the total; filtered by branch, room and source.
+//   their own row, one column per month of the year and the total; filtered by branch, room and source. With an
+//   accreditation period chosen (`periodId`, at most twelve months) the period is read instead of the year, each of
+//   its months in the column of that calendar month.
 // - `visits.daily`: one row per day of a month, members and guests apart, and the total; filtered by branch and source.
 
 /** How the monthly visits are grouped. */
@@ -32,10 +36,10 @@ function counted(ctx: ReportCtx, from: string, to: string) {
 type RowKey = { order: number; label: string };
 
 async function monthly(ctx: ReportCtx): Promise<{ rows: ReportRow[]; totals: ReportRow }> {
-  const year = yearParam(ctx);
+  const span = await monthMatrixSpan(ctx);
   const grouping = (textParam(ctx, 'rowsBy') ?? 'member_type') as (typeof VISIT_GROUPINGS)[number];
   const groups = await sumGrouped(
-    counted(ctx, `${year}-01-01`, `${year}-12-31`),
+    counted(ctx, span.from, span.to),
     { t: 'v.member_type_id', a: 'v.accred_group', c: 'v.class_name', s: 'v.source', m: datePrefix('v.visited_on', 'month') },
     'v.headcount',
   );
@@ -93,6 +97,8 @@ export const visitsMonthlyReport: TableReport = Object.freeze<TableReport>({
     reportParam('branchId', 'branch'),
     reportParam('locationId', 'location'),
     reportParam('source', 'status', { options: VISIT_SOURCES, optionLabelPrefix: 'vocab.visit_source.' }),
+    // ---- Komunitas K5 (reports) ----
+    PERIOD_FILTER,
   ],
   paramsSchema: z.strictObject({
     year: reportYearField.optional(),
@@ -100,8 +106,10 @@ export const visitsMonthlyReport: TableReport = Object.freeze<TableReport>({
     branchId: reportIdField.optional(),
     locationId: reportIdField.optional(),
     source: z.enum(VISIT_SOURCES).optional(),
+    periodId: reportIdField.optional(),
   }),
   columns: [reportColumn('group', 'text', { widthChars: 24 }), ...MONTH_COLUMNS],
+  chart: { kind: 'totals', columns: MONTH_KEYS },
   async rows(ctx, cursor, limit) {
     return offsetPage((await monthly(ctx)).rows, cursor, limit);
   },
@@ -167,6 +175,7 @@ export const visitsDailyReport: TableReport = Object.freeze<TableReport>({
     reportColumn('guests', 'int'),
     reportColumn('total', 'int'),
   ],
+  chart: { kind: 'rows', label: 'date', value: 'total' },
   async rows(ctx, cursor, limit) {
     return offsetPage((await daily(ctx)).rows, cursor, limit);
   },

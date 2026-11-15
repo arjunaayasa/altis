@@ -421,6 +421,10 @@ export function budgetShareMean(rows: readonly (BudgetRow | undefined)[]): numbe
 
 // ---- the provider --------------------------------------------------------------------------------------------------
 
+/**
+ * The register metrics, by id: those of the registers provider, and the register part of the recount and weeding
+ * standard, which the stocktake provider completes with its finished sessions (providers/stocktake.ts).
+ */
 type RegisterMetricId = Extract<AccredMetricId, `registers.${string}`>;
 
 /** Each read once per call. */

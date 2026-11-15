@@ -88,7 +88,7 @@ const MINUTE = 60_000;
 
 /**
  * Empties the catalogue and the search index (FTS5 `'delete-all'` first, as every wipe of `search_doc` must), the
- * custom fields of records and items, and the jobs, locks and events a reindex leaves. Branches stay.
+ * custom fields (of records and items, and the member fields a SLiMS run makes with them), and the jobs, locks and events a reindex leaves. Branches stay.
  */
 export async function wipeCatalog(h: DbHandle): Promise<void> {
   await withTx(h, async (trx) => {
@@ -96,7 +96,7 @@ export async function wipeCatalog(h: DbHandle): Promise<void> {
     for (const table of ['search_facet', 'search_doc', 'search_term', 'search_state', 'custom_values', 'attachments', 'item_events', 'items'] as const) {
       await trx.deleteFrom(table).execute();
     }
-    await trx.deleteFrom('custom_field_defs').where('entity', 'in', ['records', 'items']).execute();
+    await trx.deleteFrom('custom_field_defs').where('entity', 'in', ['records', 'items', 'members']).execute();
     for (const table of ['record_identifiers', 'record_marc_extra', 'record_agents', 'record_subjects', 'record_relations', 'records'] as const) {
       await trx.deleteFrom(table).execute();
     }

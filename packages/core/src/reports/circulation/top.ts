@@ -91,6 +91,8 @@ export const circulationTopTitlesReport: TableReport = Object.freeze<TableReport
     top: z.enum(TOP_SIZES).optional(),
   }),
   columns: [reportColumn('rank', 'int'), reportColumn('title', 'text', { widthChars: 40 }), reportColumn('call_number', 'text'), reportColumn('loans', 'int')],
+  // ---- Komunitas K5 (reports) ----
+  chart: { kind: 'rows', label: 'title', value: 'loans' },
   async rows(ctx, cursor, limit) {
     return offsetPage(await titleRows(ctx), cursor, limit);
   },

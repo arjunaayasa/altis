@@ -138,7 +138,7 @@ const CATALOGUE: Readonly<Record<string, { kind: 'table' | 'document'; personal:
     kind: 'table',
     personal: true,
     orientation: 'landscape',
-    columns: 'title:text member_no:text name:text placed_on:date status:text queue_position:int pickup_until:date',
+    columns: 'title:text member_no:text name:text placed_on:date hold_status:text queue_position:int pickup_until:date',
   },
   'circulation.charges': {
     kind: 'table',
@@ -168,8 +168,17 @@ const CATALOGUE: Readonly<Record<string, { kind: 'table' | 'document'; personal:
     personal: false,
     orientation: 'landscape',
     columns:
-      'session:text branch:text started_at:text finished_at:text status:text source:text expected:int found:int pending:int misplaced:int on_loan:int unexpected:int unknown_codes:int',
+      'session:text branch:text started_at:text finished_at:text session_status:text source:text expected:int found:int pending:int misplaced:int on_loan:int unexpected:int unknown_codes:int',
   },
+  // ---- Komunitas K5 (reports) ----
+  'visits.by_hour': { kind: 'table', personal: false, orientation: 'portrait', columns: 'hour:text wd1:int wd2:int wd3:int wd4:int wd5:int wd6:int wd7:int total:int' },
+  'system.staff_activity': {
+    kind: 'table',
+    personal: true,
+    orientation: 'landscape',
+    columns: 'staff:text records:int items:int members:int loans:int returns:int renewals:int total:int',
+  },
+  'library.annual_report': { kind: 'document', personal: false, orientation: 'portrait' },
 };
 
 /** The module, permission and export permission of the member, visit and circulation reports. */
@@ -193,7 +202,14 @@ const PERMISSIONS: Readonly<Record<string, readonly [string, string, string]>> =
   ),
   // ---- Komunitas K4 (stocktake) ----
   ...Object.fromEntries(['progress', 'missing', 'misplaced', 'by_officer', 'history'].map((n) => [`stocktake.${n}`, ['stocktake', 'stocktake.scan.use', 'stocktake.scan.use']])),
+  // ---- Komunitas K5 (reports) ----
+  'visits.by_hour': ['visits', 'reports.statistics.read', 'reports.statistics.read'],
+  'system.staff_activity': ['system', 'system.audit.read', 'system.audit.export'],
+  'library.annual_report': ['library', 'reports.statistics.read', 'reports.statistics.read'],
 };
+
+/** The definitions written in one format only, and the documents made through the generic run routes. */
+const ONLY_PDF = ['library.annual_report'];
 
 /** The test profile's definitions, appended after the catalogue. */
 const TEST_IDS = ['test.rows', 'test.personal', 'test.document'];
@@ -236,7 +252,7 @@ describe('REPORTS', () => {
         expect(def.formats, id).toEqual(['csv', 'xlsx', 'pdf']);
       } else if (PERMISSIONS[id] !== undefined) {
         expect([def.module, def.permission, def.exportPermission ?? def.permission], id).toEqual(PERMISSIONS[id]);
-        expect(def.formats, id).toEqual(['csv', 'xlsx', 'pdf']);
+        expect(def.formats, id).toEqual(ONLY_PDF.includes(id) ? ['pdf'] : ['csv', 'xlsx', 'pdf']);
       } else {
         expect([def.module, def.permission], id).toEqual(['accreditation', 'accreditation.workspace.read']);
         expect(def.params[0], id).toMatchObject({ name: 'periodId', kind: 'period', required: true });
@@ -268,12 +284,13 @@ describe('REPORTS', () => {
     );
   });
 
-  it('the copies of the reprint list also take the catalogue permission; no other definition asks for one more', () => {
+  it('the copies of the reprint list also take the catalogue permission, the annual report the accreditation one; no other definition asks for one more', () => {
     const reprint = table('members.reprint_list');
     expect(reprint.extraPermission?.({ kind: 'items' })).toBe('catalog.records.read');
     expect(reprint.extraPermission?.({ kind: 'members' })).toBeNull();
     expect(reprint.extraPermission?.({})).toBeNull();
-    expect(REPORTS.filter((d) => d.extraPermission !== undefined).map((d) => d.id)).toEqual(['members.reprint_list']);
+    expect(reportById('library.annual_report')?.extraPermission?.({})).toBe('accreditation.workspace.read');
+    expect(REPORTS.filter((d) => d.extraPermission !== undefined).map((d) => d.id)).toEqual(['members.reprint_list', 'library.annual_report']);
   });
 
   it('the stock scans: the acquisitions always, four lists with a date of their own, and three annexes', () => {
@@ -302,6 +319,33 @@ describe('REPORTS', () => {
   });
 });
 
+// ---- Komunitas K5 (reports) ----
+describe('the charts, the period filter and the documents of the run routes', () => {
+  it('the charted definitions name columns they answer (for the empty parameters)', () => {
+    const charted = REPORTS.filter((d): d is TableReport => d.kind === 'table' && d.chart !== undefined);
+    expect(charted.map((d) => d.id)).toEqual(['visits.monthly', 'visits.daily', 'circulation.loans_by_class', 'circulation.top_titles', 'circulation.in_library', 'visits.by_hour']);
+    for (const def of charted) {
+      const keys = columnsOf(def).map((c) => c.key);
+      const chart = def.chart!;
+      for (const key of chart.kind === 'rows' ? [chart.label, chart.value] : chart.columns) expect(keys, def.id).toContain(key);
+    }
+  });
+
+  it('the statistics reports of a year or a range take an optional accreditation period', () => {
+    const periodic = ['visits.monthly', 'circulation.loans_by_class', 'circulation.in_library', 'visits.by_hour', 'system.staff_activity', 'library.annual_report'];
+    expect(REPORTS.filter((d) => d.module !== 'accreditation' && d.params.some((p) => p.kind === 'period')).map((d) => d.id).sort()).toEqual([...periodic].sort());
+    for (const id of periodic) {
+      const def = reportById(id)!;
+      expect(def.params.find((p) => p.name === 'periodId'), id).toMatchObject({ kind: 'period', required: false });
+      expect(def.paramsSchema.safeParse({ periodId: newId() }).success, id).toBe(true);
+    }
+  });
+
+  it('only the annual report is a document made through the generic run routes', () => {
+    expect(REPORTS.filter((d) => d.kind === 'document' && d.runRoutes === true).map((d) => d.id)).toEqual(['library.annual_report']);
+  });
+});
+
 describe('the personal rule', () => {
   it('a definition whose columns, for any shape of its parameters, include a registered personal column is personal', () => {
     for (const def of REPORTS) {
@@ -322,6 +366,8 @@ describe('the personal rule', () => {
       'circulation.payments_daily',
       'circulation.top_borrowers',
       'stocktake.by_officer',
+      // ---- Komunitas K5 (reports) ----
+      'system.staff_activity',
       'test.personal',
     ]);
   });
@@ -355,6 +401,14 @@ describe('the labels', () => {
       for (const params of columnShapes(def)) for (const c of columnsOf(def, params)) need(c.labelKey, def.id);
     }
     expect([...new Set(missing)]).toEqual([]);
+  });
+
+  it('a status column says whose status it is: the session of a stocktake history, the hold of the holds list', () => {
+    const statusColumns = (id: string): string[] => columnsOf(reportById(id)!, {}).filter((c) => c.key.endsWith('status')).map((c) => c.key);
+    expect(statusColumns('stocktake.history')).toEqual(['session_status']);
+    expect(statusColumns('circulation.holds')).toEqual(['hold_status']);
+    expect([MESSAGES.id['report.column.session_status'], MESSAGES.en['report.column.session_status']]).toEqual(['Status sesi', 'Session status']);
+    expect([MESSAGES.id['report.column.hold_status'], MESSAGES.en['report.column.hold_status']]).toEqual(['Status reservasi', 'Hold status']);
   });
 
   it('a column is labelled report.column.<key>', () => {

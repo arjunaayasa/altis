@@ -9,8 +9,10 @@ import { lockItemRecords, lockItemRows } from '../catalog/items/service.js';
 import { cancelLostCharges } from '../circulation/charges.js';
 import { locking, lockMemberRow } from '../circulation/desk.js';
 import { txCtx, type Actor, type TxCtx } from '../context.js';
+import type { StorageDriver } from '../files/serve.js';
 import type { JobHandler, JobOutcome } from '../jobs/types.js';
 import { lockSession, matchesClass, parseScope, withDescendants } from './common.js';
+import { closeStocktakeFinish } from './minutes.js';
 import { scanLocked } from './scan.js';
 
 // The three stocktake jobs, each sliced within its budget, idempotent and resumable after a crash:
@@ -26,14 +28,15 @@ import { scanLocked } from './scan.js';
 //   no longer active ends it; the staged file is removed at the end.
 // - `stocktake.finish`: 500 rows per transaction, the rows whose `result` is still empty (so a run again continues
 //   where it stopped): a pending copy on loan now becomes `on_loan`; a pending one, when the finish marks missing
-//   copies, becomes `missing` when its status may change that way and it is not kept on the hold shelf for a ready
-//   hold, else its status is kept (`status_kept`); a found or misplaced copy that is `missing` or `lost`, when the
+//   copies, becomes `missing` when its status may change that way, it is not kept on the hold shelf for a ready hold
+//   and it was not lent or returned since the session started, else its status is kept (`status_kept`); a found or misplaced copy that is `missing` or `lost`, when the
 //   finish restores found copies, becomes `available` unless its status changed or it was lent after the scan (then
 //   `status_kept`), and a lost one has what is left of its last loan's lost charge cancelled ("found during a
 //   stocktake"). The batch's rows are read with a locking read, so the first plain read of the transaction (which
 //   fixes a MySQL/MariaDB snapshot) comes after the copies' locks and sees a loan committed meanwhile. Status changes go
 //   through bulkUpdateItems (the item lifecycle, the item → record lock order, the history rows with `via:
-//   stocktake`). At the end the session is `finished` and its branch free for the next one.
+//   stocktake`). At the end the session is `finished`, its branch free for the next one, and its minutes stored as a
+//   file (minutes.ts closeStocktakeFinish).
 
 const PREPARE_BATCH = 1000;
 const INSERT_CHUNK = 250;
@@ -312,6 +315,23 @@ export async function finishBatch(tx: TxCtx, branchId: string, id: string, o: { 
       for (const e of [...events, ...loans]) if (e.item_id !== null && e.at !== null && Number(e.at) > (scannedAt.get(e.item_id) ?? Infinity)) changedSince.add(e.item_id);
     }
   }
+  // A pending copy lent or returned since the session started went through the desk meanwhile: it may have been away
+  // when its shelf was checked, so its absence says nothing and its status is kept.
+  const handledSince = new Set<string>();
+  const unlent = rows.filter((r) => r.state === 'pending' && !loaned.has(r.item_id)).map((r) => r.item_id);
+  if (o.markMissing && unlent.length > 0) {
+    const session = await trx.selectFrom('stocktakes').select('started_at').where('id', '=', id).executeTakeFirst();
+    const since = session === undefined ? null : Number(session.started_at);
+    for (let i = 0; since !== null && i < unlent.length; i += FINISH_BATCH) {
+      const recent = await trx
+        .selectFrom('loans')
+        .select('item_id')
+        .where('item_id', 'in', unlent.slice(i, i + FINISH_BATCH))
+        .where((eb) => eb.or([eb('loaned_at', '>=', since), eb('returned_at', '>=', since)]))
+        .execute();
+      for (const l of recent) if (l.item_id !== null) handledSince.add(l.item_id);
+    }
+  }
   const result = new Map<string, 'marked_missing' | 'restored' | 'status_kept' | 'none'>();
   const nowOnLoan: string[] = [];
   const toMissing: string[] = [];
@@ -323,7 +343,7 @@ export async function finishBatch(tx: TxCtx, branchId: string, id: string, o: { 
         nowOnLoan.push(r.item_id);
         result.set(r.item_id, 'none');
       } else if (!o.markMissing) result.set(r.item_id, 'none');
-      else if (!held.has(r.item_id) && (st === 'available' || st === 'not_for_loan')) toMissing.push(r.item_id);
+      else if (!held.has(r.item_id) && !handledSince.has(r.item_id) && (st === 'available' || st === 'not_for_loan')) toMissing.push(r.item_id);
       else result.set(r.item_id, 'status_kept');
     } else if ((r.state === 'found' || r.state === 'misplaced') && o.restoreFound && (st === 'missing' || st === 'lost')) {
       if (changedSince.has(r.item_id)) result.set(r.item_id, 'status_kept');
@@ -367,8 +387,11 @@ export async function finishBatch(tx: TxCtx, branchId: string, id: string, o: { 
   return true;
 }
 
-/** `stocktake.finish`: the staff member who asked for the finish may drive it; the copies change in that name. */
-export function stocktakeFinishJob(): JobHandler<FinishPayload> {
+/**
+ * `stocktake.finish`: the staff member who asked for the finish may drive it; the copies change in that name. With
+ * `deps`, the minutes are stored through its storage driver when the session is finished.
+ */
+export function stocktakeFinishJob(deps?: () => { storage: StorageDriver }): JobHandler<FinishPayload> {
   return {
     type: 'stocktake.finish',
     permission: 'system.jobs.manage',
@@ -391,15 +414,7 @@ export function stocktakeFinishJob(): JobHandler<FinishPayload> {
         first = false;
         const more = await withTx(ctx.handle, (trx) => finishBatch(txCtx(trx, ctx.now(), staff(s.finished_by)), s.branch_id, p.stocktakeId, options));
         if (!more) {
-          const now = ctx.now();
-          await withTx(ctx.handle, async (trx) => {
-            await lockSession(trx, s.branch_id, p.stocktakeId, 'finishing');
-            await trx
-              .updateTable('stocktakes')
-              .set((eb) => ({ status: 'finished', active_key: null, finished_at: now, updated_at: now, version: eb('version', '+', 1) }))
-              .where('id', '=', p.stocktakeId)
-              .execute();
-          });
+          await closeStocktakeFinish(ctx.handle, deps?.().storage ?? null, s.branch_id, p.stocktakeId, ctx.now());
           return { done: true };
         }
       }

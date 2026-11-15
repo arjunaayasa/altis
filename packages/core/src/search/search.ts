@@ -13,6 +13,7 @@ import {
   fromSource,
   identifierIn,
   ordered,
+  popularOrderBranches,
   scopeAndFilters,
   textPlan,
   textPredicates,
@@ -60,7 +61,7 @@ function pageOf(q: CatalogSearchQuery): { page: number; size: number } {
 /** The order of `q` when its text has (or has no) positive clause. */
 function sortOf(q: CatalogSearchQuery, hasText: boolean): SearchSort {
   const s = q.sort;
-  const known: readonly SearchSort[] = ['relevance', 'newest', 'title', 'year_desc', 'year_asc'];
+  const known: readonly SearchSort[] = ['relevance', 'newest', 'title', 'year_desc', 'year_asc', 'popular'];
   if (s !== undefined && known.includes(s)) return s === 'relevance' && !hasText ? 'newest' : s;
   return hasText ? 'relevance' : 'newest';
 }
@@ -71,19 +72,20 @@ function sourceOf(family: FullTextFamily, q: CatalogSearchQuery, parsed: ParsedQ
   sort: SearchSort;
 } {
   const where = scopeAndFilters(q);
+  const popularBranches = popularOrderBranches(q);
   if ('id' in parsed) {
     const sort = sortOf(q, false);
-    return { source: { family, where: [...where, identifierIn(parsed.id)], ranked: null }, sort };
+    return { source: { family, where: [...where, identifierIn(parsed.id)], ranked: null, popularBranches }, sort };
   }
   const text = textPlan(parsed);
   const sort = sortOf(q, text.positive !== null);
   const ranked = sort === 'relevance' ? text.positive : null;
-  return { source: { family, where: [...where, ...textPredicates(family, text, ranked !== null)], ranked }, sort };
+  return { source: { family, where: [...where, ...textPredicates(family, text, ranked !== null)], ranked, popularBranches }, sort };
 }
 
 /** The page query of a source: `search_doc.record_id` in `sort` order, one page. */
 function pageQuery(db: Db, source: SearchSource, sort: SearchSort, page: number, size: number): SearchQB {
-  return ordered(fromSource(db, source), sort)
+  return ordered(fromSource(db, source), sort, source.popularBranches)
     .select('search_doc.record_id')
     .limit(size)
     .offset((page - 1) * size) as unknown as SearchQB;
@@ -106,7 +108,7 @@ async function run(db: Db, q: CatalogSearchQuery, source: SearchSource, sort: Se
     // Over every hit when there are at most 5 000 (no order needed), else over the first 5 000 in the search's order.
     const approximate = counted > SEARCH_FACET_TOP;
     let top = fromSource(db, source);
-    if (approximate) top = ordered(top, sort);
+    if (approximate) top = ordered(top, sort, source.popularBranches);
     out.facets = await countFacets(db, top.select('search_doc.record_id').limit(SEARCH_FACET_TOP) as never);
     out.facetsApproximate = approximate;
   }

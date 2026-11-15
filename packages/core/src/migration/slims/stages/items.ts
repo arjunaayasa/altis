@@ -2,15 +2,7 @@ import { createHash } from 'node:crypto';
 import { fullTextFamily, type DB } from '@altis/db';
 import { DomainError, newId, type ItemStatus } from '@altis/shared';
 import type { Insertable, Transaction, Updateable } from 'kysely';
-import {
-  CUSTOM_TEXT_MAX,
-  coerceCustomValues,
-  customValuesSchema,
-  loadCustomDefs,
-  writeCustomValues,
-  type CustomFieldDef,
-  type CustomFieldType,
-} from '../../../catalog/data/custom-fields.js';
+import { writeCustomValues } from '../../../catalog/data/custom-fields.js';
 import { defaultCollectionTypeId, defaultMaterialTypeId } from '../../../catalog/data/defaults.js';
 import { codeKey } from '../../../catalog/data/keys.js';
 import { mapLegacy, type LegacyMapping } from '../../../catalog/data/legacy-map.js';
@@ -26,17 +18,15 @@ import { slimsBarcode, withBarcodeSuffix, type SlimsBarcode } from '../maps/barc
 import { slimsAcqSource, slimsItemStatus, type SlimsStatusRow } from '../maps/item-status.js';
 import { slimsPrice } from '../maps/price.js';
 import { cleanDate } from '../source/clean-text.js';
-import { phpUnserialize } from '../source/php-unserialize.js';
 import type { SlimsRow } from '../source/types.js';
 import type { SlimsStage, SlimsStageContext } from '../stage.js';
+import { slimsCustomDefs, slimsCustomValues } from './custom-values.js';
 import {
   againOnRace,
   cachedForRun,
   cutChars,
   fitChars,
-  fitText,
   inBatch,
-  intOf,
   keyFits,
   keyOf,
   mappedRows,
@@ -1411,163 +1401,8 @@ async function goneBatch(c: SlimsStageContext, entity: 'item' | 'biblio', at: St
 
 // ---- phase 2: custom values -----------------------------------------------------------------------------------------
 
-/** SLiMS custom field types → ALTIS (§11.4), as the masters stage makes the definitions. */
-const CUSTOM_TYPES: Readonly<Record<string, CustomFieldType>> = Object.freeze({
-  text: 'text',
-  longtext: 'longtext',
-  numeric: 'number',
-  dropdown: 'select',
-  checklist: 'multiselect',
-  choice: 'select',
-  date: 'date',
-});
-
-/** The strings of an unserialized list (a list of pairs, a list, an object of values). */
-function listOf(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : typeof value === 'object' && value !== null ? Object.values(value) : [value];
-}
-
-/**
- * The item field definitions a dry run uses (it made none): the source's `mst_custom_field` rows of `item`, typed and
- * with their options as the masters stage makes them (cached for the run).
- */
-function sourceItemDefs(c: SlimsStageContext): Promise<CustomFieldDef[]> {
-  return cachedForRun(c, 'items:defs', async () => {
-    const defs: CustomFieldDef[] = [];
-    await scanAll(c, 'mst_custom_field', (row) => {
-      if (keyOf(row['primary_table']).toLowerCase() !== 'item') return;
-      const code = keyOf(row['dbfield']);
-      if (code === '' || defs.some((d) => d.code === code)) return;
-      const slimsType = keyOf(row['type']).toLowerCase();
-      let type: CustomFieldType = Object.hasOwn(CUSTOM_TYPES, slimsType) ? CUSTOM_TYPES[slimsType]! : 'text';
-      const options: CustomFieldDef['options'] = [];
-      if (type === 'select' || type === 'multiselect') {
-        const parsed = phpUnserialize(quietText(row['data']));
-        const pairs: [string, string][] = [];
-        if (parsed.ok) {
-          for (const item of listOf(parsed.value)) {
-            if (Array.isArray(item) && item[0] !== undefined && item[0] !== null) pairs.push([String(item[0]), String(item[1] ?? item[0])]);
-            else if (typeof item === 'string' || typeof item === 'number') pairs.push([String(item), String(item)]);
-          }
-        } else {
-          for (let i = 0; i < parsed.strings.length; i += 2) pairs.push([parsed.strings[i]!, parsed.strings[i + 1] ?? parsed.strings[i]!]);
-        }
-        for (const [v, label] of pairs) {
-          const value = cutChars(oneLine(v), NAME_MAX);
-          if (value !== '' && !options.some((o) => o.value === value)) options.push({ value, labelId: cutChars(oneLine(label), NAME_MAX) || value, labelEn: null });
-        }
-        if (options.length === 0) type = 'text';
-      }
-      defs.push({
-        id: `~${code}`,
-        code,
-        type,
-        labelId: code,
-        labelEn: null,
-        options,
-        required: false,
-        sortOrder: Math.max(0, intOf(row['field_id']) ?? 0),
-        isPublic: false,
-        isSearchable: false,
-        archived: false,
-      });
-    });
-    return defs;
-  });
-}
-
-/** The definitions of the item fields and, per `cf_*` column, the one that takes it. */
-async function itemDefs(c: SlimsStageContext, io: BatchIo, columns: readonly string[]): Promise<{ defs: CustomFieldDef[]; byColumn: Map<string, CustomFieldDef> }> {
-  const byColumn = new Map<string, CustomFieldDef>();
-  if (io.trx !== null) {
-    const mapped = await targetsOf(c, io.db, 'mst_custom_field', columns);
-    const defs = await loadCustomDefs(io.db, 'items');
-    const byId = new Map(defs.map((d) => [d.id, d]));
-    for (const column of columns) {
-      const def = byId.get(mapped.get(column) ?? '');
-      if (def !== undefined) byColumn.set(column, def);
-    }
-    return { defs, byColumn };
-  }
-  const defs = await sourceItemDefs(c);
-  for (const column of columns) {
-    const def = defs.find((d) => d.code === column);
-    if (def !== undefined) byColumn.set(column, def);
-  }
-  return { defs, byColumn };
-}
-
-/** Multi-line text: C0 controls but tab, line feed and carriage return removed, DEL too; trimmed. */
-function multiLine(s: string): string {
-  let out = '';
-  for (const ch of s) {
-    const code = ch.charCodeAt(0);
-    if ((code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) || code === 0x7f) continue;
-    out += ch;
-  }
-  return out.trim();
-}
-
-/** A list as coerceCustomValues reads a multiselect: joined with `|`, a literal `|` as `\|`. */
-function pipes(list: readonly string[]): string {
-  return list.map((s) => s.replace(/\|/g, '\\|')).join('|');
-}
-
-/** The custom values of one `item_custom` row, checked against `defs` (S19); refused values reported and left out. */
-function customValues(log: Ledger, key: string, row: SlimsRow, defs: readonly CustomFieldDef[], byColumn: ReadonlyMap<string, CustomFieldDef>): Record<string, unknown> {
-  const raw: [string, string][] = [];
-  for (const [column, def] of byColumn) {
-    const cell = textOf(log, TC, column, row[column]);
-    if (cell === null) continue;
-    let s = def.type === 'longtext' ? multiLine(cell) : oneLine(cell);
-    if (s === '') continue;
-    if (def.type === 'multiselect') {
-      const parsed = phpUnserialize(s);
-      const list = parsed.ok ? listOf(parsed.value).filter((x) => typeof x === 'string' || typeof x === 'number').map(String) : parsed.strings;
-      if (!parsed.ok) {
-        log.fixed(`${TC}.${column}`, ['php'], s, JSON.stringify(list));
-        log.report(TC, key, 'php_broken', `${column}: ${list.length} teks terbaca / strings recovered`);
-      }
-      s = pipes(list.map((x) => oneLine(x)).filter((x) => x !== ''));
-    } else if (def.type === 'date') {
-      const date = cleanDate(s);
-      if (date === null) {
-        log.fixed(`${TC}.${column}`, ['date'], s, '');
-        log.report(TC, key, 'date_invalid', `${column}=${cutChars(s, 40)}`);
-        continue;
-      }
-      s = date.slice(0, 10);
-    } else if (def.type === 'text') {
-      s = fitChars(log, TC, key, column, s, CUSTOM_TEXT_MAX) ?? '';
-    } else if (def.type === 'longtext') {
-      s = fitText(log, TC, key, column, s) ?? '';
-    }
-    if (s !== '') raw.push([def.code, s]);
-  }
-  const given = Object.fromEntries(raw);
-  const coerced = coerceCustomValues(defs, given);
-  for (const e of coerced.errors) {
-    const code = e.path.replace(/^custom\./, '');
-    log.report(TC, key, 'custom_value_invalid', `${code}=${cutChars(given[code] ?? '', 60)}`);
-  }
-  // The definitions' schema (S19): a value it refuses is reported and left out; the others are kept.
-  const schema = customValuesSchema(defs, 'patch');
-  let values: Record<string, unknown> = coerced.values;
-  for (let round = 0; round < 8 && Object.keys(values).length > 0; round += 1) {
-    const parsed = schema.safeParse(values);
-    if (parsed.success) return parsed.data;
-    const bad = new Set(parsed.error.issues.map((issue) => String(issue.path[0] ?? '')));
-    if (bad.has('')) return {};
-    for (const code of bad) {
-      log.report(TC, key, 'custom_value_invalid', `${code}=${cutChars(given[code] ?? '', 60)}`);
-      values = Object.fromEntries(Object.entries(values).filter(([k]) => k !== code));
-    }
-  }
-  return values;
-}
-
 async function customBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: BatchIo, l: Ledger, first: boolean, columns: readonly string[]): Promise<void> {
-  const { defs, byColumn } = await itemDefs(c, io, columns);
+  const { defs, byColumn } = await slimsCustomDefs(c, io, 'items', columns);
   if (first) {
     for (const column of columns) {
       if (!byColumn.has(column)) l.report(TC, null, 'custom_column_unmapped', `${column}: tanpa definisi ruas / no field definition`);
@@ -1604,7 +1439,7 @@ async function customBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: 
       l.report(TC, key, 'item_missing', `item_id=${cutChars(key, 40)}`);
       continue;
     }
-    const values = customValues(l, key, row, defs, byColumn);
+    const values = slimsCustomValues(l, TC, key, row, defs, byColumn);
     if (Object.keys(values).length === 0) {
       l.skipped(TC, 'no_values');
       continue;

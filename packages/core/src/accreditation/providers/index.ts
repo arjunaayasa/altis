@@ -2,6 +2,7 @@ import type { AccredMetricProvider } from '../types.js';
 import { collectionProvider } from './collection.js';
 import { periodProvider } from './period.js';
 import { registersProvider } from './registers.js';
+import { stocktakeProvider } from './stocktake.js';
 import { systemProvider } from './system.js';
 import { usageProvider } from './usage.js';
 
@@ -15,4 +16,6 @@ export const ACCRED_METRIC_PROVIDERS: readonly AccredMetricProvider[] = Object.f
   periodProvider,
   systemProvider,
   usageProvider,
+  // ---- Komunitas K4 (stocktake) ----
+  stocktakeProvider,
 ]);

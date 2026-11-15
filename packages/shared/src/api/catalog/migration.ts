@@ -249,6 +249,8 @@ export interface MigrationSummary {
   memberTypes?: MigrationMemberType[];
   /** "Cocokkan dengan SLiMS": each number of the source against ALTIS after the run. */
   matches?: MigrationMatchRow[];
+  /** A dry run's circulation lists to check before the real run (absent in a real run). */
+  dryLists?: MigrationDryList[];
 }
 
 /** A SLiMS member type as a run saw it. */
@@ -287,6 +289,34 @@ export interface MigrationMatchRow {
   ok: boolean;
 }
 
+/**
+ * The lists a dry run of the circulation stage gives the librarian to check, each with its count and a few samples:
+ * open loans whose due date or fine ALTIS's rules would make differ (`loan_terms_differ`), the member types whose
+ * effective loan limit changes (`type_limit_changes`), the members whose open loans would pass a rule's limit in ALTIS
+ * (`members_over_limit`), the "every" rules of a member type ALTIS leaves unused (`all_rule_unused`), and the open loans
+ * whose copy will not be in ALTIS (`open_loan_item_missing`).
+ */
+export const MIGRATION_DRY_LIST_KEYS = Object.freeze([
+  'loan_terms_differ',
+  'type_limit_changes',
+  'members_over_limit',
+  'all_rule_unused',
+  'open_loan_item_missing',
+] as const);
+export type MigrationDryListKey = (typeof MIGRATION_DRY_LIST_KEYS)[number];
+/** At most this many samples per dry-run list. */
+export const MIGRATION_DRY_LIST_SAMPLES = 20;
+
+/**
+ * One dry-run list: how many rows it holds and at most {@link MIGRATION_DRY_LIST_SAMPLES} samples, which name SLiMS
+ * member numbers, item codes and rule or type ids only (never a name).
+ */
+export interface MigrationDryList {
+  key: MigrationDryListKey;
+  count: number;
+  samples: string[];
+}
+
 /** The cut-over checklist of the Migrasi SLiMS screen (`GET catalog/migrations/slims/cutover`). */
 export interface SlimsCutoverView {
   /** The last real run that read the circulation tables, or null: nothing to check yet. */
@@ -301,7 +331,7 @@ export interface SlimsCutoverView {
   reprintOpenedAt: number | null;
   /** The run's matches all hold (0 unexplained differences, no open loan whose item ALTIS lacks). */
   reconciled: boolean;
-  /** Stocktaking is not part of this release: finish a scheduled one in SLiMS before moving. */
+  /** Whether this release has stocktaking (without it: finish a scheduled one in SLiMS before moving). */
   stocktakeAvailable: boolean;
   /** Every required item holds: "Mulai melayani" may be pressed. */
   ready: boolean;

@@ -23,6 +23,8 @@ import { MAGIC_HEAD_BYTES, detectType, type DetectedKind } from './magic.js';
 import { localStorageDriver } from './serve.js';
 import { IncrementalSha256, decodeSha256Midstate, encodeSha256Midstate } from './sha256-incremental.js';
 import { stripImageMetadata, type StrippableImage } from './strip-metadata.js';
+// ---- Komunitas (OPAC home page) ----
+import { jpegInfo } from '../print/jpeg.js';
 
 // Chunked, resumable uploads (spec §7.5, P10, P21; decision C7; preflight M16, M36).
 //
@@ -86,7 +88,13 @@ const READ_CHUNK_BYTES = 1024 * 1024;
 /** A setting in MB counts mebibytes (as `catalog.attachment.maxMb` everywhere: SLiMS blobs, the files zip). */
 const MIB = 1024 * 1024;
 /** The contexts whose images are stored without their metadata (spec §8, D2-18). */
-const STRIPPED_CONTEXTS: ReadonlySet<UploadContextName> = new Set<UploadContextName>(['catalog.cover', 'catalog.floor_plan', 'opac.page_image']);
+const STRIPPED_CONTEXTS: ReadonlySet<UploadContextName> = new Set<UploadContextName>([
+  'catalog.cover',
+  'catalog.floor_plan',
+  'opac.page_image',
+  // ---- Komunitas (OPAC home page) ----
+  'opac.home_photo',
+]);
 /** The kinds {@link stripImageMetadata} handles (a GIF page image is stored as it came). */
 const STRIPPABLE: ReadonlySet<string> = new Set<StrippableImage>(['jpeg', 'png', 'webp']);
 /** `.complete` is a small JSON file. */
@@ -696,6 +704,47 @@ async function strippedImage(
   return { content, size: content.byteLength, sha256: createHash('sha256').update(content).digest('hex') };
 }
 
+// ---- Komunitas (OPAC home page) ----
+/**
+ * The width and height of a JPEG `content`, read by the PDF pictures' header reader (the whole marker structure walked,
+ * an RGB or grey 8-bit frame); null for another kind or a file that reader refuses.
+ */
+function jpegSize(content: Uint8Array | AsyncIterable<Uint8Array>, kind: string): { width: number; height: number } | null {
+  if (kind !== 'jpeg' || !(content instanceof Uint8Array)) return null;
+  try {
+    const info = jpegInfo(content);
+    return { width: info.width, height: info.height };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Refuses (after discarding the upload) an image of `context` whose width or height lies outside its `imageSides`, or
+ * whose size cannot be read from `content` (a JPEG only).
+ *
+ * @throws DomainError `UPLOAD_TYPE_REFUSED` with `meta.reason` `dimensions`
+ */
+async function checkImageSides(
+  h: DbHandle,
+  id: string,
+  context: UploadContext,
+  kind: string,
+  content: Uint8Array | AsyncIterable<Uint8Array>,
+  dataDir: string,
+): Promise<void> {
+  const sides = context.imageSides;
+  if (sides === undefined) return;
+  const size = jpegSize(content, kind);
+  if (size !== null && Math.min(size.width, size.height) >= sides.min && Math.max(size.width, size.height) <= sides.max) return;
+  await discard(h, id, dataDir);
+  throw new DomainError('UPLOAD_TYPE_REFUSED', {
+    detail:
+      `Ukuran gambar harus ${sides.min}-${sides.max} piksel per sisi / ` + `The image must be ${sides.min}-${sides.max} pixels a side`,
+    meta: { kind, allowed: context.magic === 'any' ? [] : [...context.magic], reason: 'dimensions' },
+  });
+}
+
 /** The `.complete` marker of upload `id`, or null when it is missing or unreadable. */
 async function readMarker(dataDir: string, id: string): Promise<CompleteMarker | null> {
   let raw: Buffer | null;
@@ -805,6 +854,9 @@ async function completeUploadLocked(
     const stored = STRIPPED_CONTEXTS.has(context.name) && STRIPPABLE.has(type.kind)
       ? await strippedImage(h, lease, s, context, type.kind as StrippableImage, o.dataDir)
       : { content: stagedContent(o.dataDir, s.id, lease), size: s.size, sha256: s.sha256 };
+    // ---- Komunitas (OPAC home page) ----
+    // A context that bounds its images' dimensions reads them from the stripped bytes (held in memory).
+    if (context.imageSides !== undefined) await checkImageSides(h, s.id, context, type.kind, stored.content, o.dataDir);
     await localStorageDriver(o.dataDir).put(s.id, stored.content, { size: stored.size, sha256: stored.sha256 });
     await lease.renew();
     await withTx(h, async (trx) => {

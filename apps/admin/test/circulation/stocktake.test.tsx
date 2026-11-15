@@ -80,6 +80,23 @@ describe('stocktake', () => {
     expect(screen.queryByRole('button', { name: 'Buat sesi' })).toBeNull();
   });
 
+  it('a new session names the collection types in the language of the screen', async () => {
+    const me = adminMe();
+    const type = (code: string, nameId: string, nameEn: string) => ({ id: `01JZ00000000000000000C${code.slice(0, 4).padEnd(4, '0')}`, code, nameId, nameEn, loanable: true, selfService: false, sortOrder: 0, usage: 0, archived: false, version: 1 });
+    startApp({
+      me: { ...me, user: { ...me.user, locale: 'en' } },
+      path: '/admin/layanan/inventarisasi',
+      routes: {
+        'GET branches': () => ({ items: [BRANCH_VIEW] }),
+        'GET branches/:branchId/stocktakes': () => ({ items: [] }),
+        'GET catalog/locations': () => ({ items: [] }),
+        'GET catalog/collection-types': () => ({ items: [type('UMUM', 'Umum', 'General'), type('REF', 'Referensi', 'Reference')] }),
+      },
+    });
+    const select = await screen.findByLabelText('Collection types');
+    await waitFor(() => expect([...select.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['General (UMUM)', 'Reference (REF)']));
+  });
+
   it('scans by keyboard, says each outcome in words, undoes my scan, and finishes with the name typed', async () => {
     const scans: unknown[] = [];
     const answers: StocktakeScanResponse[] = [

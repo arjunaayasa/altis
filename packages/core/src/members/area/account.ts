@@ -1,17 +1,24 @@
 import type { DB } from '@altis/db';
-import { DomainError, type Locale, type MemberStatus } from '@altis/shared';
+import { DomainError, type ChargeKind, type Locale, type MemberStatus, type PaymentMethod } from '@altis/shared';
 import type { Kysely, Transaction } from 'kysely';
 import type { TxCtx } from '../../context.js';
 import { readSettings } from '../../settings/service.js';
+import { chargeLeft, libraryCurrency, memberBalances } from '../../circulation/charge-views.js';
+import { branchToday } from '../../circulation/dates.js';
 import { renewLoan } from '../../circulation/desk.js';
+import { FinePreviewer } from '../../circulation/fines.js';
 import { libraryToday, lockLiveMember, memberStatusOf } from '../common.js';
 import { registerMemberDataSection, registerMemberErasureStep } from '../ext/hooks.js';
 import { memberDataSectionsOf } from '../ext/privacy.js';
 
 // What a signed-in member sees and does in the OPAC member area, besides the password (auth.ts): the account and its
-// card, the open loans and the loan history (paged), the online renewal, the bookmarks, the attachments of access
-// `members` and the download of the member's own data. Every read is keyed by the session's member: a row of another
-// member is the same NOT_FOUND as a row that does not exist (the pages answer the OPAC 404 for both).
+// card, the open loans and the loan history (paged), the online renewal, the open charges and the payments, the
+// bookmarks, the attachments of access `members` and the download of the member's own data. Every read is keyed by the
+// session's member: a row of another member is the same NOT_FOUND as a row that does not exist (the pages answer the
+// OPAC 404 for both).
+//
+// - Charges and payments: read only (no payment online); the open charges at every branch with the balance, and the
+//   payments paged, without the staff who took them or their notes.
 //
 // - Online renewal: a loan of the member only; the member type must allow online renewal (`online_renewal`) and
 //   `circulation.renew.opac` must be on (else CIRC_RENEW_REFUSED `{reason: 'not_online'}`); then the desk's renewal
@@ -134,8 +141,16 @@ export interface MemberLoanRow {
   outcome: string | null;
   renewals: number;
   renewLimit: number;
-  /** Days past due on the library's today (open) or on the return day (closed). */
+  /** Calendar days past due on the loan branch's today (open) or on the return day (closed). */
   daysLate: number;
+  /**
+   * The days the overdue fine counts on that day, as the desk says them (circulation/fines.ts lateness: the open days
+   * when closed days are not fined); null when no fine (none per day, or within the grace days).
+   */
+  finedDays: number | null;
+  /** The running overdue fine of an open loan (minor units of `currency`, 0: none); 0 for a closed loan. */
+  fineMinor: number;
+  currency: string;
 }
 
 export interface MemberLoanPage {
@@ -143,13 +158,6 @@ export interface MemberLoanPage {
   total: number;
   page: number;
   pages: number;
-}
-
-const DAY_MS = 86_400_000;
-
-/** Whole days from `a` to `b` (calendar dates). */
-function daysBetween(a: string, b: string): number {
-  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY_MS);
 }
 
 /** One page of the member's open loans (oldest due date first) or closed loans (newest return first). */
@@ -177,34 +185,54 @@ export async function memberLoans(db: Db, memberId: string, o: { open: boolean; 
       'l.outcome',
       'l.renewals',
       'l.renew_limit',
+      'l.currency',
+      'l.fine_per_day_minor',
+      'l.fine_cap_minor',
+      'l.grace_days',
     ])
     .$call((q) => (o.open ? q.orderBy('l.due_on').orderBy('l.id') : q.orderBy('l.returned_at', 'desc').orderBy('l.id', 'desc')))
     .limit(MEMBER_LOANS_PER_PAGE)
     .offset((page - 1) * MEMBER_LOANS_PER_PAGE)
     .execute();
-  const today = await libraryToday(db, o.now);
-  return {
-    rows: rows.map((r) => {
-      const end = r.returned_on ?? today;
-      return {
-        id: r.id,
-        recordId: r.record_id,
-        title: r.title,
-        barcode: r.barcode_display,
+  // Every date of a loan is its branch's (circulation/dates.ts); the days late and fined are the desk's (fines.ts).
+  const todays = new Map<string, string>();
+  const fines = await FinePreviewer.open(db);
+  const out: MemberLoanRow[] = [];
+  for (const r of rows) {
+    let end = r.returned_on;
+    if (end === null) {
+      end = todays.get(r.branch_id) ?? (await branchToday(db, r.branch_id, o.now));
+      todays.set(r.branch_id, end);
+    }
+    const late = await fines.lateness(
+      {
         branchId: r.branch_id,
-        loanedOn: r.loaned_on,
         dueOn: r.due_on,
-        returnedOn: r.returned_on,
-        outcome: r.outcome,
-        renewals: Number(r.renewals),
-        renewLimit: Number(r.renew_limit),
-        daysLate: Math.max(0, daysBetween(r.due_on, end)),
-      };
-    }),
-    total,
-    page,
-    pages,
-  };
+        finePerDayMinor: Number(r.fine_per_day_minor),
+        fineCapMinor: r.fine_cap_minor === null ? null : Number(r.fine_cap_minor),
+        graceDays: Number(r.grace_days),
+      },
+      end,
+    );
+    out.push({
+      id: r.id,
+      recordId: r.record_id,
+      title: r.title,
+      barcode: r.barcode_display,
+      branchId: r.branch_id,
+      loanedOn: r.loaned_on,
+      dueOn: r.due_on,
+      returnedOn: r.returned_on,
+      outcome: r.outcome,
+      renewals: Number(r.renewals),
+      renewLimit: Number(r.renew_limit),
+      daysLate: late.daysLate,
+      finedDays: late.finedDays,
+      fineMinor: r.returned_on === null ? late.fineMinor : 0,
+      currency: r.currency,
+    });
+  }
+  return { rows: out, total, page, pages };
 }
 
 /** Whether members may renew online at all (`circulation.renew.opac`) and the member's type allows it. */
@@ -225,6 +253,113 @@ export async function ownLoanForRenewal(db: Db, input: { memberId: string; loanI
     throw new DomainError('CIRC_RENEW_REFUSED', { detail: 'Perpanjangan daring tidak tersedia / Online renewal is not available', meta: { reason: 'not_online' } });
   }
   return { branchId: loan.branch_id };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Charges and payments (read only)
+
+/** Payments per page of the member's charges page. */
+export const MEMBER_PAYMENTS_PER_PAGE = 20;
+/** The most open charges the member's charges page lists (the balance counts them all). */
+export const MEMBER_OPEN_CHARGES_MAX = 200;
+
+/** An open charge as the member sees it (minor units of `currency`). */
+export interface MemberOwnChargeRow {
+  id: string;
+  /** Null: a migrated charge whose day was not known. */
+  chargedOn: string | null;
+  kind: ChargeKind;
+  /** The line the desk wrote (for a fine or a lost copy: the copy's barcode and title). */
+  description: string;
+  amountMinor: number;
+  paidMinor: number;
+  waivedMinor: number;
+  leftMinor: number;
+  currency: string;
+}
+
+/** A payment as the member sees it: no staff name, no note. */
+export interface MemberOwnPaymentRow {
+  id: string;
+  /** Null: a migrated payment whose day was not known. */
+  paidOn: string | null;
+  receiptNo: string | null;
+  method: PaymentMethod;
+  amountMinor: number;
+  currency: string;
+  voided: boolean;
+}
+
+export interface MemberOwnChargesPage {
+  /** The open charges, oldest first. */
+  charges: MemberOwnChargeRow[];
+  /** More open charges than listed. */
+  chargesCut: boolean;
+  /** What is left to pay of every open charge. */
+  balanceMinor: number;
+  currency: string;
+  /** One page of the payments, newest first. */
+  payments: MemberOwnPaymentRow[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
+/** The member's open charges and one page of their payments, at every branch (read only). */
+export async function memberOwnCharges(db: Db, memberId: string, o: { page: number }): Promise<MemberOwnChargesPage> {
+  const open = await db
+    .selectFrom('charges')
+    .select(['id', 'charged_on', 'date_unknown', 'kind', 'description', 'amount_minor', 'paid_minor', 'waived_minor', 'currency'])
+    .where('member_id', '=', memberId)
+    .where('status', '=', 'open')
+    .orderBy('charged_at')
+    .orderBy('id')
+    .limit(MEMBER_OPEN_CHARGES_MAX + 1)
+    .execute();
+  const charges = open.slice(0, MEMBER_OPEN_CHARGES_MAX).map(
+    (r): MemberOwnChargeRow => ({
+      id: r.id,
+      chargedOn: Number(r.date_unknown) === 1 ? null : r.charged_on,
+      kind: r.kind as ChargeKind,
+      description: r.description,
+      amountMinor: Number(r.amount_minor),
+      paidMinor: Number(r.paid_minor),
+      waivedMinor: Number(r.waived_minor),
+      leftMinor: chargeLeft(r),
+      currency: r.currency,
+    }),
+  );
+  const counted = await db.selectFrom('payments').select((eb) => eb.fn.countAll<number>().as('n')).where('member_id', '=', memberId).executeTakeFirst();
+  const total = Number(counted?.n ?? 0);
+  const pages = Math.max(1, Math.ceil(total / MEMBER_PAYMENTS_PER_PAGE));
+  const page = Math.min(Math.max(1, Math.trunc(o.page)), pages);
+  const paid = await db
+    .selectFrom('payments')
+    .select(['id', 'paid_on', 'date_unknown', 'receipt_no', 'method', 'amount_minor', 'currency', 'voided_at'])
+    .where('member_id', '=', memberId)
+    .orderBy('paid_at', 'desc')
+    .orderBy('id', 'desc')
+    .limit(MEMBER_PAYMENTS_PER_PAGE)
+    .offset((page - 1) * MEMBER_PAYMENTS_PER_PAGE)
+    .execute();
+  return {
+    charges,
+    chargesCut: open.length > MEMBER_OPEN_CHARGES_MAX,
+    balanceMinor: (await memberBalances(db, [memberId])).get(memberId) ?? 0,
+    currency: charges[0]?.currency ?? (await libraryCurrency(db)),
+    payments: paid.map((p) => ({
+      id: p.id,
+      paidOn: Number(p.date_unknown) === 1 ? null : p.paid_on,
+      receiptNo: p.receipt_no,
+      method: p.method as PaymentMethod,
+      amountMinor: Number(p.amount_minor),
+      currency: p.currency,
+      voided: p.voided_at !== null,
+    })),
+    total,
+    page,
+    pages,
+  };
 }
 
 /**

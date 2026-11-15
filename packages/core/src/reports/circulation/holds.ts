@@ -57,7 +57,7 @@ export const circulationHoldsReport: TableReport = Object.freeze<TableReport>({
     reportColumn('member_no', 'text', { widthChars: 14 }),
     reportColumn('name', 'text', { source: { table: 'members', column: 'name' }, widthChars: 24 }),
     reportColumn('placed_on', 'date'),
-    reportColumn('status', 'text', { widthChars: 12 }),
+    reportColumn('hold_status', 'text', { widthChars: 12 }),
     reportColumn('queue_position', 'int'),
     reportColumn('pickup_until', 'date'),
   ],

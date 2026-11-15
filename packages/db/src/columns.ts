@@ -4,7 +4,7 @@ import type { TableName } from './registry.js';
 export type { ColumnKind } from './ddl.js';
 
 // The column registry (decision C11): every column of every table, in table-definition order, and every table's
-// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0029; Komunitas K1: 0030–0033; members and circulation: 0040; holds: 0041; circulation core: 0042; visits: 0043; member area: 0044; charges and payments: 0045; notices: 0046; SLiMS members and circulation: 0047; stocktake: 0048) and the runner's own tables (ddl.ts ensureBootstrap,
+// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0029; Komunitas K1: 0030–0033; members and circulation: 0040; holds: 0041; circulation core: 0042; visits: 0043; member area: 0044; charges and payments: 0045; notices: 0046; SLiMS members and circulation: 0047; stocktake: 0048; OPAC home page: 0049) and the runner's own tables (ddl.ts ensureBootstrap,
 // migrator.ts). Backup and restore read it for the canonical row (registry column order), the per-version checks of
 // an archive's rows (columnsAt) and the length checks against the code's DDL; restore's read-only pre-pass reads the
 // unique keys (S5c) and the load order follows the foreign keys (order.ts).
@@ -135,6 +135,8 @@ const M0046 = '0046_notices';
 const M0047 = '0047_migration_subject';
 // ---- Komunitas K4 (stocktake) ----
 const M0048 = '0048_stocktakes';
+// ---- Komunitas (OPAC home page) ----
+const M0049 = '0049_opac_popular';
 
 /** `archived_at` + `version`, then the trail columns (Phase 2 spec §2.2 "arsip+ver, jejak"). */
 function archivedTrail(since: string): ColumnSpec[] {
@@ -1378,6 +1380,8 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
   stocktake_unknown_codes: frozen(
     added(M0048, t.ulid('stocktake_id'), t.key191('code_key'), t.varchar('code_display', 64), t.timestamp('first_at'), t.timestamp('last_at'), t.int('seen'), nul(t.ulid('scanned_by'))),
   ),
+  // ---- Komunitas (OPAC home page) ----
+  opac_popular_titles: frozen(added(M0049, t.ulid('record_id'), t.ulid('branch_id'), t.int('loans'), t.timestamp('refreshed_at'))),
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping (made by the runner, like the two above) ----
   schema_migrations_edition: frozen(added(RUNNER_TABLES_SINCE, t.key191('name'), t.varchar('timestamp', 64))),
   schema_migrations_edition_lock: frozen(added(RUNNER_TABLES_SINCE, t.key191('id'), t.int('is_locked'))),
@@ -1530,6 +1534,8 @@ export const TABLE_KEYS: Readonly<Record<TableName, TableKeySpec>> = Object.free
   stocktakes: keys(['id'], { unique: [['active_key']] }),
   stocktake_items: keys(['stocktake_id', 'item_id'], { fks: [{ column: 'stocktake_id', table: 'stocktakes', refColumn: 'id' }] }),
   stocktake_unknown_codes: keys(['stocktake_id', 'code_key'], { fks: [{ column: 'stocktake_id', table: 'stocktakes', refColumn: 'id' }] }),
+  // ---- Komunitas (OPAC home page) ----
+  opac_popular_titles: keys(['record_id', 'branch_id']),
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: keys(['name']),
   schema_migrations_edition_lock: keys(['id']),

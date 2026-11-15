@@ -17,7 +17,7 @@ import {
 } from '@altis/platform';
 import { isDomainError } from '@altis/shared';
 import { ulidField } from '@altis/shared/api/common';
-import type { MigrationCharsetSample, MigrationMatchRow, MigrationMemberType, MigrationSummary, SlimsVersion } from '@altis/shared/api/catalog/migration';
+import type { MigrationCharsetSample, MigrationDryList, MigrationMatchRow, MigrationMemberType, MigrationSummary, SlimsVersion } from '@altis/shared/api/catalog/migration';
 import type { Kysely, Transaction } from 'kysely';
 import { z } from 'zod';
 import { RUN_JSON_MAX_BYTES, finishRun, saveRunSummary, startRun, writeRunReport, type RunEnd, type RunRow } from '../../catalog/data/runs.js';
@@ -43,7 +43,9 @@ import type { SlimsReportRow, SlimsStage, SlimsStageContext } from './stage.js';
 // 2. resumes from the checkpoint the summary keeps (`resume`: the stage, its cursor, the split checkpoint and the length
 //    of the report work file), which is saved together with the counters after the stage work it covers committed; the
 //    job's payload carries the same checkpoint, saved by the queue just after, so a process that died between the two
-//    saves resumes from the summary's and counts nothing twice;
+//    saves resumes from the summary's and counts nothing twice. The stage is found by its name, so a run that crosses
+//    an update whose list has the stage elsewhere goes on in that stage; a checkpoint whose stage this list cannot
+//    place ends the run `failed` (resume_mismatch);
 // 3. puts the run's input in place (idempotent, again after a crash): the dry run's work folder it adopts (S3), the
 //    staged uploads or CLI copies it moves into `tmp/<runId>/` (`dump.bin`, `files.bin`); then cuts the report work
 //    file back to the checkpoint's length. The start route does the same after its COMMIT (placeSlimsWork), so the
@@ -119,10 +121,14 @@ const splitCheckpointSchema = z.strictObject({
   headroomAt: z.int().min(0).optional(),
 });
 
-/** The payload of `catalog.migrate_slims`: the run, the stage (an index into the run's stage list), its cursor. */
+/**
+ * The payload of `catalog.migrate_slims`: the run, the stage (an index into the run's stage list, and its name), its
+ * cursor.
+ */
 export const migrateSlimsPayload = z.strictObject({
   runId: ulidField,
   stage: z.int().min(0).max(63),
+  stageName: z.string().regex(/^[a-z][a-z_]{0,31}$/).optional(),
   cursor: z.string().min(1).max(SLIMS_CURSOR_MAX).nullable(),
   split: splitCheckpointSchema.optional(),
 });
@@ -158,6 +164,11 @@ export class SlimsRunFailure extends Error {
 export interface SlimsResume {
   /** The index of the current stage in the run's stage list. */
   stage: number;
+  /**
+   * The name of that stage, which places the checkpoint when a later build's list has the stage elsewhere; absent from
+   * a checkpoint a build that kept the index only saved (resumeIndex).
+   */
+  name?: string;
   cursor: string | null;
   split?: SplitCheckpoint;
   /** The length of the report work file the counters cover. */
@@ -186,6 +197,8 @@ export interface SlimsPipelineState {
   memberTypes: MigrationMemberType[];
   /** "Cocokkan dengan SLiMS" (the circulation stage's, a real run). */
   matches: MigrationMatchRow[] | null;
+  /** The circulation lists of a dry run (the circulation stage's), or null. */
+  dryLists: MigrationDryList[] | null;
 }
 
 /** What the framework's own stages (`split`, `analyze`, `report`) get besides the stage context. */
@@ -304,12 +317,20 @@ function int(v: unknown): number {
 /** The state a summary holds (tolerant: anything missing or malformed starts empty), with `payload` as the fallback checkpoint. */
 function stateOf(summary: Record<string, unknown>, payload: MigrateSlimsPayload): SlimsPipelineState {
   const resumeRaw = objectOf(summary['resume']);
-  let resume: SlimsResume = { stage: payload.stage, cursor: payload.cursor, reportBytes: 0, ...(payload.split === undefined ? {} : { split: payload.split }) };
+  let resume: SlimsResume = {
+    stage: payload.stage,
+    ...(payload.stageName === undefined ? {} : { name: payload.stageName }),
+    cursor: payload.cursor,
+    reportBytes: 0,
+    ...(payload.split === undefined ? {} : { split: payload.split }),
+  };
   if (resumeRaw !== null) {
     const cursor = resumeRaw['cursor'];
+    const name = resumeRaw['name'];
     const split = splitCheckpointSchema.safeParse(resumeRaw['split']);
     resume = {
       stage: int(resumeRaw['stage']),
+      ...(typeof name === 'string' && /^[a-z][a-z_]{0,31}$/.test(name) ? { name } : {}),
       cursor: typeof cursor === 'string' && cursor !== '' && cursor.length <= SLIMS_CURSOR_MAX ? cursor : null,
       reportBytes: int(resumeRaw['reportBytes']),
       ...(split.success ? { split: split.data } : {}),
@@ -334,6 +355,7 @@ function stateOf(summary: Record<string, unknown>, payload: MigrateSlimsPayload)
     memberNoCollisions: typeof summary['memberNoCollisions'] === 'number' ? int(summary['memberNoCollisions']) : null,
     memberTypes: Array.isArray(summary['memberTypes']) ? (summary['memberTypes'] as MigrationMemberType[]) : [],
     matches: Array.isArray(summary['matches']) ? (summary['matches'] as MigrationMatchRow[]) : null,
+    dryLists: Array.isArray(summary['dryLists']) ? (summary['dryLists'] as MigrationDryList[]) : null,
   };
 }
 
@@ -380,6 +402,26 @@ function bounded(
 }
 
 /** Whether `error` ends the run at once (a code and a detail for the report), or is left to the queue's retry. */
+/**
+ * The stages added to the list after checkpoints began to name their stage. A checkpoint that holds an index only was
+ * saved by a build without them, so its index means the same stage only below the first of them.
+ */
+const STAGES_AFTER_INDEX_CHECKPOINTS: readonly string[] = ['stocktake'];
+
+/**
+ * The index in `stages` of the stage checkpoint `resume` stands in: the stage its name names, or for a checkpoint
+ * without a name its index while below the first stage added since. Null: this list has no such stage, and running
+ * another one with the checkpoint's cursor would read the wrong tables.
+ */
+export function resumeIndex(resume: SlimsResume, stages: readonly SlimsStage[]): number | null {
+  if (resume.name !== undefined) {
+    const at = stages.findIndex((s) => s.name === resume.name);
+    return at < 0 ? null : at;
+  }
+  const added = stages.findIndex((s) => STAGES_AFTER_INDEX_CHECKPOINTS.includes(s.name));
+  return added >= 0 && resume.stage >= added ? null : resume.stage;
+}
+
 function failureOf(error: unknown): { code: string; detail: string } | 'retry' {
   if (error instanceof SlimsRunFailure) return { code: error.code, detail: error.detail };
   if (isDomainError(error)) {
@@ -626,6 +668,13 @@ export async function runSlimsMigrationSlice(
     if (!state.warnings.includes(code) && state.warnings.length < 50) state.warnings.push(cutText(code, 120));
   }
 
+  /** The checkpoint as the summary keeps it: the current stage's name beside its index. */
+  function savedResume(): SlimsResume {
+    const { stage, cursor, reportBytes, split } = state.resume;
+    const name = stages[stage]?.name;
+    return { stage, ...(name === undefined ? {} : { name }), cursor, ...(split === undefined ? {} : { split }), reportBytes };
+  }
+
   function summaryOf(withReconciliation: boolean): Record<string, unknown> {
     const counts = counters.toJSON();
     // A sync dry run that ran the catalogue stages counts what a real sync would write (startSlimsMigration's precheck
@@ -646,7 +695,7 @@ export async function runSlimsMigrationSlice(
       nonstandardBarcodes: state.nonstandardBarcodes,
       warnings: [...state.warnings],
       indexBuilding: state.indexBuilding,
-      resume: state.resume,
+      resume: savedResume(),
       checkSource: { ...state.checkSource },
       vanished: counts.vanished,
       ...(catalogDry ? { changes: counts.changes, catalogChanges: Object.values(counts.changes).reduce((a, b) => a + b, 0) } : {}),
@@ -654,6 +703,7 @@ export async function runSlimsMigrationSlice(
       ...(state.memberNoCollisions === null ? {} : { memberNoCollisions: state.memberNoCollisions }),
       ...(state.memberTypes.length === 0 ? {} : { memberTypes: state.memberTypes }),
       ...(state.matches === null ? {} : { matches: state.matches }),
+      ...(state.dryLists === null ? {} : { dryLists: state.dryLists }),
     };
     return bounded(doc);
   }
@@ -851,6 +901,7 @@ export async function runSlimsMigrationSlice(
   const checkpoint = (): MigrateSlimsPayload => ({
     runId,
     stage: Math.min(state.resume.stage, 63),
+    ...(stages[state.resume.stage] === undefined ? {} : { stageName: stages[state.resume.stage]!.name }),
     cursor: state.resume.cursor,
     ...(state.resume.split === undefined ? {} : { split: state.resume.split }),
   });
@@ -938,6 +989,11 @@ export async function runSlimsMigrationSlice(
   async function slices(): Promise<JobOutcome<MigrateSlimsPayload>> {
     if (run.status === 'queued') await withTx(ctx.handle, (trx) => startRun(trx, runId, ctx.now()));
     await prepareWork();
+    const at = resumeIndex(state.resume, stages);
+    if (at === null) {
+      return fail('resume_mismatch', 'Proses ini dimulai oleh versi ALTIS lain dan tidak dapat dilanjutkan / The run was started by another ALTIS version and cannot be continued');
+    }
+    state.resume.stage = at;
     let calls = 0;
     while (state.resume.stage < stages.length) {
       if (calls > 0 && budgetLeft() <= 0) break;

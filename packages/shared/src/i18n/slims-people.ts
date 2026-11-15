@@ -1,6 +1,7 @@
 /**
  * The shared texts of the SLiMS migration's member, visit and circulation stages: the cut-over audit action, the error
- * a `replace` run meets once ALTIS lends on its own, and the names of the numbers "Cocokkan dengan SLiMS" compares.
+ * a `replace` run meets once ALTIS lends on its own, the names of the numbers "Cocokkan dengan SLiMS" compares and of
+ * the lists a dry run gives to check.
  * `SLIMS_PEOPLE_ID` is the source of the keys and `SLIMS_PEOPLE_EN` is typed against it; both are spread once into the
  * shared catalogs (`i18n/id.ts`, `i18n/en.ts`).
  *
@@ -23,6 +24,12 @@ export const SLIMS_PEOPLE_ID = {
   'migration.match.expired_members': 'Anggota kedaluwarsa',
   'migration.match.holds': 'Reservasi',
   'migration.match.visits_month': 'Kunjungan per bulan',
+  // ---- migration.dry.<key>: the lists a dry run gives to check before the real run ----
+  'migration.dry.loan_terms_differ': 'Pinjaman terbuka yang jatuh tempo atau dendanya akan berbeda menurut aturan ALTIS',
+  'migration.dry.type_limit_changes': 'Tipe anggota yang batas pinjam efektifnya berubah',
+  'migration.dry.members_over_limit': 'Anggota yang di ALTIS akan melampaui batas aturan karena pinjaman terbukanya',
+  'migration.dry.all_rule_unused': 'Aturan "semua" tipe anggota yang tidak dipakai ALTIS',
+  'migration.dry.open_loan_item_missing': 'Pinjaman terbuka yang eksemplarnya tidak akan ada di ALTIS',
 } as const;
 
 export const SLIMS_PEOPLE_EN: Record<keyof typeof SLIMS_PEOPLE_ID, string> = {
@@ -38,4 +45,9 @@ export const SLIMS_PEOPLE_EN: Record<keyof typeof SLIMS_PEOPLE_ID, string> = {
   'migration.match.expired_members': 'Expired members',
   'migration.match.holds': 'Holds',
   'migration.match.visits_month': 'Visits per month',
+  'migration.dry.loan_terms_differ': "Open loans whose due date or fine ALTIS's rules would make differ",
+  'migration.dry.type_limit_changes': 'Member types whose effective loan limit changes',
+  'migration.dry.members_over_limit': 'Members whose open loans would pass a rule limit in ALTIS',
+  'migration.dry.all_rule_unused': 'The "every" rules of member types that ALTIS does not use',
+  'migration.dry.open_loan_item_missing': 'Open loans whose item will not be in ALTIS',
 };

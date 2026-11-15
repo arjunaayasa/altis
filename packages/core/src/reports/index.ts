@@ -9,6 +9,7 @@ export {
   listReportRuns,
   openReportRunDownload,
   previewReport,
+  reportBranchOf,
   reportCatalogEntry,
   startReportRun,
   visibleReports,
@@ -23,3 +24,6 @@ export {
   reportsHousekeepingPayload,
 } from './housekeeping/index.js';
 export type { ReportsHousekeepingPayload, ReportsHousekeepingStep } from './housekeeping/index.js';
+// ---- Komunitas K5 (reports) ----
+// The library's figures at a glance for the dashboard, one per module endpoint.
+export { libraryCollectionStatistics, libraryLoanStatistics, libraryMemberStatistics, libraryVisitStatistics } from './statistics/library.js';

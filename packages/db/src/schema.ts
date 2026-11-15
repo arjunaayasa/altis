@@ -1731,6 +1731,20 @@ export interface StocktakeUnknownCodesTable {
   scanned_by: string | null;
 }
 
+// ---- Komunitas (OPAC home page) ----
+// Migration 0049: the OPAC's popular titles.
+
+/**
+ * Class volatile. PK (`record_id`, `branch_id`): the loans of a title the OPAC shows, at one branch, over the last year,
+ * kept only when enough different borrowers lent it (rebuilt daily; no borrower is stored).
+ */
+export interface OpacPopularTitlesTable {
+  record_id: string;
+  branch_id: string;
+  loans: number;
+  refreshed_at: EpochMs;
+}
+
 // ---- Komunitas (member area) ----
 
 /** A title a member marked on the OPAC (0044); PK (`member_id`, `record_id`). */
@@ -1854,6 +1868,8 @@ export interface DB {
   stocktakes: StocktakesTable;
   stocktake_items: StocktakeItemsTable;
   stocktake_unknown_codes: StocktakeUnknownCodesTable;
+  // ---- Komunitas (OPAC home page) ----
+  opac_popular_titles: OpacPopularTitlesTable;
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: SchemaMigrationsEditionTable;
   schema_migrations_edition_lock: SchemaMigrationsEditionLockTable;

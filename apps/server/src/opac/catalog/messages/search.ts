@@ -36,6 +36,8 @@ export const SEARCH_MESSAGES = defineOpacMessages(
     'search.sort.judul': 'Judul (A–Z)',
     'search.sort.tahun_baru': 'Tahun terbit (terbaru)',
     'search.sort.tahun_lama': 'Tahun terbit (terlama)',
+    // ---- Komunitas (OPAC home page) ----
+    'search.sort.populer': 'Paling sering dipinjam',
     'search.sort.submit': 'Terapkan',
     // The facets and the active filters.
     'search.facets.title': 'Saring hasil',
@@ -88,6 +90,8 @@ export const SEARCH_MESSAGES = defineOpacMessages(
     'search.sort.judul': 'Title (A–Z)',
     'search.sort.tahun_baru': 'Year published (newest)',
     'search.sort.tahun_lama': 'Year published (oldest)',
+    // ---- Komunitas (OPAC home page) ----
+    'search.sort.populer': 'Most borrowed',
     'search.sort.submit': 'Apply',
     'search.facets.title': 'Refine results',
     'search.facets.approximate': 'Filter counts are taken from the top {count} results.',

@@ -1,15 +1,18 @@
-import { DomainError, diffDays, t, type Locale } from '@altis/shared';
+import { DomainError, t, type Locale } from '@altis/shared';
 import type { ReceiptPaper } from '@altis/shared/api/charges';
 import { formatPrice } from '../catalog/items/service.js';
 import type { Db } from '../members/common.js';
 import { PdfLayout } from '../print/layout.js';
 import { readSettings } from '../settings/service.js';
 import { branchTimeZone } from './dates.js';
+import { FinePreviewer } from './fines.js';
 
-// The transaction slip of a visit at the desk (F9): the loans and renewals made, the items returned (with days late and
-// the overdue fine each booked) and the payments taken, on a 58 or 80 mm roll in the library's language. Every loan
+// The transaction slip of a visit at the desk (F9): the loans and renewals made, the items returned (with the days late,
+// the days their fine counted when those differ, as the desk says it, and the overdue fine each booked) and the
+// payments taken, on a 58 or 80 mm roll in the library's language. Every loan
 // named must be one of the desk's branch (made there, or returned there), every payment one taken there; anything else
-// is 404, as if it did not exist. Nothing is written: the slip only reads.
+// is 404, as if it did not exist. A loan voided since (Ctrl+Z at the desk) was never lent and is left out. Nothing is
+// written: the slip only reads.
 
 /** A loan or renewal on the slip. */
 interface SlipLoan {
@@ -24,7 +27,10 @@ interface SlipReturn {
   barcode: string;
   title: string;
   returnedOn: string;
+  /** Calendar days past the due date at the return. */
   daysLate: number;
+  /** The days the booked fine counted (fines.ts lateness), when a fine was booked; null otherwise. */
+  finedDays: number | null;
   /** The overdue fine booked at the return (decimal), or null. */
   fine: string | null;
 }
@@ -68,7 +74,21 @@ export async function slipData(
           .selectFrom('loans as l')
           .leftJoin('items as it', 'it.id', 'l.item_id')
           .leftJoin('records as r', 'r.id', 'l.record_id')
-          .select(['l.id', 'l.branch_id', 'l.return_branch_id', 'l.member_id', 'l.due_on', 'l.renewals', 'l.returned_on', 'it.barcode_display', 'r.title'])
+          .select([
+            'l.id',
+            'l.branch_id',
+            'l.return_branch_id',
+            'l.member_id',
+            'l.due_on',
+            'l.renewals',
+            'l.returned_on',
+            'l.outcome',
+            'l.fine_per_day_minor',
+            'l.fine_cap_minor',
+            'l.grace_days',
+            'it.barcode_display',
+            'r.title',
+          ])
           .where('l.id', 'in', loanIds)
           .execute();
   const byId = new Map(loans.map((l) => [l.id, l]));
@@ -93,7 +113,34 @@ export async function slipData(
   const zone = await branchTimeZone(db, i.branchId);
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(i.now);
   const part = (type: string): string => parts.find((p) => p.type === type)?.value ?? '';
-  const daysLate = (due: string, back: string | null): number => (back === null ? 0 : Math.max(0, diffDays(due, back)));
+  // The days late and the days the fine counted, as the return worked them out (one computation: fines.ts lateness).
+  const fined = await FinePreviewer.open(db);
+  const returns: SlipReturn[] = [];
+  for (const id of i.returnedLoanIds) {
+    const l = byId.get(id)!;
+    const fine = fines.get(id);
+    const late =
+      l.returned_on === null
+        ? { daysLate: 0, finedDays: null }
+        : await fined.lateness(
+            {
+              branchId: l.branch_id,
+              dueOn: l.due_on,
+              finePerDayMinor: Number(l.fine_per_day_minor),
+              fineCapMinor: l.fine_cap_minor === null ? null : Number(l.fine_cap_minor),
+              graceDays: Number(l.grace_days),
+            },
+            l.returned_on,
+          );
+    returns.push({
+      barcode: l.barcode_display ?? '',
+      title: cut(l.title ?? ''),
+      returnedOn: l.returned_on ?? '',
+      daysLate: late.daysLate,
+      finedDays: fine === undefined ? null : late.finedDays,
+      fine: fine === undefined ? null : formatPrice(fine),
+    });
+  }
   return {
     library: { name: s['library.name'] as string, address: (s['library.address'] as string | null) ?? null },
     branchName: branch === undefined ? '' : `${branch.name} (${branch.code_display})`,
@@ -101,19 +148,22 @@ export async function slipData(
     printedOn: `${part('year')}-${part('month')}-${part('day')}`,
     time: `${part('hour')}:${part('minute')}`,
     currency: s['catalog.currency'] as string,
-    loans: i.loanIds.map((id) => {
-      const l = byId.get(id)!;
-      return { barcode: l.barcode_display ?? '', title: cut(l.title ?? ''), dueOn: l.due_on, renewed: Number(l.renewals) > 0 };
-    }),
-    returns: i.returnedLoanIds.map((id) => {
-      const l = byId.get(id)!;
-      const fine = fines.get(id);
-      return { barcode: l.barcode_display ?? '', title: cut(l.title ?? ''), returnedOn: l.returned_on ?? '', daysLate: daysLate(l.due_on, l.returned_on), fine: fine === undefined ? null : formatPrice(fine) };
-    }),
+    loans: i.loanIds
+      .map((id) => byId.get(id)!)
+      .filter((l) => l.outcome !== 'voided')
+      .map((l) => ({ barcode: l.barcode_display ?? '', title: cut(l.title ?? ''), dueOn: l.due_on, renewed: Number(l.renewals) > 0 })),
+    returns,
     payments: payments.map((p) => ({ receiptNo: p.receipt_no, amount: formatPrice(Number(p.amount_minor)), method: p.method, voided: p.voided_at !== null })),
     locale: s['library.locale'] === 'en' ? 'en' : 'id',
     paper: i.paper ?? (String(s['circulation.receipt.paperMm']) === '58' ? '58' : '80'),
   };
+}
+
+/** The days late of a return as the desk says them (with the days its fine counted when they differ), and its fine. */
+function slipLateText(d: SlipData, r: SlipReturn): string {
+  if (r.daysLate === 0) return '-';
+  const days = r.finedDays !== null && r.finedDays !== r.daysLate ? t(d.locale, 'slip.late_fined', { days: r.daysLate, fined: r.finedDays }) : String(r.daysLate);
+  return r.fine === null ? days : `${days} · ${d.currency} ${r.fine}`;
 }
 
 /** The slip PDF of `d`: a 58 or 80 mm roll. */
@@ -148,7 +198,7 @@ export function buildSlipPdf(d: SlipData): Uint8Array {
     pdf.paragraph(tr('slip.returns'), { bold: true, size });
     pdf.table(
       [{ header: tr('slip.item'), weight: narrow ? 2 : 3 }, { header: tr('slip.late'), align: 'right' }],
-      d.returns.map((r) => [`${r.barcode} ${r.title}`, r.daysLate === 0 ? '-' : r.fine === null ? String(r.daysLate) : `${r.daysLate} · ${d.currency} ${r.fine}`]),
+      d.returns.map((r) => [`${r.barcode} ${r.title}`, slipLateText(d, r)]),
     );
   }
   if (d.payments.length > 0) {

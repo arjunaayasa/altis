@@ -31,6 +31,10 @@ import { OPAC_ROUTES } from './opac/routes.js';
 import { VISITS_ROUTES } from './api/visits/index.js';
 // ---- Komunitas K4 (stocktake) ----
 import { STOCKTAKE_ROUTES } from './api/stocktake.js';
+// ---- Komunitas K5 (reports) ----
+import { LIBRARY_STATISTICS_ROUTES } from './api/library-statistics.js';
+// ---- Komunitas (OPAC home page) ----
+import { OPAC_HOME_ROUTES } from './api/opac-home.js';
 import { VISIT_STATION_ROUTES } from './opac/visits/routes.js';
 // ---- Komunitas (member area) ----
 import { AKUN_ROUTES } from './opac/akun/routes.js';
@@ -63,12 +67,16 @@ const health = route({
 export const KOMUNITAS_ROUTES: RouteDecl[] = [
   ...REPORTS_ROUTES,
   ...ACCREDITATION_ROUTES,
+  // ---- Komunitas K5 (reports): the dashboard's library figures, literal paths before `members/:id` ----
+  ...LIBRARY_STATISTICS_ROUTES,
   ...MEMBERS_ROUTES,
   ...CIRCULATION_ROUTES,
   // ---- Komunitas K2 (visits) ----
   ...VISITS_ROUTES,
   // ---- Komunitas K4 (stocktake) ----
   ...STOCKTAKE_ROUTES,
+  // ---- Komunitas (OPAC home page): the admin screen's content of the home page ----
+  ...OPAC_HOME_ROUTES,
 ];
 
 export const ALL_ROUTES: RouteDecl[] = defineRoutes([

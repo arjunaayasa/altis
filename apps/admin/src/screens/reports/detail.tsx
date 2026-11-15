@@ -26,7 +26,8 @@ import { RunHistory } from './run-history';
  * user, then for a table report its filters (param-form.tsx), its exports (export-panel.tsx), its paged preview with
  * "Cetak" (preview-table.tsx), and the user's own runs of it (run-history.tsx). A document report (the accreditation
  * dossier, the self-assessment, the statement) is made in the accreditation workspace: its page says so, links there
- * and lists the user's runs of it. A report the user may not open, or that does not exist, is "not found" either way.
+ * and lists the user's runs of it. A document the user may export here (the annual library report) shows its filters
+ * and its export instead, without a preview. A report the user may not open, or that does not exist, is "not found" either way.
  *
  * The filters start empty, or with the values the page address gives (`?periodId=…`), so a link from elsewhere can
  * open a report on a period or a date. "Terapkan" checks them and reads the preview; an export takes them as they
@@ -151,6 +152,12 @@ function ReportPage({ entry, search }: { entry: ReportCatalogEntry; search: Read
             <NoticeAlert>{t('reports.export.no_permission')}</NoticeAlert>
           )}
           <PreviewSection entry={entry} query={preview} params={applied?.params ?? null} />
+        </>
+      ) : entry.canExport ? (
+        // ---- Komunitas K5 (reports): a document made through the run routes (the annual report): its filters, its export ----
+        <>
+          <ParamForm entry={entry} values={values} errors={errors} options={options} onChange={change} onApply={apply} onReset={reset} previews={false} />
+          <ExportPanel entry={entry} collect={collect} markFieldErrors={markFieldErrors} describe={describe} />
         </>
       ) : (
         <NoticeAlert>

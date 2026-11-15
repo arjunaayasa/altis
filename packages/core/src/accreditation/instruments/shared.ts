@@ -85,6 +85,10 @@ export const SCHOOL_COMPONENTS: readonly { code: ComponentCode; weight: number }
  */
 export const EVIDENCE_SNAPSHOT_DATE = '@snapshot-date';
 
+// ---- Komunitas K5 (reports) ----
+/** Stands for the period itself in the parameters of the report behind an evidence item (a report of the period's span). */
+export const EVIDENCE_PERIOD = '@period';
+
 /**
  * The parameters of the report behind a generated evidence item, for the period `periodId` measured at `D`: the item's
  * own parameters with the snapshot date put in, and the period first for an accreditation report (each of those starts
@@ -93,7 +97,7 @@ export const EVIDENCE_SNAPSHOT_DATE = '@snapshot-date';
 export function evidenceReportParams(item: AccredEvidenceItem, o: { periodId: string; D: string }): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (item.reportId?.startsWith('accreditation.') === true) out['periodId'] = o.periodId;
-  for (const [key, value] of Object.entries(item.params ?? {})) out[key] = value === EVIDENCE_SNAPSHOT_DATE ? o.D : value;
+  for (const [key, value] of Object.entries(item.params ?? {})) out[key] = value === EVIDENCE_SNAPSHOT_DATE ? o.D : value === EVIDENCE_PERIOD ? o.periodId : value;
   return out;
 }
 
@@ -110,6 +114,12 @@ const screenshot = (code: string, screen: string): EvidenceSpec => ({ code, kind
 const primary = (item: EvidenceSpec): EvidenceSpec => ({ ...item, primary: true });
 
 const AS_OF_D = { asOf: EVIDENCE_SNAPSHOT_DATE } as const;
+// ---- Komunitas K5 (reports) ----
+/**
+ * A signed document ALTIS drafts: the report behind it (`reportId`, over the period's span) is printed, signed and
+ * uploaded; the item is there once the signed copy is.
+ */
+const drafted = (item: EvidenceSpec, reportId: string): EvidenceSpec => ({ ...item, reportId, params: { periodId: EVIDENCE_PERIOD } });
 const ACTIVITIES = 'accreditation.annex.activities';
 const STAFF = 'accreditation.annex.staff';
 const RECORDS_SCREEN = 'catalog/records';
@@ -220,6 +230,8 @@ export const SCHOOL_INDICATORS: readonly ConceptIndicator[] = deepFreeze<Concept
       photo('shelf_photos'),
       generated('data_quality', 'collection.data_quality'),
       photo('scanner_photo'),
+      // ---- Komunitas K4 (stocktake) ----
+      signed('stocktake_minutes'),
     ],
     options: true,
   },
@@ -233,6 +245,8 @@ export const SCHOOL_INDICATORS: readonly ConceptIndicator[] = deepFreeze<Concept
     evidence: [
       primary(generated('preservation_list', ACTIVITIES, { kinds: ['preservation'], window: 'three_periods' })),
       photo('preservation_photos'),
+      // ---- Komunitas K4 (stocktake) ----
+      signed('stocktake_minutes'),
     ],
   },
   // ---- Sarana dan Prasarana ----
@@ -556,7 +570,7 @@ export const SCHOOL_INDICATORS: readonly ConceptIndicator[] = deepFreeze<Concept
     band: rule('g4'),
     noteKeys: notes('g4_rule', 'g4_undated', 'register_empty'),
     evidence: [
-      primary(signed('report_documents')),
+      primary(drafted(signed('report_documents'), 'library.annual_report')),
       generated('report_list', 'accreditation.annex.documents', { kinds: ['report_annual', 'report_semester', 'report_quarterly', 'report_monthly'] }),
     ],
     options: true,

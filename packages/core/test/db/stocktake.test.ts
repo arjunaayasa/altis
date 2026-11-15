@@ -10,12 +10,15 @@ import {
   finishStocktake,
   getStocktake,
   lendItem,
+  localStorageDriver,
   markHoldReady,
   markLoanLost,
   placeHold,
+  returnItem,
   scanStocktake,
   stocktakeCodesJob,
   stocktakeFinishJob,
+  stocktakeMinutes,
   stocktakeMinutesPdf,
   stocktakePrepareJob,
   txCtx,
@@ -24,6 +27,7 @@ import {
   type JobHandler,
   type StocktakeJobDeps,
 } from '../../src/index.js';
+import { formatPrice } from '../../src/catalog/items/service.js';
 import { checkPdf } from '../support/pdf-check.js';
 import { NOW, failure, openItemsDb, seedItem, seedLocation, seedRecord, type ItemsDb } from './catalog-items-support.js';
 
@@ -32,7 +36,8 @@ import { NOW, failure, openItemsDb, seedItem, seedLocation, seedRecord, type Ite
 // copy, two unknown codes, the same unexpected copy); undoing a scan; the finish never marks a copy on loan missing,
 // keeps a status that may not become missing (`status_kept`), restores a lost copy found and cancels its lost charge;
 // a finish waits for code lists still being applied; and the minutes PDF. A copy kept on the hold shelf is not marked
-// missing (its hold stays ready); a found copy lent and declared lost after its scan is not restored.
+// missing (its hold stays ready), nor one lent and returned during the session; a found copy lent and declared lost after its scan is not restored. The finish stores
+// the minutes as a staff file the minutes route serves; a session finished without them has them built on request.
 
 const ctx = testDbContext();
 
@@ -185,7 +190,8 @@ describe.skipIf(!ctx.available)(`stocktake [${engineLabel()}]`, () => {
     expect(await failure(db.run((tx) => finishStocktake(tx, db.branchId, s.id, { confirmName: 'Salah', markMissing: true, restoreFound: true }, deps)))).toMatchObject({ code: 'VALIDATION_FAILED' });
 
     await db.run((tx) => finishStocktake(tx, db.branchId, s.id, { confirmName: 'Inventarisasi Rak', markMissing: true, restoreFound: true }, deps));
-    await runJob(db, stocktakeFinishJob(), { stocktakeId: s.id });
+    const storage = localStorageDriver(db.dataDir);
+    await runJob(db, stocktakeFinishJob(() => ({ storage })), { stocktakeId: s.id });
     const status = async (id: string) => (await db.h.db.selectFrom('items').select('status').where('id', '=', id).executeTakeFirstOrThrow()).status;
     const result = async (id: string) =>
       (await db.h.db.selectFrom('stocktake_items').select(['result', 'state']).where('stocktake_id', '=', s.id).where('item_id', '=', id).executeTakeFirstOrThrow());
@@ -209,11 +215,28 @@ describe.skipIf(!ctx.available)(`stocktake [${engineLabel()}]`, () => {
     // Run again (a crash after the last batch): nothing changes.
     expect(await runJob(db, stocktakeFinishJob(), { stocktakeId: s.id })).toBe('stocktake_not_finishing');
 
-    const pdf = await stocktakeMinutesPdf(db.h.db, db.branchId, s.id);
-    const text = checkPdf(pdf.bytes)
+    // The minutes were stored at the finish (a staff file of the session) and are served from there.
+    const session = await db.h.db.selectFrom('stocktakes').select(['minutes_file_id', 'finished_at']).where('id', '=', s.id).executeTakeFirstOrThrow();
+    expect(session.minutes_file_id).not.toBeNull();
+    const file = await db.h.db.selectFrom('files').selectAll().where('id', '=', session.minutes_file_id!).executeTakeFirstOrThrow();
+    expect(file).toMatchObject({ context: 'stocktake.minutes', owner_type: 'stocktakes', owner_id: s.id, access: 'staff', status: 'ok', mime: 'application/pdf' });
+    const served = await stocktakeMinutes(db.h.db, storage, db.branchId, s.id);
+    expect(served.bytes.byteLength).toBe(Number(file.size));
+    expect(served.name).toBe(file.original_name);
+    const text = checkPdf(served.bytes)
       .pages.flatMap((p) => p.texts.map((t) => t.text))
       .join('\n');
-    for (const want of ['Berita Acara Inventarisasi', 'Inventarisasi Rak', 'Per kelas DDC', 'Per tipe koleksi', 'Petugas Inventarisasi', 'Kepala Perpustakaan', lost.barcode]) expect(text).toContain(want);
+    for (const want of ['Berita Acara Inventarisasi', 'Inventarisasi Rak', 'Per kelas DDC', 'Per tipe koleksi', 'Petugas Inventarisasi', 'Kepala Perpustakaan', lost.barcode, 'Selesai']) expect(text).toContain(want);
+    // The restored lost copy with the lost charge the finish cancelled, and their total.
+    const cancelledMinor = (
+      await db.h.db.selectFrom('charge_adjustments as a').innerJoin('charges as c', 'c.id', 'a.charge_id').select('a.amount_minor').where('c.loan_id', '=', lostLoan.id).where('a.kind', '=', 'cancel').executeTakeFirstOrThrow()
+    ).amount_minor;
+    const amount = formatPrice(Number(cancelledMinor));
+    expect(Number(cancelledMinor)).toBeGreaterThan(0);
+    expect(text.replace(/\s+/g, ' ')).toContain(`Biaya hilang dibatalkan ${lost.barcode}`);
+    expect(text).toContain(`\n${amount}\n`);
+    expect(text).toContain(`Biaya hilang yang dibatalkan untuk 1 eksemplar, jumlah ${amount}.`);
+    expect(await failure(stocktakeMinutes(db.h.db, storage, db.otherBranchId, s.id))).toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('a pending copy that may become missing is marked missing, with its history row', async () => {
@@ -226,6 +249,10 @@ describe.skipIf(!ctx.available)(`stocktake [${engineLabel()}]`, () => {
     expect((await db.h.db.selectFrom('items').select('status').where('id', '=', book.id).executeTakeFirstOrThrow()).status).toBe('missing');
     const ev = await db.h.db.selectFrom('item_events').select(['to_status', 'meta']).where('item_id', '=', book.id).where('type', '=', 'status').execute();
     expect(ev.map((e) => [e.to_status, JSON.parse(e.meta).via])).toEqual([['missing', 'stocktake']]);
+    // Finished without a storage driver: no stored minutes, built when asked for.
+    expect((await db.h.db.selectFrom('stocktakes').select('minutes_file_id').where('id', '=', s.id).executeTakeFirstOrThrow()).minutes_file_id).toBeNull();
+    const built = await stocktakeMinutes(db.h.db, localStorageDriver(db.dataDir), db.branchId, s.id);
+    expect(built.bytes.byteLength).toBe((await stocktakeMinutesPdf(db.h.db, db.branchId, s.id)).bytes.byteLength);
   });
 
   it('a copy kept on the hold shelf for a ready hold keeps its status and its hold', async () => {
@@ -258,5 +285,22 @@ describe.skipIf(!ctx.available)(`stocktake [${engineLabel()}]`, () => {
     expect((await db.h.db.selectFrom('items').select('status').where('id', '=', book.id).executeTakeFirstOrThrow()).status).toBe('lost');
     expect((await db.h.db.selectFrom('stocktake_items').select('result').where('stocktake_id', '=', s.id).where('item_id', '=', book.id).executeTakeFirstOrThrow()).result).toBe('status_kept');
     expect((await db.h.db.selectFrom('charges').select('status').where('loan_id', '=', loan.id).where('kind', '=', 'lost').executeTakeFirstOrThrow()).status).not.toBe('cancelled');
+  });
+
+  it('a pending copy lent and returned during the session keeps its status; one the desk never saw is marked missing', async () => {
+    const shelf = await seedLocation(db, { code: `R${seq}`, kind: 'room' });
+    const book = await copy({ locationId: shelf });
+    const untouched = await copy({ locationId: shelf });
+    const s = await db.run((tx) => createStocktake(tx, db.branchId, { name: 'Sesi Meja', scope: { locationIds: [shelf] } }, deps));
+    await prepare(s.id);
+    const memberId = await newReader();
+    await db.run((tx) => lendItem(tx, { branchId: db.branchId, memberId, barcode: book.barcode }), NOW + 60_000);
+    await db.run((tx) => returnItem(tx, { branchId: db.branchId, barcode: book.barcode }), NOW + 120_000);
+    await db.run((tx) => finishStocktake(tx, db.branchId, s.id, { confirmName: 'Sesi Meja', markMissing: true, restoreFound: false }, deps), NOW + 180_000);
+    await runJob(db, stocktakeFinishJob(), { stocktakeId: s.id });
+    const statusOf = async (id: string) => (await db.h.db.selectFrom('items').select('status').where('id', '=', id).executeTakeFirstOrThrow()).status;
+    const resultOf = async (id: string) => (await db.h.db.selectFrom('stocktake_items').select('result').where('stocktake_id', '=', s.id).where('item_id', '=', id).executeTakeFirstOrThrow()).result;
+    expect([await statusOf(book.id), await resultOf(book.id)]).toEqual(['available', 'status_kept']);
+    expect([await statusOf(untouched.id), await resultOf(untouched.id)]).toEqual(['missing', 'marked_missing']);
   });
 });

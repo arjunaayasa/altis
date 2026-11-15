@@ -206,6 +206,8 @@ export const SHEET = Object.freeze({
   report: 'Laporan',
   screen: 'Layar ALTIS',
   file: 'Berkas',
+  // ---- Komunitas K5 (reports) ----
+  draft: 'Draf dari laporan ALTIS',
 });
 
 /** The source of a value (`basis`), as the sheets print it. */

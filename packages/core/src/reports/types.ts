@@ -1,6 +1,6 @@
 import type { DB, TableName } from '@altis/db';
 import type { Locale, Permission } from '@altis/shared';
-import type { ReportCell, ReportColumnType, ReportParamSpec } from '@altis/shared/api/reports';
+import type { ReportCell, ReportChartSpec, ReportColumnType, ReportModule, ReportParamSpec } from '@altis/shared/api/reports';
 import type { Kysely } from 'kysely';
 import type { z } from 'zod';
 import type { StorageDriver } from '../files/serve.js';
@@ -53,7 +53,7 @@ export type ReportRow = readonly ReportCell[];
 interface ReportBase {
   /** `<module>.<name>`, at most 64 characters (`report_runs.report_id`). */
   id: string;
-  module: 'collection' | 'accreditation' | 'members' | 'visits' | 'circulation' | 'stocktake';
+  module: ReportModule;
   /** `report.<id>.title`. */
   titleKey: string;
   /** What it takes to see and preview the report. */
@@ -67,6 +67,14 @@ interface ReportBase {
    * the preview and the export routes check it beside {@link permission}. Null: none.
    */
   extraPermission?(params: Readonly<Record<string, unknown>>): Permission | null;
+  // ---- Komunitas K4 (stocktake) ----
+  /**
+   * The branch the parameters (as the body sends them, or as a run stored them) address, for a definition whose
+   * permission is a branch permission (a stocktake report: the session's branch): the routes check the permission at
+   * that branch, so a role granted at one branch only may use the report there. Null (or no such function): no one
+   * branch, and the permission is needed globally.
+   */
+  branchOf?(db: Kysely<DB>, params: Readonly<Record<string, unknown>>): Promise<string | null>;
   params: readonly ReportParamSpec[];
   /** Checks a body's parameters; its output is the stored `def`. */
   paramsSchema: z.ZodType<Record<string, unknown>>;
@@ -92,6 +100,9 @@ export interface TableReport extends ReportBase {
   /** The number of rows an export will have, when it can be known up front (null: unknown, the size check waits). */
   count?(ctx: ReportCtx): Promise<number | null>;
   scanBased?(params: Record<string, unknown>): boolean;
+  // ---- Komunitas K5 (reports) ----
+  /** The compact chart the report's screen draws from its preview rows (none when absent). */
+  chart?: ReportChartSpec;
 }
 
 /** What a document report renders with: the run, its work folder and the facts its pages print. */
@@ -118,6 +129,12 @@ export type DocumentStep = { done: true; rowCount: number; nonLatinRows: number;
 export interface DocumentReport extends ReportBase {
   kind: 'document';
   formats: readonly ('pdf' | 'zip')[];
+  // ---- Komunitas K5 (reports) ----
+  /**
+   * The document is started through the generic run routes (`POST reports/runs`, with its parameters, as a table
+   * report is) and listed as exportable; without it, a route of its own makes it (the accreditation documents).
+   */
+  runRoutes?: boolean;
   render(ctx: DocumentCtx, resume: DocumentResume | null): Promise<DocumentStep>;
 }
 

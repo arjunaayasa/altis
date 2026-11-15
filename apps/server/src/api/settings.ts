@@ -181,10 +181,14 @@ const FIELDS: Readonly<Record<SettingsGroupName, FieldMap>> = Object.freeze({
   ],
 });
 
+// ---- Komunitas (OPAC home page) ----
+/** The settings of an edited group that a screen of their own reads and writes, never `settings/:group`. */
+export const SETTINGS_SERVED_ELSEWHERE: ReadonlySet<SettingKey> = new Set<SettingKey>(['opac.home']);
+
 // Every registered key of a group has its place, and nothing else: checked once, when the module loads.
 for (const group of SETTINGS_GROUPS) {
   const mapped = FIELDS[group].map(([, key]) => key);
-  if (JSON.stringify(mapped) !== JSON.stringify(groupKeys(group))) {
+  if (JSON.stringify(mapped) !== JSON.stringify(groupKeys(group).filter((key) => !SETTINGS_SERVED_ELSEWHERE.has(key)))) {
     throw new Error(`settings API: the fields of group ${group} do not match the settings registry`);
   }
 }
