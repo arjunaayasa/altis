@@ -49,3 +49,31 @@ describe('slims:import --catalog-mode, --skip-catalog, --from-run', () => {
     expect(USAGE).toContain('--skip-catalog --from-run <id>');
   });
 });
+
+// ---- Komunitas (SLiMS members and circulation) ----
+describe('slims:import --members-mode, --visits-before, --circulation-mode, --fine-mode, --migrate-gender, --no-staff-users', () => {
+  it('parses into the member, visit and circulation options; an unknown value is a usage error', async () => {
+    const args = parseArgs([
+      'slims:import',
+      '--dump',
+      'slims.sql',
+      '--members-mode',
+      'update',
+      '--visits-before=2026-07-01',
+      '--circulation-mode',
+      'replace',
+      '--fine-mode',
+      'minor',
+      '--migrate-gender',
+      '--no-staff-users',
+    ]);
+    expect(args.slims).toEqual({
+      dump: 'slims.sql',
+      people: { membersMode: 'update', visitsBefore: '2026-07-01', circulationMode: 'replace', fineMode: 'minor', migrateGender: true, staffUsers: false },
+    });
+    expect(parseArgs(['slims:import', '--dump', 'slims.sql', '--visits-before', 'auto']).slims).toEqual({ dump: 'slims.sql', people: { visitsBefore: 'auto' } });
+    for (const bad of [['--members-mode', 'merge'], ['--circulation-mode'], ['--visits-before', 'kemarin'], ['--fine-mode', 'rupiah']]) {
+      expect((await cli(bad)).code, bad.join(' ')).toBe(1);
+    }
+  });
+});

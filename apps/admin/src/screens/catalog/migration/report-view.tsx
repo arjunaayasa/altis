@@ -1,5 +1,5 @@
 import { isUlid } from '@altis/shared';
-import type { MigrationSummary } from '@altis/shared/api/catalog/migration';
+import { MIGRATION_MATCH_KEYS, type MigrationSummary } from '@altis/shared/api/catalog/migration';
 import type { RunView } from '@altis/shared/api/catalog/runs';
 import { Link } from '@tanstack/react-router';
 import { DownloadIcon } from 'lucide-react';
@@ -10,6 +10,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { useLocale, useT, type Translate } from '@/i18n';
 import { isMessageKey } from '@/lib/form-errors';
 import { cn } from '@/lib/utils';
+import { MatchesReport } from './people';
 
 /**
  * The report of a SLiMS migration run (Phase 2 spec §11.6; plan Task 30; summary of Task 23): what `catalog_runs.summary`
@@ -77,6 +78,12 @@ const ReportSummary = z.object({
   warnings: z.array(z.string()).catch([]),
   // ---- Komunitas K1 (catalogue re-sync) ----
   catalogChanges: z.number().int().nonnegative().optional().catch(undefined),
+  // ---- Komunitas (SLiMS members and circulation) ----
+  memberNoCollisions: z.number().int().nonnegative().optional().catch(undefined),
+  matches: z
+    .array(z.object({ key: z.enum(MIGRATION_MATCH_KEYS), scope: z.string(), source: count, altis: count, explained: count, ok: z.boolean() }))
+    .optional()
+    .catch(undefined),
 });
 
 /** What the report shows of a run's summary (MigrationSummary without the per-table counters, which reconcile). */
@@ -215,6 +222,7 @@ export function ReportView({ run }: { run: RunView }) {
             </div>
           )}
 
+          <MatchesReport matches={report.matches} collisions={report.memberNoCollisions} />
           {report.reconciliation === null ? (
             <NoticeAlert>{t('catalog.migration.report.reconcile_none')}</NoticeAlert>
           ) : (
