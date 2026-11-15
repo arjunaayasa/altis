@@ -124,6 +124,8 @@ export const TABLE_CLASSES: Readonly<Record<TableName, TableClass>> = Object.fre
   charge_adjustments: 'data',
   payments: 'data',
   payment_allocations: 'data',
+  // ---- Komunitas (notices): data ----
+  notices: 'data',
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping, made by the runner on every run ----
   schema_migrations_edition: 'migrator',
   schema_migrations_edition_lock: 'migrator',

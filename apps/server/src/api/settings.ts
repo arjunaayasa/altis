@@ -47,6 +47,10 @@ import { SYSTEM_CONFIG_ROUTES } from './system-config.js';
 
 const SETTINGS_PATH = '/api/v1/settings';
 
+// ---- Komunitas (notices) ----
+/** The body name of each member notice's template in `PUT settings/email`. */
+const NOTICE_TEMPLATE_NAMES = { circulation_due_soon: 'circulationDueSoon', circulation_overdue: 'circulationOverdue', circulation_hold_ready: 'circulationHoldReady' } as const;
+
 /** Where each setting of a group sits in its body and its view: the path of property names, and the setting. */
 type FieldMap = readonly (readonly [path: readonly string[], key: SettingKey])[];
 
@@ -64,6 +68,14 @@ const FIELDS: Readonly<Record<SettingsGroupName, FieldMap>> = Object.freeze({
     [['templates', 'passwordReset', 'id', 'body'], 'email.template.password_reset.id.body'],
     [['templates', 'passwordReset', 'en', 'subject'], 'email.template.password_reset.en.subject'],
     [['templates', 'passwordReset', 'en', 'body'], 'email.template.password_reset.en.body'],
+    // ---- Komunitas (notices) ----
+    ...(['circulation_due_soon', 'circulation_overdue', 'circulation_hold_ready'] as const).flatMap((kind) =>
+      (['id', 'en'] as const).flatMap((locale) =>
+        (['subject', 'body'] as const).map(
+          (part) => [['templates', NOTICE_TEMPLATE_NAMES[kind], locale, part], `email.template.${kind}.${locale}.${part}`] as const,
+        ),
+      ),
+    ),
   ],
   security: [
     [['passwordMinLength'], 'security.password_min_length'],
@@ -135,6 +147,11 @@ const FIELDS: Readonly<Record<SettingsGroupName, FieldMap>> = Object.freeze({
     [['receipt', 'paperMm'], 'circulation.receipt.paperMm'],
     [['receipt', 'footer', 'id'], 'circulation.receipt.footer.id'],
     [['receipt', 'footer', 'en'], 'circulation.receipt.footer.en'],
+    // ---- Komunitas (notices) ----
+    [['notices', 'dueSoonDays'], 'circulation.notices.dueSoonDays'],
+    [['notices', 'overdueEveryDays'], 'circulation.notices.overdueEveryDays'],
+    [['notices', 'overdueMax'], 'circulation.notices.overdueMax'],
+    [['notices', 'holdReady'], 'circulation.notices.holdReady'],
   ],
   members: [
     [['clearance', 'prefix'], 'members.clearance.prefix'],

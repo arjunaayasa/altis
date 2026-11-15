@@ -3,6 +3,7 @@ import {
   holdsExpiryJob,
   importSlimsUsageJob,
   localStorageDriver,
+  noticesBuildJob,
   privacyAnonymizeJob,
   reportsExportJob,
   reportsHousekeepingJob,
@@ -26,6 +27,8 @@ export function komunitasJobHandlers(deps: () => ReportJobDeps): JobHandler<any>
     importSlimsUsageJob(deps),
     // ---- Komunitas (holds) ----
     holdsExpiryJob(),
+    // ---- Komunitas (notices) ----
+    noticesBuildJob(),
     // ---- Komunitas K2 (privacy) ----
     privacyAnonymizeJob(() => ({ storage: localStorageDriver(deps().dataDir) })),
   ];

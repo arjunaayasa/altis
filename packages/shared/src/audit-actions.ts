@@ -218,6 +218,11 @@ export const AUDIT_ACTIONS = Object.freeze([
   'circulation.charge.waive',
   'circulation.payment.create',
   'circulation.payment.void',
+  // ---- Komunitas (notices) ----
+  // reminders sent by hand from the desk or the overdue list (`meta`: kind and count; a test send: kind and `test`), and
+  // one entry per run of the daily notices job (`meta`: counts)
+  'circulation.notice.send',
+  'circulation.notices.run',
 ] as const);
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

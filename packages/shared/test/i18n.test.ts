@@ -227,6 +227,9 @@ describe('MESSAGES', () => {
       update_restored: ['version'],
       update_restore_failed: ['version'],
       update_blocked: ['version'],
+      // ---- Komunitas (notices): the hold shelf to clear, and reminders that did not go out ----
+      circulation_hold_shelf: ['count'],
+      circulation_notices_failed: ['failed', 'skipped'],
     };
     for (const locale of LOCALES) {
       const table = MESSAGES[locale] as Record<string, string>;

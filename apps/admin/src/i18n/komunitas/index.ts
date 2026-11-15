@@ -14,6 +14,8 @@ import { MEMBER_AREA_EN, MEMBER_AREA_ID } from './member-area';
 import { CHARGES_ADMIN_EN, CHARGES_ADMIN_ID } from './charges';
 // ---- Komunitas (member, visit and circulation reports) ----
 import { CIRC_REPORTS_ADMIN_EN, CIRC_REPORTS_ADMIN_ID } from './circ-reports';
+// ---- Komunitas (notices) ----
+import { NOTICES_ADMIN_EN, NOTICES_ADMIN_ID } from './notices';
 import { MEMBERS_EN, MEMBERS_ID } from './members';
 import { MEMBERS_TOOLS_EN, MEMBERS_TOOLS_ID } from './members-tools';
 import { KOMUNITAS_SETTINGS_EN, KOMUNITAS_SETTINGS_ID } from './settings';
@@ -87,6 +89,8 @@ export const KOMUNITAS_AREAS_ID = Object.freeze({
   charges: CHARGES_ADMIN_ID,
   // ---- Komunitas (member, visit and circulation reports) ----
   circReports: CIRC_REPORTS_ADMIN_ID,
+  // ---- Komunitas (notices) ----
+  notices: NOTICES_ADMIN_ID,
   placeholder: PLACEHOLDER_ID,
 });
 
@@ -111,6 +115,8 @@ export const KOMUNITAS_AREAS_EN: { readonly [A in keyof typeof KOMUNITAS_AREAS_I
   charges: CHARGES_ADMIN_EN,
   // ---- Komunitas (member, visit and circulation reports) ----
   circReports: CIRC_REPORTS_ADMIN_EN,
+  // ---- Komunitas (notices) ----
+  notices: NOTICES_ADMIN_EN,
   placeholder: PLACEHOLDER_EN,
 });
 
@@ -131,6 +137,7 @@ export const KOMUNITAS_ID = {
   ...MEMBER_AREA_ID,
   ...CHARGES_ADMIN_ID,
   ...CIRC_REPORTS_ADMIN_ID,
+  ...NOTICES_ADMIN_ID,
   ...PLACEHOLDER_ID,
 } as const;
 
@@ -151,5 +158,6 @@ export const KOMUNITAS_EN: Record<keyof typeof KOMUNITAS_ID, string> = {
   ...MEMBER_AREA_EN,
   ...CHARGES_ADMIN_EN,
   ...CIRC_REPORTS_ADMIN_EN,
+  ...NOTICES_ADMIN_EN,
   ...PLACEHOLDER_EN,
 };

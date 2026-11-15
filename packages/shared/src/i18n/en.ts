@@ -21,6 +21,8 @@ import { MEMBER_AREA_EN } from './member-area.js';
 import { CHARGES_EN } from './charges.js';
 // ---- Komunitas (member, visit and circulation reports) ----
 import { CIRC_REPORTS_EN } from './circ-reports.js';
+// ---- Komunitas (notices) ----
+import { NOTICES_EN } from './notices.js';
 
 const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   // ---- error.<CODE> ---------------------------------------------------------------------------------------
@@ -1544,6 +1546,8 @@ const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   ...CHARGES_EN,
   // ---- Komunitas (member, visit and circulation reports) ----
   ...CIRC_REPORTS_EN,
+  // ---- Komunitas (notices) ----
+  ...NOTICES_EN,
 };
 
 /** Spread in only under the test profile, like the Indonesian one (see `id.ts`). */

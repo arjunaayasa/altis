@@ -6,6 +6,8 @@ import { DESK_ROUTES } from './desk.js';
 // ---- Komunitas (holds) ----
 import { HOLD_ROUTES } from './holds.js';
 import { LOAN_LIST_ROUTES } from './loans.js';
+// ---- Komunitas (notices) ----
+import { NOTICE_ROUTES } from './notices.js';
 import { POLICY_ROUTES } from './policies.js';
 // ---- Komunitas (member, visit and circulation reports) ----
 import { CIRCULATION_SUMMARY_ROUTES } from './summary.js';
@@ -24,4 +26,6 @@ export const CIRCULATION_ROUTES: RouteDecl[] = [
   ...CHARGE_ROUTES,
   // ---- Komunitas (member, visit and circulation reports) ----
   ...CIRCULATION_SUMMARY_ROUTES,
+  // ---- Komunitas (notices) ----
+  ...NOTICE_ROUTES,
 ];

@@ -1629,6 +1629,35 @@ export interface PaymentAllocationsTable {
   amount_minor: number;
 }
 
+// ---- Komunitas (notices) ----
+// Migration 0046: the e-mails the library owes members (due soon, overdue, hold ready), ids and states only.
+
+/** Class data. UNIQUE (ref_key): one row per mail, built once however often the build runs. */
+export interface NoticesTable {
+  id: string;
+  member_id: string;
+  /** `due_soon` | `overdue` | `hold_ready`. */
+  kind: string;
+  /** What the mail is about (`due_soon:<memberId>:<due_on>`, …): unique. */
+  ref_key: string;
+  /** `email`. */
+  channel: string;
+  /** `queued` | `sending` | `sent` | `failed` | `skipped`. */
+  status: string;
+  /** Why it was skipped or failed (`no_email`, `smtp_not_configured`, …). */
+  reason: string | null;
+  /** JSON list of the loan ids the mail is about. */
+  loan_ids: string | null;
+  hold_id: string | null;
+  /** Default 0. */
+  attempts: Generated<number>;
+  /** The sender job that claimed it. */
+  job_id: string | null;
+  claimed_at: EpochMs | null;
+  created_at: EpochMs;
+  sent_at: EpochMs | null;
+}
+
 // ---- Komunitas (member area) ----
 
 /** A title a member marked on the OPAC (0044); PK (`member_id`, `record_id`). */
@@ -1746,6 +1775,8 @@ export interface DB {
   charge_adjustments: ChargeAdjustmentsTable;
   payments: PaymentsTable;
   payment_allocations: PaymentAllocationsTable;
+  // ---- Komunitas (notices) ----
+  notices: NoticesTable;
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: SchemaMigrationsEditionTable;
   schema_migrations_edition_lock: SchemaMigrationsEditionLockTable;
