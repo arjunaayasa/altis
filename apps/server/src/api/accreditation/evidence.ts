@@ -1,6 +1,6 @@
-import { archiveEvidence, createEvidence, listEvidence } from '@altis/core';
-import { EVIDENCE_ENTITIES } from '@altis/shared';
-import { EvidenceCreateBody } from '@altis/shared/api/accreditation';
+import { archiveEvidence, attachMinutesEvidence, can, createEvidence, listEvidence, listMinutesForEvidence, stocktakeBranchOf } from '@altis/core';
+import { DomainError, EVIDENCE_ENTITIES } from '@altis/shared';
+import { EvidenceCreateBody, EvidenceMinutesBody, type EvidenceMinutesListResponse } from '@altis/shared/api/accreditation';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import { ulidField } from '@altis/shared/api/common';
 import { z } from 'zod';
@@ -16,6 +16,14 @@ import { route, type RouteDecl } from '../../http/route.js';
 //   DELETE accreditation/evidence/:id    accreditation.workspace.manage   removes the row and releases its file
 //
 // Both writes are `store` routes, audited once (`accreditation.evidence.create|archive`).
+//
+// The stored minutes of a stocktake session as evidence (the indicators whose checklist has the minutes item):
+//
+//   GET    accreditation/evidence/stocktake-minutes    accreditation.workspace.manage   the finished sessions with
+//          stored minutes, of the branches where the caller holds `stocktake.scan.use`
+//   POST   accreditation/evidence/stocktake-minutes    accreditation.workspace.manage   EvidenceMinutesBody → 201
+//          {id, version}; `stocktake.scan.use` at the session's branch too (a session of no such branch, or none at
+//          all, is the field error `stocktakeId` `not_found`); audited `accreditation.evidence.create`
 
 const API = '/api/v1/accreditation/evidence';
 const IdParams = z.strictObject({ id: ulidField });
@@ -76,4 +84,44 @@ const evidenceArchive = route({
   },
 });
 
-export const EVIDENCE_ROUTES: RouteDecl[] = [evidenceList, evidenceCreate, evidenceArchive];
+// ---- the stocktake minutes as evidence ----
+const MINUTES_API = `${API}/stocktake-minutes`;
+
+const minutesList = route({
+  id: 'accreditation.evidence.minutes_list',
+  method: 'GET',
+  path: MINUTES_API,
+  permission: 'accreditation.workspace.manage',
+  idempotency: 'none',
+  audit: null,
+  handler: async (rc) => {
+    const grants = rc.auth?.grants;
+    const body: EvidenceMinutesListResponse = await listMinutesForEvidence(rc.db.db, (branchId) => grants !== undefined && can(grants, 'stocktake.scan.use', branchId));
+    return { body };
+  },
+});
+
+const minutesAttach = route({
+  id: 'accreditation.evidence.minutes_attach',
+  method: 'POST',
+  path: MINUTES_API,
+  permission: 'accreditation.workspace.manage',
+  idempotency: 'store',
+  audit: 'accreditation.evidence.create',
+  body: EvidenceMinutesBody,
+  // The session's minutes are branch data: whoever links them must read that branch's stocktake. A session of a branch
+  // the caller may not read is answered as one that does not exist.
+  prepare: async (rc) => {
+    const branchId = await stocktakeBranchOf(rc.db.db, rc.body.stocktakeId);
+    if (branchId === null || rc.auth === null || !can(rc.auth.grants, 'stocktake.scan.use', branchId)) {
+      throw new DomainError('VALIDATION_FAILED', { detail: 'Data belum benar / The data is not valid', meta: { errors: [{ path: 'stocktakeId', code: 'not_found' }] } });
+    }
+    return branchId;
+  },
+  handler: async (rc) => {
+    const body: StoreResponse = await attachMinutesEvidence(rc.tx(), rc.body, rc.now);
+    return { status: 201, body };
+  },
+});
+
+export const EVIDENCE_ROUTES: RouteDecl[] = [evidenceList, evidenceCreate, evidenceArchive, minutesList, minutesAttach];
