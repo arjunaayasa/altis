@@ -114,6 +114,8 @@ export const REPORTS_ID = {
   'reports.warning.file_missing':
     'Satu berkas bukti tidak ditemukan di penyimpanan sehingga tidak dimuat di ZIP. Tab Cetak di ruang Akreditasi menyebut nama berkasnya.',
   'reports.warning.other': 'Peringatan: {code}',
+  // ---- Komunitas K5 (reports) ----
+  'reports.warning.report_withheld': 'Draf laporan untuk {code} tidak dimuat di ZIP karena Anda tidak memegang izin laporan itu.',
 } as const;
 
 export const REPORTS_EN: Readonly<Record<keyof typeof REPORTS_ID, string>> = {
@@ -225,4 +227,6 @@ export const REPORTS_EN: Readonly<Record<keyof typeof REPORTS_ID, string>> = {
   'reports.warning.file_missing':
     'An evidence file was not found in the storage, so it is not in the ZIP. The Print tab of the Accreditation workspace names the file.',
   'reports.warning.other': 'Warning: {code}',
+  // ---- Komunitas K5 (reports) ----
+  'reports.warning.report_withheld': "The report draft for {code} is not in the ZIP because you do not hold that report's permission.",
 };

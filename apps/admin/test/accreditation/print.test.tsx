@@ -259,6 +259,13 @@ describe('Cetak', () => {
     expect(await within(runs).findByText(/Daftar title_list melebihi 10\.000 baris/, undefined, FIRST)).toBeTruthy();
   });
 
+  // ---- Komunitas K5 (reports) ----
+  it('a drafted report left out of the ZIP for want of its permission is said in words', async () => {
+    renderTab(PrintTab, routes({ runs: [reportRun({ warnings: ['report_withheld:G4.report_documents'] })] }));
+    const runs = await card(ADMIN_ID['accreditation.print.runs.title']);
+    expect(await within(runs).findByText(/Draf laporan untuk G4\.report_documents tidak dimasukkan ke ZIP/, undefined, FIRST)).toBeTruthy();
+  });
+
   it('an unscored instrument offers neither the simulation nor the ZIP per component nor the request letter', async () => {
     renderTab(PrintTab, routes({ scored: false }));
     const dossier = await card(ID['report.accreditation.dossier.title']);

@@ -20,7 +20,8 @@ import { listPdfBuilder, sheetWorkName, writeZip, zipStart, zipStateSchema, zipU
 // - `pdf`: the whole PDF is laid out in one slice from the results, the profile's figures and those rows: the run's
 //   file for a PDF, else `dossier.pdf` (combined ZIP) or the sheets of each component and the profile form
 //   (`entry-1.pdf` … `entry-7.pdf`, per-component ZIP);
-// - `zip`: the ZIP is written unit by unit (zip.ts).
+// - `zip`: the ZIP is written unit by unit (zip.ts), the reports the evidence items draft rendered on the way, except
+//   those the run's `withheld` names.
 
 /** The parts of the dossier a run makes: all of it, or the request letter alone. */
 export const DOSSIER_PARTS = Object.freeze(['all', 'request_letter'] as const);
@@ -32,6 +33,9 @@ const DossierParams = z.strictObject({
   periodId: reportIdField,
   part: z.enum(DOSSIER_PARTS).default('all'),
   zipMode: z.enum(DOSSIER_ZIP_MODES).default('combined'),
+  // ---- Komunitas K5 (reports) ----
+  /** The drafted reports the ZIP leaves out: its caller may not export them (set when the run starts). */
+  withheld: z.array(z.string().max(64)).max(16).optional(),
 });
 
 const count = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
@@ -97,7 +101,7 @@ async function renderDossier(ctx: DocumentCtx, resume: DocumentResume | null): P
   }
   if (phase !== 'zip' || resume === null) throw new ExportRunFailure('internal');
   const zip = stateOf(zipStateSchema, resume);
-  const r = await writeZip(ctx, await zipUnits(ctx.db, p, zip.mode), zip, listPdfBuilder(ctx, p));
+  const r = await writeZip(ctx, await zipUnits(ctx.db, p, zip.mode, { withheld: params.withheld ?? [] }), zip, listPdfBuilder(ctx, p));
   if (r.done) return r;
   return { done: false, resume: { phase: 'zip', cursor: null, state: r.state } };
 }

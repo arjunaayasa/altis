@@ -327,7 +327,7 @@ async function renderAnnual(ctx: DocumentCtx, resume: DocumentResume | null): Pr
     if (ctx.budgetLeftMs() < PDF_MIN_MS) return { done: false, resume: { phase: 'pdf', cursor: null, state } };
   } else if (resume.phase !== 'pdf') throw new ExportRunFailure('internal');
   const layout = render(ctx, span, D, state, await figuresOf(ctx, span, D));
-  await writeBytesAtomic(reportWorkPath(ctx.dataDir, ctx.runId, 'output.part'), layout.toBytes());
+  await writeBytesAtomic(reportWorkPath(ctx.dataDir, ctx.runId, ctx.outputName ?? 'output.part'), layout.toBytes());
   return { done: true, rowCount: layout.pages, nonLatinRows: layout.nonLatinRows, warnings: [] };
 }
 
