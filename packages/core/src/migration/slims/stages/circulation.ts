@@ -719,7 +719,9 @@ async function loansBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: B
     const dueOn = dateCell(row['due_date']) ?? loanedOn;
     if (open) {
       const dryMember = io.trx === null && sourceMembers.has(slimsMember);
-      const dryItem = io.trx === null && (await sourceItemIds(c)).has(code) && itemId !== null;
+      // A dry run: a copy the source's `item` holds comes over with the catalogue (unless the run skips it), as
+      // `open_loan_item_missing` reads it; one not mapped yet (every copy, before any real run) is no reason to skip.
+      const dryItem = io.trx === null && !c.options.skipCatalog && (await sourceItemIds(c)).has(code);
       if ((itemId === null && !dryItem) || (memberId === null && !dryMember)) {
         l.skipped(table, 'open_loan_unresolved');
         l.report(table, key, 'open_loan_unresolved', `${itemId === null ? `item_code=${code || '-'}` : ''}${memberId === null && !dryMember ? ` member_id=${slimsMember || '-'}` : ''}`.trim());
