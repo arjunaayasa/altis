@@ -7,6 +7,7 @@ import { engineLabel, testDbContext } from '../../../../tools/test/test-db.js';
 import { txCtx } from '../../src/context.js';
 import { uploadContext } from '../../src/files/contexts.js';
 import { acceptChunk, completeUpload, createUpload, uploadOwner } from '../../src/files/uploads.js';
+import { CLASS_MIN_BORROWERS, classActivityStep, refreshClassActivity, topClasses } from '../../src/opac-home/class-activity.js';
 import { readOpacHome, saveOpacHome } from '../../src/opac-home/content.js';
 import { POPULAR_MIN_BORROWERS, popularRecordIds, popularTitlesStep, refreshPopularTitles } from '../../src/opac-home/popular.js';
 import { REPORTS_HOUSEKEEPING_STEPS } from '../../src/reports/housekeeping/index.js';
@@ -18,9 +19,11 @@ import { masterId, seedBranch, seedCopy, seedLoan, seedMember } from '../support
 import { KEYRING, openExportDb, type ExportDb } from './reports-export-support.js';
 
 // The OPAC home page as the library's profile site (core opac-home): its content saved with a revision (a stale one is
-// refused), its photos claimed as public files of the setting and released when dropped, and the popular titles: an
-// aggregate of loan counts per title and branch, rebuilt from the last year's loans of titles the OPAC shows, that keeps
-// a title only when enough different members borrowed it and never holds a borrower.
+// refused), its photos claimed as public files of the setting and released when dropped, a content saved before its texts
+// were per language still read as before, the popular titles (an aggregate of loan counts per title and branch, rebuilt
+// from the last year's loans of titles the OPAC shows, that keeps a title only when enough different members borrowed
+// it and never holds a borrower), and the loans per class (counts per class, kept only with five or more different
+// borrowers, never a member).
 
 const ctx = testDbContext();
 const NOW = Date.parse('2026-11-15T05:00:00Z');
@@ -118,11 +121,12 @@ describe.skipIf(!ctx.available)(`the OPAC home page [${engineLabel()}]`, () => {
 
       const home: OpacHomeContent = {
         ...OPAC_HOME_DEFAULT,
-        title: '  Ruang baca untuk semua  ',
-        about: { text: 'Berdiri sejak 1987.', photo: null, founded: 1987, librarians: 3 },
+        title: { id: '  Ruang baca untuk semua  ', en: 'A reading room for all' },
+        brand: '#1E3A8A',
+        about: { text: { id: 'Berdiri sejak 1987.', en: null }, photo: null, founded: 1987, librarians: 3 },
         services: [{ title: 'Peminjaman', text: null }],
-        hours: [{ days: 'Senin–Jumat', time: '07.00–15.00' }],
-        blocks: { ...OPAC_HOME_DEFAULT.blocks, promoted: false },
+        hours: [{ days: 'Senin–Jumat', time: '07.00–15.00', weekdays: [1, 2, 3, 4, 5] }],
+        blocks: { ...OPAC_HOME_DEFAULT.blocks, promoted: false, readingClasses: true },
       };
       const saved = await asStaff((tx) => saveOpacHome(tx, { revision: first.revision, home, welcome: { id: 'Selamat datang', en: '   ' } }, { keyring: KEYRING }));
       expect(saved.changed).toEqual(['opac.welcome.id', 'opac.home']);
@@ -130,14 +134,41 @@ describe.skipIf(!ctx.available)(`the OPAC home page [${engineLabel()}]`, () => {
 
       const after = await readOpacHome(db.h.db);
       expect(after.revision).toBe(saved.revision);
-      expect(after.home.title).toBe('Ruang baca untuk semua');
+      expect(after.home.title).toEqual({ id: 'Ruang baca untuk semua', en: 'A reading room for all' });
+      expect(after.home.brand).toBe('#1e3a8a');
+      expect(after.home.hours[0]!.weekdays).toEqual([1, 2, 3, 4, 5]);
       expect(after.home.blocks.promoted).toBe(false);
+      expect(after.home.blocks.readingClasses).toBe(true);
       expect(after.welcome).toEqual({ id: 'Selamat datang', en: null });
 
       const audit = await db.h.db.selectFrom('audit_log').select(['actor_id', 'meta']).where('action', '=', 'opac.home.update').execute();
       expect(audit).toHaveLength(1);
       expect(audit[0]!.actor_id).toBe(db.staffId);
       expect(JSON.parse(String(audit[0]!.meta))).toEqual({ keys: ['opac.welcome.id', 'opac.home'] });
+    });
+
+    it('reads a content saved before its texts were per language as before: the texts as the Indonesian ones, the new fields at their defaults', async () => {
+      const current = (await db.h.db.selectFrom('settings').select('value').where('key', '=', 'opac.home').executeTakeFirstOrThrow()).value!;
+      const legacy = {
+        title: 'Ruang baca lama',
+        hero: null,
+        about: { text: 'Paragraf lama.', photo: null, founded: null, librarians: null },
+        services: [],
+        facilities: [],
+        hours: [{ days: 'Senin–Jumat', time: '07.00–15.00' }],
+        blocks: { classes: true, popular: true, newTitles: true, promoted: true, about: true, services: true, news: true, visit: false },
+      };
+      await db.h.db.updateTable('settings').set({ value: JSON.stringify(legacy) }).where('key', '=', 'opac.home').execute();
+      try {
+        const read = await readOpacHome(db.h.db);
+        expect(read.home.title).toEqual({ id: 'Ruang baca lama', en: null });
+        expect(read.home.about.text).toEqual({ id: 'Paragraf lama.', en: null });
+        expect(read.home.brand).toBeNull();
+        expect(read.home.hours).toEqual([{ days: 'Senin–Jumat', time: '07.00–15.00', weekdays: [] }]);
+        expect(read.home.blocks).toEqual({ ...legacy.blocks, readingClasses: false });
+      } finally {
+        await db.h.db.updateTable('settings').set({ value: current }).where('key', '=', 'opac.home').execute();
+      }
     });
 
     it('refuses a save that names an older revision with CONFLICT_STALE, and changes nothing', async () => {
@@ -155,7 +186,7 @@ describe.skipIf(!ctx.available)(`the OPAC home page [${engineLabel()}]`, () => {
       let state = await readOpacHome(db.h.db);
       const withPhotos: OpacHomeContent = {
         ...state.home,
-        hero: { fileId: hero, alt: 'Ruang baca', position: 60 },
+        hero: { fileId: hero, alt: 'Ruang baca', position: 60, overlay: 70 },
         about: { ...state.home.about, photo: { fileId: about, alt: 'Rak buku', caption: null } },
         facilities: [{ fileId: facility, alt: 'Sudut baca', caption: 'Sudut baca' }],
       };
@@ -275,8 +306,8 @@ describe.skipIf(!ctx.available)(`the OPAC home page [${engineLabel()}]`, () => {
       await withTx(db.h, (trx) => indexRecords(trx, Object.values(titles), NOW));
     });
 
-    it('the rebuild is the last step of the reports housekeeping, age-based; the floor is three borrowers', () => {
-      expect(REPORTS_HOUSEKEEPING_STEPS.at(-1)).toBe(popularTitlesStep);
+    it('the rebuild is a step of the reports housekeeping, age-based; the floor is three borrowers', () => {
+      expect(REPORTS_HOUSEKEEPING_STEPS).toContain(popularTitlesStep);
       expect(popularTitlesStep).toMatchObject({ name: 'popular_titles', ageBased: true });
       expect(POPULAR_MIN_BORROWERS).toBe(3);
     });
@@ -318,6 +349,91 @@ describe.skipIf(!ctx.available)(`the OPAC home page [${engineLabel()}]`, () => {
       expect(all).not.toContain(titles['hidden']);
       // At B only: the second title (3 loans there) before the popular one (its loans were at A).
       expect(await ids({ branchIds: [branchB] })).toEqual([titles['second'], titles['popular']]);
+    });
+  });
+
+  describe('the loans per class', () => {
+    const members: { id: string; no: string; name: string }[] = [];
+    const copies: { recordId: string; itemId: string }[] = [];
+    let branch: string;
+
+    /** A loan of copy `c` by member `m` (null: an anonymised borrower), `daysAgo` days before NOW, counted in `className`. */
+    async function lend(c: number, m: number | null, className: string | null, daysAgo: number, outcome?: 'voided'): Promise<void> {
+      const at = NOW - daysAgo * DAY;
+      const on = new Date(at).toISOString().slice(0, 10);
+      await seedLoan(db.h.db, {
+        ...copies[c]!,
+        memberId: m === null ? null : members[m]!.id,
+        branchId: branch,
+        loanedOn: on,
+        loanedAt: at,
+        dueOn: on,
+        returnedOn: on,
+        className,
+        ...(outcome === undefined ? {} : { outcome }),
+      });
+    }
+
+    beforeAll(async () => {
+      const h = db.h.db;
+      branch = await seedBranch(h, 'KLS');
+      for (let i = 0; i < 12; i += 1) {
+        const no = `KLS-${i}`;
+        const name = `Pembaca Kelas Rahasia ${i}`;
+        members.push({ id: await seedMember(h, { no, name, className: 'XI IPA 2' }), no, name });
+      }
+      for (let i = 0; i < 4; i += 1) copies.push(await seedCopy(h, { branchId: branch, title: `Buku Kelas ${i}`, barcode: `KLS-B${i}` }));
+      // XI IPA 2: five borrowers (one spelling it in lower case), three titles, eight loans, one by an anonymised borrower.
+      for (const [m, c] of [[0, 0], [1, 1], [2, 2], [3, 0], [0, 1], [1, 0]] as const) await lend(c, m, 'XI IPA 2', 10);
+      await lend(2, 4, 'xi ipa 2', 12);
+      await lend(0, null, 'XI IPA 2', 14);
+      // X-1: four borrowers, many loans: not enough borrowers.
+      for (const m of [5, 6, 7, 8, 5, 5, 6, 6, 7, 8]) await lend(3, m, 'X-1', 20);
+      // IX: four borrowers and three loans of anonymised borrowers: still four.
+      for (const m of [5, 6, 7, 8, null, null, null]) await lend(1, m, 'IX', 20);
+      // XII: five borrowers, more than a year ago.
+      for (const m of [0, 1, 2, 3, 4]) await lend(0, m, 'XII', 400);
+      // VOID: five borrowers, every loan voided.
+      for (const m of [0, 1, 2, 3, 4]) await lend(0, m, 'VOID', 5, 'voided');
+      // XII IPS 1: six borrowers, six loans of one title.
+      for (const m of [6, 7, 8, 9, 10, 11]) await lend(3, m, 'XII IPS 1', 30);
+      // No class in the snapshot: never counted.
+      for (const m of [0, 1, 2, 3, 4, 5]) await lend(1, m, null, 3);
+    });
+
+    it('the rebuild is the last step of the reports housekeeping, age-based; the floor is five borrowers', () => {
+      expect(REPORTS_HOUSEKEEPING_STEPS.at(-1)).toBe(classActivityStep);
+      expect(classActivityStep).toMatchObject({ name: 'class_activity', ageBased: true });
+      expect(CLASS_MIN_BORROWERS).toBe(5);
+    });
+
+    it('keeps a class only with five different borrowers in the last year, voided loans and loans without a class not counted; letter case is one class', async () => {
+      expect(await refreshClassActivity(db.h, NOW)).toEqual({ classes: 2 });
+      const top = await topClasses(db.h.db, 10);
+      expect(top.map((c) => ({ ...c, className: c.className.toUpperCase() }))).toEqual([
+        { place: 1, className: 'XI IPA 2', loans: 8, titles: 3 },
+        { place: 2, className: 'XII IPS 1', loans: 6, titles: 1 },
+      ]);
+      // The spelling most of its loans carry (MySQL and MariaDB compare the spellings as equal and keep either).
+      if (db.h.dialect !== 'mysql' && db.h.dialect !== 'mariadb') expect(top[0]!.className).toBe('XI IPA 2');
+      expect((await topClasses(db.h.db, 1)).map((c) => c.place)).toEqual([1]);
+      const rows = await db.h.db.selectFrom('opac_class_activity').select('refreshed_at').execute();
+      expect(rows.map((r) => Number(r.refreshed_at))).toEqual([NOW, NOW]);
+
+      // A year later nothing is left; the rebuild replaces the whole table.
+      expect(await refreshClassActivity(db.h, NOW + 400 * DAY)).toEqual({ classes: 0 });
+      expect(await db.h.db.selectFrom('opac_class_activity').selectAll().execute()).toEqual([]);
+      await refreshClassActivity(db.h, NOW);
+    });
+
+    it('holds no member: its columns are a place, a class, two counts and a time, and no cell is a member id, number or name', async () => {
+      expect(TABLE_COLUMNS.opac_class_activity.map((c) => c.name)).toEqual(['place', 'class_name', 'loans', 'titles', 'refreshed_at']);
+      const cells = (await db.h.db.selectFrom('opac_class_activity').selectAll().execute()).flatMap((r) => Object.values(r).map((v) => String(v)));
+      expect(cells.length).toBeGreaterThan(0);
+      for (const m of members) {
+        expect(cells).not.toContain(m.id);
+        expect(cells.some((c) => c.includes(m.no) || c.includes(m.name))).toBe(false);
+      }
     });
   });
 });

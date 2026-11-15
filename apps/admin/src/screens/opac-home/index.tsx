@@ -1,9 +1,17 @@
 import {
   OPAC_HOME_BLOCKS,
   OPAC_HOME_HERO_SIZE,
+  OPAC_HOME_LANGS,
   OPAC_HOME_LIMITS,
+  OPAC_HOME_MIN_CONTRAST,
+  OPAC_HOME_OVERLAY,
+  OPAC_HOME_OVERLAY_RGB,
   OPAC_HOME_PHOTO_SIZE,
   OPAC_HOME_POSITION_STEP,
+  OPAC_HOME_WEEKDAYS,
+  brandRgb,
+  contrastWithWhite,
+  type OpacHomeLang,
   type OpacHomePutResponse,
   type OpacHomeView,
 } from '@altis/shared/api/opac-home';
@@ -15,7 +23,7 @@ import { Badge, CheckField, Field, Notice, TEXTAREA_CLASS } from '@/components/f
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useT, type TKey } from '@/i18n';
+import { useLocale, useT, type TKey } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
 import { useDirtyGuard } from '@/lib/dirty-forms';
@@ -24,15 +32,17 @@ import { useApiQuery, useMe } from '@/lib/me';
 import { uploadFile } from '@/lib/upload';
 import { cn } from '@/lib/utils';
 import { PHOTO_SOURCE_MAX_BYTES, PHOTO_SOURCE_TYPES, PhotoCropDialog, photoSourceOf, type PhotoSource } from './crop';
-import { bodyOf, comparable, draftOf, newRowKey, type HomeDraft, type PhotoDraft } from './draft';
+import { bodyOf, comparable, draftOf, newRowKey, type HomeDraft, type PhotoDraft, type TextDraft } from './draft';
 
 /**
  * OPAC › Halaman awal (`/admin/opac/beranda`, permission `opac.pages.manage`): the home page of the public site as the
  * library's profile. `GET opac/home` loads the content, both welcome texts and their revision; the form edits them in
- * one draft: the hero photo (uploaded as `opac.home_photo` after a 16:9 crop in the browser), its alternative text and
- * position, the heading and the lead sentence in each language, "about" (photo, paragraph, year founded, librarians),
- * up to eight services, up to four facility photos (4:3), the opening hours and the eight blocks shown. A preview of
- * the hero beside the form follows the unsaved draft. The save bar sticks to the bottom with a mark while something
+ * one draft: the hero photo (uploaded as `opac.home_photo` after a 16:9 crop in the browser), its alternative text,
+ * position and the darkness of its overlay (never lighter than the floor that keeps white text readable), the library
+ * colour of a hero without a photo (with the contrast white text keeps on it), the heading and the lead sentence in
+ * each language, "about" (photo, paragraph in each language, year founded, librarians), up to eight services, up to
+ * four facility photos (4:3), the opening hours with the weekdays each row covers, and the blocks shown. A preview of
+ * the hero beside the form follows the unsaved draft, in either language. The save bar sticks to the bottom with a mark while something
  * is unsaved, "Batalkan perubahan" goes back to what was loaded, and `PUT opac/home` saves it all; a save another admin
  * made first is a 409 CONFLICT_STALE, which offers to reload. The draft is checked with the server's schema before it is
  * sent, and the server's field errors land on the same fields. Every outcome of a save is said in the save bar.
@@ -51,6 +61,23 @@ const HERO_COLORS: Readonly<Record<OpacAccent, string>> = {
 };
 
 const fileSrc = (fileId: string): string => `/files/${encodeURIComponent(fileId)}`;
+
+/** The text of `draft` a page in `lang` shows: its own, else the other language's (blank: none). */
+function textIn(draft: TextDraft, lang: OpacHomeLang): string {
+  const own = draft[lang];
+  if (own.trim() !== '') return own;
+  const other = draft[lang === 'id' ? 'en' : 'id'];
+  return other.trim() === '' ? '' : other;
+}
+
+/** The colour the hero band takes without a photo: the draft's library colour when it is one, else the accent's. */
+function bandColor(draft: HomeDraft, view: OpacHomeView): string {
+  const typed = draft.brand.trim().toLowerCase();
+  return brandRgb(typed) === null ? HERO_COLORS[view.accent] : typed;
+}
+
+/** The overlay's colour at `percent` darkness, as CSS. */
+const overlayColor = (percent: number): string => `rgb(${OPAC_HOME_OVERLAY_RGB.join(' ')} / ${percent / 100})`;
 
 /** The screen: its header, then the editor once the content is loaded. */
 export function OpacHomeScreen() {
@@ -235,11 +262,11 @@ function HeroFrame({ draft, view, ratio, label, className, children }: { draft: 
   const id = useId();
   return (
     <figure aria-labelledby={id} className={cn('grid gap-1', className)}>
-      <div className="relative flex items-end overflow-hidden rounded-lg text-white" style={{ aspectRatio: ratio, backgroundColor: HERO_COLORS[view.accent] }}>
+      <div className="relative flex items-end overflow-hidden rounded-lg text-white" style={{ aspectRatio: ratio, backgroundColor: bandColor(draft, view) }}>
         {draft.hero !== null && (
           <>
             <img src={fileSrc(draft.hero.fileId)} alt="" className="absolute inset-0 size-full object-cover" style={{ objectPosition: `50% ${draft.hero.position}%` }} />
-            <div aria-hidden="true" className="absolute inset-0" style={{ backgroundColor: 'rgb(8 12 20 / 0.64)' }} />
+            <div aria-hidden="true" data-overlay={draft.hero.overlay} className="absolute inset-0" style={{ backgroundColor: overlayColor(draft.hero.overlay) }} />
           </>
         )}
         {children}
@@ -257,12 +284,20 @@ function HeroFrame({ draft, view, ratio, label, className, children }: { draft: 
  */
 function HeroPreview({ draft, view }: { draft: HomeDraft; view: OpacHomeView }) {
   const t = useT();
-  const title = draft.title.trim() === '' ? view.libraryName : draft.title;
-  const lead = draft.lead.id.trim() !== '' ? draft.lead.id : draft.lead.en;
+  const [lang, setLang] = useState<OpacHomeLang>('id');
+  const title = textIn(draft.title, lang) || view.libraryName;
+  const lead = textIn(draft.lead, lang);
   return (
     <div className="grid gap-3">
+      <div role="group" aria-label={t('opacHome.preview.lang')} className="flex flex-wrap gap-1">
+        {OPAC_HOME_LANGS.map((l) => (
+          <Button key={l} type="button" size="sm" variant={l === lang ? 'secondary' : 'ghost'} aria-pressed={l === lang} onClick={() => setLang(l)}>
+            {t(l === 'id' ? 'opacHome.preview.lang_id' : 'opacHome.preview.lang_en')}
+          </Button>
+        ))}
+      </div>
       <HeroFrame draft={draft} view={view} ratio={HERO_FRAMES.wide} label={t('opacHome.preview.wide')}>
-        <div className="relative grid gap-1 p-3">
+        <div className="relative grid gap-1 p-3" lang={lang}>
           <p className="line-clamp-2 text-sm leading-tight font-bold text-balance">{title}</p>
           {lead.trim() !== '' && <p className="line-clamp-2 text-[11px] leading-snug whitespace-pre-line">{lead}</p>}
           <span className="w-max rounded bg-background px-2 py-0.5 text-[10px] text-muted-foreground">{t('opacHome.preview.search')}</span>
@@ -299,6 +334,7 @@ function HomeEditor({
   onReload(): Promise<void>;
 }) {
   const t = useT();
+  const locale = useLocale();
   const baseline = useMemo(() => draftOf(view), [view]);
   const [draft, setDraft] = useState<HomeDraft>(baseline);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -323,8 +359,39 @@ function HomeEditor({
     setDraft(change);
     onEdited();
   };
+  /** Edits the library colour; its refusal goes with the value it was about (the contrast hint speaks for the new one). */
+  const editBrand = (value: string): void => {
+    setErrors((e) => (e['home.brand'] === undefined ? e : Object.fromEntries(Object.entries(e).filter(([path]) => path !== 'home.brand'))));
+    edit((d) => ({ ...d, brand: value }));
+  };
   /** The message of the field at `path`, if the last check refused it. */
-  const errorAt = (path: string): string | undefined => (errors[path] === undefined ? undefined : fieldErrorKey(errors[path]));
+  const errorAt = (path: string): string | undefined => {
+    const code = errors[path];
+    if (code === undefined) return undefined;
+    return code === 'low_contrast' ? 'opacHome.brand.low_contrast' : fieldErrorKey(code);
+  };
+  /** White text's contrast on the typed library colour, or null while it is not a colour. */
+  const brandContrast = (() => {
+    const rgb = brandRgb(draft.brand.trim().toLowerCase());
+    return rgb === null ? null : contrastWithWhite(rgb);
+  })();
+  const ratioText = (ratio: number): string => new Intl.NumberFormat(locale === 'id' ? 'id-ID' : 'en-GB', { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(Math.floor(ratio * 10) / 10);
+  /** A text field per language (`path` names the body's object of both). */
+  const perLanguage = (path: string, label: (lang: OpacHomeLang) => TKey, value: TextDraft, set: (next: TextDraft) => void, max: number, rows: number | null) =>
+    OPAC_HOME_LANGS.map((lang) => (
+      <Field key={lang} label={t(label(lang))} error={errorAt(`${path}.${lang}`)}>
+        {(c) => (
+          <>
+            {rows === null ? (
+              <Input {...c} lang={lang} value={value[lang]} maxLength={max} onChange={(e) => set({ ...value, [lang]: e.target.value })} />
+            ) : (
+              <textarea {...c} className={TEXTAREA_CLASS} rows={rows} lang={lang} value={value[lang]} maxLength={max} onChange={(e) => set({ ...value, [lang]: e.target.value })} />
+            )}
+            <Counter value={value[lang]} max={max} />
+          </>
+        )}
+      </Field>
+    ));
 
   const save = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
@@ -383,7 +450,7 @@ function HomeEditor({
             <PhotoUpload
               label={t(draft.hero === null ? 'opacHome.photo.upload' : 'opacHome.photo.replace')}
               size={OPAC_HOME_HERO_SIZE}
-              onUploaded={(fileId) => edit((d) => ({ ...d, hero: { fileId, alt: '', position: d.hero?.position ?? 50 } }))}
+              onUploaded={(fileId) => edit((d) => ({ ...d, hero: { fileId, alt: '', position: d.hero?.position ?? 50, overlay: d.hero?.overlay ?? OPAC_HOME_OVERLAY.default } }))}
             />
             {draft.hero !== null && (
               <Button type="button" variant="ghost" size="sm" onClick={() => edit((d) => ({ ...d, hero: null }))}>
@@ -418,37 +485,81 @@ function HomeEditor({
                   />
                 )}
               </Field>
+              <Field label={t('opacHome.hero.overlay')} hint={t('opacHome.hero.overlay_hint', { value: draft.hero.overlay, min: OPAC_HOME_OVERLAY.min })} error={errorAt('home.hero.overlay')}>
+                {(c) => (
+                  <input
+                    {...c}
+                    type="range"
+                    min={OPAC_HOME_OVERLAY.min}
+                    max={OPAC_HOME_OVERLAY.max}
+                    step={OPAC_HOME_OVERLAY.step}
+                    value={draft.hero?.overlay ?? OPAC_HOME_OVERLAY.default}
+                    aria-valuetext={`${draft.hero?.overlay ?? OPAC_HOME_OVERLAY.default}%`}
+                    onChange={(e) => edit((d) => (d.hero === null ? d : { ...d, hero: { ...d.hero, overlay: Number(e.target.value) } }))}
+                  />
+                )}
+              </Field>
             </>
           )}
+          <Field
+            label={t('opacHome.brand.label')}
+            hint={
+              brandContrast === null
+                ? t('opacHome.brand.hint', { accent: HERO_COLORS[view.accent] })
+                : t(brandContrast >= OPAC_HOME_MIN_CONTRAST ? 'opacHome.brand.contrast_ok' : 'opacHome.brand.contrast_low', {
+                    ratio: ratioText(brandContrast),
+                    min: ratioText(OPAC_HOME_MIN_CONTRAST),
+                  })
+            }
+            error={errorAt('home.brand')}
+          >
+            {(c) => (
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="color"
+                  aria-label={t('opacHome.brand.picker')}
+                  className="h-9 w-12 shrink-0 cursor-pointer rounded-md border bg-background p-1"
+                  value={bandColor(draft, view)}
+                  onChange={(e) => editBrand(e.target.value)}
+                />
+                <Input
+                  {...c}
+                  className="w-32"
+                  value={draft.brand}
+                  maxLength={7}
+                  spellCheck={false}
+                  autoComplete="off"
+                  placeholder={HERO_COLORS[view.accent]}
+                  onChange={(e) => editBrand(e.target.value)}
+                />
+                {draft.brand !== '' && (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => editBrand('')}>
+                    {t('opacHome.brand.reset')}
+                  </Button>
+                )}
+              </div>
+            )}
+          </Field>
         </Section>
 
         <Section title={t('opacHome.text.title')} description={t('opacHome.text.description')}>
-          <Field label={t('opacHome.text.heading')} hint={t('opacHome.text.heading_hint')} error={errorAt('home.title')}>
-            {(c) => (
-              <>
-                <Input {...c} value={draft.title} maxLength={OPAC_HOME_LIMITS.title} placeholder={view.libraryName} onChange={(e) => edit((d) => ({ ...d, title: e.target.value }))} />
-                <Counter value={draft.title} max={OPAC_HOME_LIMITS.title} />
-              </>
-            )}
-          </Field>
-          {(['id', 'en'] as const).map((locale) => (
-            <Field key={locale} label={t(locale === 'id' ? 'opacHome.text.lead_id' : 'opacHome.text.lead_en')} error={errorAt(`welcome.${locale}`)}>
-              {(c) => (
-                <>
-                  <textarea
-                    {...c}
-                    className={TEXTAREA_CLASS}
-                    rows={3}
-                    lang={locale}
-                    value={draft.lead[locale]}
-                    maxLength={OPAC_HOME_LIMITS.welcome}
-                    onChange={(e) => edit((d) => ({ ...d, lead: { ...d.lead, [locale]: e.target.value } }))}
-                  />
-                  <Counter value={draft.lead[locale]} max={OPAC_HOME_LIMITS.welcome} />
-                </>
-              )}
-            </Field>
-          ))}
+          <p className="text-xs text-muted-foreground">{t('opacHome.text.languages_hint', { library: view.libraryName })}</p>
+          {perLanguage(
+            'home.title',
+            (lang) => (lang === 'id' ? 'opacHome.text.heading_id' : 'opacHome.text.heading_en'),
+            draft.title,
+            (title) => edit((d) => ({ ...d, title })),
+            OPAC_HOME_LIMITS.title,
+            null,
+          )}
+          {perLanguage(
+            'welcome',
+            (lang) => (lang === 'id' ? 'opacHome.text.lead_id' : 'opacHome.text.lead_en'),
+            draft.lead,
+            (lead) => edit((d) => ({ ...d, lead })),
+            OPAC_HOME_LIMITS.welcome,
+            3,
+          )}
         </Section>
 
         <Section title={t('opacHome.about.title')} description={t('opacHome.about.description')}>
@@ -473,21 +584,14 @@ function HomeEditor({
           </div>
           {draft.about.photo !== null &&
             photoFields(draft.about.photo, 'home.about.photo', (photo) => edit((d) => ({ ...d, about: { ...d.about, photo } })), true)}
-          <Field label={t('opacHome.about.text')} error={errorAt('home.about.text')}>
-            {(c) => (
-              <>
-                <textarea
-                  {...c}
-                  className={TEXTAREA_CLASS}
-                  rows={5}
-                  value={draft.about.text}
-                  maxLength={OPAC_HOME_LIMITS.aboutText}
-                  onChange={(e) => edit((d) => ({ ...d, about: { ...d.about, text: e.target.value } }))}
-                />
-                <Counter value={draft.about.text} max={OPAC_HOME_LIMITS.aboutText} />
-              </>
-            )}
-          </Field>
+          {perLanguage(
+            'home.about.text',
+            (lang) => (lang === 'id' ? 'opacHome.about.text_id' : 'opacHome.about.text_en'),
+            draft.about.text,
+            (text) => edit((d) => ({ ...d, about: { ...d.about, text } })),
+            OPAC_HOME_LIMITS.aboutText,
+            5,
+          )}
           <div className="flex flex-wrap gap-4">
             <Field label={t('opacHome.about.founded')} error={errorAt('home.about.founded')} className="w-36">
               {(c) => <Input {...c} inputMode="numeric" maxLength={4} value={draft.about.founded} onChange={(e) => edit((d) => ({ ...d, about: { ...d.about, founded: e.target.value } }))} />}
@@ -612,39 +716,67 @@ function HomeEditor({
         <Section title={t('opacHome.hours.title')} description={t('opacHome.hours.description')}>
           {draft.hours.map((h, i) => {
             const n = i + 1;
+            const toggle = (day: number, on: boolean): void =>
+              edit((d) => ({
+                ...d,
+                hours: d.hours.map((x) => (x.key === h.key ? { ...x, weekdays: OPAC_HOME_WEEKDAYS.filter((w) => (w === day ? on : x.weekdays.includes(w))) } : x)),
+              }));
             return (
-              <div key={h.key} className="flex flex-wrap items-end gap-2">
-                <Field label={t('opacHome.hours.days', { n })} error={errorAt(`home.hours.${i}.days`)} className="min-w-40 flex-1">
-                  {(c) => (
-                    <Input
-                      {...c}
-                      value={h.days}
-                      maxLength={OPAC_HOME_LIMITS.hoursDays}
-                      placeholder={t('opacHome.hours.days_placeholder')}
-                      onChange={(e) => edit((d) => ({ ...d, hours: d.hours.map((x) => (x.key === h.key ? { ...x, days: e.target.value } : x)) }))}
-                    />
+              <div key={h.key} className="grid gap-2 rounded-md border bg-muted/40 p-2">
+                <div className="flex flex-wrap items-end gap-2">
+                  <Field label={t('opacHome.hours.days', { n })} error={errorAt(`home.hours.${i}.days`)} className="min-w-40 flex-1">
+                    {(c) => (
+                      <Input
+                        {...c}
+                        value={h.days}
+                        maxLength={OPAC_HOME_LIMITS.hoursDays}
+                        placeholder={t('opacHome.hours.days_placeholder')}
+                        onChange={(e) => edit((d) => ({ ...d, hours: d.hours.map((x) => (x.key === h.key ? { ...x, days: e.target.value } : x)) }))}
+                      />
+                    )}
+                  </Field>
+                  <Field label={t('opacHome.hours.time', { n })} error={errorAt(`home.hours.${i}.time`)} className="min-w-32 flex-1">
+                    {(c) => (
+                      <Input
+                        {...c}
+                        value={h.time}
+                        maxLength={OPAC_HOME_LIMITS.hoursTime}
+                        placeholder={t('opacHome.hours.time_placeholder')}
+                        onChange={(e) => edit((d) => ({ ...d, hours: d.hours.map((x) => (x.key === h.key ? { ...x, time: e.target.value } : x)) }))}
+                      />
+                    )}
+                  </Field>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    aria-label={t('opacHome.hours.remove_label', { n })}
+                    onClick={() => edit((d) => ({ ...d, hours: d.hours.filter((x) => x.key !== h.key) }))}
+                  >
+                    {t('opacHome.services.remove')}
+                  </Button>
+                </div>
+                <fieldset aria-describedby={errorAt(`home.hours.${i}.weekdays`) === undefined ? undefined : `hours-${h.key}-weekdays-error`}>
+                  <legend className="mb-1 text-xs font-medium">{t('opacHome.hours.weekdays', { n })}</legend>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    {OPAC_HOME_WEEKDAYS.map((day) => (
+                      <CheckField
+                        key={day}
+                        label={t(`opacHome.hours.weekday.${day}` as TKey)}
+                        checked={h.weekdays.includes(day)}
+                        onChange={(e) => {
+                          const on = e.target.checked;
+                          toggle(day, on);
+                        }}
+                      />
+                    ))}
+                  </div>
+                  {errorAt(`home.hours.${i}.weekdays`) !== undefined && (
+                    <p id={`hours-${h.key}-weekdays-error`} className="text-sm text-destructive">
+                      {t(errorAt(`home.hours.${i}.weekdays`) as TKey)}
+                    </p>
                   )}
-                </Field>
-                <Field label={t('opacHome.hours.time', { n })} error={errorAt(`home.hours.${i}.time`)} className="min-w-32 flex-1">
-                  {(c) => (
-                    <Input
-                      {...c}
-                      value={h.time}
-                      maxLength={OPAC_HOME_LIMITS.hoursTime}
-                      placeholder={t('opacHome.hours.time_placeholder')}
-                      onChange={(e) => edit((d) => ({ ...d, hours: d.hours.map((x) => (x.key === h.key ? { ...x, time: e.target.value } : x)) }))}
-                    />
-                  )}
-                </Field>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  aria-label={t('opacHome.hours.remove_label', { n })}
-                  onClick={() => edit((d) => ({ ...d, hours: d.hours.filter((x) => x.key !== h.key) }))}
-                >
-                  {t('opacHome.services.remove')}
-                </Button>
+                </fieldset>
               </div>
             );
           })}
@@ -654,7 +786,7 @@ function HomeEditor({
               size="sm"
               variant="outline"
               disabled={draft.hours.length >= OPAC_HOME_LIMITS.hours}
-              onClick={() => edit((d) => ({ ...d, hours: [...d.hours, { key: newRowKey(), days: '', time: '' }] }))}
+              onClick={() => edit((d) => ({ ...d, hours: [...d.hours, { key: newRowKey(), days: '', time: '', weekdays: [] }] }))}
             >
               {t('opacHome.hours.add')}
             </Button>

@@ -1,5 +1,5 @@
 import { legacyTarget, popularRecordIds, recordUrlPath } from '@altis/core';
-import type { DbHandle } from '@altis/db';
+import { countGrouped, type DbHandle } from '@altis/db';
 import type { Locale } from '@altis/shared';
 import { sourceNameField } from '@altis/shared/api/catalog/migration';
 
@@ -36,6 +36,12 @@ export interface TitleCard {
   coverFileId: string | null;
   /** The display name of the main agent (`is_main`), if any. */
   mainAgent: string | null;
+  // ---- Komunitas (OPAC home page) ----
+  /**
+   * From the search index's facets: `available` when a copy is on an open shelf now (`av`), `unavailable` when the
+   * title has copies but none is (`br` without `av`), null when it has no copy at all.
+   */
+  availability: 'available' | 'unavailable' | null;
 }
 
 /** One news post as the home page lists it. */
@@ -154,11 +160,24 @@ const CARD_COLUMNS = ['id', 'title', 'subtitle', 'publication_year', 'cover_file
 
 type CardRow = { id: string; title: string; subtitle: string | null; publication_year: string | null; cover_file_id: string | null };
 
+/**
+ * The availability of each of `ids` the search index knows (see TitleCard): one read of the facets `av` and `br` for
+ * all of them.
+ */
+async function availabilities(db: Db, ids: readonly string[]): Promise<Map<string, 'available' | 'unavailable'>> {
+  const out = new Map<string, 'available' | 'unavailable'>();
+  if (ids.length === 0) return out;
+  const rows = await db.selectFrom('search_facet').select(['record_id', 'facet']).where('facet', 'in', ['av', 'br']).where('record_id', 'in', [...ids]).execute();
+  for (const r of rows) {
+    if (r.facet === 'av') out.set(r.record_id, 'available');
+    else if (!out.has(r.record_id)) out.set(r.record_id, 'unavailable');
+  }
+  return out;
+}
+
 async function cards(db: Db, rows: readonly CardRow[]): Promise<TitleCard[]> {
-  const agents = await mainAgents(
-    db,
-    rows.map((r) => r.id),
-  );
+  const ids = rows.map((r) => r.id);
+  const [agents, available] = await Promise.all([mainAgents(db, ids), availabilities(db, ids)]);
   return rows.map((r) => ({
     id: r.id,
     title: r.title,
@@ -166,6 +185,7 @@ async function cards(db: Db, rows: readonly CardRow[]): Promise<TitleCard[]> {
     year: r.publication_year,
     coverFileId: r.cover_file_id,
     mainAgent: agents.get(r.id) ?? null,
+    availability: available.get(r.id) ?? null,
   }));
 }
 
@@ -232,6 +252,57 @@ export async function popularTitles(db: Db, n: number): Promise<TitleCard[]> {
       return r === undefined ? [] : [r];
     }),
   );
+}
+
+/** A subject as a pill above a list of titles: its id (the search's `subjek`), its term, and its public titles. */
+export interface SubjectPill {
+  id: string;
+  term: string;
+  /** How many titles the OPAC shows carry it (what the pill's search finds). */
+  titles: number;
+}
+
+/**
+ * The subject pills of each list of titles: the subjects its titles carry most (at most `max`; ties by their number of
+ * titles in the catalogue, then by term), each with its number of public titles. Three reads for all the lists
+ * together, from the search index (the `sb` facet and `search_doc.is_public`) and the subjects' terms; a subject
+ * archived or merged is left out.
+ */
+export async function subjectPills(db: Db, lists: readonly (readonly string[])[], max: number): Promise<SubjectPill[][]> {
+  const all = [...new Set(lists.flat())];
+  if (all.length === 0 || max <= 0) return lists.map(() => []);
+  const facets = await db.selectFrom('search_facet').select(['record_id', 'value_key']).where('facet', '=', 'sb').where('record_id', 'in', all).execute();
+  const subjectsOf = new Map<string, string[]>();
+  for (const f of facets) subjectsOf.set(f.record_id, [...(subjectsOf.get(f.record_id) ?? []), f.value_key]);
+  const subjectIds = [...new Set(facets.map((f) => f.value_key))];
+  if (subjectIds.length === 0) return lists.map(() => []);
+  const [counts, terms] = await Promise.all([
+    countGrouped(
+      db
+        .selectFrom('search_facet as f')
+        .innerJoin('search_doc as d', 'd.record_id', 'f.record_id')
+        .where('f.facet', '=', 'sb')
+        .where('d.is_public', '=', 1)
+        .where('f.value_key', 'in', subjectIds),
+      { subjectId: 'f.value_key' },
+    ),
+    db.selectFrom('subjects').select(['id', 'term_display']).where('id', 'in', subjectIds).where('archived_at', 'is', null).where('merged_into', 'is', null).execute(),
+  ]);
+  const titlesOf = new Map(counts.map((c) => [String(c.subjectId), c.count]));
+  const termOf = new Map(terms.map((t) => [t.id, t.term_display]));
+  return lists.map((ids) => {
+    const seen = new Map<string, number>();
+    for (const id of new Set(ids)) for (const s of subjectsOf.get(id) ?? []) seen.set(s, (seen.get(s) ?? 0) + 1);
+    return [...seen.entries()]
+      .flatMap(([id, n]) => {
+        const term = termOf.get(id);
+        const titles = titlesOf.get(id) ?? 0;
+        return term === undefined || titles === 0 ? [] : [{ id, term, titles, n }];
+      })
+      .sort((a, b) => b.n - a.n || b.titles - a.titles || (a.term < b.term ? -1 : a.term > b.term ? 1 : 0))
+      .slice(0, max)
+      .map(({ id, term, titles }) => ({ id, term, titles }));
+  });
 }
 
 /**

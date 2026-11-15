@@ -42,6 +42,7 @@ describe('the reports housekeeping steps and handler', () => {
       ['notices', true],
       // ---- Komunitas (OPAC home page) ----
       ['popular_titles', true],
+      ['class_activity', true],
     ]);
     expect(Object.isFrozen(REPORTS_HOUSEKEEPING_STEPS)).toBe(true);
     const handler = reportsHousekeepingJob(() => ({}) as CatalogJobDeps);
