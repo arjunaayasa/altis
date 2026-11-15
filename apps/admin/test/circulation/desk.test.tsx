@@ -1,8 +1,9 @@
 import type { BranchView } from '@altis/shared/api/branches';
 import type { DeskMemberView, LoanResponse, ReturnResponse } from '@altis/shared/api/circulation';
+import { idempotencyKeyField } from '@altis/shared/api/common';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { adminMe, problem, startApp, type FakeHandler } from '../fake-api';
+import { adminMe, problem, startApp, superMe, type FakeHandler } from '../fake-api';
 
 // Meja Layanan: one scan box for a member card or an item barcode, each scan one transaction with its own
 // Idempotency-Key, and the outcome said three ways (colour, a sentence, a live region). Kembali (F3) returns by barcode
@@ -266,5 +267,50 @@ describe('Meja Layanan', () => {
     await screen.findByRole('textbox', { name: 'Pindai eksemplar yang dikembalikan' });
     await scan('B0001');
     expect(await screen.findByText('Dikembalikan — terlambat 10 hari (8 hari dikenai denda)')).toBeTruthy();
+  });
+
+  it('"Hilang" and "Ubah jatuh tempo" send an Idempotency-Key the API accepts, a new one for another request', async () => {
+    const loan = { id: LOAN.id, version: 1, branchId: BRANCH, item: LOAN.item, record: LOAN.record, loanedOn: '2026-11-10', dueOn: '2026-11-17', daysLate: 0, renewals: 0, renewLimit: 1, finePreview: null };
+    const held = deskMember({ counts: { openLoans: 1, overdue: 0, holdsReady: 0 }, loans: [loan] });
+    // "Ubah jatuh tempo" needs the desk override, which the super admin holds.
+    const app = startApp({
+      me: superMe(),
+      path: '/admin/layanan',
+      routes: {
+        'GET branches': () => ({ items: [BRANCH_VIEW] }),
+        'POST branches/:branchId/circulation/members/search': () => ({ items: [] }),
+        'POST branches/:branchId/circulation/members/lookup': () => held,
+        'GET branches/:branchId/circulation/members/:memberId': () => held,
+        'PATCH branches/:branchId/circulation/loans/:id/due': (req) => ({ id: LOAN.id, version: 2, dueOn: (req.body as { dueOn: string }).dueOn }),
+        'POST branches/:branchId/circulation/loans/:id/lost': () => ({ id: LOAN.id, version: 3, itemStatus: 'lost', replacement: '85000.00', currency: 'IDR', charged: true }),
+      },
+    });
+    await scan('a001');
+    expect(await screen.findByText('Anggota dimuat: Budi Santoso')).toBeTruthy();
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Dipinjam (1)' }));
+    const keyOf = (method: string, suffix: string): string[] =>
+      app.fetchMock.mock.calls.filter(([url, init]) => String(url).endsWith(suffix) && init?.method === method).map(([, init]) => headerOf(init, 'Idempotency-Key') ?? '');
+
+    for (const day of ['2026-11-20', '2026-11-24']) {
+      fireEvent.click(await screen.findByRole('button', { name: 'Ubah jatuh tempo' }));
+      const due = await screen.findByRole('dialog', { name: 'Ubah jatuh tempo' });
+      fireEvent.change(within(due).getByLabelText('Jatuh tempo baru'), { target: { value: day } });
+      fireEvent.change(within(due).getByLabelText(/^Alasan/), { target: { value: 'Siswa sakit' } });
+      fireEvent.click(within(due).getByRole('button', { name: 'Simpan jatuh tempo' }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Ubah jatuh tempo' })).toBeNull());
+    }
+    const dueKeys = keyOf('PATCH', `/loans/${LOAN.id}/due`);
+    expect(dueKeys).toHaveLength(2);
+    for (const key of dueKeys) expect(idempotencyKeyField.safeParse(key).success).toBe(true);
+    expect(dueKeys[0]).toMatch(/^desk-due:[0-9a-f]{32}$/);
+    expect(dueKeys[1]).not.toBe(dueKeys[0]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hilang' }));
+    const lost = await screen.findByRole('dialog', { name: 'Catat eksemplar hilang' });
+    fireEvent.click(within(lost).getByRole('button', { name: 'Catat hilang' }));
+    await waitFor(() => expect(keyOf('POST', `/loans/${LOAN.id}/lost`)).toHaveLength(1));
+    const [lostKey] = keyOf('POST', `/loans/${LOAN.id}/lost`);
+    expect(idempotencyKeyField.safeParse(lostKey).success).toBe(true);
+    expect(lostKey).toMatch(/^desk-lost:[0-9a-f]{32}$/);
   });
 });

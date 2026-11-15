@@ -1,5 +1,5 @@
 import type { DeskLoanView, LoanDueResponse, LoanLostResponse } from '@altis/shared/api/circulation';
-import { useId, useState, type FormEvent } from 'react';
+import { useId, useRef, useState, type FormEvent } from 'react';
 import { Field, ProblemAlert } from '@/components/form-field';
 import { useReturnFocus } from '@/components/return-focus';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,20 @@ import { newTransactionKey, useCalendarDate } from './common';
  * the overdue fine to today and the replacement charge are booked, the item becomes lost) and "Ubah jatuh tempo" (a new
  * due date by hand, with a note; needs the override permission). Each is one request with its own Idempotency-Key.
  */
+
+/**
+ * The Idempotency-Key of a dialog's request: a fresh `newTransactionKey(prefix)` for each new request (`what`: the loan
+ * and the body), the same one while that request is sent again after a failure. A key is at most 64 characters, so the
+ * loan and the body are never appended to it.
+ */
+function useRequestKey(prefix: string): (what: unknown) => string {
+  const last = useRef<{ what: string; key: string } | null>(null);
+  return (what) => {
+    const text = JSON.stringify(what);
+    if (last.current?.what !== text) last.current = { what: text, key: newTransactionKey(prefix) };
+    return last.current.key;
+  };
+}
 
 /** A typed amount as the API's decimal: `85.000` and `85000` are eighty-five thousand, `2,5` is two and a half. */
 export function amountOf(s: string): string {
@@ -33,7 +47,7 @@ export function LostDialog({ branchId, loan, onClose, onDone }: { branchId: stri
   const [error, setError] = useState<TKey | null>(null);
   const [problem, setProblem] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  const [key] = useState(() => newTransactionKey('desk-lost'));
+  const keyFor = useRequestKey('desk-lost');
 
   const close = (): void => {
     if (busy) return;
@@ -58,7 +72,7 @@ export function LostDialog({ branchId, loan, onClose, onDone }: { branchId: stri
     try {
       const body = { ...(amount === '' ? {} : { replacement: amount }), ...(note.trim() === '' ? {} : { note: note.trim() }) };
       const done = await api<LoanLostResponse>('POST', `branches/${encodeURIComponent(branchId)}/circulation/loans/${encodeURIComponent(loan.id)}/lost`, body, {
-        idempotencyKey: `${key}:${loan.id}`,
+        idempotencyKey: keyFor([loan.id, body]),
       });
       setBusy(false);
       setReplacement('');
@@ -113,7 +127,7 @@ export function DueDialog({ branchId, loan, onClose, onDone }: { branchId: strin
   const [errors, setErrors] = useState<{ dueOn?: TKey; note?: TKey }>({});
   const [problem, setProblem] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  const [key] = useState(() => newTransactionKey('desk-due'));
+  const keyFor = useRequestKey('desk-due');
 
   const close = (): void => {
     if (busy) return;
@@ -138,7 +152,7 @@ export function DueDialog({ branchId, loan, onClose, onDone }: { branchId: strin
     try {
       const body = { dueOn: date, note: note.trim() };
       const done = await api<LoanDueResponse>('PATCH', `branches/${encodeURIComponent(branchId)}/circulation/loans/${encodeURIComponent(loan.id)}/due`, body, {
-        idempotencyKey: `${key}:${loan.id}:${date}`,
+        idempotencyKey: keyFor([loan.id, body]),
       });
       setBusy(false);
       setDueOn('');
