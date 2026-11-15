@@ -16,6 +16,8 @@ import { holdsSampleRows } from '../../../db/test/fixtures/komunitas-holds-table
 import { circCoreSampleRows, type CircCoreTable } from '../../../db/test/fixtures/komunitas-circ-core-tables.js';
 // ---- Komunitas K2 (visits) ----
 import { visitsSampleRows, type VisitsTableName } from '../../../db/test/fixtures/komunitas-visits-tables.js';
+// ---- Komunitas (charges and payments) ----
+import { chargesSampleRows } from '../../../db/test/fixtures/komunitas-charges-tables.js';
 import { backupTables, tableChecksumFromDb } from '../../src/backup/canonical.js';
 import { createExporter, type ExportCheckpoint } from '../../src/backup/exporter.js';
 import { readManifest, type BackupManifest } from '../../src/backup/manifest.js';
@@ -245,6 +247,12 @@ async function seed(db: Kysely<DB>): Promise<void> {
   // ---- Komunitas (member area): a bookmark of a sample member, a type list of a sample attachment ----
   await db.insertInto('member_bookmarks').values({ member_id: circulation.members[0]!.id, record_id: '01JU0000000000000000000001', created_at: 1767225600000 }).execute();
   await db.insertInto('attachment_member_types').values({ attachment_id: rows.attachments[0]!.id, member_type_id: '01JU0000000000000000000002' }).execute();
+  // ---- Komunitas (charges and payments): parents first ----
+  let c = 0;
+  const charges = chargesSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JW${String((c += 1)).padStart(22, '0')}` });
+  for (const t of ['charges', 'charge_adjustments', 'payments', 'payment_allocations'] as const) {
+    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(charges[t]).execute();
+  }
 }
 
 /** The circulation core sample rows with ids numbered from another fixed prefix. */
