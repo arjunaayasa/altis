@@ -21,6 +21,7 @@ import { isMessageKey } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
 import { cn } from '@/lib/utils';
 import { reportTitle } from './catalog';
+import { useCellFormat } from './cell-format';
 import { serverParamErrors, useDescribeParams, useParamOptions } from './param-form';
 // ---- Komunitas K5 (reports) ----
 import { PreviewChart } from './preview-chart';
@@ -85,32 +86,6 @@ export function isExportOnly(e: unknown): boolean {
 }
 
 const NUMERIC: ReadonlySet<ReportColumnType> = new Set<ReportColumnType>(['int', 'money', 'percent']);
-
-/** Formats a cell by its column's type in the current language (the output's, under the section's provider). */
-export function useCellFormat(): (type: ReportColumnType, cell: ReportCell) => string {
-  const locale = useLocale();
-  return useMemo(() => {
-    const tag = locale === 'en' ? 'en-GB' : 'id-ID';
-    const integer = new Intl.NumberFormat(tag, { maximumFractionDigits: 0 });
-    const money = new Intl.NumberFormat(tag, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-    const percent = new Intl.NumberFormat(tag, { style: 'percent', maximumFractionDigits: 0 });
-    const date = new Intl.DateTimeFormat(tag, { dateStyle: 'medium', timeZone: 'UTC' });
-    return (type, cell) => {
-      if (cell === null) return '';
-      if (typeof cell === 'number' && Number.isFinite(cell)) {
-        if (type === 'int') return integer.format(cell);
-        if (type === 'money') return money.format(cell);
-        if (type === 'percent') return percent.format(cell / 100);
-        return String(cell);
-      }
-      if (type === 'date' && typeof cell === 'string') {
-        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cell);
-        if (m !== null) return date.format(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-      }
-      return String(cell);
-    };
-  }, [locale]);
-}
 
 /** A column's label: the shared report text, or its key when this build has none. */
 function columnLabel(t: ReturnType<typeof useT>, c: ReportColumnView): string {
