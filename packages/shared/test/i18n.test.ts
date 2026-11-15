@@ -709,11 +709,11 @@ const REPORT_COLUMNS = [
   ...['registered', 'active', 'expired', 'suspended', 'days_left', 'source_no', 'source_barcode'],
   ...['m01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09', 'm10', 'm11', 'm12'],
   ...['date', 'weekday', 'members', 'guests', 'visited_at', 'institution', 'purpose', 'rank'],
-  ...['loaned_on', 'due_on', 'returned_on', 'renewals', 'outcome', 'days_late', 'fine', 'placed_on', 'queue_position', 'pickup_until'],
+  ...['loaned_on', 'due_on', 'returned_on', 'renewals', 'outcome', 'days_late', 'fine', 'placed_on', 'hold_status', 'queue_position', 'pickup_until'],
   ...['charged_on', 'description', 'paid', 'waived', 'balance', 'paid_on', 'method', 'staff', 'payments', 'receipt_no', 'voided'],
   // ---- Komunitas K4 (stocktake) ----
   ...['expected', 'found', 'misplaced', 'on_loan', 'pending', 'unexpected', 'unknown_codes', 'material_type', 'expected_location'],
-  ...['scanned_location', 'scanned_at', 'officer', 'session', 'branch', 'started_at', 'finished_at'],
+  ...['scanned_location', 'scanned_at', 'officer', 'session', 'session_status', 'branch', 'started_at', 'finished_at'],
   // ---- Komunitas K5 (reports) ----
   ...['hour', 'wd1', 'wd2', 'wd3', 'wd4', 'wd5', 'wd6', 'wd7', 'records', 'returns'],
 ];

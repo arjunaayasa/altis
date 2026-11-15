@@ -330,7 +330,7 @@ export const stocktakeHistoryReport: TableReport = Object.freeze<TableReport>({
     reportColumn('branch', 'text', { widthChars: 10 }),
     reportColumn('started_at', 'text', { widthChars: 16 }),
     reportColumn('finished_at', 'text', { widthChars: 16 }),
-    reportColumn('status', 'text', { widthChars: 12 }),
+    reportColumn('session_status', 'text', { widthChars: 12 }),
     reportColumn('source', 'text', { widthChars: 12 }),
     reportColumn('expected', 'int'),
     reportColumn('found', 'int'),
