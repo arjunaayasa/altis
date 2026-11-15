@@ -288,7 +288,8 @@ export const MIGRATION_ID = {
   'catalog.migration.people.collision_refused': 'Migrasi ditolak: uji kering menemukan nomor anggota yang bertabrakan. Ubah nomornya di SLiMS lalu jalankan uji kering lagi.',
   'catalog.migration.people.circulation_live': 'ALTIS sudah mencatat sirkulasi sendiri, jadi mode ganti tidak dapat dipakai lagi.',
   'catalog.migration.people.matches': 'Cocokkan dengan SLiMS',
-  'catalog.migration.people.matches_hint': 'Setiap angka SLiMS dibandingkan dengan ALTIS. Kolom "terjelaskan" menghitung baris yang dilewati dan dicatat di laporan.',
+  'catalog.migration.people.matches_hint':
+    'Setiap angka SLiMS dibandingkan dengan ALTIS. Kolom "terjelaskan" menghitung baris yang dilewati dan dicatat di laporan, serta pinjaman, denda, dan reservasi hasil migrasi yang sudah diselesaikan di ALTIS sendiri.',
   'catalog.migration.people.col_number': 'Angka',
   'catalog.migration.people.col_explained': 'Terjelaskan',
   'catalog.migration.people.col_status': 'Hasil',
@@ -587,7 +588,8 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.people.collision_refused': 'The migration was refused: the dry run found member numbers that collide. Change them in SLiMS, then run the dry run again.',
   'catalog.migration.people.circulation_live': 'ALTIS already records circulation of its own, so replace mode can no longer be used.',
   'catalog.migration.people.matches': 'Match with SLiMS',
-  'catalog.migration.people.matches_hint': 'Each SLiMS number against ALTIS. The "explained" column counts the rows skipped and listed in the report.',
+  'catalog.migration.people.matches_hint':
+    'Each SLiMS number against ALTIS. The "explained" column counts the rows skipped and listed in the report, and the migrated loans, fines and holds ALTIS has settled itself.',
   'catalog.migration.people.col_number': 'Number',
   'catalog.migration.people.col_explained': 'Explained',
   'catalog.migration.people.col_status': 'Result',
