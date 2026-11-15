@@ -6,7 +6,7 @@ import { adminMe, problem, startApp } from '../fake-api';
 
 // Inventarisasi: the session list offers a new session and opens the live one; the session page scans with the keyboard
 // (typing and Enter), says what each scan found in words, lists my last scans with "Batalkan", and finishes only with
-// the session's name typed in full.
+// the session's name typed in full. After my scan, the counts the session's next poll reads replace my scan's.
 
 beforeAll(async () => {
   await import('@/screens/stocktake/stocktake');
@@ -144,5 +144,37 @@ describe('stocktake', () => {
     fireEvent.change(within(dialog).getByLabelText(/^Ketik nama sesi/), { target: { value: 'Inventarisasi 2026' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Selesaikan' }));
     await waitFor(() => expect(finish).toEqual({ confirmName: 'Inventarisasi 2026', markMissing: true, restoreFound: true }));
+  });
+
+  it('shows the polled counts again after my scan', async () => {
+    let polled = COUNTS;
+    const app = startApp({
+      me: adminMe(),
+      path: `/admin/layanan/inventarisasi/${BRANCH}/${ID}`,
+      routes: {
+        'GET branches': () => ({ items: [BRANCH_VIEW] }),
+        'GET branches/:branchId/stocktakes/:id': () => session({ counts: polled }),
+        'GET branches/:branchId/stocktakes/:id/items': empty,
+        'GET branches/:branchId/stocktakes/:id/unknown-codes': empty,
+        'GET branches/:branchId/stocktakes/:id/officers': () => ({ items: [] }),
+        'GET catalog/locations': () => ({ items: [] }),
+        'POST branches/:branchId/stocktakes/:id/scans': () => ({
+          outcome: 'found',
+          code: 'B0001',
+          item: { id: ITEM, barcode: 'B0001', title: 'Bumi Manusia', callNumber: null, location: null },
+          counts: { ...COUNTS, found: 1, pending: 8 },
+        }),
+      },
+    });
+    const found = () => screen.getByText('Ditemukan', { selector: 'dt' }).nextElementSibling?.textContent;
+    const box = await screen.findByLabelText(/^Pindai atau ketik barkod/);
+    fireEvent.change(box, { target: { value: 'B0001' } });
+    fireEvent.submit(box.closest('form')!);
+    expect(await screen.findByText('Tercatat ditemukan.')).toBeTruthy();
+    await waitFor(() => expect(found()).toBe('1'));
+    // Three other officers scanned meanwhile: the next poll reads their scans too.
+    polled = { ...COUNTS, found: 4, pending: 5 };
+    await app.queryClient.refetchQueries({ queryKey: ['stocktake', 'session', ID] });
+    await waitFor(() => expect(found()).toBe('4'));
   });
 });

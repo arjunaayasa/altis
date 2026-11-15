@@ -316,7 +316,10 @@ export function StocktakeSessionScreen() {
   const [last, setLast] = useState<RecentScan | null>(null);
   const [recent, setRecent] = useState<RecentScan[]>([]);
   const [problem, setProblem] = useState<unknown>(null);
-  const [counts, setCounts] = useState<StocktakeCounts | null>(null);
+  // The counts of my last scan or undo, until the session's next poll lands (`seen`: the poll they were answered after);
+  // `seq` keeps an older answer from replacing a newer one.
+  const [counts, setCounts] = useState<{ counts: StocktakeCounts; seen: number; seq: number } | null>(null);
+  const seqRef = useRef(0);
   const [tab, setTab] = useState<Tab>('pending');
   const [finishing, setFinishing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -329,13 +332,18 @@ export function StocktakeSessionScreen() {
   const s = session.data;
   const manage = holdsAt(me, 'stocktake.sessions.manage', branchId);
   const active = s?.status === 'active';
-  const shown = counts !== null && s !== undefined && s.status === 'active' ? counts : s?.counts;
+  const shown = counts !== null && s !== undefined && s.status === 'active' && counts.seen === session.dataUpdatedAt ? counts.counts : s?.counts;
+  const keepCounts = (seq: number, c: StocktakeCounts): void => {
+    const seen = queryClient.getQueryState(['stocktake', 'session', id])?.dataUpdatedAt ?? 0;
+    setCounts((old) => (old !== null && old.seq > seq ? old : { counts: c, seen, seq }));
+  };
 
   const doScan = async (raw: string): Promise<void> => {
     const barcode = raw.trim();
     if (barcode === '' || !active) return;
     setProblem(null);
     setCode('');
+    const seq = (seqRef.current += 1);
     try {
       const body = { barcode, ...(locationId === '' ? {} : { locationId }) };
       const r = await api<StocktakeScanResponse>('POST', `${base}/scans`, body, { idempotencyKey: crypto.randomUUID() });
@@ -349,7 +357,7 @@ export function StocktakeSessionScreen() {
       };
       setLast(entry);
       setRecent((list) => [entry, ...list].slice(0, RECENT_MAX));
-      setCounts(r.counts);
+      keepCounts(seq, r.counts);
       void queryClient.invalidateQueries({ queryKey: ['stocktake', 'items', id] });
     } catch (err) {
       setProblem(err);
@@ -362,9 +370,10 @@ export function StocktakeSessionScreen() {
   const undo = async (entry: RecentScan): Promise<void> => {
     if (entry.itemId === null) return;
     setProblem(null);
+    const seq = (seqRef.current += 1);
     try {
       const r = await api<StocktakeUndoResponse>('DELETE', `${base}/scans/${encodeURIComponent(entry.itemId)}`);
-      setCounts(r.counts);
+      keepCounts(seq, r.counts);
       setRecent((list) => list.map((x) => (x.key === entry.key ? { ...x, undone: true } : x)));
       void queryClient.invalidateQueries({ queryKey: ['stocktake', 'items', id] });
     } catch (err) {
