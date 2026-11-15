@@ -4,7 +4,9 @@
  * zone and `year` its year; a month series (`byMonth`) holds the twelve months of that year, January first.
  *
  * - `GET catalog/statistics` (`catalog.records.read`) → {@link CollectionStatistics}: the titles and copies in the
- *   stock today, and the copies received this year (by receiving date, or the date entered in the source system).
+ *   stock today, and the copies received this year (by the acquisition date the collection reports use: the receiving
+ *   date, else the date entered in the source system, else the day the copy was made here, or for a migrated copy the
+ *   day its record was made in the source system).
  * - `GET members/statistics` (`members.records.read`) → {@link MemberStatistics}: the members on the register, those
  *   whose membership is valid today, and those who joined this year.
  * - `GET visits/statistics` (`visits.records.read`) → {@link VisitStatistics}: people who visited (head counts, voided
