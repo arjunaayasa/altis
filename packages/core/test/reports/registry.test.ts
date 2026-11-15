@@ -138,7 +138,7 @@ const CATALOGUE: Readonly<Record<string, { kind: 'table' | 'document'; personal:
     kind: 'table',
     personal: true,
     orientation: 'landscape',
-    columns: 'title:text member_no:text name:text placed_on:date status:text queue_position:int pickup_until:date',
+    columns: 'title:text member_no:text name:text placed_on:date hold_status:text queue_position:int pickup_until:date',
   },
   'circulation.charges': {
     kind: 'table',
@@ -168,7 +168,7 @@ const CATALOGUE: Readonly<Record<string, { kind: 'table' | 'document'; personal:
     personal: false,
     orientation: 'landscape',
     columns:
-      'session:text branch:text started_at:text finished_at:text status:text source:text expected:int found:int pending:int misplaced:int on_loan:int unexpected:int unknown_codes:int',
+      'session:text branch:text started_at:text finished_at:text session_status:text source:text expected:int found:int pending:int misplaced:int on_loan:int unexpected:int unknown_codes:int',
   },
   // ---- Komunitas K5 (reports) ----
   'visits.by_hour': { kind: 'table', personal: false, orientation: 'portrait', columns: 'hour:text wd1:int wd2:int wd3:int wd4:int wd5:int wd6:int wd7:int total:int' },
@@ -401,6 +401,14 @@ describe('the labels', () => {
       for (const params of columnShapes(def)) for (const c of columnsOf(def, params)) need(c.labelKey, def.id);
     }
     expect([...new Set(missing)]).toEqual([]);
+  });
+
+  it('a status column says whose status it is: the session of a stocktake history, the hold of the holds list', () => {
+    const statusColumns = (id: string): string[] => columnsOf(reportById(id)!, {}).filter((c) => c.key.endsWith('status')).map((c) => c.key);
+    expect(statusColumns('stocktake.history')).toEqual(['session_status']);
+    expect(statusColumns('circulation.holds')).toEqual(['hold_status']);
+    expect([MESSAGES.id['report.column.session_status'], MESSAGES.en['report.column.session_status']]).toEqual(['Status sesi', 'Session status']);
+    expect([MESSAGES.id['report.column.hold_status'], MESSAGES.en['report.column.hold_status']]).toEqual(['Status reservasi', 'Hold status']);
   });
 
   it('a column is labelled report.column.<key>', () => {
