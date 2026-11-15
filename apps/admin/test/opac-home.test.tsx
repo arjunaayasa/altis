@@ -30,6 +30,8 @@ function view(o: Partial<OpacHomeView['home']> = {}): OpacHomeView {
 }
 
 const puts = (requests: FakeRequest[]): unknown[] => requests.filter((r) => r.method === 'PUT' && r.path === 'opac/home').map((r) => r.body);
+/** The save bar at the foot of the form (it stays in sight): the outcome of a save is said there. */
+const saveBar = (): HTMLElement => screen.getByRole('button', { name: t('opacHome.save') }).parentElement!;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -88,9 +90,11 @@ describe('OPAC › Halaman awal', () => {
         welcome: { id: 'Selamat datang.', en: null },
       },
     ]);
-    // The editor starts again from what the server holds now.
+    // The editor starts again from what the server holds now; the bar says it was saved and its button has the focus.
     await waitFor(() => expect((screen.getByLabelText(t('opacHome.text.heading')) as HTMLInputElement).value).toBe('Ruang baca'));
     expect(screen.queryByText(t('opacHome.dirty'))).toBeNull();
+    expect(within(saveBar()).getByText(t('opacHome.saved'))).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: t('opacHome.save') }));
   });
 
   it('checks the draft before sending: a photo needs its alternative text, a year must be a number', async () => {
@@ -103,9 +107,11 @@ describe('OPAC › Halaman awal', () => {
     fireEvent.change(alt, { target: { value: '   ' } });
     fireEvent.change(screen.getByLabelText(t('opacHome.about.founded')), { target: { value: 'dulu' } });
     fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
-    expect(await screen.findByText(t('opacHome.fix_fields'))).toBeTruthy();
+    expect(await within(saveBar()).findByText(t('opacHome.fix_fields'))).toBeTruthy();
     expect(alt.getAttribute('aria-invalid')).toBe('true');
     expect(screen.getByLabelText(t('opacHome.about.founded')).getAttribute('aria-invalid')).toBe('true');
+    // The first refused field takes the focus (and so comes into sight).
+    await waitFor(() => expect(document.activeElement).toBe(alt));
     expect(puts(requests)).toEqual([]);
   });
 
@@ -121,8 +127,8 @@ describe('OPAC › Halaman awal', () => {
     const heading = (await screen.findByLabelText(t('opacHome.text.heading'), undefined, FIRST)) as HTMLInputElement;
     fireEvent.change(heading, { target: { value: 'Judul saya' } });
     fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
-    expect(await screen.findByText(t('opacHome.conflict'))).toBeTruthy();
-    expect(screen.getByRole('button', { name: t('opacHome.reload') })).toBeTruthy();
+    expect(await within(saveBar()).findByText(t('opacHome.conflict'))).toBeTruthy();
+    expect(within(saveBar()).getByRole('button', { name: t('opacHome.reload') })).toBeTruthy();
     expect(heading.value).toBe('Judul saya');
   });
 
