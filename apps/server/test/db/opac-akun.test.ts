@@ -16,7 +16,8 @@ import { seedStaff, sessionCookieFor, sessionCsrfFor } from '../support-auth.js'
 // sessions, one failure text for an unknown number and a wrong password, the sign-in bucket and its one audit entry,
 // CSRF and Origin on every form, the form body rules, `lanjut`, a SLiMS bcrypt hash rehashed at sign-in, the password
 // change and the reset ending the member's sessions, ownership (another member's loan, hold or bookmark is the OPAC 404),
-// online renewal per member type, holds and bookmarks, the members' attachments and the download of the member's data.
+// online renewal per member type, holds and bookmarks, the member's own fines, charges and payments (read only), the
+// members' attachments and the download of the member's data.
 
 const ctx = testDbContext();
 
@@ -390,6 +391,91 @@ describe.skipIf(!ctx.available)(`the OPAC member area [${engineLabel()}]`, () =>
     expect((await other.a.post(`/akun/penanda/${recordId}/hapus`, form({ _csrf: other.csrf }), FORM)).status).toBe(303);
     // A record the OPAC does not show cannot be held or bookmarked.
     expect((await mine.a.get(`/akun/penanda/baru?cantuman=${newId()}`)).status).toBe(404);
+  });
+
+  it("fines and charges: a member sees their own unpaid charges and payments, never another member's, and no staff note", async () => {
+    const owner = await seedMember('E-001');
+    await seedMember('E-002');
+    const staff = await seedStaff(h, { username: 'kasir', now: NOW, roles: [{ permissions: ['circulation.desk.use'] as never }] });
+    const trail = { created_at: NOW, created_by: null, updated_at: NOW, updated_by: null };
+    // A fine booked at a late return (the loan is closed: /akun lists it no more), part paid; a migrated charge whose
+    // day SLiMS did not know; a charge paid in full.
+    const charge = (o: { kind: string; description: string; amount: number; paid: number; on: string; at: number; unknown?: boolean; status?: string }) => ({
+      id: newId(NOW),
+      member_id: owner,
+      branch_id: branchId,
+      loan_id: null,
+      item_id: null,
+      kind: o.kind,
+      description: o.description,
+      amount_minor: o.amount,
+      paid_minor: o.paid,
+      waived_minor: 0,
+      currency: 'IDR',
+      status: o.status ?? 'open',
+      charged_on: o.on,
+      charged_at: o.at,
+      date_unknown: o.unknown === true ? 1 : 0,
+      source: 'desk',
+      version: 0,
+      ...trail,
+    });
+    await h.db
+      .insertInto('charges')
+      .values([
+        charge({ kind: 'overdue', description: 'Terlambat 10 hari: LP-01 Laskar Pelangi', amount: 500_000, paid: 200_000, on: '2026-10-20', at: NOW - 2000 }),
+        charge({ kind: 'migrated', description: 'Denda lama', amount: 150_000, paid: 0, on: '2026-10-22', at: NOW - 1000, unknown: true }),
+        charge({ kind: 'card', description: 'Kartu sudah lunas', amount: 100_000, paid: 100_000, on: '2026-10-01', at: NOW - 3000, status: 'settled' }),
+      ])
+      .execute();
+    await h.db
+      .insertInto('payments')
+      .values({
+        id: newId(NOW),
+        member_id: owner,
+        branch_id: branchId,
+        receipt_year: 2026,
+        receipt_seq: 7,
+        receipt_no: 'PUSAT/2026/000007',
+        amount_minor: 300_000,
+        currency: 'IDR',
+        method: 'cash',
+        paid_on: '2026-10-21',
+        paid_at: NOW - 500,
+        received_by: staff.id,
+        note: 'Catatan-kasir-rahasia',
+        voided_at: null,
+        voided_by: null,
+        void_reason: null,
+        date_unknown: 0,
+        source: 'desk',
+        version: 0,
+        ...trail,
+      })
+      .execute();
+
+    const mine = await member('E-001');
+    const home = await mine.a.get('/akun');
+    expect(home.text).toContain('Rp 4.500');
+    expect(home.text).toContain('href="/akun/denda"');
+    const page = await mine.a.get('/akun/denda');
+    expect(page.status, page.text).toBe(200);
+    expect(page.headers.get('cache-control')).toBe('private, no-store');
+    for (const shown of ['Terlambat 10 hari: LP-01 Laskar Pelangi', 'Denda lama', 'Tanggal tidak diketahui', 'Rp 3.000', 'Rp 4.500', 'PUSAT/2026/000007', 'Tunai', 'Denda keterlambatan']) {
+      expect(page.text, shown).toContain(shown);
+    }
+    for (const hidden of ['Kartu sudah lunas', 'Catatan-kasir-rahasia', 'kasir']) expect(page.text, hidden).not.toContain(hidden);
+
+    // Another member: none of it.
+    const other = await member('E-002');
+    expect((await other.a.get('/akun')).text).not.toContain('Rp 4.500');
+    const theirs = await other.a.get('/akun/denda');
+    expect(theirs.status).toBe(200);
+    for (const hidden of ['Laskar Pelangi', 'Denda lama', 'PUSAT/2026/000007', 'Rp 4.500']) expect(theirs.text, hidden).not.toContain(hidden);
+    expect(theirs.text).toContain('Anda tidak punya denda atau biaya yang belum lunas.');
+    expect(theirs.text).toContain('Belum ada pembayaran.');
+    // Signed out: the sign-in page first.
+    expect((await agent().get('/akun/denda')).headers.get('location')).toBe('/akun/masuk?lanjut=%2Fakun%2Fdenda');
   });
 
   it("members' attachments open to the listed member types; the download of the member's own data needs the password", async () => {

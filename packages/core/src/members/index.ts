@@ -32,7 +32,7 @@ export {
 export type { MemberCsvColumn, MemberCsvRow, MemberImportFormatReason, MemberImportResult, PlannedRow } from './import.js';
 // ---- Komunitas (member area) ----
 // The OPAC member area: member sessions, sign-in and passwords (with the SLiMS bcrypt hashes), the account, loans,
-// online renewal, bookmarks, members' attachments and the download of the member's own data.
+// online renewal, charges and payments, bookmarks, members' attachments and the download of the member's own data.
 export {
   MEMBER_SUBJECT,
   createMemberSession,
@@ -59,6 +59,8 @@ export type { MemberLoginCtx, MemberLoginOutcome, MemberResetStart, MemberSignIn
 export {
   MEMBER_BOOKMARK_LIMIT,
   MEMBER_LOANS_PER_PAGE,
+  MEMBER_OPEN_CHARGES_MAX,
+  MEMBER_PAYMENTS_PER_PAGE,
   addBookmark,
   attachmentMemberTypes,
   hasBookmark,
@@ -67,6 +69,7 @@ export {
   memberDataExport,
   memberLoans,
   memberMayOpenFile,
+  memberOwnCharges,
   memberSelf,
   memberTypeName,
   onlineRenewalOpen,
@@ -76,6 +79,15 @@ export {
   renewOwnLoan,
   setAttachmentMemberTypes,
 } from './area/account.js';
-export type { MemberAttachment, MemberBookmarkRow, MemberLoanPage, MemberLoanRow, MemberSelf } from './area/account.js';
+export type {
+  MemberAttachment,
+  MemberBookmarkRow,
+  MemberLoanPage,
+  MemberLoanRow,
+  MemberOwnChargeRow,
+  MemberOwnChargesPage,
+  MemberOwnPaymentRow,
+  MemberSelf,
+} from './area/account.js';
 export { MAIL_MEMBER_PASSWORD_RESET, enqueueMemberResetMail, memberResetMailJob } from './area/mail.js';
 export type { MemberResetMail } from './area/mail.js';

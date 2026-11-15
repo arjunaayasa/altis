@@ -1,4 +1,4 @@
-import { code128Modules, mailMoney, type MemberBookmarkRow, type MemberLoanPage, type MemberLoanRow, type MemberSelf } from '@altis/core';
+import { code128Modules, mailMoney, type MemberBookmarkRow, type MemberLoanPage, type MemberLoanRow, type MemberOwnChargesPage, type MemberSelf } from '@altis/core';
 import { t, type HoldRefusal, type LoanOutcome, type Locale } from '@altis/shared';
 import type { HoldView } from '@altis/shared/api/holds';
 import type { Child } from 'hono/jsx';
@@ -13,12 +13,13 @@ import { formatDate } from '../catalog/views/page.js';
 /** A link of the page that keeps the request's `?lang=`. */
 export type Keep = (path: string) => string;
 
-export type AkunTab = 'home' | 'history' | 'holds' | 'bookmarks' | 'card' | 'password' | 'data';
+export type AkunTab = 'home' | 'history' | 'holds' | 'charges' | 'bookmarks' | 'card' | 'password' | 'data';
 
 const TABS: readonly [AkunTab, string, Parameters<typeof opacText>[1]][] = [
   ['home', '/akun', 'akun.nav.home'],
   ['history', '/akun/riwayat', 'akun.nav.history'],
   ['holds', '/akun/reservasi', 'akun.nav.holds'],
+  ['charges', '/akun/denda', 'akun.nav.charges'],
   ['bookmarks', '/akun/penanda', 'akun.nav.bookmarks'],
   ['card', '/akun/kartu', 'akun.nav.card'],
   ['password', '/akun/sandi', 'akun.nav.password'],
@@ -284,6 +285,18 @@ export function MemberSummary(props: { locale: Locale; self: MemberSelf; typeNam
   );
 }
 
+/** The account's line about what the member has left to pay, with the link to the details (nothing when none). */
+export function BalanceNote(props: { locale: Locale; keep: Keep; balanceMinor: number; currency: string }) {
+  const { locale } = props;
+  if (props.balanceMinor <= 0) return null;
+  return (
+    <p class="akun-flash akun-flash-warn">
+      {opacText(locale, 'akun.home.charges_open', { amount: mailMoney(locale, props.balanceMinor, props.currency) })}{' '}
+      <a href={props.keep('/akun/denda')}>{opacText(locale, 'akun.home.charges_link')}</a>
+    </p>
+  );
+}
+
 /** How late a loan is, as the desk says it: the days late, with the days its fine counts when they differ. */
 function lateText(locale: Locale, l: Pick<MemberLoanRow, 'daysLate' | 'finedDays'>): string {
   return l.finedDays !== null && l.finedDays !== l.daysLate
@@ -400,6 +413,104 @@ export function HistoryView(props: { locale: Locale; keep: Keep; loans: MemberLo
         </table>
       </div>
       <Pager locale={locale} keep={keep} path="/akun/riwayat" page={loans.page} pages={loans.pages} />
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fines, charges and payments (read only)
+
+export function ChargesView(props: { locale: Locale; keep: Keep; data: MemberOwnChargesPage }) {
+  const { locale, keep, data } = props;
+  const money = (minor: number, currency: string): string => mailMoney(locale, minor, currency);
+  const col = (key: 'date' | 'kind' | 'amount' | 'paid' | 'waived' | 'left'): string => opacText(locale, `akun.charges.col.${key}`);
+  const dateOf = (on: string | null): string => (on === null ? opacText(locale, 'akun.charges.date_unknown') : day(locale, on));
+  return (
+    <>
+      <p class="akun-hint">{opacText(locale, 'akun.charges.lead')}</p>
+      <section aria-labelledby="belum-lunas">
+        <h2 id="belum-lunas">{opacText(locale, 'akun.charges.open_title')}</h2>
+        {data.charges.length === 0 ? (
+          <p>{opacText(locale, 'akun.charges.empty')}</p>
+        ) : (
+          <>
+            <p>
+              <strong>{opacText(locale, 'akun.charges.balance', { amount: money(data.balanceMinor, data.currency) })}</strong>
+            </p>
+            <div class="table-scroll">
+              <table class="akun-table akun-stack">
+                <thead>
+                  <tr>
+                    <th scope="col">{opacText(locale, 'akun.charges.col.description')}</th>
+                    <th scope="col">{col('date')}</th>
+                    <th scope="col">{col('kind')}</th>
+                    <th scope="col">{col('amount')}</th>
+                    <th scope="col">{col('paid')}</th>
+                    <th scope="col">{col('waived')}</th>
+                    <th scope="col">{col('left')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.charges.map((c) => (
+                    <tr>
+                      <td class="akun-stack-main">{c.description}</td>
+                      <td data-label={col('date')}>{dateOf(c.chargedOn)}</td>
+                      <td data-label={col('kind')}>{t(locale, `vocab.charge_kind.${c.kind}`)}</td>
+                      <td data-label={col('amount')}>{money(c.amountMinor, c.currency)}</td>
+                      <td data-label={col('paid')}>{money(c.paidMinor, c.currency)}</td>
+                      <td data-label={col('waived')}>{money(c.waivedMinor, c.currency)}</td>
+                      <td data-label={col('left')}>{money(c.leftMinor, c.currency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {data.chargesCut ? <p class="akun-hint">{opacText(locale, 'akun.charges.cut', { max: data.charges.length })}</p> : null}
+          </>
+        )}
+      </section>
+      <section aria-labelledby="pembayaran">
+        <h2 id="pembayaran">{opacText(locale, 'akun.payments.title')}</h2>
+        {data.total === 0 ? (
+          <p>{opacText(locale, 'akun.payments.empty')}</p>
+        ) : (
+          <>
+            <div class="table-scroll">
+              <table class="akun-table akun-stack">
+                <thead>
+                  <tr>
+                    <th scope="col">{col('date')}</th>
+                    <th scope="col">{opacText(locale, 'akun.payments.col.receipt')}</th>
+                    <th scope="col">{opacText(locale, 'akun.payments.col.method')}</th>
+                    <th scope="col">{col('amount')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.payments.map((p) => (
+                    <tr>
+                      <td class="akun-stack-main">{dateOf(p.paidOn)}</td>
+                      <td class="akun-no" data-label={opacText(locale, 'akun.payments.col.receipt')}>
+                        {p.receiptNo ?? '—'}
+                      </td>
+                      <td data-label={opacText(locale, 'akun.payments.col.method')}>{t(locale, `vocab.payment_method.${p.method}`)}</td>
+                      <td data-label={col('amount')}>
+                        {p.voided ? <s>{money(p.amountMinor, p.currency)}</s> : money(p.amountMinor, p.currency)}
+                        {p.voided ? (
+                          <>
+                            {' '}
+                            <span class="status status-warn">{opacText(locale, 'akun.payments.voided')}</span>
+                          </>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pager locale={locale} keep={keep} path="/akun/denda" page={data.page} pages={data.pages} />
+          </>
+        )}
+      </section>
     </>
   );
 }
