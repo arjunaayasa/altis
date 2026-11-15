@@ -56,6 +56,11 @@ describe('UPLOAD_CONTEXTS', () => {
     });
   });
 
+  // ---- Komunitas K4 (stocktake) ----
+  it('the stocktake code list: staged text, scanning (a branch permission) checked at the declared branch', () => {
+    expect(uploadContext('stocktake.codes')).toEqual({ name: 'stocktake.codes', permission: 'stocktake.scan.use', maxBytes: 10 * MIB, magic: ['text'], kind: 'staged' });
+  });
+
   it('a size setting lowers the ceiling of the attachment and the evidence contexts only, and each is a registered setting', () => {
     const named = Object.values(UPLOAD_CONTEXTS).filter((c) => c?.maxBytesSetting !== undefined);
     expect(named.map((c) => [c!.name, c!.maxBytesSetting])).toEqual([

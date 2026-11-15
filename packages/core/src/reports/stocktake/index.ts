@@ -1,5 +1,6 @@
-import { countRows } from '@altis/db';
-import { DDC_MAINS, STOCKTAKE_SOURCES, STOCKTAKE_STATUSES, t } from '@altis/shared';
+import { countRows, type DB } from '@altis/db';
+import { DDC_MAINS, isUlid, STOCKTAKE_SOURCES, STOCKTAKE_STATUSES, t } from '@altis/shared';
+import type { Kysely } from 'kysely';
 import { z } from 'zod';
 import { decodeCursor, encodeCursor, masterName, textParam, vocabLabel } from '../collection/common.js';
 import { escapeLike, localDateTime, titleMatchSql } from '../circulation/common.js';
@@ -14,11 +15,27 @@ import type { ReportCtx, ReportRow, TableReport } from '../types.js';
 // - misplaced: the copies found at another place than their own: where they belong and where they were scanned;
 // - by officer (personal data: staff names): what each officer scanned;
 // - history: every session, newest first, with its counts and where it came from.
+//
+// Scanning is a branch permission: a session report is checked at the session's branch, the history at the branch it
+// is asked for (every branch: the permission held globally), so a role granted at one branch only reads that branch's.
 
 const SESSION_PARAM = reportParam('stocktakeId', 'stocktake', { required: true });
 const sessionField = { stocktakeId: reportIdField };
 
 const idKeyset = z.tuple([z.string().min(1).max(26)]);
+
+/** The branch of the session the parameters name (none for an id that is no session). */
+async function sessionBranch(db: Kysely<DB>, params: Readonly<Record<string, unknown>>): Promise<string | null> {
+  const id = params['stocktakeId'];
+  if (typeof id !== 'string' || !isUlid(id)) return null;
+  return (await db.selectFrom('stocktakes').select('branch_id').where('id', '=', id).executeTakeFirst())?.branch_id ?? null;
+}
+
+/** The branch the history is asked for (null: every branch). */
+async function historyBranch(_db: Kysely<DB>, params: Readonly<Record<string, unknown>>): Promise<string | null> {
+  const id = params['branchId'];
+  return typeof id === 'string' && isUlid(id) ? id : null;
+}
 
 /** The DDC main class of a stored class key (`000`–`990`, `2X`), else `NON`. */
 function mainOf(key: string | null): string {
@@ -38,6 +55,7 @@ export const stocktakeProgressReport: TableReport = Object.freeze<TableReport>({
   kind: 'table',
   titleKey: 'report.stocktake.progress.title',
   permission: 'stocktake.scan.use',
+  branchOf: sessionBranch,
   personal: false,
   formats: ['csv', 'xlsx', 'pdf'],
   orientation: 'portrait',
@@ -147,6 +165,7 @@ export const stocktakeMissingReport: TableReport = Object.freeze<TableReport>({
   kind: 'table',
   titleKey: 'report.stocktake.missing.title',
   permission: 'stocktake.scan.use',
+  branchOf: sessionBranch,
   personal: false,
   formats: ['csv', 'xlsx', 'pdf'],
   orientation: 'landscape',
@@ -202,6 +221,7 @@ export const stocktakeMisplacedReport: TableReport = Object.freeze<TableReport>(
   kind: 'table',
   titleKey: 'report.stocktake.misplaced.title',
   permission: 'stocktake.scan.use',
+  branchOf: sessionBranch,
   personal: false,
   formats: ['csv', 'xlsx', 'pdf'],
   orientation: 'landscape',
@@ -252,6 +272,7 @@ export const stocktakeByOfficerReport: TableReport = Object.freeze<TableReport>(
   kind: 'table',
   titleKey: 'report.stocktake.by_officer.title',
   permission: 'stocktake.scan.use',
+  branchOf: sessionBranch,
   personal: true,
   formats: ['csv', 'xlsx', 'pdf'],
   orientation: 'portrait',
@@ -298,6 +319,7 @@ export const stocktakeHistoryReport: TableReport = Object.freeze<TableReport>({
   kind: 'table',
   titleKey: 'report.stocktake.history.title',
   permission: 'stocktake.scan.use',
+  branchOf: historyBranch,
   personal: false,
   formats: ['csv', 'xlsx', 'pdf'],
   orientation: 'landscape',

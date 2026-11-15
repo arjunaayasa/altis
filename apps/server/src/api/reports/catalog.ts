@@ -1,4 +1,4 @@
-import { can, loadAccredSettings, previewReport, readSettings, reportById, reportCatalogEntry, visibleReports, type ReportDefinition } from '@altis/core';
+import { can, loadAccredSettings, previewReport, readSettings, reportBranchOf, reportById, reportCatalogEntry, visibleReports, type ReportDefinition } from '@altis/core';
 import { DomainError, resolveLocale, type Locale, type Permission } from '@altis/shared';
 import { ReportPreviewBody, reportOutputLocale, type ReportCatalogResponse, type ReportPreviewResponse } from '@altis/shared/api/reports';
 import { z } from 'zod';
@@ -17,6 +17,10 @@ import { route, type RouteContext, type RouteDecl } from '../../http/route.js';
 //                                     report that scans the stock of a large library 422 `export_only`. The rows
 //                                     are written in the language the definition's output is in (outputLocaleOf):
 //                                     an accreditation annex in Indonesian, whatever the user reads, as its export.
+//
+// A definition whose permission is a branch permission (a stocktake report) is listed to whoever holds it at any
+// branch, and checked at the branch its parameters address (ReportDefinition.branchOf), so a role granted at one
+// branch only may preview and export it there.
 
 const ReportParams = z.strictObject({ reportId: z.string().min(1).max(64) });
 
@@ -25,6 +29,21 @@ export function holdsOf(rc: RouteContext<unknown, unknown, unknown>): (p: Permis
   const auth = rc.auth;
   if (auth === null) throw new DomainError('AUTH_REQUIRED');
   return (p) => can(auth.grants, p);
+}
+
+// ---- Komunitas K4 (stocktake) ----
+/** What the request's user holds anywhere: globally, or at one branch at least (a branch permission). */
+export function holdsAnywhereOf(rc: RouteContext<unknown, unknown, unknown>): (p: Permission) => boolean {
+  const auth = rc.auth;
+  if (auth === null) throw new DomainError('AUTH_REQUIRED');
+  return (p) => can(auth.grants, p) || [...auth.grants.branches.values()].some((held) => held.has(p));
+}
+
+/** Whether the request's user holds `permission` for `def` with `params`: at the branch they address, if any. */
+export async function holdsForReport(rc: RouteContext<unknown, unknown, unknown>, def: ReportDefinition, params: Readonly<Record<string, unknown>>, permission: Permission): Promise<boolean> {
+  const auth = rc.auth;
+  if (auth === null) throw new DomainError('AUTH_REQUIRED');
+  return can(auth.grants, permission, await reportBranchOf(rc.db.db, def, params));
 }
 
 /** The definition `id` names. @throws DomainError `NOT_FOUND` */
@@ -59,7 +78,7 @@ const reportsCatalog = route({
   idempotency: 'none',
   audit: null,
   handler: async (rc) => {
-    const holds = holdsOf(rc);
+    const holds = holdsAnywhereOf(rc);
     const body: ReportCatalogResponse = { reports: visibleReports(holds).map((def) => reportCatalogEntry(def, holds)) };
     return { body };
   },
@@ -79,7 +98,7 @@ const reportsPreview = route({
   body: ReportPreviewBody,
   handler: async (rc) => {
     const def = definitionOf(rc.params.reportId);
-    if (!holdsOf(rc)(def.permission)) throw await rc.authzDenied(def.permission);
+    if (!(await holdsForReport(rc, def, rc.body.params, def.permission))) throw await rc.authzDenied(def.permission);
     // ---- Komunitas (member, visit and circulation reports) ----
     const extra = def.extraPermission?.(rc.body.params) ?? null;
     if (extra !== null && !holdsOf(rc)(extra)) throw await rc.authzDenied(extra);
