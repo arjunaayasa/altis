@@ -265,6 +265,7 @@ describe('navigation and language', () => {
       ['Laporan', '/admin/reports'],
       ['Akreditasi', '/admin/accreditation'],
       ['Halaman & Berita', '/admin/opac/pages'],
+      ['Halaman awal', '/admin/opac/beranda'],
       ['Pengguna', '/admin/users'],
       ['Peran', '/admin/roles'],
       ['Cabang', '/admin/branches'],
@@ -330,7 +331,7 @@ describe('navigation and language', () => {
     ]);
     expect(within(groups[2]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Daftar Anggota', 'Tipe Anggota', 'Impor Anggota', 'Surat Bebas Pustaka', 'Cetak Kartu']);
     expect(within(groups[3]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Laporan', 'Akreditasi']);
-    expect(within(groups[4]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Halaman & Berita']);
+    expect(within(groups[4]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Halaman & Berita', 'Halaman awal']);
     expect(within(groups[5]!).getByRole('link', { name: 'Konfigurasi Sistem' })).toBeTruthy();
     // Beranda belongs to no group.
     for (const g of groups) expect(within(g).queryByRole('link', { name: 'Beranda' })).toBeNull();
@@ -402,7 +403,7 @@ describe('command palette', () => {
         .map((o) => o.textContent);
     expect(options('Navigasi')).toEqual(['Beranda']);
     expect(options('Katalog')).toEqual(['Bibliografi', 'Eksemplar', 'Otoritas', 'Lokasi & Rak', 'Data Induk', 'Impor/Ekspor', 'Cetak Label']);
-    expect(options('OPAC')).toEqual(['Halaman & Berita']);
+    expect(options('OPAC')).toEqual(['Halaman & Berita', 'Halaman awal']);
     expect(options('Sistem')).toEqual(['Log audit', 'Tentang']);
   });
 

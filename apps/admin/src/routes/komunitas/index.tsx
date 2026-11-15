@@ -4,6 +4,8 @@ import { circulationRoutes } from './circulation';
 import { membersRoutes } from './members';
 import { reportsRoutes } from './reports';
 import { accreditationSettingsRoutes } from './settings';
+// ---- Komunitas (OPAC home page) ----
+import { opacHomeRoutes } from './opac-home';
 
 // The admin routes of reports and accreditation, members and circulation: one file per area, joined here and spread once into the shell's
 // children (routes.tsx), so that no later task edits routes.tsx. Every path is a child of the shell
@@ -21,5 +23,7 @@ export function komunitasRoutes(shell: typeof shellRoute) {
     ...accreditationSettingsRoutes(shell),
     ...circulationRoutes(shell),
     ...membersRoutes(shell),
+    // ---- Komunitas (OPAC home page) ----
+    ...opacHomeRoutes(shell),
   ];
 }
