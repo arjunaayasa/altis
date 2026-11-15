@@ -28,15 +28,17 @@ import { cachedForRun, cutChars, keyOf, mappedRows, oneLine, scanAll, sourceKeys
 //    and their start and end in the library's time zone. A session SLiMS has finished comes in `finished`; one still
 //    active (`is_active`) comes in `cancelled`, since ALTIS does not go on with it, and the report names it
 //    (`stocktake_active_cancelled`). A session without a valid start date is skipped `invalid_date`. A session keeps
-//    the totals SLiMS kept for it (in the scope, found, on loan; the rest not found) until its rows say otherwise.
+//    the totals SLiMS kept for it (in the scope, found, on loan; the rest not found), except as step 3 says.
 // 2. `stock_take_item` → the copies of the last session (the latest start, then the highest id; entity
 //    `stock_take_item`, key `<stock_take_id>|<item_id>`): the copy through the item's legacy map, else through its item
 //    code (a copy ALTIS lacks: skipped `item_missing`; a second row of one copy: `duplicate_item`); SLiMS's `e` is
 //    found (scanned when the row was last updated, by the officer's name as SLiMS kept it), `l` on loan, `m` and any
 //    other not found, and in a finished session `m` is marked missing; each with a snapshot of the copy's location,
 //    status, class and collection type as ALTIS has them now. A row of another session is skipped `older_session`
-//    (SLiMS keeps the rows of its latest session only).
-// 3. the last session's counters are counted again from its rows, when it has any.
+//    (SLiMS keeps the rows of its latest session only). Each row is decided by its own legacy map, so a run after one
+//    that ended within the rows brings the rows it had not into the session that run made.
+// 3. the last session's counters are counted again from its rows, when it has any, unless SLiMS finished it and kept
+//    its totals: those stand, since they also count the rows of copies ALTIS lacks (copies SLiMS removed, for one).
 //
 // A dry run writes nothing: a row whose copy the source's `item` table holds counts as the run would write it.
 //
@@ -165,7 +167,6 @@ async function itemsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: B
   const tz = await runTimeZone(c);
   const last = await lastSession(c);
   const session = last === null ? undefined : (await mappedRows(c, io.db, TS, [last])).get(last);
-  const sessionState = stateOf(c, session);
   const status = session === undefined ? null : ((await io.db.selectFrom('stocktakes').select('status').where('id', '=', session.targetId).executeTakeFirst())?.status ?? null);
   const keyOfRow = (r: SlimsRow): string => `${keyOf(r['stock_take_id'])}|${keyOf(r['item_id'])}`;
   const maps = await mappedRows(c, io.db, TI, rows.map(keyOfRow));
@@ -209,11 +210,6 @@ async function itemsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: B
     }
     if (stKey !== last) {
       l.skipped(TI, 'older_session');
-      continue;
-    }
-    // The session this run did not make (an earlier run's) keeps the rows that run gave it.
-    if (sessionState === 'done') {
-      l.skipped(TI, 'already_migrated');
       continue;
     }
     if (io.trx !== null && session === undefined) {
@@ -271,12 +267,14 @@ async function itemsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: B
   await mapLegacy(io.trx, toMap);
 }
 
-/** The last session's counters, counted again from its rows (a session this run made, with rows). */
+/** The last session's counters, counted again from its rows (see the top of this file). */
 async function recountOnce(c: SlimsStageContext, _rows: readonly SlimsRow[], io: BatchIo): Promise<void> {
   if (io.trx === null) return;
   const last = await lastSession(c);
   const session = last === null ? undefined : (await mappedRows(c, io.trx, TS, [last])).get(last);
-  if (session === undefined || stateOf(c, session) === 'done') return;
+  if (session === undefined) return;
+  const header = await io.trx.selectFrom('stocktakes').select(['status', 'total']).where('id', '=', session.targetId).executeTakeFirst();
+  if (header === undefined || (header.status === 'finished' && Number(header.total) > 0)) return;
   const counts = await countGrouped(io.trx.selectFrom('stocktake_items').where('stocktake_id', '=', session.targetId).where('expected', '=', 1), { state: 'state' });
   const n = (state: string): number => counts.find((r) => r.state === state)?.count ?? 0;
   const total = counts.reduce((sum, r) => sum + r.count, 0);
