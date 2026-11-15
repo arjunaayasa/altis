@@ -1220,13 +1220,29 @@ async function matchesOnce(c: SlimsStageContext, _rows: readonly SlimsRow[], io:
 
 // ---- 11. the dry run's lists ----------------------------------------------------------------------------------------
 
-/** What one rule gives a loan: its days, fine per day (minor), grace days and loan limit; `id` names it for grouping. */
+/** What one rule gives a loan: its days, fine per day and cap (minor), grace days and loan limit; `id` names it for grouping. */
 interface DryTerms {
   id: string;
   loanDays: number;
   finePerDay: number;
+  cap: number | null;
   grace: number;
   limit: number | null;
+}
+
+/** A rule as ALTIS resolves it: its terms and its dimensions (an ALTIS id, or `t:`/`c:`/`g:` and a SLiMS id not mapped yet). */
+type DryRule = DryTerms & { member_type_id: string | null; collection_type_id: string | null; material_type_id: string | null; branch_id: string | null };
+
+/** The terms of an ALTIS rule as it is now. */
+function policyTerms(p: PolicyRow): DryTerms {
+  return {
+    id: p.id,
+    loanDays: Number(p.loan_days),
+    finePerDay: Number(p.fine_per_day_minor),
+    cap: p.fine_cap_minor === null ? null : Number(p.fine_cap_minor),
+    grace: Number(p.grace_days),
+    limit: p.loan_limit === null ? null : Number(p.loan_limit),
+  };
 }
 
 /** A list of the dry run: its count and at most MIGRATION_DRY_LIST_SAMPLES samples, and its report rows. */
@@ -1256,7 +1272,7 @@ class DryList {
  *
  * - `loan_terms_differ`: the open loans that would stay open whose next due date or fine differs between SLiMS and the
  *   rule ALTIS gives them (the SLiMS rule it maps to, the type's fallback rule for an "every" rule, else ALTIS's
- *   resolution order over the rules this run makes): another loan period (a renewal's due date), another fine per day,
+ *   resolution order over ALTIS's rules and the ones this run makes): another loan period (a renewal's due date), another fine per day,
  *   or, overdue today, another fine today (grace read the ALTIS way, the raised grace, the closed days of the ALTIS
  *   calendar);
  * - `type_limit_changes`: the SLiMS member types with rules that apply to them: SLiMS counts every open loan against
@@ -1268,8 +1284,10 @@ class DryList {
  * - `open_loan_item_missing`: the open loans whose copy will not be in ALTIS (not in the source's `item`, or not mapped
  *   while the run skips the catalogue): the real run skips them; a re-sync of the catalogue may bring them.
  *
- * The rules are worked out from the source as this stage makes them (ids from SLiMS, not ALTIS's), so a dry run before
- * any real run lists them too. ALTIS rules the library made itself are left out of the resolution.
+ * SLiMS's side is read from the source. ALTIS's side is the rules ALTIS holds as they are now (those an earlier run made,
+ * edited since or not, and the library's own), with the ones this run is still to make worked out from the source as
+ * this stage makes them: a dimension ALTIS has not mapped yet keeps its SLiMS id, so a dry run before any real run lists
+ * them too.
  */
 async function circulationDryLists(c: SlimsStageContext, db: Db, l: Ledger): Promise<MigrationDryList[]> {
   const terms = new DryList('loan_terms_differ', l, TL);
@@ -1283,14 +1301,13 @@ async function circulationDryLists(c: SlimsStageContext, db: Db, l: Ledger): Pro
   const typeTerms = new Map<string, DryTerms>();
   for (const [id, row] of types) {
     const v = typeRuleValues(c, row);
-    typeTerms.set(id, { id: `T${id}`, loanDays: v.loan_days, finePerDay: v.fine_per_day_minor, grace: v.grace_days, limit: v.loan_limit });
+    typeTerms.set(id, { id: `T${id}`, loanDays: v.loan_days, finePerDay: v.fine_per_day_minor, cap: null, grace: v.grace_days, limit: v.loan_limit });
   }
 
-  // The rules: SLiMS's own (every row, as SLiMS applies them) and the ones this stage makes live.
+  // The rules: SLiMS's own (every row, as SLiMS applies them), the ones this stage makes live, the "every" ones it archives.
   const slimsRules = new Map<string, DryTerms>();
-  const live: (DryTerms & { member_type_id: string | null; collection_type_id: string | null; material_type_id: string | null; branch_id: string | null })[] = [];
-  const all = new Map<string, DryTerms>();
-  for (const [id, t] of typeTerms) live.push({ ...t, member_type_id: `t:${id}`, collection_type_id: null, material_type_id: null, branch_id: null });
+  const made: { id: string; mt: string; ct: string; gm: string; terms: DryTerms }[] = [];
+  const all = new Set<string>();
   await scanAll(c, TLR, (row) => {
     const id = keyOf(row['loan_rules_id']);
     if (id === '') return;
@@ -1300,21 +1317,22 @@ async function circulationDryLists(c: SlimsStageContext, db: Db, l: Ledger): Pro
       id: `R${id}`,
       loanDays: clamp(intCell(row['loan_periode']), 0, 365, 7),
       finePerDay: fineMinor(c, row['fine_each_day']),
+      cap: null,
       grace: Math.max(clamp(intCell(row['grace_periode']), 0, 365, 0), typeGrace),
       limit: clamp(intCell(row['loan_limit']), 0, 32_767, 0),
     };
     slimsRules.set(id, t);
     if (tuples.get(tupleOfRule(row)) !== id || (mt !== '0' && !types.has(mt))) return;
     if (mt !== '0' && ct === '0' && gm === '0') {
-      all.set(id, t);
+      all.add(id);
       allRules.add(id, id, `loan_days=${t.loanDays}; loan_limit=${t.limit ?? 0}; fine=${t.finePerDay}; grace=${t.grace}`);
       return;
     }
-    live.push({ ...t, member_type_id: mt === '0' ? null : `t:${mt}`, collection_type_id: ct === '0' ? null : `c:${ct}`, material_type_id: gm === '0' ? null : `g:${gm}`, branch_id: null });
+    made.push({ id, mt, ct, gm, terms: t });
   });
   for (const [id, row] of types) {
     const t = typeTerms.get(id)!;
-    const ruled = live.filter((r) => r.id.startsWith('R') && (r.member_type_id === null || r.member_type_id === `t:${id}`)).length;
+    const ruled = made.filter((r) => r.mt === '0' || r.mt === id).length;
     if (ruled > 0) typeLimits.add(id, `${id} ${cutChars(oneLine(keyOf(row['member_type_name'])), 40)}`, `loan_limit=${t.limit ?? 0}; rules=${ruled}`);
   }
 
@@ -1349,6 +1367,59 @@ async function circulationDryLists(c: SlimsStageContext, db: Db, l: Ledger): Pro
   });
   const altisItems = await altisItemsOf(c, db, [...codes]);
 
+  // ALTIS's side, as the real run resolves a loan's rule: the live rules ALTIS holds first (a tie goes to them), then
+  // the fallback rule of each type ALTIS does not hold one for, and the SLiMS rules no run made yet.
+  const pol = await policies(db);
+  const typeIds = await mapped(c, db, 'mst_member_type', [...types.keys()]);
+  const collIds = await mapped(c, db, 'mst_coll_type', [...made.map((r) => r.ct), ...[...itemRows.values()].map((x) => x.coll)]);
+  const gmdIds = await mapped(c, db, 'mst_gmd', [...made.map((r) => r.gm), ...gmds.values()]);
+  const ruleIds = await mapped(c, db, TLR, [...slimsRules.keys()]);
+  const typeRuleIds = await mapped(c, db, TYPE_RULE, [...types.keys()]);
+  const dimType = (id: string): string => typeIds.get(id) ?? `t:${id}`;
+  const dimColl = (id: string): string => collIds.get(id) ?? `c:${id}`;
+  const dimGmd = (id: string): string => gmdIds.get(id) ?? `g:${id}`;
+  const resolvable: DryRule[] = pol.live.map((p) => ({
+    ...policyTerms(p),
+    member_type_id: p.member_type_id,
+    collection_type_id: p.collection_type_id,
+    material_type_id: p.material_type_id,
+    branch_id: p.branch_id,
+  }));
+  // A type's fallback rule, by its ALTIS type: the one a run mapped (as it is now), the type's own rule ALTIS holds (the
+  // run maps that one), else the one the run makes.
+  const fallback = new Map<string, DryTerms>();
+  for (const [id, t] of typeTerms) {
+    const type = dimType(id);
+    const held = pol.byId.get(typeRuleIds.get(id) ?? '');
+    if (held !== undefined) {
+      fallback.set(held.member_type_id ?? type, policyTerms(held));
+      continue;
+    }
+    const scope = policyScopeKey({ memberTypeId: type, collectionTypeId: null, materialTypeId: null, branchId: null });
+    const existing = typeIds.has(id) ? pol.live.find((p) => p.scope_key === scope) : undefined;
+    if (existing !== undefined) {
+      fallback.set(type, policyTerms(existing));
+      continue;
+    }
+    fallback.set(type, t);
+    resolvable.push({ ...t, member_type_id: type, collection_type_id: null, material_type_id: null, branch_id: null });
+  }
+  const simulated = new Map<string, DryTerms>();
+  for (const r of made) {
+    if (ruleIds.has(r.id)) continue;
+    simulated.set(r.id, r.terms);
+    resolvable.push({
+      ...r.terms,
+      member_type_id: r.mt === '0' ? null : dimType(r.mt),
+      collection_type_id: r.ct === '0' ? null : dimColl(r.ct),
+      material_type_id: r.gm === '0' ? null : dimGmd(r.gm),
+      branch_id: null,
+    });
+  }
+  const itemsNow = await itemFacts(db, [...altisItems.values()]);
+  const memberIds = await mapped(c, db, 'member', open.map((x) => x.member));
+  const membersNow = await memberFactsOf(db, [...memberIds.values()]);
+
   // The calendars: SLiMS's holidays, and ALTIS's after the run (them, and the days the library closed in ALTIS).
   const settings = await slimsSettings(c);
   const skipClosed = settings.has('ignore_holidays_fine_calc') && settingFlag(settingScalar(settings.get('ignore_holidays_fine_calc')!)) === true;
@@ -1375,15 +1446,24 @@ async function circulationDryLists(c: SlimsStageContext, db: Db, l: Ledger): Pro
     const type = members.get(loan.member) ?? '';
     // SLiMS: the loan's own rule, else its member type's values.
     const slims = slimsRules.get(loan.rule) ?? typeTerms.get(type) ?? null;
-    // ALTIS: the rule the SLiMS rule maps to (an "every" rule: the type's fallback rule), else the resolution order.
-    let altis: DryTerms | null = live.find((r) => r.id === `R${loan.rule}`) ?? null;
-    if (altis === null && all.has(loan.rule)) altis = typeTerms.get(type) ?? null;
+    // ALTIS: the rule the SLiMS rule maps to (an "every" rule, or one archived since: the type's fallback rule), else
+    // the resolution order; the member's type and the copy's dimensions as ALTIS has them, when it has them.
+    const now = itemsNow.get(altisItems.get(loan.code) ?? '');
+    const altisType = membersNow.get(memberIds.get(loan.member) ?? '')?.type ?? dimType(type);
+    let altis: DryTerms | null = null;
+    const ruleId = ruleIds.get(loan.rule);
+    if (ruleId !== undefined) {
+      const p = pol.byId.get(ruleId);
+      if (p !== undefined) altis = p.archived_at === null ? policyTerms(p) : (fallback.get(altisType) ?? null);
+    } else {
+      altis = simulated.get(loan.rule) ?? (all.has(loan.rule) ? (fallback.get(altisType) ?? null) : null);
+    }
     if (altis === null) {
-      altis = pickPolicy(live, {
-        memberTypeId: `t:${type}`,
-        collectionTypeId: `c:${item?.coll ?? '0'}`,
-        materialTypeId: `g:${gmds.get(item?.biblio ?? '') ?? '0'}`,
-        branchId: null,
+      altis = pickPolicy(resolvable, {
+        memberTypeId: altisType,
+        collectionTypeId: now?.collection_type_id ?? dimColl(item?.coll ?? '0'),
+        materialTypeId: now === undefined ? dimGmd(gmds.get(item?.biblio ?? '') ?? '0') : now.material_type_id,
+        branchId: now?.branch_id ?? null,
       });
     }
     const reasons: string[] = [];
@@ -1392,11 +1472,11 @@ async function circulationDryLists(c: SlimsStageContext, db: Db, l: Ledger): Pro
     if (slimsDays !== null && slimsDays !== altisDays) reasons.push(`loan_days=${slimsDays}->${altisDays}`);
     if ((slims?.finePerDay ?? 0) !== (altis?.finePerDay ?? 0)) reasons.push(`fine_per_day=${slims?.finePerDay ?? 0}->${altis?.finePerDay ?? 0}`);
     if (loan.dueOn < todayIs) {
-      // SLiMS frees N - 1 days of grace, ALTIS N; both fine every day late past it; ALTIS has no cap here.
+      // SLiMS frees N - 1 days of grace, ALTIS N; both fine every day late past it, ALTIS up to its rule's cap.
       const slimsLate = skipClosed ? countOpenDays(slimsClosed, loan.dueOn, todayIs) : diffDays(loan.dueOn, todayIs);
       const altisLate = skipClosed ? countOpenDays(altisClosed, loan.dueOn, todayIs) : diffDays(loan.dueOn, todayIs);
       const slimsFine = slims === null || slimsLate === 0 || slimsLate < slims.grace ? 0 : slims.finePerDay * slimsLate;
-      const altisFine = altis === null ? 0 : overdueFineMinor(altisLate, { finePerDayMinor: altis.finePerDay, fineCapMinor: null, graceDays: altis.grace });
+      const altisFine = altis === null ? 0 : overdueFineMinor(altisLate, { finePerDayMinor: altis.finePerDay, fineCapMinor: altis.cap, graceDays: altis.grace });
       if (slimsFine !== altisFine) reasons.push(`fine_today=${slimsFine}->${altisFine}`);
     }
     if (reasons.length > 0) terms.add(loan.id, `${loan.member} · ${loan.code}`, reasons.join('; '));
