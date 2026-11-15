@@ -2,6 +2,7 @@ import { vocabKey } from '@altis/shared';
 import type { EvidenceListResponse, IndicatorEvidenceView, IndicatorResultView } from '@altis/shared/api/accreditation';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import { useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { useState, type JSX } from 'react';
 import { EvidenceUpload } from '@/components/accreditation/evidence-upload';
 import { accredKeys, accredPaths } from '@/components/accreditation/usage/queries';
@@ -9,8 +10,9 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Badge } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { useT, type TKey, type Translate } from '@/i18n';
+import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
-import { useApiQuery } from '@/lib/me';
+import { useApiQuery, useMe } from '@/lib/me';
 import { accreditationKeys, keyText } from '@/screens/accreditation/data';
 
 /** The ALTIS screens a screenshot item names, by the key the instrument gives them. */
@@ -34,6 +36,9 @@ export function screenName(t: Translate, screen: string): string {
  * linked to it, and, for an item filled by uploading, the upload (`canUpload`: a manager on an open period). Whether an
  * item is there comes from the period's results (`status`); before the first evaluation it is not shown.
  *
+ * A signed document ALTIS drafts (the annual library report behind the routine-reports item) names that report, with a
+ * link to make it for the period's span when the user may read the statistics reports.
+ *
  * The same manager removes a file after a confirmation (`DELETE accreditation/evidence/:id`): a wrong upload must not
  * stay in the evidence file and its ZIPs, nor keep the item "ada". The results name a file only; its evidence row comes
  * from the period's evidence list, read once for every checklist of the page.
@@ -55,6 +60,7 @@ export function EvidenceChecklist({
 }): JSX.Element {
   const t = useT();
   const queryClient = useQueryClient();
+  const readsReports = holds(useMe(), 'reports.statistics.read');
   const evidence = useApiQuery<EvidenceListResponse>({ queryKey: accredKeys.evidence(periodId), path: accredPaths.evidence(periodId), enabled: canUpload });
   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
   const evidenceOf = (fileId: string): string | undefined => evidence.data?.evidence.find((e) => e.fileId === fileId)?.id;
@@ -84,6 +90,23 @@ export function EvidenceChecklist({
             </div>
             {item.kind === 'generated' && item.reportId !== null && (
               <p className="text-muted-foreground">{t('accreditation.workspace.evidence.generated', { report: keyText(t, `report.${item.reportId}.title`) })}</p>
+            )}
+            {/* ---- Komunitas K5 (reports): a signed document ALTIS drafts ---- */}
+            {item.kind !== 'generated' && item.reportId !== null && (
+              <p className="text-muted-foreground">
+                {t('accreditation.workspace.evidence.draft', { report: keyText(t, `report.${item.reportId}.title`) })}
+                {readsReports && (
+                  <>
+                    {' '}
+                    <Link
+                      to={`/admin/reports/${encodeURIComponent(item.reportId)}`}
+                      search={{ periodId }}
+                      className="text-primary underline-offset-4 hover:underline">
+                      {t('accreditation.workspace.evidence.draft_open')}
+                    </Link>
+                  </>
+                )}
+              </p>
             )}
             {item.kind === 'screenshot' && item.screen !== null && (
               <p className="text-muted-foreground">{t('accreditation.workspace.evidence.screen', { screen: screenName(t, item.screen) })}</p>

@@ -680,6 +680,10 @@ const REPORT_IDS = [
   'stocktake.misplaced',
   'stocktake.by_officer',
   'stocktake.history',
+  // ---- Komunitas K5 (reports) ----
+  'visits.by_hour',
+  'system.staff_activity',
+  'library.annual_report',
   'test.rows',
   'test.personal',
   'test.document',
@@ -710,6 +714,8 @@ const REPORT_COLUMNS = [
   // ---- Komunitas K4 (stocktake) ----
   ...['expected', 'found', 'misplaced', 'on_loan', 'pending', 'unexpected', 'unknown_codes', 'material_type', 'expected_location'],
   ...['scanned_location', 'scanned_at', 'officer', 'session', 'branch', 'started_at', 'finished_at'],
+  // ---- Komunitas K5 (reports) ----
+  ...['hour', 'wd1', 'wd2', 'wd3', 'wd4', 'wd5', 'wd6', 'wd7', 'records', 'returns'],
 ];
 
 /** Every parameter name of the report definitions. */

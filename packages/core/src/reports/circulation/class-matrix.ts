@@ -5,20 +5,9 @@ import { z } from 'zod';
 import { label, offsetPage, textParam } from '../collection/common.js';
 import { reportColumn, reportIdField, reportParam, reportYearField } from '../params.js';
 import type { ReportColumn, ReportCtx, ReportRow, TableReport } from '../types.js';
-import {
-  CLASS_COLUMNS,
-  CLASS_KEYS,
-  MAIN_CLASS_OPTIONS,
-  MONTH_COLUMNS,
-  MONTH_KEYS,
-  classIndexOf,
-  divisionIndexOf,
-  divisionLabel,
-  monthIndexOf,
-  monthText,
-  sumOf,
-  yearParam,
-} from './common.js';
+// ---- Komunitas K5 (reports) ----
+import { PERIOD_FILTER, monthMatrixSpan, type ReportSpan } from '../window.js';
+import { CLASS_COLUMNS, CLASS_KEYS, MAIN_CLASS_OPTIONS, MONTH_COLUMNS, MONTH_KEYS, classIndexOf, divisionIndexOf, divisionLabel, monthIndexOf, sumOf } from './common.js';
 
 // Two matrices of one year by DDC class, from the class each event kept when it happened (`stat_ddc`):
 //
@@ -27,30 +16,32 @@ import {
 // - `circulation.in_library`: the in-library uses (books read in the library and put back by staff).
 //
 // Rows are the months of the year and columns the DDC main classes, 2X, the other classes and the total; with a main
-// class chosen, rows are its ten divisions and columns the months. Both end with a totals row.
+// class chosen, rows are its ten divisions and columns the months. Both end with a totals row. With an accreditation
+// period chosen (`periodId`, at most twelve months) the period is read instead of the year: rows are its months in
+// order, and a division's month columns take each of its months in the column of that calendar month.
 
 type Matrix = { rows: ReportRow[]; totals: ReportRow };
 
-/** The counts of `base` by month and class: rows of months × classes, or (with `main`) divisions × months. */
+/** The counts of `base` by month and class: rows of the span's months × classes, or (with `main`) divisions × months. */
 async function matrixOf(
   ctx: ReportCtx,
   base: SelectQueryBuilder<DB, never, object>,
   dateColumn: string,
   statColumn: string,
-  year: number,
+  span: ReportSpan,
   main: string | null,
 ): Promise<Matrix> {
   const groups = await countGrouped(base, { m: datePrefix(dateColumn, 'month'), d: statColumn });
   const total = label(ctx, 'report.row.total' as MessageKey);
   if (main === null) {
-    const cells = MONTH_KEYS.map(() => CLASS_KEYS.map(() => 0));
+    const cells = span.months.map(() => CLASS_KEYS.map(() => 0));
     for (const g of groups) {
-      const month = monthIndexOf(g.m);
-      if (month === null) continue;
+      const month = g.m === null ? -1 : span.months.indexOf(String(g.m).slice(0, 7));
+      if (month < 0) continue;
       const k = classIndexOf(g.d === null ? null : String(g.d));
       cells[month]![k] = (cells[month]![k] ?? 0) + g.count;
     }
-    const rows: ReportRow[] = cells.map((row, k) => [monthText(year, k), ...row, sumOf(row)]);
+    const rows: ReportRow[] = cells.map((row, k) => [span.months[k]!, ...row, sumOf(row)]);
     const sums = CLASS_KEYS.map((_, c) => sumOf(cells.map((row) => row[c]!)));
     return { rows, totals: [total, ...sums, sumOf(sums)] };
   }
@@ -71,16 +62,14 @@ function matrixColumns(params: Record<string, unknown>): readonly ReportColumn[]
   return typeof params['mainClass'] === 'string' ? [reportColumn('class', 'text'), ...MONTH_COLUMNS] : [reportColumn('month', 'text'), ...CLASS_COLUMNS];
 }
 
-const yearOf = (ctx: ReportCtx): number => yearParam(ctx);
 const mainOf = (ctx: ReportCtx): string | null => textParam(ctx, 'mainClass');
 
-/** The loans of the year (alias `l`), with the filters. */
-function loansOfYear(ctx: ReportCtx): SelectQueryBuilder<DB, never, object> {
-  const year = yearOf(ctx);
+/** The loans of the span (alias `l`), with the filters. */
+function loansOfYear(ctx: ReportCtx, span: ReportSpan): SelectQueryBuilder<DB, never, object> {
   let q = ctx.db
     .selectFrom('loans as l')
-    .where('l.loaned_on', '>=', `${year}-01-01`)
-    .where('l.loaned_on', '<=', `${year}-12-31`)
+    .where('l.loaned_on', '>=', span.from)
+    .where('l.loaned_on', '<=', span.to)
     .where(sql<SqlBool>`(l.outcome is null or l.outcome <> 'voided')`);
   const branchId = textParam(ctx, 'branchId');
   if (branchId !== null) q = q.where('l.branch_id', '=', branchId);
@@ -91,10 +80,9 @@ function loansOfYear(ctx: ReportCtx): SelectQueryBuilder<DB, never, object> {
   return q as unknown as SelectQueryBuilder<DB, never, object>;
 }
 
-/** The in-library uses of the year (alias `u`). */
-function usesOfYear(ctx: ReportCtx): SelectQueryBuilder<DB, never, object> {
-  const year = yearOf(ctx);
-  let q = ctx.db.selectFrom('item_uses as u').where('u.used_on', '>=', `${year}-01-01`).where('u.used_on', '<=', `${year}-12-31`);
+/** The in-library uses of the span (alias `u`). */
+function usesOfYear(ctx: ReportCtx, span: ReportSpan): SelectQueryBuilder<DB, never, object> {
+  let q = ctx.db.selectFrom('item_uses as u').where('u.used_on', '>=', span.from).where('u.used_on', '<=', span.to);
   const branchId = textParam(ctx, 'branchId');
   if (branchId !== null) q = q.where('u.branch_id', '=', branchId);
   return q as unknown as SelectQueryBuilder<DB, never, object>;
@@ -118,6 +106,8 @@ export const circulationLoansByClassReport: TableReport = Object.freeze<TableRep
     reportParam('collectionTypeId', 'collectionType'),
     reportParam('memberTypeId', 'memberType'),
     reportParam('branchId', 'branch'),
+    // ---- Komunitas K5 (reports) ----
+    PERIOD_FILTER,
   ],
   paramsSchema: z.strictObject({
     year: reportYearField.optional(),
@@ -125,17 +115,21 @@ export const circulationLoansByClassReport: TableReport = Object.freeze<TableRep
     collectionTypeId: reportIdField.optional(),
     memberTypeId: reportIdField.optional(),
     branchId: reportIdField.optional(),
+    periodId: reportIdField.optional(),
   }),
   columns: matrixColumns,
+  chart: { kind: 'rows', label: 'month', value: 'total' },
   async rows(ctx, cursor, limit) {
-    const m = await matrixOf(ctx, loansOfYear(ctx), 'l.loaned_on', 'l.stat_ddc', yearOf(ctx), mainOf(ctx));
+    const span = await monthMatrixSpan(ctx);
+    const m = await matrixOf(ctx, loansOfYear(ctx, span), 'l.loaned_on', 'l.stat_ddc', span, mainOf(ctx));
     return offsetPage(m.rows, cursor, limit);
   },
   async totals(ctx) {
-    return (await matrixOf(ctx, loansOfYear(ctx), 'l.loaned_on', 'l.stat_ddc', yearOf(ctx), mainOf(ctx))).totals;
+    const span = await monthMatrixSpan(ctx);
+    return (await matrixOf(ctx, loansOfYear(ctx, span), 'l.loaned_on', 'l.stat_ddc', span, mainOf(ctx))).totals;
   },
   async count(ctx) {
-    return mainOf(ctx) === null ? 12 : 10;
+    return mainOf(ctx) === null ? (await monthMatrixSpan(ctx)).months.length : 10;
   },
 });
 
@@ -149,21 +143,31 @@ export const circulationInLibraryReport: TableReport = Object.freeze<TableReport
   personal: false,
   formats: ['csv', 'xlsx', 'pdf'],
   orientation: 'landscape',
-  params: [reportParam('year', 'year', { min: 1900, max: 2100 }), MAIN_CLASS_PARAM, reportParam('branchId', 'branch')],
+  params: [
+    reportParam('year', 'year', { min: 1900, max: 2100 }),
+    MAIN_CLASS_PARAM,
+    reportParam('branchId', 'branch'),
+    // ---- Komunitas K5 (reports) ----
+    PERIOD_FILTER,
+  ],
   paramsSchema: z.strictObject({
     year: reportYearField.optional(),
     mainClass: z.enum(MAIN_CLASS_OPTIONS as [string, ...string[]]).optional(),
     branchId: reportIdField.optional(),
+    periodId: reportIdField.optional(),
   }),
   columns: matrixColumns,
+  chart: { kind: 'rows', label: 'month', value: 'total' },
   async rows(ctx, cursor, limit) {
-    const m = await matrixOf(ctx, usesOfYear(ctx), 'u.used_on', 'u.stat_ddc', yearOf(ctx), mainOf(ctx));
+    const span = await monthMatrixSpan(ctx);
+    const m = await matrixOf(ctx, usesOfYear(ctx, span), 'u.used_on', 'u.stat_ddc', span, mainOf(ctx));
     return offsetPage(m.rows, cursor, limit);
   },
   async totals(ctx) {
-    return (await matrixOf(ctx, usesOfYear(ctx), 'u.used_on', 'u.stat_ddc', yearOf(ctx), mainOf(ctx))).totals;
+    const span = await monthMatrixSpan(ctx);
+    return (await matrixOf(ctx, usesOfYear(ctx, span), 'u.used_on', 'u.stat_ddc', span, mainOf(ctx))).totals;
   },
   async count(ctx) {
-    return mainOf(ctx) === null ? 12 : 10;
+    return mainOf(ctx) === null ? (await monthMatrixSpan(ctx)).months.length : 10;
   },
 });
