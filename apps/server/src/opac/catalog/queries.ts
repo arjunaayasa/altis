@@ -1,4 +1,4 @@
-import { legacyTarget, recordUrlPath } from '@altis/core';
+import { legacyTarget, popularRecordIds, recordUrlPath } from '@altis/core';
 import type { DbHandle } from '@altis/db';
 import type { Locale } from '@altis/shared';
 import { sourceNameField } from '@altis/shared/api/catalog/migration';
@@ -210,6 +210,44 @@ export async function promotedTitles(db: Db, n: number): Promise<TitleCard[]> {
     .limit(n)
     .execute();
   return cards(db, rows);
+}
+
+// ---- Komunitas (OPAC home page) ----
+/**
+ * The `n` popular titles the OPAC shows, the most lent first: the ids of the popular titles' aggregate (loan counts per
+ * title, no borrower), checked against the public records again.
+ */
+export async function popularTitles(db: Db, n: number): Promise<TitleCard[]> {
+  const ids = await popularRecordIds(db, n);
+  if (ids.length === 0) return [];
+  const rows = await publicRecords(db)
+    .select([...CARD_COLUMNS])
+    .where('id', 'in', ids)
+    .execute();
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return cards(
+    db,
+    ids.flatMap((id) => {
+      const r = byId.get(id);
+      return r === undefined ? [] : [r];
+    }),
+  );
+}
+
+/**
+ * How many members are active on `today` (`YYYY-MM-DD`): neither archived nor anonymised, not suspended, and not
+ * expired. A count only: the home page's facts.
+ */
+export async function activeMemberCount(db: Db, today: string): Promise<number> {
+  const row = await db
+    .selectFrom('members')
+    .select((eb) => eb.fn.countAll<number>().as('n'))
+    .where('archived_at', 'is', null)
+    .where('anonymized_at', 'is', null)
+    .where('status', '=', 'active')
+    .where((eb) => eb.or([eb('expires_on', 'is', null), eb('expires_on', '>=', today)]))
+    .executeTakeFirst();
+  return Number(row?.n ?? 0);
 }
 
 /** How many records the OPAC shows. */

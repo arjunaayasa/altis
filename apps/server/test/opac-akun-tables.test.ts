@@ -1,14 +1,14 @@
-import type { MemberLoanPage } from '@altis/core';
+import type { MemberLoanPage, MemberOwnChargesPage } from '@altis/core';
 import { AKUN_CSS } from '@altis/opac-theme';
 import type { HoldView } from '@altis/shared/api/holds';
 import { jsx } from 'hono/jsx';
 import { describe, expect, it } from 'vitest';
-import { HistoryView, HoldsView, OpenLoans } from '../src/opac/akun/views.js';
+import { ChargesView, HistoryView, HoldsView, OpenLoans } from '../src/opac/akun/views.js';
 
-// The member area's tables of loans, history and holds on a phone: below the shell's 48 rem each row is a card (CSS
-// only, the page keeps its strict CSP), so the due date and the "Perpanjang" or "Batalkan" button show without a
-// sideways scroll. The markup gives every cell what the card needs: the title heads it, the action spans it, and each
-// other cell names its column in `data-label`.
+// The member area's tables of loans, history, holds, charges and payments on a phone: below the shell's 48 rem each row
+// is a card (CSS only, the page keeps its strict CSP), so the due date and the "Perpanjang" or "Batalkan" button show
+// without a sideways scroll. The markup gives every cell what the card needs: the title heads it, the action spans it,
+// and each other cell names its column in `data-label`.
 
 /** The server render of a view (hono's jsx() from a .ts file). */
 const render = (view: unknown, props: Record<string, unknown>): string => String(jsx(view as never, props as never));
@@ -44,6 +44,9 @@ const loan = (id: string, o: Partial<MemberLoanPage['rows'][number]> = {}): Memb
   renewals: 0,
   renewLimit: 2,
   daysLate: 0,
+  finedDays: null,
+  fineMinor: 0,
+  currency: 'IDR',
   ...o,
 });
 
@@ -95,6 +98,62 @@ describe('the member area tables stack into cards on a phone', () => {
     ]);
     const history = render(HistoryView, { locale: 'id', keep: (p: string) => p, loans: { rows: [loan('L3', { returnedOn: '2026-11-09', outcome: 'returned' })], total: 1, page: 1, pages: 1 } });
     expect(labelsPerRow(history, 5)).toEqual([['Barkod', 'Dipinjam', 'Dikembalikan', 'Keterangan']]);
+  });
+
+  it('the fines and charges and the payments stack the same way; a voided payment says so', () => {
+    const data: MemberOwnChargesPage = {
+      charges: [
+        { id: 'C1', chargedOn: '2026-11-02', kind: 'overdue', description: 'Terlambat 3 hari', amountMinor: 150_000, paidMinor: 50_000, waivedMinor: 0, leftMinor: 100_000, currency: 'IDR' },
+        { id: 'C2', chargedOn: null, kind: 'migrated', description: 'Denda lama', amountMinor: 20_000, paidMinor: 0, waivedMinor: 0, leftMinor: 20_000, currency: 'IDR' },
+      ],
+      chargesCut: false,
+      balanceMinor: 120_000,
+      currency: 'IDR',
+      payments: [
+        { id: 'P1', paidOn: '2026-11-03', receiptNo: 'PUSAT/2026/000001', method: 'cash', amountMinor: 50_000, currency: 'IDR', voided: false },
+        { id: 'P2', paidOn: '2026-11-01', receiptNo: 'PUSAT/2026/000002', method: 'transfer', amountMinor: 10_000, currency: 'IDR', voided: true },
+      ],
+      total: 2,
+      page: 1,
+      pages: 1,
+    };
+    const html = render(ChargesView, { locale: 'id', keep: (p: string) => p, data });
+    const [charges, payments] = html.split('id="pembayaran"');
+    expect(labelsPerRow(charges!, 7)).toEqual([
+      ['Tanggal', 'Jenis', 'Jumlah', 'Dibayar', 'Dihapuskan', 'Sisa'],
+      ['Tanggal', 'Jenis', 'Jumlah', 'Dibayar', 'Dihapuskan', 'Sisa'],
+    ]);
+    expect(labelsPerRow(payments!, 4)).toEqual([
+      ['Nomor kuitansi', 'Cara bayar', 'Jumlah'],
+      ['Nomor kuitansi', 'Cara bayar', 'Jumlah'],
+    ]);
+    expect(html).toMatch(/Sisa yang harus dibayar: Rp\s?1\.200/);
+    expect(html).toContain('Tanggal tidak diketahui');
+    expect(html.match(/Dibatalkan/g)).toHaveLength(1);
+    expect(html).not.toMatch(/<form|\sstyle=|<script/);
+    const en = render(ChargesView, { locale: 'en', keep: (p: string) => p, data: { ...data, charges: [], payments: [], total: 0, balanceMinor: 0 } });
+    expect(en).toContain('You have no fines or charges left to pay.');
+    expect(en).toContain('No payments yet.');
+  });
+
+  it('a late loan says its days late as the desk does: the days its fine counts when they differ, and the running fine', () => {
+    const loans: MemberLoanPage = {
+      rows: [loan('L1', { daysLate: 10, finedDays: 8, fineMinor: 400_000 }), loan('L2', { daysLate: 3, finedDays: 3, fineMinor: 150_000 }), loan('L3', { daysLate: 2 })],
+      total: 3,
+      page: 1,
+      pages: 1,
+    };
+    const id = render(OpenLoans, { locale: 'id', keep: (p: string) => p, csrf: 'token', loans, canRenew: false });
+    expect(id).toContain('Terlambat 10 hari (8 hari dikenai denda)');
+    expect(id).toMatch(/Denda berjalan Rp\s?4\.000/);
+    expect(id).toContain('Terlambat 3 hari</span>');
+    expect(id).toContain('Terlambat 2 hari</span>');
+    expect(id.match(/Denda berjalan/g)).toHaveLength(2);
+    const en = render(OpenLoans, { locale: 'en', keep: (p: string) => p, csrf: 'token', loans, canRenew: false });
+    expect(en).toContain('10 days late (8 days fined)');
+    const history = render(HistoryView, { locale: 'en', keep: (p: string) => p, loans: { rows: [loan('L4', { returnedOn: '2026-11-18', outcome: 'returned', daysLate: 10, finedDays: 8 })], total: 1, page: 1, pages: 1 } });
+    expect(history).toContain('10 days late (8 days fined)');
+    expect(history).not.toContain('Running fine');
   });
 
   it('the stylesheet turns those tables into cards below 48 rem: the header row only for screen readers, each cell labelled, the button across the card', () => {

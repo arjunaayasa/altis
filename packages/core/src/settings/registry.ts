@@ -36,6 +36,8 @@ import {
 } from '@altis/shared/api/settings';
 import { z } from 'zod';
 import { CardProfile, DEFAULT_CARD_PROFILE } from '@altis/shared/api/member-ops';
+// ---- Komunitas (OPAC home page) ----
+import { OPAC_HOME_DEFAULT, OpacHomeContent } from '@altis/shared/api/opac-home';
 
 // The registry of settings (spec §6.5, §7.6; D26, D41): every key the `settings` table may hold, with the group
 // the admin screens file it under, its scope, its Zod schema and its default. A row that is absent reads as the
@@ -137,7 +139,9 @@ export type SettingKey =
   | `circulation.receipt.${'paperMm' | 'footer.id' | 'footer.en'}`
   // ---- Komunitas (notices) ----
   | `circulation.notices.${'dueSoonDays' | 'overdueEveryDays' | 'overdueMax' | 'holdReady'}`
-  | `email.template.${'circulation_due_soon' | 'circulation_overdue' | 'circulation_hold_ready'}.${'id' | 'en'}.${'subject' | 'body'}`;
+  | `email.template.${'circulation_due_soon' | 'circulation_overdue' | 'circulation_hold_ready'}.${'id' | 'en'}.${'subject' | 'body'}`
+  // ---- Komunitas (OPAC home page) ----
+  | 'opac.home';
 
 export interface SettingDef {
   group: SettingsGroup;
@@ -635,6 +639,11 @@ export const SETTINGS: Readonly<Record<SettingKey, SettingDef>> = Object.freeze(
   'email.template.circulation_hold_ready.id.body': def({ group: 'email', schema: noticeTemplateBodyField, default: null }),
   'email.template.circulation_hold_ready.en.subject': def({ group: 'email', schema: textOrNull(200), default: null }),
   'email.template.circulation_hold_ready.en.body': def({ group: 'email', schema: noticeTemplateBodyField, default: null }),
+  // ---- Komunitas (OPAC home page) ----
+  // The home page as the library's profile site: the hero photo and title, the "about" block, the services, the
+  // facility photos, the opening hours and the blocks shown. Edited on its own screen (`opac/home`, permission
+  // `opac.pages.manage`), not through `settings/opac`; its photos are files of this setting.
+  'opac.home': def({ group: 'opac', schema: OpacHomeContent, default: seed(OpacHomeContent, OPAC_HOME_DEFAULT) }),
 });
 
 /** The registered keys in registry order. */

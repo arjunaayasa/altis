@@ -77,6 +77,8 @@ function checklistItem(item: AccredEvidenceItem, state: IndicatorResultView['evi
   const label = `${msg(item.labelKey)} (${msg(`vocab.evidence_kind.${item.kind}`)})`;
   const details: string[] = [];
   if (item.kind === 'generated' && item.reportId !== undefined) details.push(`${SHEET.report}: ${reportTitle(item.reportId)}`);
+  // ---- Komunitas K5 (reports): a signed document ALTIS drafts names its report ----
+  else if (item.reportId !== undefined) details.push(`${SHEET.draft}: ${reportTitle(item.reportId)}`);
   if (item.kind === 'screenshot' && item.screen !== undefined) details.push(`${SHEET.screen}: ${item.screen}`);
   for (const f of state?.files ?? []) {
     const caption = f.caption.trim();

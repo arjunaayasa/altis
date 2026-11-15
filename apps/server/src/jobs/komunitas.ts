@@ -37,7 +37,7 @@ export function komunitasJobHandlers(deps: () => ReportJobDeps): JobHandler<any>
     // ---- Komunitas K4 (stocktake) ----
     stocktakePrepareJob(),
     stocktakeCodesJob(() => ({ dataDir: deps().dataDir })),
-    stocktakeFinishJob(),
+    stocktakeFinishJob(() => ({ storage: localStorageDriver(deps().dataDir) })),
   ];
 }
 

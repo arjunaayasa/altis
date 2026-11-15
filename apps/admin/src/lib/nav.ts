@@ -95,6 +95,8 @@ export const NAV: readonly NavItem[] = Object.freeze([
   { to: '/admin/anggota/bebas-pustaka', labelKey: 'nav.members.clearances', permission: 'members.records.manage', group: 'members' },
   // ---- Komunitas K2 (members extended) ----
   { to: '/admin/anggota/kartu', labelKey: 'nav.members.cards', permission: 'members.records.read', group: 'members' },
+  // ---- Komunitas (OPAC home page): the home page as the library's profile site ----
+  { to: '/admin/opac/beranda', labelKey: 'nav.opac.home', permission: 'opac.pages.manage', group: 'opac' },
   // The edition's own items (ruling R2, edition/index.ts), after the community ones: none in the community edition.
   ...editionNav,
 ] satisfies NavItem[]);

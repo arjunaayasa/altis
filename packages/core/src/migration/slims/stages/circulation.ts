@@ -1,10 +1,12 @@
 import { countGrouped, datePrefix, type DB } from '@altis/db';
 import { addDays, addMonths, ddcClassOf, diffDays, localDate, newId } from '@altis/shared';
-import type { MigrationMatchRow } from '@altis/shared/api/catalog/migration';
+import { MIGRATION_DRY_LIST_SAMPLES, type MigrationDryList, type MigrationDryListKey, type MigrationMatchRow } from '@altis/shared/api/catalog/migration';
 import type { Kysely, Selectable, Transaction } from 'kysely';
 import { codeKey } from '../../../catalog/data/keys.js';
 import { mapLegacy, type LegacyMapping } from '../../../catalog/data/legacy-map.js';
+import { closedBy, countOpenDays, loadClosedDayRules, type ClosedDayRule } from '../../../circulation/calendars.js';
 import { chargeStatusOf } from '../../../circulation/charges.js';
+import { overdueFineMinor } from '../../../circulation/fines.js';
 import { pickPolicy, policyScopeKey } from '../../../circulation/policies.js';
 import { indexRecords } from '../../../search/index-records.js';
 import { readSettings, writeSettings } from '../../../settings/service.js';
@@ -69,6 +71,7 @@ import { visitsCutoff } from './visits.js';
 //    `item_missing`, `duplicate`).
 // 9. `read_counter` → items read in place (`migrated`).
 // 10. a real run: "Cocokkan dengan SLiMS", each number of the source against ALTIS (the summary's `matches`).
+// 11. a dry run: the lists to check before the real run (the summary's `dryLists`, see circulationDryLists).
 
 const TLR = 'mst_loan_rules';
 const THO = 'holiday';
@@ -716,7 +719,9 @@ async function loansBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: B
     const dueOn = dateCell(row['due_date']) ?? loanedOn;
     if (open) {
       const dryMember = io.trx === null && sourceMembers.has(slimsMember);
-      const dryItem = io.trx === null && (await sourceItemIds(c)).has(code) && itemId !== null;
+      // A dry run: a copy the source's `item` holds comes over with the catalogue (unless the run skips it), as
+      // `open_loan_item_missing` reads it; one not mapped yet (every copy, before any real run) is no reason to skip.
+      const dryItem = io.trx === null && !c.options.skipCatalog && (await sourceItemIds(c)).has(code);
       if ((itemId === null && !dryItem) || (memberId === null && !dryMember)) {
         l.skipped(table, 'open_loan_unresolved');
         l.report(table, key, 'open_loan_unresolved', `${itemId === null ? `item_code=${code || '-'}` : ''}${memberId === null && !dryMember ? ` member_id=${slimsMember || '-'}` : ''}`.trim());
@@ -1213,6 +1218,293 @@ async function matchesOnce(c: SlimsStageContext, _rows: readonly SlimsRow[], io:
   pipelineOf(c).state.matches = await circulationMatches(c, io.trx);
 }
 
+// ---- 11. the dry run's lists ----------------------------------------------------------------------------------------
+
+/** What one rule gives a loan: its days, fine per day and cap (minor), grace days and loan limit; `id` names it for grouping. */
+interface DryTerms {
+  id: string;
+  loanDays: number;
+  finePerDay: number;
+  cap: number | null;
+  grace: number;
+  limit: number | null;
+}
+
+/** A rule as ALTIS resolves it: its terms and its dimensions (an ALTIS id, or `t:`/`c:`/`g:` and a SLiMS id not mapped yet). */
+type DryRule = DryTerms & { member_type_id: string | null; collection_type_id: string | null; material_type_id: string | null; branch_id: string | null };
+
+/** The terms of an ALTIS rule as it is now. */
+function policyTerms(p: PolicyRow): DryTerms {
+  return {
+    id: p.id,
+    loanDays: Number(p.loan_days),
+    finePerDay: Number(p.fine_per_day_minor),
+    cap: p.fine_cap_minor === null ? null : Number(p.fine_cap_minor),
+    grace: Number(p.grace_days),
+    limit: p.loan_limit === null ? null : Number(p.loan_limit),
+  };
+}
+
+/** A list of the dry run: its count and at most MIGRATION_DRY_LIST_SAMPLES samples, and its report rows. */
+class DryList {
+  count = 0;
+  readonly samples: string[] = [];
+  constructor(
+    readonly key: MigrationDryListKey,
+    private readonly l: Ledger,
+    private readonly table: string,
+  ) {}
+
+  add(legacyKey: string, sample: string, detail: string): void {
+    this.count += 1;
+    if (this.samples.length < MIGRATION_DRY_LIST_SAMPLES) this.samples.push(sample);
+    this.l.report(this.table, legacyKey, `dry_${this.key}`, detail === '' ? sample : `${sample}: ${detail}`);
+  }
+
+  json(): MigrationDryList {
+    return { key: this.key, count: this.count, samples: [...this.samples] };
+  }
+}
+
+/**
+ * The lists a dry run gives the librarian before the real run (each with its count and 20 samples of SLiMS member
+ * numbers and item codes, or rule and type ids; every row also in the report):
+ *
+ * - `loan_terms_differ`: the open loans that would stay open whose next due date or fine differs between SLiMS and the
+ *   rule ALTIS gives them (the SLiMS rule it maps to, the type's fallback rule for an "every" rule, else ALTIS's
+ *   resolution order over ALTIS's rules and the ones this run makes): another loan period (a renewal's due date), another fine per day,
+ *   or, overdue today, another fine today (grace read the ALTIS way, the raised grace, the closed days of the ALTIS
+ *   calendar);
+ * - `type_limit_changes`: the SLiMS member types with rules that apply to them: SLiMS counts every open loan against
+ *   the type's limit when no rule matches, ALTIS's fallback rule only the loans made under it (or, with the type limit
+ *   as a total, every loan against it);
+ * - `members_over_limit`: the members whose open loans under one ALTIS rule (or in all, with the type limit as a total)
+ *   pass its limit;
+ * - `all_rule_unused`: the `(type, 0, 0)` rules ALTIS makes and archives (the type's fallback rule wins), with their values;
+ * - `open_loan_item_missing`: the open loans whose copy will not be in ALTIS (not in the source's `item`, or not mapped
+ *   while the run skips the catalogue): the real run skips them; a re-sync of the catalogue may bring them.
+ *
+ * SLiMS's side is read from the source. ALTIS's side is the rules ALTIS holds as they are now (those an earlier run made,
+ * edited since or not, and the library's own), with the ones this run is still to make worked out from the source as
+ * this stage makes them: a dimension ALTIS has not mapped yet keeps its SLiMS id, so a dry run before any real run lists
+ * them too.
+ */
+async function circulationDryLists(c: SlimsStageContext, db: Db, l: Ledger): Promise<MigrationDryList[]> {
+  const terms = new DryList('loan_terms_differ', l, TL);
+  const typeLimits = new DryList('type_limit_changes', l, 'mst_member_type');
+  const overLimit = new DryList('members_over_limit', l, 'member');
+  const allRules = new DryList('all_rule_unused', l, TLR);
+  const missing = new DryList('open_loan_item_missing', l, TL);
+  const todayIs = await today(c);
+  const types = await sourceMemberTypes(c);
+  const tuples = await ruleTuples(c);
+  const typeTerms = new Map<string, DryTerms>();
+  for (const [id, row] of types) {
+    const v = typeRuleValues(c, row);
+    typeTerms.set(id, { id: `T${id}`, loanDays: v.loan_days, finePerDay: v.fine_per_day_minor, cap: null, grace: v.grace_days, limit: v.loan_limit });
+  }
+
+  // The rules: SLiMS's own (every row, as SLiMS applies them), the ones this stage makes live, the "every" ones it archives.
+  const slimsRules = new Map<string, DryTerms>();
+  const made: { id: string; mt: string; ct: string; gm: string; terms: DryTerms }[] = [];
+  const all = new Set<string>();
+  await scanAll(c, TLR, (row) => {
+    const id = keyOf(row['loan_rules_id']);
+    if (id === '') return;
+    const [mt, ct, gm] = tupleOfRule(row).split('|') as [string, string, string];
+    const typeGrace = mt === '0' ? 0 : (typeTerms.get(mt)?.grace ?? 0);
+    const t: DryTerms = {
+      id: `R${id}`,
+      loanDays: clamp(intCell(row['loan_periode']), 0, 365, 7),
+      finePerDay: fineMinor(c, row['fine_each_day']),
+      cap: null,
+      grace: Math.max(clamp(intCell(row['grace_periode']), 0, 365, 0), typeGrace),
+      limit: clamp(intCell(row['loan_limit']), 0, 32_767, 0),
+    };
+    slimsRules.set(id, t);
+    if (tuples.get(tupleOfRule(row)) !== id || (mt !== '0' && !types.has(mt))) return;
+    if (mt !== '0' && ct === '0' && gm === '0') {
+      all.add(id);
+      allRules.add(id, id, `loan_days=${t.loanDays}; loan_limit=${t.limit ?? 0}; fine=${t.finePerDay}; grace=${t.grace}`);
+      return;
+    }
+    made.push({ id, mt, ct, gm, terms: t });
+  });
+  for (const [id, row] of types) {
+    const t = typeTerms.get(id)!;
+    const ruled = made.filter((r) => r.mt === '0' || r.mt === id).length;
+    if (ruled > 0) typeLimits.add(id, `${id} ${cutChars(oneLine(keyOf(row['member_type_name'])), 40)}`, `loan_limit=${t.limit ?? 0}; rules=${ruled}`);
+  }
+
+  // The open loans that would stay open (the latest of a copy), of members the source has.
+  const { openWinner } = await sourceLoans(c);
+  const members = new Map<string, string>();
+  await scanAll(c, 'member', (row) => {
+    const id = keyOf(row['member_id']);
+    if (id !== '') members.set(id, keyOf(row['member_type_id']));
+  });
+  const open: { id: string; code: string; member: string; loanedOn: string; dueOn: string; rule: string }[] = [];
+  await scanAll(c, TL, (row) => {
+    const id = keyOf(row['loan_id']);
+    const code = keyOf(row['item_code']);
+    const member = keyOf(row['member_id']);
+    if (flagCell(row['is_lent']) !== true || flagCell(row['is_return']) === true || openWinner.get(code) !== id || !members.has(member)) return;
+    const loanedOn = dateCell(row['loan_date']);
+    if (loanedOn === null) return;
+    open.push({ id, code, member, loanedOn, dueOn: dateCell(row['due_date']) ?? loanedOn, rule: String(intCell(row['loan_rules_id']) ?? 0) });
+  });
+  const codes = new Set(open.map((x) => x.code));
+  const itemRows = new Map<string, { coll: string; biblio: string }>();
+  await scanAll(c, 'item', (row) => {
+    const code = keyOf(row['item_code']);
+    if (codes.has(code) && !itemRows.has(code)) itemRows.set(code, { coll: String(intCell(row['coll_type_id']) ?? 0), biblio: keyOf(row['biblio_id']) });
+  });
+  const biblios = new Set([...itemRows.values()].map((x) => x.biblio));
+  const gmds = new Map<string, string>();
+  await scanAll(c, 'biblio', (row) => {
+    const id = keyOf(row['biblio_id']);
+    if (biblios.has(id)) gmds.set(id, String(intCell(row['gmd_id']) ?? 0));
+  });
+  const altisItems = await altisItemsOf(c, db, [...codes]);
+
+  // ALTIS's side, as the real run resolves a loan's rule: the live rules ALTIS holds first (a tie goes to them), then
+  // the fallback rule of each type ALTIS does not hold one for, and the SLiMS rules no run made yet.
+  const pol = await policies(db);
+  const typeIds = await mapped(c, db, 'mst_member_type', [...types.keys()]);
+  const collIds = await mapped(c, db, 'mst_coll_type', [...made.map((r) => r.ct), ...[...itemRows.values()].map((x) => x.coll)]);
+  const gmdIds = await mapped(c, db, 'mst_gmd', [...made.map((r) => r.gm), ...gmds.values()]);
+  const ruleIds = await mapped(c, db, TLR, [...slimsRules.keys()]);
+  const typeRuleIds = await mapped(c, db, TYPE_RULE, [...types.keys()]);
+  const dimType = (id: string): string => typeIds.get(id) ?? `t:${id}`;
+  const dimColl = (id: string): string => collIds.get(id) ?? `c:${id}`;
+  const dimGmd = (id: string): string => gmdIds.get(id) ?? `g:${id}`;
+  const resolvable: DryRule[] = pol.live.map((p) => ({
+    ...policyTerms(p),
+    member_type_id: p.member_type_id,
+    collection_type_id: p.collection_type_id,
+    material_type_id: p.material_type_id,
+    branch_id: p.branch_id,
+  }));
+  // A type's fallback rule, by its ALTIS type: the one a run mapped (as it is now), the type's own rule ALTIS holds (the
+  // run maps that one), else the one the run makes.
+  const fallback = new Map<string, DryTerms>();
+  for (const [id, t] of typeTerms) {
+    const type = dimType(id);
+    const held = pol.byId.get(typeRuleIds.get(id) ?? '');
+    if (held !== undefined) {
+      fallback.set(held.member_type_id ?? type, policyTerms(held));
+      continue;
+    }
+    const scope = policyScopeKey({ memberTypeId: type, collectionTypeId: null, materialTypeId: null, branchId: null });
+    const existing = typeIds.has(id) ? pol.live.find((p) => p.scope_key === scope) : undefined;
+    if (existing !== undefined) {
+      fallback.set(type, policyTerms(existing));
+      continue;
+    }
+    fallback.set(type, t);
+    resolvable.push({ ...t, member_type_id: type, collection_type_id: null, material_type_id: null, branch_id: null });
+  }
+  const simulated = new Map<string, DryTerms>();
+  for (const r of made) {
+    if (ruleIds.has(r.id)) continue;
+    simulated.set(r.id, r.terms);
+    resolvable.push({
+      ...r.terms,
+      member_type_id: r.mt === '0' ? null : dimType(r.mt),
+      collection_type_id: r.ct === '0' ? null : dimColl(r.ct),
+      material_type_id: r.gm === '0' ? null : dimGmd(r.gm),
+      branch_id: null,
+    });
+  }
+  const itemsNow = await itemFacts(db, [...altisItems.values()]);
+  const memberIds = await mapped(c, db, 'member', open.map((x) => x.member));
+  const membersNow = await memberFactsOf(db, [...memberIds.values()]);
+
+  // The calendars: SLiMS's holidays, and ALTIS's after the run (them, and the days the library closed in ALTIS).
+  const settings = await slimsSettings(c);
+  const skipClosed = settings.has('ignore_holidays_fine_calc') && settingFlag(settingScalar(settings.get('ignore_holidays_fine_calc')!)) === true;
+  const holidays: ClosedDayRule[] = [];
+  await scanAll(c, THO, (row) => {
+    const date = dateCell(row['holiday_date']);
+    if (date !== null) holidays.push({ kind: 'dates', weekday: null, date_from: date, date_to: date, month_day_from: null, month_day_to: null });
+    else {
+      const weekday = weekdayOf(keyOf(row['holiday_dayname']));
+      if (weekday !== null) holidays.push({ kind: 'weekly', weekday, date_from: null, date_to: null, month_day_from: null, month_day_to: null });
+    }
+  });
+  const slimsClosed = closedBy(holidays);
+  const altisClosed = closedBy([...holidays.filter((h) => h.date_from === null || !SEED_HOLIDAYS.has(h.date_from)), ...(await loadClosedDayRules(db, c.options.branchId))]);
+
+  const perRule = new Map<string, { member: string; count: number; limit: number | null }>();
+  const perMember = new Map<string, number>();
+  for (const loan of open) {
+    const item = itemRows.get(loan.code);
+    if (!altisItems.has(loan.code) && (item === undefined || c.options.skipCatalog)) {
+      missing.add(loan.id, `${loan.member} · ${loan.code}`, '');
+      continue;
+    }
+    const type = members.get(loan.member) ?? '';
+    // SLiMS: the loan's own rule, else its member type's values.
+    const slims = slimsRules.get(loan.rule) ?? typeTerms.get(type) ?? null;
+    // ALTIS: the rule the SLiMS rule maps to (an "every" rule, or one archived since: the type's fallback rule), else
+    // the resolution order; the member's type and the copy's dimensions as ALTIS has them, when it has them.
+    const now = itemsNow.get(altisItems.get(loan.code) ?? '');
+    const altisType = membersNow.get(memberIds.get(loan.member) ?? '')?.type ?? dimType(type);
+    let altis: DryTerms | null = null;
+    const ruleId = ruleIds.get(loan.rule);
+    if (ruleId !== undefined) {
+      const p = pol.byId.get(ruleId);
+      if (p !== undefined) altis = p.archived_at === null ? policyTerms(p) : (fallback.get(altisType) ?? null);
+    } else {
+      altis = simulated.get(loan.rule) ?? (all.has(loan.rule) ? (fallback.get(altisType) ?? null) : null);
+    }
+    if (altis === null) {
+      altis = pickPolicy(resolvable, {
+        memberTypeId: altisType,
+        collectionTypeId: now?.collection_type_id ?? dimColl(item?.coll ?? '0'),
+        materialTypeId: now === undefined ? dimGmd(gmds.get(item?.biblio ?? '') ?? '0') : now.material_type_id,
+        branchId: now?.branch_id ?? null,
+      });
+    }
+    const reasons: string[] = [];
+    const slimsDays = slims?.loanDays ?? null;
+    const altisDays = altis?.loanDays ?? Math.max(0, Math.min(365, diffDays(loan.loanedOn, loan.dueOn)));
+    if (slimsDays !== null && slimsDays !== altisDays) reasons.push(`loan_days=${slimsDays}->${altisDays}`);
+    if ((slims?.finePerDay ?? 0) !== (altis?.finePerDay ?? 0)) reasons.push(`fine_per_day=${slims?.finePerDay ?? 0}->${altis?.finePerDay ?? 0}`);
+    if (loan.dueOn < todayIs) {
+      // SLiMS frees N - 1 days of grace, ALTIS N; both fine every day late past it, ALTIS up to its rule's cap.
+      const slimsLate = skipClosed ? countOpenDays(slimsClosed, loan.dueOn, todayIs) : diffDays(loan.dueOn, todayIs);
+      const altisLate = skipClosed ? countOpenDays(altisClosed, loan.dueOn, todayIs) : diffDays(loan.dueOn, todayIs);
+      const slimsFine = slims === null || slimsLate === 0 || slimsLate < slims.grace ? 0 : slims.finePerDay * slimsLate;
+      const altisFine = altis === null ? 0 : overdueFineMinor(altisLate, { finePerDayMinor: altis.finePerDay, fineCapMinor: altis.cap, graceDays: altis.grace });
+      if (slimsFine !== altisFine) reasons.push(`fine_today=${slimsFine}->${altisFine}`);
+    }
+    if (reasons.length > 0) terms.add(loan.id, `${loan.member} · ${loan.code}`, reasons.join('; '));
+    if (altis !== null) {
+      const k = `${loan.member}\u0000${altis.id}`;
+      const held = perRule.get(k) ?? { member: loan.member, count: 0, limit: altis.limit };
+      held.count += 1;
+      perRule.set(k, held);
+    }
+    perMember.set(loan.member, (perMember.get(loan.member) ?? 0) + 1);
+  }
+  const over = new Map<string, string>();
+  for (const r of perRule.values()) if (r.limit !== null && r.count > r.limit && !over.has(r.member)) over.set(r.member, `open=${r.count}; limit=${r.limit}`);
+  if (c.options.people.typeLimitAsTotal) {
+    for (const [member, n] of perMember) {
+      const limit = typeTerms.get(members.get(member) ?? '')?.limit ?? null;
+      if (limit !== null && n > limit && !over.has(member)) over.set(member, `open=${n}; type_limit=${limit}`);
+    }
+  }
+  for (const [member, detail] of [...over].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) overLimit.add(member, member, detail);
+  return [terms, typeLimits, overLimit, allRules, missing].map((x) => x.json());
+}
+
+async function dryListsOnce(c: SlimsStageContext, _rows: readonly SlimsRow[], io: BatchIo, l: Ledger): Promise<void> {
+  if (io.trx !== null) return;
+  pipelineOf(c).state.dryLists = await circulationDryLists(c, io.db, l);
+}
+
 const PHASES: readonly PeoplePhase[] = Object.freeze([
   { table: null, run: (c, rows, io, l) => replaceOnce(c, rows, io, l) },
   { table: null, run: (c, rows, io, l) => typeRulesOnce(c, rows, io, l) },
@@ -1225,6 +1517,7 @@ const PHASES: readonly PeoplePhase[] = Object.freeze([
   { table: TRS, run: (c, rows, io, l) => holdsBatch(c, rows, io, l) },
   { table: TRC, run: (c, rows, io, l, at) => readsBatch(c, rows, io, l, at) },
   { table: null, run: (c, rows, io) => matchesOnce(c, rows, io) },
+  { table: null, run: (c, rows, io, l) => dryListsOnce(c, rows, io, l) },
 ] satisfies PeoplePhase[]);
 
 /** The circulation stage (see the top of this file). */

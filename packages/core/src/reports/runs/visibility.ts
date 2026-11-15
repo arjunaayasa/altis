@@ -34,24 +34,36 @@ export function exportPermissionOf(def: ReportDefinition): Permission {
   return def.exportPermission ?? def.permission;
 }
 
+// ---- Komunitas K4 (stocktake) ----
+/** The branch `params` of `def` address (ReportBase.branchOf), or null. */
+export async function reportBranchOf(db: Kysely<DB>, def: ReportDefinition, params: Readonly<Record<string, unknown>>): Promise<string | null> {
+  return def.branchOf === undefined ? null : def.branchOf(db, params);
+}
+
 /** The definitions whose `permission` the user holds. */
 export function visibleReports(holds: (p: Permission) => boolean): ReportDefinition[] {
   return REPORTS.filter((def) => holds(def.permission));
 }
 
-/** A definition as the catalogue lists it for a user (`canExport` from the export permission). */
+/**
+ * A definition as the catalogue lists it for a user (`canExport` from the export permission, and the further permission
+ * the definition needs whatever its parameters).
+ */
 export function reportCatalogEntry(def: ReportDefinition, holds: (p: Permission) => boolean): ReportCatalogEntry {
+  const extra = def.extraPermission?.({}) ?? null;
   return {
     id: def.id,
     module: def.module,
     kind: def.kind,
     titleKey: def.titleKey,
     personal: def.personal,
-    canExport: def.kind === 'table' && holds(exportPermissionOf(def)),
+    canExport: (def.kind === 'table' || def.runRoutes === true) && holds(exportPermissionOf(def)) && (extra === null || holds(extra)),
     formats: [...def.formats],
     orientation: def.orientation,
     params: def.params.map((p) => ({ ...p, ...(p.options === undefined ? {} : { options: [...p.options] }) })),
     columns: def.kind === 'table' && typeof def.columns !== 'function' ? def.columns.map(columnView) : null,
+    // ---- Komunitas K5 (reports) ----
+    chart: def.kind === 'table' && def.chart !== undefined ? def.chart : null,
   };
 }
 

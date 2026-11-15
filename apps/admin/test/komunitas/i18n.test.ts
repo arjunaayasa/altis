@@ -33,6 +33,10 @@ const PREFIXES: Readonly<Record<keyof typeof KOMUNITAS_AREAS_ID, readonly string
   notices: ['notices.', 'nav.circulation.notices', 'jobs.type.circulation.notices', 'jobs.schedule.circulation.notices', 'jobs.message.circulation.notices.'],
   // ---- Komunitas K4 (stocktake) ----
   stocktake: ['stocktake.ui.', 'nav.circulation.stocktake', 'jobs.type.stocktake.'],
+  // ---- Komunitas K5 (reports) ----
+  reportsK5: ['reports.module.', 'reports.chart.', 'accreditation.workspace.evidence.draft', 'dashboard.library.'],
+  // ---- Komunitas (OPAC home page) ----
+  opacHome: ['opacHome.', 'nav.opac.home'],
   placeholder: ['komunitas.placeholder.'],
 };
 
@@ -40,7 +44,7 @@ describe('the reports and accreditation admin copy', () => {
   const areas = Object.keys(KOMUNITAS_AREAS_ID) as (keyof typeof KOMUNITAS_AREAS_ID)[];
 
   it('is one file per area, in a fixed order, plus the placeholder texts', () => {
-    expect(areas).toEqual(['reports', 'accreditation', 'workspace', 'registers', 'usage', 'print', 'settings', 'members', 'circulation', 'holds', 'circCore', 'membersTools', 'member-area', 'charges', 'circReports', 'notices', 'stocktake', 'placeholder']);
+    expect(areas).toEqual(['reports', 'accreditation', 'workspace', 'registers', 'usage', 'print', 'settings', 'members', 'circulation', 'holds', 'circCore', 'membersTools', 'member-area', 'charges', 'circReports', 'notices', 'stocktake', 'reportsK5', 'opacHome', 'placeholder']);
     expect(Object.keys(KOMUNITAS_AREAS_EN)).toEqual(areas);
   });
 

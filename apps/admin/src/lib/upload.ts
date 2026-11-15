@@ -58,6 +58,8 @@ export interface UploadOptions {
   onHashProgress?(hashed: number, total: number): void;
   /** Stops the upload (hashing, waiting or sending); it rejects with the signal's reason. */
   signal?: AbortSignal;
+  /** The branch the file is for, when the context's permission is a branch permission (a stocktake code list). */
+  branchId?: string;
 }
 
 /** A stored chunk size, and a stored `probedAt` (epoch ms). */
@@ -222,7 +224,7 @@ export async function uploadFile(file: Blob, o: UploadOptions): Promise<{ upload
 
   for (;;) {
     const key = idempotencyKey();
-    const declared = { context: o.context, size, sha256, chunkBytes };
+    const declared = { context: o.context, size, sha256, chunkBytes, ...(o.branchId === undefined ? {} : { branchId: o.branchId }) };
     const session = await retrying(
       () => api<UploadCreateResponse>('POST', 'files/uploads', declared, { ...request, idempotencyKey: key }),
       signal,

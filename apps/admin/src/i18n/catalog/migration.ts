@@ -187,6 +187,7 @@ export const MIGRATION_ID = {
   'catalog.migration.warning.source_unsupported': 'Sumber tidak terlihat seperti SLiMS 8 atau 9.',
   'catalog.migration.warning.work_missing': 'Berkas kerja proses ini hilang. Mulai uji kering baru.',
   'catalog.migration.warning.work_corrupt': 'Berkas kerja proses ini rusak. Mulai uji kering baru.',
+  'catalog.migration.warning.resume_mismatch': 'Proses ini dimulai oleh versi ALTIS lain dan tidak dapat dilanjutkan. Mulai prosesnya lagi.',
   'catalog.migration.warning.password_missing': 'Kata sandi basis data SLiMS tidak tersedia lagi. Mulai prosesnya lagi.',
   'catalog.migration.warning.source_too_wide': 'Sebuah tabel sumber punya terlalu banyak kolom untuk dibaca.',
   'catalog.migration.warning.error': 'Proses berhenti karena kesalahan yang terus berulang.',
@@ -246,6 +247,8 @@ export const MIGRATION_ID = {
   'catalog.migration.stage.staff': 'akun staf',
   'catalog.migration.stage.visits': 'kunjungan',
   'catalog.migration.stage.circulation': 'sirkulasi',
+  // ---- Komunitas K4 (stocktake) ----
+  'catalog.migration.stage.stocktake': 'inventarisasi',
   'catalog.migration.warning.matches_diff': 'Ada angka "Cocokkan dengan SLiMS" yang belum sama.',
   'catalog.migration.warning.member_no_collision': 'Ada nomor anggota SLiMS yang bertabrakan setelah dinormalkan. Ubah nomornya di SLiMS lebih dulu.',
   'catalog.migration.warning.circulation_live': 'ALTIS sudah mencatat sirkulasi sendiri, jadi sirkulasi SLiMS tidak diganti.',
@@ -304,6 +307,12 @@ export const MIGRATION_ID = {
   'catalog.migration.people.serving': 'Perpustakaan melayani di ALTIS sejak {since}.',
   'catalog.migration.people.serve': 'Mulai melayani',
   'catalog.migration.people.serve_held': 'Selesaikan butir wajib di atas lebih dulu.',
+  'catalog.migration.people.dry_lists': 'Periksa sebelum run nyata',
+  'catalog.migration.people.dry_lists_hint': 'Daftar dari uji kering, masing-masing dengan jumlah dan paling banyak 20 contoh (nomor anggota, kode eksemplar, atau nomor aturan/tipe SLiMS). Daftar lengkapnya ada di laporan.',
+  'catalog.migration.people.col_list': 'Daftar',
+  'catalog.migration.people.col_count': 'Jumlah',
+  'catalog.migration.people.col_samples': 'Contoh',
+  'catalog.migration.people.item_missing_hint': 'Ada pinjaman terbuka yang eksemplarnya tidak akan ada di ALTIS: jalankan dengan mode katalog Selaraskan.',
 } as const;
 
 export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
@@ -479,6 +488,7 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.warning.source_unsupported': 'The source does not look like SLiMS 8 or 9.',
   'catalog.migration.warning.work_missing': "This run's work files are gone. Start a new dry run.",
   'catalog.migration.warning.work_corrupt': "This run's work files are damaged. Start a new dry run.",
+  'catalog.migration.warning.resume_mismatch': 'This run was started by another ALTIS version and cannot be continued. Start the run again.',
   'catalog.migration.warning.password_missing': 'The SLiMS database password is no longer available. Start the run again.',
   'catalog.migration.warning.source_too_wide': 'A source table has too many columns to be read.',
   'catalog.migration.warning.error': 'The run stopped on an error that kept coming back.',
@@ -536,6 +546,8 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.stage.staff': 'staff accounts',
   'catalog.migration.stage.visits': 'visits',
   'catalog.migration.stage.circulation': 'circulation',
+  // ---- Komunitas K4 (stocktake) ----
+  'catalog.migration.stage.stocktake': 'stocktake',
   'catalog.migration.warning.matches_diff': 'Some "Match with SLiMS" numbers differ.',
   'catalog.migration.warning.member_no_collision': 'Some SLiMS member numbers collide once normalised. Change them in SLiMS first.',
   'catalog.migration.warning.circulation_live': 'ALTIS already records circulation of its own, so the SLiMS circulation was not replaced.',
@@ -594,4 +606,10 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.people.serving': 'The library serves in ALTIS since {since}.',
   'catalog.migration.people.serve': 'Start serving',
   'catalog.migration.people.serve_held': 'Finish the required items above first.',
+  'catalog.migration.people.dry_lists': 'Check before the real run',
+  'catalog.migration.people.dry_lists_hint': 'Lists from the dry run, each with its count and at most 20 samples (member numbers, item codes, or SLiMS rule or type numbers). The report holds the whole lists.',
+  'catalog.migration.people.col_list': 'List',
+  'catalog.migration.people.col_count': 'Count',
+  'catalog.migration.people.col_samples': 'Samples',
+  'catalog.migration.people.item_missing_hint': 'Some open loans are of items that will not be in ALTIS: run with the catalogue mode Re-sync.',
 };

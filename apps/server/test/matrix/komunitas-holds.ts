@@ -137,11 +137,15 @@ async function seedLoan(s: MatrixSeed, branchId: string, itemId: string, recordI
     .execute();
 }
 
-/** A hold of a new member on `recordId` at `branchId`, `waiting`, or an expired one whose copy still waits to be cleared. */
-async function seedHold(s: MatrixSeed, branchId: string, recordId: string, o: { expiredCopy?: string } = {}): Promise<string> {
+/**
+ * A hold of a new member on `recordId` at `branchId`, `waiting`, an expired one whose copy still waits to be cleared, or
+ * a ready one whose copy is kept on the hold shelf.
+ */
+async function seedHold(s: MatrixSeed, branchId: string, recordId: string, o: { expiredCopy?: string; readyCopy?: string } = {}): Promise<string> {
   const id = newId();
   const memberId = (await seedMember(s)).id;
   const expired = o.expiredCopy !== undefined;
+  const ready = o.readyCopy !== undefined;
   await s.h.db
     .insertInto('holds')
     .values({
@@ -150,16 +154,16 @@ async function seedHold(s: MatrixSeed, branchId: string, recordId: string, o: { 
       item_id: o.expiredCopy ?? null,
       member_id: memberId,
       pickup_branch_id: branchId,
-      status: expired ? 'expired' : 'waiting',
+      status: expired ? 'expired' : ready ? 'ready' : 'waiting',
       active_key: expired ? null : `${memberId}:${recordId}`,
-      trap_item_id: null,
+      trap_item_id: o.readyCopy ?? null,
       placed_on: '2026-10-20',
       placed_at: s.now - 5 * 86_400_000,
       placed_by: null,
       source: 'desk',
       expires_on: null,
-      ready_at: expired ? s.now - 4 * 86_400_000 : null,
-      pickup_until: expired ? '2026-10-23' : null,
+      ready_at: expired ? s.now - 4 * 86_400_000 : ready ? s.now : null,
+      pickup_until: expired ? '2026-10-23' : ready ? '2026-11-05' : null,
       closed_at: expired ? s.now - 86_400_000 : null,
       close_reason: expired ? 'expired_pickup' : null,
       shelf_cleared_at: null,
@@ -181,6 +185,7 @@ const rows: Record<string, string> = {
   'circulation.desk.hold_shelf.get': `GET ${DESK_API}/hold-shelf | ${DESK} | - | - | read | deny | none | null | - | -`,
   'circulation.desk.hold_shelf.clear': `POST ${DESK_API}/hold-shelf/:holdId/clear | ${deskWrite('shelf_clear')}`,
   'circulation.holds.list': 'GET /api/v1/circulation/holds | P:circulation.records.read | - | - | read | deny | none | null | - | -',
+  'circulation.desk.holds.slip': `GET ${DESK_API}/holds/:id/slip | ${DESK} | - | - | read | deny | none | null | - | -`,
 };
 
 const fixtures: Record<string, MatrixFixture> = {
@@ -207,6 +212,11 @@ const fixtures: Record<string, MatrixFixture> = {
     return { params: { branchId, holdId: await seedHold(s, branchId, copy.recordId, { expiredCopy: copy.itemId }) } };
   },
   'circulation.holds.list': async () => ({ query: { status: 'active' } }),
+  'circulation.desk.holds.slip': async (s) => {
+    const branchId = await seedBranch(s);
+    const copy = await seedCopy(s, branchId);
+    return { params: { branchId, id: await seedHold(s, branchId, copy.recordId, { readyCopy: copy.itemId }) }, query: { paper: '58' } };
+  },
 };
 
 export const MATRIX: AreaMatrix = {

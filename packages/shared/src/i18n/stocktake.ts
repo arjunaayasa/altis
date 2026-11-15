@@ -1,7 +1,7 @@
 /**
  * The shared texts of stocktake (inventarisasi): the permission and module labels, the audit actions, the error codes,
  * the vocabularies of `stocktake-vocab.ts`, the reason of a lost charge cancelled because its copy was found, the
- * stocktake reports and the minutes (berita acara) PDF. `STOCKTAKE_ID` is the source of the keys and `STOCKTAKE_EN` is
+ * stocktake reports, the minutes (berita acara) PDF and the minutes as accreditation evidence. `STOCKTAKE_ID` is the source of the keys and `STOCKTAKE_EN` is
  * typed against it, so a key without its English text fails `tsc`; both are spread once into the shared catalogs.
  *
  * No Node built-ins here: the browser bundles this module.
@@ -66,6 +66,7 @@ export const STOCKTAKE_ID = {
   'report.column.scanned_at': 'Waktu pindai',
   'report.column.officer': 'Petugas',
   'report.column.session': 'Sesi',
+  'report.column.session_status': 'Status sesi',
   'report.column.branch': 'Cabang',
   'report.column.started_at': 'Mulai',
   'report.column.finished_at': 'Selesai',
@@ -99,11 +100,17 @@ export const STOCKTAKE_ID = {
   'stocktake.minutes.by_collection_type': 'Per tipe koleksi',
   'stocktake.minutes.restored': 'Eksemplar hilang yang ditemukan dan dipulihkan',
   'stocktake.minutes.restored_none': 'Tidak ada.',
+  'stocktake.minutes.cancelled_charge': 'Biaya hilang dibatalkan',
+  'stocktake.minutes.cancelled_total': 'Biaya hilang yang dibatalkan untuk {count} eksemplar, jumlah {amount}.',
+  'stocktake.minutes.restored_cut': 'Daftar ini memuat {shown} dari {total} eksemplar yang dipulihkan.',
   'stocktake.minutes.closing': 'Demikian berita acara ini dibuat dengan sebenarnya.',
   'stocktake.minutes.sign_head': 'Kepala Perpustakaan',
   'stocktake.minutes.sign_officer': 'Petugas Inventarisasi',
   'stocktake.minutes.non_latin': 'Teks di luar huruf Latin tidak tercetak di PDF ini.',
   'stocktake.minutes.page': 'Halaman {page} dari {pages}',
+  // ---- accred.evidence.<IK>.<item>: the minutes as evidence of the organisation and preservation of the collection ----
+  'accred.evidence.K7.stocktake_minutes': 'Berita acara inventarisasi terakhir yang ditandatangani (unduh dari sesinya di Layanan › Inventarisasi)',
+  'accred.evidence.K8.stocktake_minutes': 'Berita acara inventarisasi yang ditandatangani (unduh dari sesinya di Layanan › Inventarisasi)',
 } satisfies Record<string, string>;
 
 export const STOCKTAKE_EN: Record<keyof typeof STOCKTAKE_ID, string> = {
@@ -159,6 +166,7 @@ export const STOCKTAKE_EN: Record<keyof typeof STOCKTAKE_ID, string> = {
   'report.column.scanned_at': 'Scanned at',
   'report.column.officer': 'Officer',
   'report.column.session': 'Session',
+  'report.column.session_status': 'Session status',
   'report.column.branch': 'Branch',
   'report.column.started_at': 'Started',
   'report.column.finished_at': 'Finished',
@@ -191,9 +199,14 @@ export const STOCKTAKE_EN: Record<keyof typeof STOCKTAKE_ID, string> = {
   'stocktake.minutes.by_collection_type': 'By collection type',
   'stocktake.minutes.restored': 'Missing copies found and restored',
   'stocktake.minutes.restored_none': 'None.',
+  'stocktake.minutes.cancelled_charge': 'Lost charge cancelled',
+  'stocktake.minutes.cancelled_total': 'Lost charges cancelled for {count} copies, in all {amount}.',
+  'stocktake.minutes.restored_cut': 'This list shows {shown} of the {total} copies restored.',
   'stocktake.minutes.closing': 'These minutes were drawn up truthfully.',
   'stocktake.minutes.sign_head': 'Head of the Library',
   'stocktake.minutes.sign_officer': 'Stocktake Officer',
   'stocktake.minutes.non_latin': 'Text outside the Latin script is not printed in this PDF.',
   'stocktake.minutes.page': 'Page {page} of {pages}',
+  'accred.evidence.K7.stocktake_minutes': 'The signed minutes of the last stocktake (downloaded from its session under Circulation › Stocktake)',
+  'accred.evidence.K8.stocktake_minutes': 'The signed stocktake minutes (downloaded from their session under Circulation › Stocktake)',
 };

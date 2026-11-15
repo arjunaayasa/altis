@@ -234,6 +234,9 @@ export const AUDIT_ACTIONS = Object.freeze([
   'stocktake.session.cancel',
   'stocktake.upload',
   'stocktake.scan.cancel_other',
+  // ---- Komunitas (OPAC home page) ----
+  // the home page's content saved (`meta`: the settings that changed, never a value)
+  'opac.home.update',
 ] as const);
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

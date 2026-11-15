@@ -91,10 +91,13 @@ const MEMBERS_SECTIONS: [string, string][] = [
   ['/admin/anggota/kartu', 'members.records.read'],
 ];
 
+/** The OPAC home page as the library's profile site, after the members block. */
+const OPAC_HOME_SECTIONS: [string, string][] = [['/admin/opac/beranda', 'opac.pages.manage']];
+
 const sectionsOf = (m: FullMe) => visibleNavSections(m).map((s) => [s.group, paths(s.items)]);
 
 describe('NAV', () => {
-  it('lists the shell sections with their permissions: Beranda, Katalog, OPAC and Sistem, then the Laporan, Layanan and Anggota blocks at the end', () => {
+  it('lists the shell sections with their permissions: Beranda, Katalog, OPAC and Sistem, then the Laporan, Layanan, Anggota and OPAC home page blocks at the end', () => {
     expect(NAV.map((item) => [item.to, item.permission ?? null])).toEqual([
       ['/admin', null],
       ...CATALOG_SECTIONS,
@@ -103,6 +106,7 @@ describe('NAV', () => {
       ...REPORTS_SECTIONS,
       ...CIRCULATION_SECTIONS,
       ...MEMBERS_SECTIONS,
+      ...OPAC_HOME_SECTIONS,
     ]);
     for (const item of NAV) expect(item.labelKey).toMatch(/^nav\./);
   });
@@ -118,7 +122,7 @@ describe('NAV', () => {
     expect(NAV.filter((item) => item.group === undefined).map((item) => item.to)).toEqual(['/admin']);
     expect(NAV.filter((item) => item.group === 'system').map((item) => item.to)).toEqual(SYSTEM_SECTIONS.map(([to]) => to));
     expect(NAV.filter((item) => item.group === 'catalog').map((item) => item.to)).toEqual(CATALOG_SECTIONS.map(([to]) => to));
-    expect(NAV.filter((item) => item.group === 'opac').map((item) => item.to)).toEqual(['/admin/opac/pages']);
+    expect(NAV.filter((item) => item.group === 'opac').map((item) => item.to)).toEqual(['/admin/opac/pages', '/admin/opac/beranda']);
     // M1: Migrasi SLiMS follows its permission, which a super admin may grant to a custom role.
     expect(NAV.find((item) => item.to === '/admin/catalog/migration')).toMatchObject({ permission: 'catalog.migration.run' });
     expect(NAV.some((item) => item.superAdminOnly === true)).toBe(false);
@@ -164,6 +168,7 @@ describe('visibleNav', () => {
       '/admin/accreditation',
       ...CIRCULATION_SECTIONS.map(([to]) => to),
       ...MEMBERS_SECTIONS.map(([to]) => to),
+      ...OPAC_HOME_SECTIONS.map(([to]) => to),
     ]);
   });
 
@@ -236,15 +241,16 @@ describe('visibleNav', () => {
       ...MEMBERS_SECTIONS.map(([to]) => to),
       ...REPORTS_SECTIONS.map(([to]) => to),
       '/admin/opac/pages',
+      '/admin/opac/beranda',
       ...SYSTEM_SECTIONS.map(([to]) => to),
     ]);
     expect([...sections.flatMap((s) => paths(s.items))].sort()).toEqual([...paths(NAV)].sort());
   });
 
-  it('opac.pages.manage alone shows the OPAC group with Halaman & Berita', () => {
+  it('opac.pages.manage alone shows the OPAC group with Halaman & Berita and Halaman awal', () => {
     expect(sectionsOf(me({ permissions: ['opac.pages.manage'] }))).toEqual([
       [null, ['/admin']],
-      ['opac', ['/admin/opac/pages']],
+      ['opac', ['/admin/opac/pages', '/admin/opac/beranda']],
       ['system', ['/admin/about']],
     ]);
   });

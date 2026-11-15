@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { withTx } from '@altis/db';
-import { isDomainError } from '@altis/shared';
+import { isDomainError, newId } from '@altis/shared';
 import type { MigrationSummary } from '@altis/shared/api/catalog/migration';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { engineLabel, testDbContext } from '../../../../tools/test/test-db.js';
@@ -13,6 +13,7 @@ import { createJobRegistry } from '../../src/jobs/registry.js';
 import { runSlice } from '../../src/jobs/slice.js';
 import { lendItem, returnItem } from '../../src/circulation/desk.js';
 import { anonymizeMember } from '../../src/members/ext/privacy.js';
+import { readCustomValues } from '../../src/catalog/data/custom-fields.js';
 import { updateMember } from '../../src/members/members.js';
 import { markSlimsCutoverStep, slimsCutover } from '../../src/migration/slims/cutover.js';
 import { __setSlimsSourceFactory, __setSlimsStages } from '../../src/migration/slims/factory.js';
@@ -50,7 +51,7 @@ const BCRYPT13 = `$2y$13$${'c'.repeat(22)}${'d'.repeat(31)}`;
 const t = (columns: string[], rows: Record<string, string | number | null>[], primaryKey: string[] = [columns[0]!]): FakeSlimsTable => ({ columns, primaryKey, rows });
 
 /** The synthetic SLiMS source. */
-function slimsTables(o: { phone?: string; name?: string; collide?: boolean } = {}): Record<string, FakeSlimsTable> {
+function slimsTables(o: { phone?: string; name?: string; collide?: boolean; job?: string } = {}): Record<string, FakeSlimsTable> {
   const member = (id: string, type: number | null, extra: Record<string, string | number | null> = {}): Record<string, string | number | null> => ({
     member_id: id,
     member_name: `Anggota ${id}`,
@@ -93,7 +94,17 @@ function slimsTables(o: { phone?: string; name?: string; collide?: boolean } = {
       member('M006', 1, { expire_date: null }),
       ...(o.collide === true ? [member('m 007', 1), member('M007', 1)] : []),
     ]),
-    member_custom: t(['member_id', 'cf_1'], [{ member_id: 'M001', cf_1: 'x' }]),
+    // Member custom fields: a text and a date field; M002's date is no date, M005's member is not migrated, M999 is gone.
+    mst_custom_field: t(['field_id', 'primary_table', 'dbfield', 'label', 'type', 'data', 'is_public', 'indexed'], [
+      { field_id: 8, primary_table: 'member', dbfield: 'cf_m1', label: 'Pekerjaan', type: 'text', data: null, is_public: 1, indexed: 1 },
+      { field_id: 9, primary_table: 'member', dbfield: 'cf_m2', label: 'Tanggal Lulus', type: 'date', data: null, is_public: 0, indexed: 0 },
+    ]),
+    member_custom: t(['member_id', 'cf_m1', 'cf_m2'], [
+      { member_id: 'M001', cf_m1: o.job ?? 'Guru Honorer', cf_m2: '2026-06-30' },
+      { member_id: 'M002', cf_m1: 'Pelajar', cf_m2: 'bukan tanggal' },
+      { member_id: 'M005', cf_m1: 'Karyawan', cf_m2: null },
+      { member_id: 'M999', cf_m1: 'Lulusan', cf_m2: null },
+    ]),
     biblio_mark: t(['id', 'member_id', 'biblio_id'], [
       { id: 'k1', member_id: 'M001', biblio_id: 1 },
       { id: 'k2', member_id: 'M999', biblio_id: 1 },
@@ -198,6 +209,15 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
       await mapRow('item', String(100 + n), itemId);
     }
     await mapRow('mst_coll_type', '1', await db.collectionTypeId('UMUM'));
+    // The member field definitions, as the masters stage makes them from the `member` rows of `mst_custom_field`.
+    for (const [code, label, type] of [['cf_m1', 'Pekerjaan', 'text'], ['cf_m2', 'Tanggal Lulus', 'date']] as const) {
+      const id = newId(NOW);
+      await db.h.db
+        .insertInto('custom_field_defs')
+        .values({ id, entity: 'members', code_key: code.toUpperCase(), code_display: code, label, label_en: null, type, options: null, is_required: 0, sort_order: 0, is_public: 0, is_searchable: 0, archived_at: null, created_at: NOW, created_by: null, updated_at: NOW, updated_by: null })
+        .execute();
+      await mapRow('mst_custom_field', code, id);
+    }
   });
 
   afterAll(async () => {
@@ -256,6 +276,14 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
   const summaryOf = async (runId: string): Promise<MigrationSummary> =>
     JSON.parse((await db.h.db.selectFrom('catalog_runs').select('summary').where('id', '=', runId).executeTakeFirstOrThrow()).summary) as MigrationSummary;
   const memberByNo = (no: string) => db.h.db.selectFrom('members').selectAll().where('member_no_key', '=', no).executeTakeFirst();
+  /** The text of the run's report. */
+  async function reportText(runId: string): Promise<string> {
+    const fileId = (await db.h.db.selectFrom('catalog_runs').select('report_file_id').where('id', '=', runId).executeTakeFirstOrThrow()).report_file_id;
+    if (fileId === null) throw new Error('the run has no report');
+    const parts: Uint8Array[] = [];
+    for await (const part of (await localStorageDriver(db.dataDir).get(fileId))!) parts.push(part);
+    return Buffer.concat(parts).toString('utf8');
+  }
   const count = async (table: 'members' | 'loans' | 'visits' | 'holds' | 'charges' | 'payments' | 'policies' | 'calendars' | 'item_uses' | 'staff_users' | 'member_bookmarks'): Promise<number> =>
     Number((await db.h.db.selectFrom(table).select((eb) => eb.fn.countAll().as('n')).executeTakeFirstOrThrow()).n);
 
@@ -273,6 +301,7 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
   }
 
   async function wipe(): Promise<void> {
+    await db.h.db.deleteFrom('custom_values').execute();
     for (const table of ['payment_allocations', 'payments', 'charges', 'holds', 'item_uses', 'loans', 'visits', 'member_bookmarks', 'member_events', 'members', 'policies', 'calendars', 'jobs', 'catalog_runs'] as const) {
       await db.h.db.deleteFrom(table).execute();
     }
@@ -305,6 +334,14 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
     const m1 = (await memberByNo('M001'))!;
     expect([m1.password_hash, m1.must_reset_password, m1.status, m1.identity_no, m1.notes, m1.source]).toEqual([BCRYPT4, 0, 'active', '0012345678', 'Faks: 021-1234', 'slims:M001']);
     expect(m1.gender).toBeNull(); // not migrated by default
+    // Custom values, through the member field definitions: the date that is none left out; the rows of a member not
+    // migrated or gone skipped as orphans; the summary holds no value.
+    const m2Id = (await memberByNo('M002'))!.id;
+    const custom = await readCustomValues(db.h.db, 'members', [m1.id, m2Id]);
+    expect([custom.get(m1.id), custom.get(m2Id)]).toEqual([{ cf_m1: 'Guru Honorer', cf_m2: '2026-06-30' }, { cf_m1: 'Pelajar' }]);
+    expect(s.tables['member_custom']).toMatchObject({ source: 4, migrated: 2, skipped: { orphan: 2 } });
+    expect(JSON.stringify(s)).not.toContain('Guru Honorer');
+    expect(JSON.stringify(s)).not.toContain('bukan tanggal');
     const m2 = (await memberByNo('M002'))!;
     expect([m2.password_hash, m2.must_reset_password, m2.status, m2.email, m2.expires_on]).toEqual([null, 1, 'suspended', null, '2025-01-31']);
     const m3 = (await memberByNo('M003'))!;
@@ -399,7 +436,7 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
 
     // The cut-over checklist holds "Mulai melayani" back.
     const view = await slimsCutover(db.h.db);
-    expect(view).toMatchObject({ runId, reconciled: false, ready: false, rooms: 1, roomsWithStation: 0, reprintOpenedAt: null, stocktakeAvailable: false, circulationLive: false });
+    expect(view).toMatchObject({ runId, reconciled: false, ready: false, rooms: 1, roomsWithStation: 0, reprintOpenedAt: null, stocktakeAvailable: true, circulationLive: false });
     const refused = await withTx(db.h, (trx) => markSlimsCutoverStep(txCtx(trx, NOW, ACTOR), 'serve')).catch((e: unknown) => e);
     expect(isDomainError(refused) && refused.code === 'MIGRATION_PRECHECK_FAILED' && refused.meta?.['reason'] === 'cutover_incomplete').toBe(true);
     const marked = await withTx(db.h, (trx) => markSlimsCutoverStep(txCtx(trx, NOW, ACTOR), 'reprint_opened'));
@@ -420,13 +457,15 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
     // The copy B004 now exists in ALTIS (a catalogue re-sync would bring it).
     const b4 = await seedItem(db, (await db.h.db.selectFrom('migration_map').select('target_id').where('entity', '=', 'biblio').where('legacy_key', '=', '4').executeTakeFirstOrThrow()).target_id, { barcode: 'B004' });
     await mapRow('item', '104', b4);
-    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ phone: '0899', name: 'Nama Baru' }) }));
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ phone: '0899', name: 'Nama Baru', job: 'Kepala Sekolah' }) }));
     const sync = await start({ people: { membersMode: 'update', circulationMode: 'replace' } });
     expect(await runToEnd(sync.jobId)).toBe('succeeded');
     const after = (await memberByNo('M001'))!;
     expect([after.name, after.phone, after.password_hash]).toEqual(['Nama Baru', '0811', BCRYPT4]);
     const synced = await db.h.db.selectFrom('member_events').select('meta').where('member_id', '=', m1.id).where('type', '=', 'synced').execute();
-    expect(synced.map((e) => JSON.parse(e.meta))).toEqual([{ fields: ['name'] }]);
+    expect(synced.map((e) => JSON.parse(e.meta))).toEqual(expect.arrayContaining([{ fields: ['name'] }, { fields: ['custom'] }]));
+    expect(synced).toHaveLength(2);
+    expect((await readCustomValues(db.h.db, 'members', [m1.id])).get(m1.id)).toEqual({ cf_m1: 'Kepala Sekolah', cf_m2: '2026-06-30' });
     const s = await summaryOf(sync.runId);
     expect(s.reconciliation?.ok).toBe(true);
     expect((s.matches ?? []).filter((m) => !m.ok)).toEqual([]);
@@ -481,14 +520,27 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
     expect(await snapshot()).toEqual(wholeRows);
   });
 
-  it('member numbers that collide once normalised: the dry run lists them, a real run taking it over is refused 422', async () => {
+  it('member numbers that collide once normalised: the dry run lists them (and the circulation lists to check), a real run taking it over is refused 422', async () => {
     await wipe();
-    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ collide: true }) }));
+    const tables = slimsTables({ collide: true });
+    // An open loan exactly as many open days late as its grace (2): SLiMS fines it, ALTIS ("within 2 days is free") not.
+    tables['loan']!.rows.push({ loan_id: 30, item_code: 'B003', member_id: 'M001', loan_date: '2026-08-21', due_date: '2026-08-31', renewed: 0, loan_rules_id: 2, is_lent: 1, is_return: 0, return_date: null, uid: 2 });
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables }));
     const dry = await start({ dryRun: true });
     expect(await runToEnd(dry.jobId)).toBe('succeeded');
     const s = await summaryOf(dry.runId);
     expect(s.memberNoCollisions).toBe(2);
     expect(s.tables['member']?.skipped).toMatchObject({ member_no_collision: 2 });
+    // The lists to check before the real run: M003's loans under the archived "every" rule of Guru take the type's
+    // fallback rule (14 days, not 21; limit 0, which his two open loans pass); Siswa has rules of its own; nothing
+    // names a member by name.
+    expect(s.dryLists).toEqual([
+      { key: 'loan_terms_differ', count: 3, samples: ['M003 · B002', 'M003 · B005', 'M001 · B003'] },
+      { key: 'type_limit_changes', count: 1, samples: ['1 Siswa'] },
+      { key: 'members_over_limit', count: 1, samples: ['M003'] },
+      { key: 'all_rule_unused', count: 1, samples: ['1'] },
+      { key: 'open_loan_item_missing', count: 0, samples: [] },
+    ]);
     expect(await count('members')).toBe(0);
     const refused = await start({ fromRunId: dry.runId }).catch((e: unknown) => e);
     expect(isDomainError(refused) && refused.code === 'MIGRATION_PRECHECK_FAILED' && refused.meta?.['reason'] === 'member_no_collision' && refused.meta?.['count'] === 2).toBe(true);
@@ -498,6 +550,52 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
     const row = await db.h.db.selectFrom('catalog_runs').select('status').where('id', '=', direct.runId).executeTakeFirstOrThrow();
     expect(row.status).toBe('failed');
     expect(await count('members')).toBe(0);
+  });
+
+  it('a dry run before any real run (no copy mapped yet) counts the open loans the real run brings, as its check list does', async () => {
+    await wipe();
+    const tables = slimsTables();
+    // An open loan of a copy the source has no `item` row for: the one open loan the real run would skip.
+    tables['loan']!.rows.push({ loan_id: 31, item_code: 'B077', member_id: 'M001', loan_date: '2026-08-21', due_date: '2026-08-31', renewed: 0, loan_rules_id: 2, is_lent: 1, is_return: 0, return_date: null, uid: 2 });
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables }));
+    // Another source name: nothing of the catalogue is mapped under it, as on a fresh installation.
+    const dry = await start({ dryRun: true, sourceName: 'slims-baru' });
+    expect(await runToEnd(dry.jobId)).toBe('succeeded');
+    const s = await summaryOf(dry.runId);
+    expect(s.tables['loan']).toMatchObject({ source: 8, migrated: 7, skipped: { open_loan_unresolved: 1 } });
+    expect(s.dryLists?.find((x) => x.key === 'open_loan_item_missing')).toMatchObject({ count: 1 });
+    expect(await count('loans')).toBe(0);
+  });
+
+  it('a dry run after a real run checks the open loans against the rules as ALTIS has them: one edited since, one the library made', async () => {
+    await wipe();
+    const tables = slimsTables();
+    // M006 (Siswa) borrows B003 under no SLiMS rule: ALTIS resolves one for it.
+    tables['loan']!.rows.push({ loan_id: 32, item_code: 'B003', member_id: 'M006', loan_date: '2026-08-21', due_date: '2026-08-28', renewed: 0, loan_rules_id: 0, is_lent: 1, is_return: 0, return_date: null, uid: 2 });
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables }));
+    const real = await start();
+    expect(await runToEnd(real.jobId)).toBe('succeeded');
+    // During the training weeks the librarian raises the fine of SLiMS rule 2 to 1000 a day, and makes a rule of their
+    // own for Siswa, UMUM and books, more specific than every rule the run made.
+    await db.h.db.updateTable('policies').set({ fine_per_day_minor: 100_000, version: 1 }).where('code_key', '=', 'SLIMS-R2').execute();
+    const r2 = await db.h.db.selectFrom('policies').selectAll().where('code_key', '=', 'SLIMS-R2').executeTakeFirstOrThrow();
+    const buku = (await db.h.db.selectFrom('records').select('material_type_id').where('id', '=', (await db.h.db.selectFrom('items').select('record_id').where('id', '=', items.get(103)!).executeTakeFirstOrThrow()).record_id).executeTakeFirstOrThrow()).material_type_id;
+    const own = newId(NOW);
+    await db.h.db
+      .insertInto('policies')
+      .values({ ...r2, id: own, code_display: 'SISWA-BUKU', code_key: 'SISWA-BUKU', name: 'Siswa buku', material_type_id: buku, scope_key: `${r2.member_type_id}/${r2.collection_type_id}/${buku}/*`, loan_days: 14, fine_per_day_minor: 200_000, fine_cap_minor: null, version: 0 })
+      .execute();
+
+    const dry = await start({ dryRun: true, people: { circulationMode: 'replace' } });
+    expect(await runToEnd(dry.jobId)).toBe('succeeded');
+    const s = await summaryOf(dry.runId);
+    // B001 runs under SLiMS rule 2: SLiMS fines 500 a day, ALTIS's rule 2 now 1000. B003 has no SLiMS rule: ALTIS gives
+    // it the library's own rule (14 days, 2000 a day), not the rule this run would make.
+    const terms = s.dryLists?.find((x) => x.key === 'loan_terms_differ');
+    expect(terms?.samples).toEqual(expect.arrayContaining(['M001 · B001', 'M006 · B003']));
+    const report = await reportText(dry.runId);
+    expect(report).toMatch(/"loan","1","dry_loan_terms_differ","M001 · B001: fine_per_day=50000->100000;/);
+    expect(report).toMatch(/"loan","32","dry_loan_terms_differ","M006 · B003: loan_days=7->14; fine_per_day=50000->200000;/);
   });
 
   it('anonymising a migrated member removes the archived rows about them', async () => {

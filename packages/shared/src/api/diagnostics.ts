@@ -257,6 +257,29 @@ export interface DiagnosticsReport {
    * only this edition migrated.
    */
   editionLane: { applied: number };
+  // ---- Komunitas K4 (stocktake) ----
+  /** The stocktake sessions under way (preparing, active or finishing), oldest first, at most 20. */
+  stocktakes: DiagnosticsStocktake[];
+}
+
+// ---- Komunitas K4 (stocktake) ----
+
+/**
+ * A stocktake session under way and its jobs: `job` is its preparation job (preparing, active) or its finish job
+ * (finishing), the newest queued for the session, null when none was; `pendingUploads` the code lists still being
+ * applied. `stuck` says why a preparing or finishing session does not move: no job (`no_job`), its job ended without
+ * moving it on (`job_ended`: dead or cancelled), or its job has not written for 10 minutes (`stalled`); null otherwise.
+ */
+export interface DiagnosticsStocktake {
+  id: string;
+  branch: { id: string; code: string; name: string };
+  name: string;
+  status: 'preparing' | 'active' | 'finishing';
+  startedAt: number;
+  counts: { total: number; found: number; pending: number };
+  job: { id: string; type: 'stocktake.prepare' | 'stocktake.finish'; status: string; progress: number; updatedAt: number } | null;
+  pendingUploads: number;
+  stuck: 'no_job' | 'job_ended' | 'stalled' | null;
 }
 
 // ---- Phase 2 (catalog): Task 3 (B2) ----

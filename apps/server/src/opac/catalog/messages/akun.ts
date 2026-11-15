@@ -1,10 +1,10 @@
 import { defineOpacMessages } from './define.js';
 
 // The OPAC copy of the member area (`/akun`): sign-in, the forgotten password, the account and its tabs (loans,
-// history, holds, bookmarks, card, password, own data), the members' attachments, and the member links the public pages
-// carry (the header link, "Pesan" and "Tandai" on a record, "Masuk untuk membuka" on an attachment). Keys start with
-// `akun.`. Copy rules as for the shared catalogs: plain Indonesian, "Anda", one term per concept; the same
-// {placeholders} in both languages.
+// history, holds, fines and charges, bookmarks, card, password, own data), the members' attachments, and the member
+// links the public pages carry (the header link, "Pesan" and "Tandai" on a record, "Masuk untuk membuka" on an
+// attachment). Keys start with `akun.`. Copy rules as for the shared catalogs: plain Indonesian, "Anda", one term per
+// concept; the same {placeholders} in both languages.
 
 export const AKUN_MESSAGES = defineOpacMessages(
   {
@@ -24,6 +24,7 @@ export const AKUN_MESSAGES = defineOpacMessages(
     'akun.nav.card': 'Kartu anggota',
     'akun.nav.password': 'Kata sandi',
     'akun.nav.data': 'Data saya',
+    'akun.nav.charges': 'Denda dan biaya',
     'akun.logout': 'Keluar',
     'akun.pager.label': 'Halaman',
     'akun.pager.prev': 'Sebelumnya',
@@ -86,6 +87,8 @@ export const AKUN_MESSAGES = defineOpacMessages(
     'akun.home.expired_note':
       'Keanggotaan Anda sudah habis. Anda masih bisa melihat akun, tetapi tidak bisa meminjam, memperpanjang, atau memesan. Hubungi petugas untuk memperpanjang.',
     'akun.home.suspended_note': 'Keanggotaan Anda ditangguhkan. Anda hanya bisa melihat akun. Hubungi petugas perpustakaan.',
+    'akun.home.charges_open': 'Anda punya denda atau biaya yang belum lunas: {amount}.',
+    'akun.home.charges_link': 'Lihat rinciannya',
     'akun.status.active': 'Aktif',
     'akun.status.expired': 'Kedaluwarsa',
     'akun.status.suspended': 'Ditangguhkan',
@@ -98,6 +101,8 @@ export const AKUN_MESSAGES = defineOpacMessages(
     'akun.loans.col.renewals': 'Perpanjangan',
     'akun.loans.col.action': 'Tindakan',
     'akun.loans.overdue': 'Terlambat {days} hari',
+    'akun.loans.overdue_fined': 'Terlambat {days} hari ({fined} hari dikenai denda)',
+    'akun.loans.fine': 'Denda berjalan {amount}',
     'akun.loans.renewals_of': '{n} dari {limit}',
     'akun.loans.renew': 'Perpanjang',
     'akun.loans.renew_label': 'Perpanjang {title}',
@@ -118,6 +123,26 @@ export const AKUN_MESSAGES = defineOpacMessages(
     'akun.history.empty': 'Belum ada pinjaman yang dikembalikan.',
     'akun.history.col.returned': 'Dikembalikan',
     'akun.history.col.outcome': 'Keterangan',
+    // Fines, charges and payments (read only).
+    'akun.charges.title': 'Denda dan Biaya',
+    'akun.charges.lead': 'Halaman ini hanya untuk melihat. Denda dan biaya dibayar di meja layanan.',
+    'akun.charges.open_title': 'Belum lunas',
+    'akun.charges.empty': 'Anda tidak punya denda atau biaya yang belum lunas.',
+    'akun.charges.balance': 'Sisa yang harus dibayar: {amount}',
+    'akun.charges.cut': 'Hanya {max} denda dan biaya terlama yang ditampilkan; sisa yang harus dibayar menghitung semuanya.',
+    'akun.charges.date_unknown': 'Tanggal tidak diketahui',
+    'akun.charges.col.date': 'Tanggal',
+    'akun.charges.col.kind': 'Jenis',
+    'akun.charges.col.description': 'Uraian',
+    'akun.charges.col.amount': 'Jumlah',
+    'akun.charges.col.paid': 'Dibayar',
+    'akun.charges.col.waived': 'Dihapuskan',
+    'akun.charges.col.left': 'Sisa',
+    'akun.payments.title': 'Pembayaran',
+    'akun.payments.empty': 'Belum ada pembayaran.',
+    'akun.payments.col.receipt': 'Nomor kuitansi',
+    'akun.payments.col.method': 'Cara bayar',
+    'akun.payments.voided': 'Dibatalkan',
     // Holds.
     'akun.holds.title': 'Reservasi saya',
     'akun.holds.empty': 'Anda tidak punya reservasi aktif. Pesan judul lewat tombol "Pesan judul ini" di halaman judul.',
@@ -186,6 +211,7 @@ export const AKUN_MESSAGES = defineOpacMessages(
     'akun.nav.card': 'Member card',
     'akun.nav.password': 'Password',
     'akun.nav.data': 'My data',
+    'akun.nav.charges': 'Fines and charges',
     'akun.logout': 'Sign out',
     'akun.pager.label': 'Pages',
     'akun.pager.prev': 'Previous',
@@ -238,6 +264,8 @@ export const AKUN_MESSAGES = defineOpacMessages(
     'akun.home.expired_note':
       'Your membership has expired. You can still look at your account, but you cannot borrow, renew or place holds. Ask the staff to extend it.',
     'akun.home.suspended_note': 'Your membership is suspended. You can only look at your account. Please talk to the library staff.',
+    'akun.home.charges_open': 'You have fines or charges left to pay: {amount}.',
+    'akun.home.charges_link': 'See the details',
     'akun.status.active': 'Active',
     'akun.status.expired': 'Expired',
     'akun.status.suspended': 'Suspended',
@@ -250,6 +278,8 @@ export const AKUN_MESSAGES = defineOpacMessages(
     'akun.loans.col.renewals': 'Renewals',
     'akun.loans.col.action': 'Action',
     'akun.loans.overdue': '{days} days late',
+    'akun.loans.overdue_fined': '{days} days late ({fined} days fined)',
+    'akun.loans.fine': 'Running fine {amount}',
     'akun.loans.renewals_of': '{n} of {limit}',
     'akun.loans.renew': 'Renew',
     'akun.loans.renew_label': 'Renew {title}',
@@ -269,6 +299,25 @@ export const AKUN_MESSAGES = defineOpacMessages(
     'akun.history.empty': 'No returned loans yet.',
     'akun.history.col.returned': 'Returned',
     'akun.history.col.outcome': 'Note',
+    'akun.charges.title': 'Fines and charges',
+    'akun.charges.lead': 'This page is for viewing only. Fines and charges are paid at the service desk.',
+    'akun.charges.open_title': 'Left to pay',
+    'akun.charges.empty': 'You have no fines or charges left to pay.',
+    'akun.charges.balance': 'Left to pay: {amount}',
+    'akun.charges.cut': 'Only the {max} oldest are shown; the amount left to pay counts them all.',
+    'akun.charges.date_unknown': 'Date not known',
+    'akun.charges.col.date': 'Date',
+    'akun.charges.col.kind': 'Kind',
+    'akun.charges.col.description': 'Description',
+    'akun.charges.col.amount': 'Amount',
+    'akun.charges.col.paid': 'Paid',
+    'akun.charges.col.waived': 'Waived',
+    'akun.charges.col.left': 'Left',
+    'akun.payments.title': 'Payments',
+    'akun.payments.empty': 'No payments yet.',
+    'akun.payments.col.receipt': 'Receipt number',
+    'akun.payments.col.method': 'Method',
+    'akun.payments.voided': 'Voided',
     'akun.holds.title': 'My holds',
     'akun.holds.empty': 'You have no active holds. Place one with "Place a hold" on a title page.',
     'akun.holds.col.title': 'Title',

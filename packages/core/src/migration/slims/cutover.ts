@@ -20,7 +20,7 @@ import { UNUSABLE_PASSWORD } from './stages/staff.js';
 //   with no room, the run's branch needs one station;
 // - the reprint list of cards and labels was opened from the checklist (the copies whose barcodes were rewritten).
 //
-// Stocktaking is not part of this release: the wizard says to finish a scheduled stocktake in SLiMS first. Once the
+// Stocktaking is part of this release (`stocktakeAvailable`): a SLiMS session still active comes in cancelled. Once the
 // library serves in ALTIS ("Mulai melayani" marked), or ALTIS records any circulation of its own (a loan, a return or
 // renewal of a migrated loan, a payment, a waiver, a hold), ALTIS's circulation is live, and a `replace` run is refused
 // from then on.
@@ -125,7 +125,7 @@ export async function slimsCutover(db: Db): Promise<SlimsCutoverView> {
     roomsWithStation: stations.withStation,
     reprintOpenedAt: state.reprintOpenedAt,
     reconciled,
-    stocktakeAvailable: false,
+    stocktakeAvailable: true,
     ready,
     servingSince: state.servingSince,
     circulationLive: (await liveCirculationCount(db)) > 0,

@@ -1,5 +1,6 @@
 import type { Permission } from '@altis/shared';
 import type { UploadContextName } from '@altis/shared/api/files';
+import { OPAC_HOME_PHOTO_MAX_BYTES, OPAC_HOME_PHOTO_SIDES } from '@altis/shared/api/opac-home';
 import type { SettingKey } from '../settings/registry.js';
 import type { MagicKind } from './magic.js';
 
@@ -31,6 +32,13 @@ export interface UploadContext {
   kind: 'staged' | 'file';
   /** A setting (in MB) that lowers `maxBytes` when the upload is declared; Task 18 enforces it. */
   maxBytesSetting?: SettingKey;
+  // ---- Komunitas (OPAC home page) ----
+  /**
+   * The smallest and largest width and height in pixels, read from the image itself at completion (a JPEG's frame
+   * header); an image outside them, or whose size cannot be read, is refused like a wrong type. Only for a stripped JPEG
+   * context.
+   */
+  imageSides?: { min: number; max: number };
 }
 
 /** The chunk size the server fixes when nothing smaller is asked for or known to pass (P10: "default 5 MB"). */
@@ -131,8 +139,22 @@ export const UPLOAD_CONTEXTS: Readonly<Partial<Record<UploadContextName, UploadC
 
   // ---- Komunitas K4 (stocktake) ----
   // A list of scanned codes (text or CSV, one code per line), staged until `POST …/stocktakes/:id/uploads` takes it.
-  // Scanning is a branch permission, so the route that takes the file at its branch is the gate (any staff may stage).
-  'stocktake.codes': context({ name: 'stocktake.codes', permission: null, maxBytes: 10 * MIB, magic: ['text'], kind: 'staged' }),
+  // Scanning is a branch permission: the declaration names the session's branch and is checked there (files.ts), and
+  // the route that takes the file checks it at the session's branch again.
+  'stocktake.codes': context({ name: 'stocktake.codes', permission: 'stocktake.scan.use', maxBytes: 10 * MIB, magic: ['text'], kind: 'staged' }),
+
+  // ---- Komunitas (OPAC home page) ----
+  // A photo of the OPAC home page (the hero, the "about" photo, a facility photo): a JPEG the browser cropped (the hero
+  // to 1600 × 900, the others to 1200 × 900), at most 500 KB, 240-2400 px a side, stored without its metadata; claimed
+  // as a public file when the home page is saved.
+  'opac.home_photo': context({
+    name: 'opac.home_photo',
+    permission: 'opac.pages.manage',
+    maxBytes: OPAC_HOME_PHOTO_MAX_BYTES,
+    magic: ['jpeg'],
+    kind: 'file',
+    imageSides: { min: OPAC_HOME_PHOTO_SIDES.min, max: OPAC_HOME_PHOTO_SIDES.max },
+  }),
 });
 
 /** The context `name` of this build, or null (an unknown name, or `test` outside the test profile). */

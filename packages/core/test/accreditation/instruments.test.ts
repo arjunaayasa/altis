@@ -3,7 +3,7 @@ import { LIBRARY_TYPES } from '@altis/shared/api/settings';
 import { describe, expect, it } from 'vitest';
 import { GENERAL_STATS_METRICS } from '../../src/accreditation/instruments/general-stats.js';
 import { ACCRED_INSTRUMENTS, instrumentById, instrumentMetricIds } from '../../src/accreditation/instruments/index.js';
-import { EVIDENCE_SNAPSHOT_DATE, evidenceReportParams } from '../../src/accreditation/instruments/shared.js';
+import { EVIDENCE_PERIOD, EVIDENCE_SNAPSHOT_DATE, evidenceReportParams } from '../../src/accreditation/instruments/shared.js';
 import { ACCRED_METRICS } from '../../src/accreditation/metric-ids.js';
 import { ACCRED_NOTE_KEYS } from '../../src/accreditation/notes.js';
 import { PREREQUISITE_METRICS } from '../../src/accreditation/scoring/prerequisites.js';
@@ -212,7 +212,10 @@ describe('every instrument of this build', () => {
           need(e.labelKey);
           expect(e.labelKey, where).toBe(`accred.evidence.${i.code}.${e.code}`);
           if (e.kind === 'generated') expect(REPORT_IDS, `${where} ${e.code}`).toContain(e.reportId);
-          else expect([e.reportId, e.params], `${where} ${e.code}`).toEqual([undefined, undefined]);
+          // ---- Komunitas K5 (reports): a signed document ALTIS drafts names its report, over the period ----
+          else if (e.reportId !== undefined) {
+            expect([e.kind, REPORT_IDS.has(e.reportId), e.params], `${where} ${e.code}`).toEqual(['signed_document', true, { periodId: EVIDENCE_PERIOD }]);
+          } else expect(e.params, `${where} ${e.code}`).toBeUndefined();
           if (e.kind !== 'screenshot') expect(e.screen, `${where} ${e.code}`).toBeUndefined();
         }
         if (i.metric !== undefined) expect(i.window, where).toBe(ACCRED_METRICS[i.metric].window);
@@ -254,6 +257,19 @@ describe('every instrument of this build', () => {
     expect(params('sch-sma-2025', 'L9', 'activity_list')).toEqual({ externalLiteracy: true });
     expect(params('sch-sma-2025', 'T4', 'training_recap')).toEqual({ section: 'trainings', window: 'three_periods' });
     expect(params('sch-sma-2025', 'G4', 'report_list')).toEqual({ kinds: ['report_annual', 'report_semester', 'report_quarterly', 'report_monthly'] });
+  });
+
+  // ---- Komunitas K5 (reports) ----
+  it('the signed reports of the routine-reports indicator are drafted by the annual report over the period, at every level', () => {
+    const periodId = '01JD0000000000000000000000';
+    for (const id of SCHOOL) {
+      const drafted = indicators(instrument(id)).flatMap((i) => i.evidence.filter((e) => e.kind !== 'generated' && e.reportId !== undefined).map((e) => [i.code, e.code, e.reportId]));
+      expect(drafted, id).toEqual([['G4', 'report_documents', 'library.annual_report']]);
+      const item = ik(id, 'G4').evidence.find((e) => e.code === 'report_documents')!;
+      const resolved = evidenceReportParams(item, { periodId, D: '2026-06-30' });
+      expect(resolved).toEqual({ periodId });
+      expect(reportById('library.annual_report')!.paramsSchema.safeParse(resolved).success).toBe(true);
+    }
   });
 });
 

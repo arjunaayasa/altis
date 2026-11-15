@@ -12,11 +12,13 @@ import {
   holdSettings,
   localStorageDriver,
   memberAttachment,
+  memberBalances,
   memberBookmarks,
   memberDataExport,
   memberHolds,
   memberLoans,
   memberLogin,
+  memberOwnCharges,
   memberResetSubject,
   memberResetMailJob,
   memberSelf,
@@ -51,9 +53,11 @@ import { OPAC_ROUTES } from '../routes.js';
 import { safeLanjut } from './lanjut.js';
 import {
   AkunFrame,
+  BalanceNote,
   BookmarkConfirmView,
   BookmarksView,
   CardView,
+  ChargesView,
   DataView,
   Flash,
   ForgotView,
@@ -372,6 +376,8 @@ const home = route({
     const self = await memberSelf(rc.db.db, memberId(rc), rc.now);
     const loans = await memberLoans(rc.db.db, self.id, { open: true, page: pageNo(rc), now: rc.now });
     const canRenew = self.status === 'active' && (await onlineRenewalOpen(rc.db.db, self));
+    const balance = (await memberBalances(rc.db.db, [self.id])).get(self.id) ?? 0;
+    const currency = await rc.services.settings.get<string>(rc.db.db, 'catalog.currency');
     return page(rc, a, {
       title: opacText(a.locale, 'akun.home.title'),
       tab: 'home',
@@ -379,6 +385,7 @@ const home = route({
         flash(rc, a),
         <p class="akun-greeting">{opacText(a.locale, 'akun.home.greeting', { name: self.name })}</p>,
         <MemberSummary locale={a.locale} self={self} typeName={memberTypeName(self, a.locale)} />,
+        <BalanceNote locale={a.locale} keep={a.keep} balanceMinor={balance} currency={currency} />,
         <OpenLoans locale={a.locale} keep={a.keep} csrf={rc.member!.csrf} loans={loans} canRenew={canRenew} />,
       ],
     });
@@ -397,6 +404,22 @@ const history = route({
       title: opacText(a.locale, 'akun.history.title'),
       tab: 'history',
       body: () => <HistoryView locale={a.locale} keep={a.keep} loans={loans} />,
+    });
+  },
+});
+
+/** GET /akun/denda: the member's unpaid fines and charges and their payments (paged), to look at only. */
+const charges = route({
+  ...PAGE,
+  id: 'akun.charges',
+  path: '/akun/denda',
+  handler: async (rc) => {
+    const a = await akunOf(rc);
+    const data = await memberOwnCharges(rc.db.db, memberId(rc), { page: pageNo(rc) });
+    return page(rc, a, {
+      title: opacText(a.locale, 'akun.charges.title'),
+      tab: 'charges',
+      body: () => <ChargesView locale={a.locale} keep={a.keep} data={data} />,
     });
   },
 });
@@ -1045,6 +1068,7 @@ export const AKUN_ROUTES: RouteDecl[] = [
   logout,
   home,
   history,
+  charges,
   renew,
   holds,
   holdNew,

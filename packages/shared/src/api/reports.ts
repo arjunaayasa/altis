@@ -110,7 +110,7 @@ export type ReportCell = string | number | null;
  */
 export interface ReportCatalogEntry {
   id: string;
-  module: 'collection' | 'accreditation' | 'members' | 'visits' | 'circulation' | 'stocktake';
+  module: ReportModule;
   kind: 'table' | 'document';
   titleKey: string;
   personal: boolean;
@@ -119,7 +119,31 @@ export interface ReportCatalogEntry {
   orientation: 'portrait' | 'landscape';
   params: ReportParamSpec[];
   columns: ReportColumnView[] | null;
+  // ---- Komunitas K5 (reports) ----
+  /** The compact chart the report's screen draws above its preview; null (or absent) for none. */
+  chart?: ReportChartSpec | null;
 }
+
+/** The module a definition belongs to: its card in the catalogue. */
+export type ReportModule =
+  | 'collection'
+  | 'accreditation'
+  | 'members'
+  | 'visits'
+  | 'circulation'
+  | 'stocktake'
+  // ---- Komunitas K5 (reports) ----
+  | 'library'
+  | 'system';
+
+// ---- Komunitas K5 (reports) ----
+/**
+ * The compact chart a report's screen draws above its preview, from the rows the preview already holds (the table
+ * stays the record): `rows` draws one bar per row, labelled with the cell of column `label` and as high as the cell of
+ * column `value`; `totals` draws one bar per listed column, from the totals row, labelled with the column's heading.
+ * A column the answer lacks is skipped (a definition's columns may depend on its parameters).
+ */
+export type ReportChartSpec = { kind: 'rows'; label: string; value: string } | { kind: 'totals'; columns: readonly string[] };
 
 /**
  * The language a definition's output is written in, wherever it is rendered (the preview and its printed copy, an

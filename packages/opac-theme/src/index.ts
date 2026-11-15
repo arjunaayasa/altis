@@ -13,6 +13,7 @@
 //   search.ts  Task 33: results, facets, paging
 //   detail.ts  Task 34: record detail, availability table, shelf map, citations
 //   akun.ts    Komunitas: the OPAC member area and the member links of the public pages
+//   home.ts    Komunitas: the home page as the library's profile site (hero band, search card, profile blocks)
 //
 // The content hash covers the joined string, so a change to any module gives the stylesheet a new URL.
 
@@ -25,13 +26,15 @@ import { SHELL_CSS } from './shell.js';
 import { VISITS_CSS } from './visits.js';
 // ---- Komunitas (member area) ----
 import { AKUN_CSS } from './akun.js';
+// ---- Komunitas (OPAC home page) ----
+import { HOME_CSS } from './home.js';
 
 export { ACCENTS, DEFAULT_ACCENT, isAccent } from './base.js';
 export type { AccentName } from './base.js';
-export { AKUN_CSS, BASE_CSS, DETAIL_CSS, PAGES_CSS, SEARCH_CSS, SHELL_CSS, VISITS_CSS };
+export { AKUN_CSS, BASE_CSS, DETAIL_CSS, HOME_CSS, PAGES_CSS, SEARCH_CSS, SHELL_CSS, VISITS_CSS };
 
 /** The modules of the stylesheet, in the order they are joined (S16). */
-export const OPAC_CSS_MODULES: readonly string[] = Object.freeze([BASE_CSS, SHELL_CSS, PAGES_CSS, SEARCH_CSS, DETAIL_CSS, VISITS_CSS, AKUN_CSS]);
+export const OPAC_CSS_MODULES: readonly string[] = Object.freeze([BASE_CSS, SHELL_CSS, PAGES_CSS, SEARCH_CSS, DETAIL_CSS, VISITS_CSS, AKUN_CSS, HOME_CSS]);
 
 /** `modules` as one stylesheet: the non-empty ones, in order, one line break apart. */
 export function joinOpacCss(modules: readonly string[]): string {
