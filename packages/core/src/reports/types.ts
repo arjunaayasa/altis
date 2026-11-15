@@ -117,6 +117,12 @@ export interface DocumentCtx extends ReportCtx {
   budgetLeftMs(): number;
   heartbeat(progress: number, message?: string): Promise<void>;
   cancelled(): Promise<boolean>;
+  // ---- Komunitas K5 (reports) ----
+  /**
+   * The work file of the run the document writes its PDF to: `output.part` when absent; another one (`entry-<n>.pdf`)
+   * when it is rendered inside another document's run, as the evidence ZIP renders a report an evidence item drafts.
+   */
+  outputName?: string;
 }
 
 /** Where a document's rendering stopped: its JSON is at most 60 000 bytes. */

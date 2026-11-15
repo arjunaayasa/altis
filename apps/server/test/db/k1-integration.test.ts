@@ -51,8 +51,9 @@ import { openK1Installation, type K1Browser, type K1Installation } from './k1-su
 //   every community audit action an audit script (none left pending);
 // - through the API as the admin SPA uses it, on the golden school dataset: the evaluation of the upper secondary
 //   period by the real job (estimate 70.45, predicate C); every personal export refused without a fresh
-//   re-authentication; the evidence file as a PDF, one ZIP and one ZIP per component, with the real annex lists in them
-//   and never a score, a predicate, a gap action, an answer, an answer-bearing note or an override note; the
+//   re-authentication; the evidence file as a PDF, one ZIP and one ZIP per component, with the real annex lists and the
+//   annual report of the period in them (left out, and named in the run's warnings, for a reader who may not export
+//   it) and never a score, a predicate, a gap action, an answer, an answer-bearing note or an override note; the
 //   self-assessment with the estimate; the freeze, after which edits of a register, a copy and a usage cell leave the
 //   snapshot byte for byte as it was; the SLiMS usage import of the synthetic dump, after which the school visits of
 //   the lower secondary period are the fixture's hand count, and a change of the member type groups moves them without
@@ -292,6 +293,19 @@ describe.skipIf(!ctx.available)(`the golden school through the API [${engineLabe
     expect(l14).toContain('2025-08 56 5 2 63 123 51 % Impor SLiMS');
     expect(l14).toContain('2025-12 0 0 0 0 123 0 % Impor SLiMS');
     expect(l14).toContain('2026-06 55 5 2 62 123 50 % Impor SLiMS');
+    // ---- Komunitas K5 (reports) ----
+    // The annual library report the routine reports item drafts: first in its item, named as a generated list, the
+    // same PDF of the period a run of the report makes, and no warning in the run.
+    const g4 = entries.filter((e) => e.name.startsWith('G-pengelolaan/G4-')).map((e) => e.name);
+    expect(g4[0]).toBe('G-pengelolaan/G4-01-laporan-tahunan-perpustakaan.pdf');
+    expect(g4.at(-1)).toMatch(/^G-pengelolaan\/G4-\d{2}-daftar-laporan/);
+    const annual = pdfPages(entries.find((e) => e.name === g4[0])!.data);
+    expect(annual.join('\n')).toContain('Laporan Tahunan Perpustakaan');
+    expect(annual.join('\n')).toContain('Tahun pelajaran 2025/2026 (SMA)');
+    const own = await runAndDownload(fresh, `${API}/reports/runs`, { reportId: 'library.annual_report', format: 'pdf', params: { periodId: fx.periods.sma } });
+    expect(annual).toEqual(pdfPages(own.bytes));
+    const zipRun = await fresh.send('get', `${API}/reports/runs/${zip.id}`);
+    expect((zipRun.json as { warnings: string[] }).warnings.filter((w) => w.startsWith('report_withheld:'))).toEqual([]);
 
     // One ZIP per component: seven ZIPs, none holding a score or an answer either.
     const perComponent = await runAndDownload(fresh, `${PERIODS}/${fx.periods.sma}/dossier`, { format: 'zip_components' });
@@ -303,6 +317,8 @@ describe.skipIf(!ctx.available)(`the golden school through the API [${engineLabe
         expectClean(`${inner.name}/${e.name}`, entryText(e));
       }
     }
+    const gInner = streamEntries(outer.find((e) => e.name === 'G-pengelolaan.zip')!.data);
+    expect(gInner.filter((e) => e.name.startsWith('G4-')).map((e) => e.name)[0]).toBe('G4-01-laporan-tahunan-perpustakaan.pdf');
 
     // The simulation prints the estimate and the predicate; no ZIP holds it.
     const simulation = await runAndDownload(fresh, `${PERIODS}/${fx.periods.sma}/self-assessment`, {});
@@ -310,6 +326,22 @@ describe.skipIf(!ctx.available)(`the golden school through the API [${engineLabe
     expect(simulated).toContain('Perkiraan nilai akhir: 70,45');
     expect(simulated).toContain('Predikat: C (Cukup Baik)');
     for (const e of entries) expect(e.data.equals(simulation.bytes), e.name).toBe(false);
+  }, 300_000);
+
+  // ---- Komunitas K5 (reports) ----
+  it('leaves the annual report out of the ZIP of a reader who may not export it, and the run says so', async () => {
+    const workspaceOnly = await k.browser(await k.staff('penilai_tanpa_statistik', ['accreditation.workspace.read']));
+    const zip = await runAndDownload(workspaceOnly, `${PERIODS}/${fx.periods.sma}/dossier`, { format: 'zip' });
+    const names = streamEntries(zip.bytes).map((e) => e.name);
+    expect(names.filter((n) => n.includes('laporan-tahunan'))).toEqual([]);
+    // The item's numbering goes on without it.
+    expect(names.filter((n) => n.startsWith('G-pengelolaan/G4-'))[0]).toMatch(/^G-pengelolaan\/G4-01-/);
+    const run = (await workspaceOnly.send('get', `${API}/reports/runs/${zip.id}`)).json as { warnings: string[]; params: Record<string, unknown> };
+    expect(run.warnings).toContain('report_withheld:G4.report_documents');
+    expect(run.params['withheld']).toEqual(['library.annual_report']);
+    // The report itself stays refused to that reader.
+    const refused = await workspaceOnly.send('post', `${API}/reports/runs`, { reportId: 'library.annual_report', format: 'pdf', params: { periodId: fx.periods.sma } });
+    expect(refused.status).toBe(403);
   }, 300_000);
 
   it('freezes the period; edits of a register row, a copy and a usage cell afterwards leave the snapshot byte for byte', async () => {

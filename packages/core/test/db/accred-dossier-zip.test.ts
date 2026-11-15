@@ -4,6 +4,7 @@ import { withTx } from '@altis/db';
 import { newId, isDomainError, t, type MessageKey } from '@altis/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDbContext } from '../../../../tools/test/test-db.js';
+import { startDocumentRun } from '../../src/accreditation/documents/index.js';
 import { GENERAL_STATS } from '../../src/accreditation/instruments/general-stats.js';
 import { writeSettings } from '../../src/settings/service.js';
 import { TINY_JPEG_BASELINE } from '../fixtures/tiny.jpg.js';
@@ -37,7 +38,9 @@ import {
 //   indicator sheets (`00-lembar-<folder>.pdf`) and its files;
 // - no entry of either holds the simulation, the estimate, a predicate, a gap action or an answer;
 // - a component whose files pass the per-component limit is named in the run's warnings;
-// - a ZIP over 5 000 entries or 2 GiB is refused before its run is written.
+// - a ZIP over 5 000 entries or 2 GiB is refused before its run is written;
+// - the annual library report the routine reports item drafts is rendered for the period into its item, first, in
+//   both layouts; a caller who may not export it gets the ZIP without it, the run's parameters and warnings naming it.
 
 const ctx = testDbContext();
 
@@ -271,6 +274,48 @@ describe.skipIf(!ctx.available)(`accreditation evidence ZIPs [${engineLabel()}]`
     expect(warnings.some((w) => w.startsWith('component_over_limit:SP:'))).toBe(false);
     const job = await db.h.db.selectFrom('jobs').select('progress_message').where('id', '=', jobId).executeTakeFirstOrThrow();
     expect(job.progress_message).toBe('warnings');
+  });
+
+  // ---- Komunitas K5 (reports) ----
+  it('renders the annual report the routine reports item drafts first in that item, in both layouts', async () => {
+    const { run, bytes } = await runDoc(db, 'accreditation.dossier', periodId, { format: 'zip' });
+    const entries = streamEntries(bytes);
+    const g4 = entries.filter((e) => e.name.startsWith('G-pengelolaan/G4-'));
+    expect(g4.map((e) => e.name)).toEqual(['G-pengelolaan/G4-01-laporan-tahunan-perpustakaan.pdf', expect.stringMatching(/^G-pengelolaan\/G4-02-daftar-laporan/)]);
+    const pages = pdfPages(g4[0]!.data);
+    expect(pages[0]).toContain('Laporan Tahunan Perpustakaan');
+    expect(pages.join('\n')).toContain('Tahun pelajaran 2025/2026');
+    expect(pages.join('\n')).toContain(msg('report.annual.section.budget'));
+    expect(storedParams(run).def).not.toHaveProperty('withheld');
+    expect((storedParams(run).warnings ?? []).filter((w) => w.startsWith('report_withheld:'))).toEqual([]);
+    expectNoScore(entries);
+
+    const components = streamEntries((await runDoc(db, 'accreditation.dossier', periodId, { format: 'zip_components' })).bytes);
+    const g = streamEntries(components.find((e) => e.name === 'G-pengelolaan.zip')!.data);
+    expect(g.filter((e) => e.name.startsWith('G4-')).map((e) => e.name)[0]).toBe('G4-01-laporan-tahunan-perpustakaan.pdf');
+  });
+
+  it('leaves the annual report out of the ZIP of a caller who may not export it, and names it in the run', async () => {
+    const all = streamEntries((await runDoc(db, 'accreditation.dossier', periodId, { format: 'zip' })).bytes).map((e) => e.name);
+    const held = new Set(['accreditation.workspace.read']);
+    const started = await withTx(db.h, (trx) =>
+      startDocumentRun(trx, 'accreditation.dossier', periodId, { format: 'zip' }, { createdBy: db.staffId, now: Date.now(), registry: db.registry, keyring: KEYRING, holds: (p) => held.has(p) }),
+    );
+    expect((await drive(db, started.jobId)).at(-1)).toBe('succeeded');
+    const run = await db.h.db.selectFrom('report_runs').selectAll().where('id', '=', started.id).executeTakeFirstOrThrow();
+    expect(storedParams(run).def).toMatchObject({ periodId, part: 'all', zipMode: 'combined', withheld: ['library.annual_report'] });
+    expect(storedParams(run).warnings).toContain('report_withheld:G4.report_documents');
+    const names = streamEntries(await fsp.readFile(reportExportPath(db.dataDir, started.id, 'zip'))).map((e) => e.name);
+    expect(names.filter((n) => n.includes('laporan-tahunan'))).toEqual([]);
+    expect(names.length).toBe(all.length - 1);
+    expect(names.filter((n) => n.startsWith('G-pengelolaan/G4-'))).toEqual([expect.stringMatching(/^G-pengelolaan\/G4-01-daftar-laporan/)]);
+    // A caller holding both permissions gets it.
+    held.add('reports.statistics.read');
+    const full = await withTx(db.h, (trx) =>
+      startDocumentRun(trx, 'accreditation.dossier', periodId, { format: 'zip' }, { createdBy: db.staffId, now: Date.now(), registry: db.registry, keyring: KEYRING, holds: (p) => held.has(p) }),
+    );
+    const fullRun = await db.h.db.selectFrom('report_runs').select('params').where('id', '=', full.id).executeTakeFirstOrThrow();
+    expect(JSON.parse(fullRun.params).def).not.toHaveProperty('withheld');
   });
 
   it('refuses a ZIP over 5 000 entries or 2 GiB before its run is written', async () => {
