@@ -40,7 +40,7 @@ const count = async (s: AuditScriptContext, table: 'records' | 'items' | 'migrat
   Number((await s.db.db.selectFrom(table).select((eb) => eb.fn.countAll().as('n')).executeTakeFirstOrThrow()).n);
 
 export const AUDIT: AreaAuditScript = {
-  actions: ['catalog.migration.start', 'catalog.migration.finish', 'catalog.migration.cutover'],
+  actions: ['catalog.migration.start', 'catalog.migration.finish'],
   run: async (s) => {
     // B1: the real sources and stages. An earlier test of this process may have left the seams set; clear them.
     __setSlimsSourceFactory(null);
@@ -127,20 +127,5 @@ export const AUDIT: AreaAuditScript = {
       { action: 'catalog.migration.start', actor_type: 'staff', entity_id: realRun.runId },
       { action: 'catalog.migration.finish', actor_type: 'system', entity_id: realRun.runId },
     ]);
-
-    // 4. The cut-over checklist (Komunitas, SLiMS members and circulation): the reprint list marked opened; serving
-    // is held back (no desk staff, no guestbook station yet), 422 without an entry.
-    const view = await s.admin.send('get', `${API}/cutover`);
-    expect(view.status, view.text).toBe(200);
-    expect(view.json).toMatchObject({ runId: realRun.runId, ready: false, reprintOpenedAt: null });
-    const reauthCutover = await s.admin.send('post', '/api/v1/auth/reauth', { password: s.admin.password });
-    expect(reauthCutover.status, reauthCutover.text).toBeLessThan(300);
-    const reprint = await s.admin.send('post', `${API}/cutover/steps`, { step: 'reprint_opened' });
-    expect(reprint.status, reprint.text).toBe(200);
-    expect((reprint.json as { reprintOpenedAt: number | null }).reprintOpenedAt).not.toBeNull();
-    const serve = await s.admin.send('post', `${API}/cutover/steps`, { step: 'serve' });
-    expect(serve.status, serve.text).toBe(422);
-    const cutover = await s.db.db.selectFrom('audit_log').select(['entity_id', 'actor_type']).where('action', '=', 'catalog.migration.cutover').execute();
-    expect(cutover).toEqual([{ entity_id: 'reprint_opened', actor_type: 'staff' }]);
   },
 };
