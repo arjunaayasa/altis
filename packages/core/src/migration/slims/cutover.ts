@@ -4,6 +4,7 @@ import type { MigrationMatchRow, SlimsCutoverView } from '@altis/shared/api/cata
 import type { Kysely, Transaction } from 'kysely';
 import { loadGrants } from '../../authz/grants.js';
 import type { TxCtx } from '../../context.js';
+import { cutoverMarkAt } from './cutover-marks.js';
 import { parseSlimsRunSettings } from './options.js';
 import { liveCirculationCount } from './stages/circulation.js';
 import { UNUSABLE_PASSWORD } from './stages/staff.js';
@@ -20,7 +21,9 @@ import { UNUSABLE_PASSWORD } from './stages/staff.js';
 // - the reprint list of cards and labels was opened from the checklist (the copies whose barcodes were rewritten).
 //
 // Stocktaking is not part of this release: the wizard says to finish a scheduled stocktake in SLiMS first. Once the
-// library serves in ALTIS, its first loan makes ALTIS's circulation live, and a `replace` run is refused from then on.
+// library serves in ALTIS ("Mulai melayani" marked), or ALTIS records any circulation of its own (a loan, a return or
+// renewal of a migrated loan, a payment, a waiver, a hold), ALTIS's circulation is live, and a `replace` run is refused
+// from then on.
 
 type Db = Kysely<DB> | Transaction<DB>;
 
@@ -29,26 +32,9 @@ interface CutoverState {
   servingSince: number | null;
 }
 
-/**
- * When each item was marked done: the latest `catalog.migration.cutover` audit entry of each step (entity
- * `slims_cutover`, the step as its id). The audit trail is where these marks live: they are the record of an admin's
- * decision, kept as long as the trail.
- */
+/** When each item was marked done (cutover-marks.ts). */
 async function cutoverState(db: Db): Promise<CutoverState> {
-  const at = async (step: string): Promise<number | null> => {
-    const row = await db
-      .selectFrom('audit_log')
-      .select('at')
-      .where('action', '=', 'catalog.migration.cutover')
-      .where('entity', '=', 'slims_cutover')
-      .where('entity_id', '=', step)
-      .orderBy('seq', 'desc')
-      .limit(1)
-      .executeTakeFirst();
-    return row === undefined ? null : Number(row.at);
-  };
-  const serving = await at('serve');
-  return { reprintOpenedAt: await at('reprint_opened'), servingSince: serving };
+  return { reprintOpenedAt: await cutoverMarkAt(db, 'reprint_opened'), servingSince: await cutoverMarkAt(db, 'serve') };
 }
 
 /** The last real run that read the circulation tables (its summary holds `matches`), or null. */

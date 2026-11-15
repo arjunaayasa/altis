@@ -11,7 +11,7 @@ import { localStorageDriver } from '../../src/files/serve.js';
 import { claimById } from '../../src/jobs/claim.js';
 import { createJobRegistry } from '../../src/jobs/registry.js';
 import { runSlice } from '../../src/jobs/slice.js';
-import { lendItem } from '../../src/circulation/desk.js';
+import { lendItem, returnItem } from '../../src/circulation/desk.js';
 import { anonymizeMember } from '../../src/members/ext/privacy.js';
 import { updateMember } from '../../src/members/members.js';
 import { markSlimsCutoverStep, slimsCutover } from '../../src/migration/slims/cutover.js';
@@ -434,6 +434,25 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
     expect(await count('charges')).toBe(4);
     // B004 is out on loan now, so the hold on it comes over too.
     expect(await count('holds')).toBe(2);
+
+    // The first act in ALTIS is an on-time return of a migrated loan: no row of ALTIS's own yet, but a replace would
+    // put the loan back open from the frozen source, so it is refused from then on.
+    const migrated = await db.h.db
+      .selectFrom('loans as l')
+      .innerJoin('items as i', 'i.id', 'l.item_id')
+      .select(['l.id', 'i.barcode_display'])
+      .where('l.source', '=', 'migrated')
+      .where('l.open_item_id', 'is not', null)
+      .orderBy('l.id')
+      .executeTakeFirstOrThrow();
+    await db.h.db.updateTable('loans').set({ due_on: '2099-12-31' }).where('id', '=', migrated.id).execute();
+    await db.run((tx) => returnItem(tx, { branchId: db.branchId, barcode: migrated.barcode_display }));
+    for (const table of ['loans', 'holds', 'charges', 'payments', 'item_uses'] as const) {
+      expect(await db.h.db.selectFrom(table as 'loans').select('id').where('source', '<>', 'migrated').execute(), table).toEqual([]);
+    }
+    const afterReturn = await start({ people: { circulationMode: 'replace' } }).catch((e: unknown) => e);
+    expect(isDomainError(afterReturn) && afterReturn.code === 'MIGRATION_CIRCULATION_LIVE').toBe(true);
+    expect((await slimsCutover(db.h.db)).circulationLive).toBe(true);
 
     // ALTIS lends on its own: a replace is refused from then on.
     const m6 = (await memberByNo('M006'))!;
