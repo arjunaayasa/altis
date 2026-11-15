@@ -9,11 +9,11 @@ import { REPORTS } from '../../src/reports/registry.js';
 import type { ReportDefinition } from '../../src/reports/types.js';
 import { seedSmaContoh, type GoldenFixture } from '../support/accreditation-golden.js';
 // ---- Komunitas (member, visit and circulation reports) ----
-import { masterId, seedCharge, seedCopy, seedHold, seedLoan, seedMember, seedPayment, seedUse, seedVisit } from '../support/circulation-seed.js';
+import { masterId, seedCharge, seedCopy, seedHold, seedLoan, seedMember, seedPayment, seedStocktake, seedUse, seedVisit } from '../support/circulation-seed.js';
 import { checkPdf } from '../support/pdf-check.js';
 import { csvCells, csvLines, drive, exportPath, openExportDb, runRow, sheetRows, startRun, xlsxParts, type ExportDb } from './reports-export-support.js';
 
-// Every table report of this edition (the collection reports, the accreditation annexes, the member, visit and circulation reports) exported to CSV,
+// Every table report of this edition (the collection reports, the accreditation annexes, the member, visit, circulation and stocktake reports) exported to CSV,
 // XLSX and PDF on the golden school dataset, each run started as the run routes start it and written by the real export
 // job, on the engine picked by ALTIS_TEST_DB:
 // - every CSV starts with the UTF-8 byte order mark, and a title that starts with `=` is written with a quote before it;
@@ -129,8 +129,11 @@ async function addTitle(db: Kysely<DB>, fx: GoldenFixture, o: { title: string; c
 describe.skipIf(!ctx.available)(`every report in every format on the golden dataset [${engineLabel()}]`, () => {
   let db: ExportDb;
   let fx: GoldenFixture;
-  /** The run parameters of each definition: the golden upper secondary period for the annexes, none otherwise. */
-  const paramsOf = (def: ReportDefinition): Record<string, unknown> => (def.module === 'accreditation' ? { periodId: fx.periods.sma } : {});
+  /** The golden stocktake session. */
+  let stocktakeId = '';
+  /** The run parameters of each definition: the golden upper secondary period for the annexes, the golden session for a report of one session, none otherwise. */
+  const paramsOf = (def: ReportDefinition): Record<string, unknown> =>
+    def.module === 'accreditation' ? { periodId: fx.periods.sma } : def.params.some((p) => p.name === 'stocktakeId') ? { stocktakeId } : {};
 
   beforeAll(async () => {
     db = await openExportDb('k1-every-format');
@@ -214,13 +217,40 @@ describe.skipIf(!ctx.available)(`every report in every format on the golden data
     await seedHold(h, { recordId: three.recordId, memberId: reader, branchId: fx.branchId, placedOn: today });
     await seedCharge(h, { memberId: reader, branchId: fx.branchId, amountMinor: 1_000_000, paidMinor: 400_000, chargedOn: today });
     await seedPayment(h, { memberId: reader, branchId: fx.branchId, amountMinor: 400_000, paidOn: today, staffId: db.staffId, seq: 1 });
+    // ---- Komunitas K4 (stocktake) ----
+    // A finished stocktake of the golden branch by two officers: a copy found, one not found, one found in another room,
+    // one on loan, one not on the list, and an unknown code, so that every stocktake report has rows.
+    const officer = newId(at);
+    await h.insertInto('staff_users').values({ id: officer, username_key: 'bayu', username_display: 'bayu', name: 'Bayu Petugas', password_hash: 'x', status: 'active', created_at: at, updated_at: at }).execute();
+    const reference = newId(at);
+    await h
+      .insertInto('locations')
+      .values({ id: reference, branch_id: fx.branchId, parent_id: null, kind: 'room', code_display: 'RR', code_key: normalizeKey('RR'), name: 'Ruang Referensi', created_at: at, updated_at: at })
+      .execute();
+    const found = await seedCopy(h, { branchId: fx.branchId, title: 'Atlas Indonesia', barcode: 'INV-0001', classification: '912', locationId: fx.locationId });
+    const missing = await seedCopy(h, { branchId: fx.branchId, title: 'Kamus Biologi', barcode: 'INV-0002', classification: '570.3', locationId: fx.locationId });
+    const misplaced = await seedCopy(h, { branchId: fx.branchId, title: 'Sejarah Nusantara', barcode: 'INV-0003', classification: '959.8', locationId: fx.locationId });
+    const unlisted = await seedCopy(h, { branchId: fx.branchId, title: 'Majalah Sekolah', barcode: 'INV-0004', classification: '050', locationId: reference });
+    stocktakeId = await seedStocktake(h, {
+      branchId: fx.branchId,
+      name: 'Inventarisasi Ruang Baca',
+      staffId: db.staffId,
+      copies: [
+        { itemId: found.itemId, state: 'found', statDdc: '910', scannedBy: db.staffId },
+        { itemId: missing.itemId, state: 'pending', statDdc: '570' },
+        { itemId: misplaced.itemId, state: 'misplaced', statDdc: '950', scannedBy: officer, scannedLocationId: reference },
+        { itemId: two.itemId, state: 'on_loan', statDdc: '2X' },
+        { itemId: unlisted.itemId, state: 'unexpected', scannedBy: officer },
+      ],
+      unknown: [{ code: 'TIDAK-ADA-1', scannedBy: officer }],
+    });
   }, 120_000);
 
   afterAll(async () => {
     await db?.close();
   });
 
-  it('covers the eight collection reports, the ten accreditation annexes, and the member, visit and circulation reports', () => {
+  it('covers the eight collection reports, the ten accreditation annexes, and the member, visit, circulation and stocktake reports', () => {
     expect(TABLES.map((d) => d.id)).toEqual([
       'collection.summary',
       'collection.ddc_recap',
@@ -261,6 +291,12 @@ describe.skipIf(!ctx.available)(`every report in every format on the golden data
       'circulation.charges',
       'circulation.payments_daily',
       'circulation.top_borrowers',
+      // ---- Komunitas K4 (stocktake) ----
+      'stocktake.progress',
+      'stocktake.missing',
+      'stocktake.misplaced',
+      'stocktake.by_officer',
+      'stocktake.history',
     ]);
     for (const def of TABLES) expect([def.id, [...def.formats].sort()]).toEqual([def.id, ['csv', 'pdf', 'xlsx']]);
   });
