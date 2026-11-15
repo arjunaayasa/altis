@@ -4,7 +4,7 @@ import type { TableName } from './registry.js';
 export type { ColumnKind } from './ddl.js';
 
 // The column registry (decision C11): every column of every table, in table-definition order, and every table's
-// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0029; Komunitas K1: 0030–0033; members and circulation: 0040; holds: 0041; circulation core: 0042; visits: 0043; member area: 0044; charges and payments: 0045; notices: 0046) and the runner's own tables (ddl.ts ensureBootstrap,
+// keys, written by hand from the migrations 0001–0009 (Phase 2: 0020–0029; Komunitas K1: 0030–0033; members and circulation: 0040; holds: 0041; circulation core: 0042; visits: 0043; member area: 0044; charges and payments: 0045; notices: 0046; SLiMS members and circulation: 0047) and the runner's own tables (ddl.ts ensureBootstrap,
 // migrator.ts). Backup and restore read it for the canonical row (registry column order), the per-version checks of
 // an archive's rows (columnsAt) and the length checks against the code's DDL; restore's read-only pre-pass reads the
 // unique keys (S5c) and the load order follows the foreign keys (order.ts).
@@ -131,6 +131,8 @@ const M0044 = '0044_member_area';
 const M0045 = '0045_charges';
 // ---- Komunitas (notices) ----
 const M0046 = '0046_notices';
+// ---- Komunitas (SLiMS members and circulation) ----
+const M0047 = '0047_migration_subject';
 
 /** `archived_at` + `version`, then the trail columns (Phase 2 spec §2.2 "arsip+ver, jejak"). */
 function archivedTrail(since: string): ColumnSpec[] {
@@ -761,8 +763,8 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
     ),
   ),
   migration_map: frozen(added(M0025, t.key191('source'), t.key191('entity'), t.key191('legacy_key'), t.ulid('target_id'), t.ulid('run_id'))),
-  migration_archive: frozen(
-    added(
+  migration_archive: frozen([
+    ...added(
       M0025,
       t.id(),
       t.ulid('run_id'),
@@ -772,7 +774,9 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
       t.text('row_json'),
       t.timestamp('created_at'),
     ),
-  ),
+    // ---- Komunitas (SLiMS members and circulation): the member a row is about ----
+    ...added(M0047, nul(t.char('subject_key', 64))),
+  ]),
   // ---- Komunitas K1 (tables) ----
   report_runs: frozen(
     added(

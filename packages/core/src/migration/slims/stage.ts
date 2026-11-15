@@ -1,4 +1,5 @@
 import type { DbHandle } from '@altis/db';
+import type { AccredGroup } from '@altis/shared';
 import type { StorageDriver } from '../../files/serve.js';
 import type { SlimsFilesSource, SlimsSource } from './source/types.js';
 
@@ -19,6 +20,11 @@ export type SlimsStageName =
   | 'records'
   | 'relations'
   | 'items'
+  // ---- Komunitas (SLiMS members and circulation) ----
+  | 'members'
+  | 'staff'
+  | 'visits'
+  | 'circulation'
   | 'attachments'
   | 'covers'
   | 'content'
@@ -44,6 +50,25 @@ export interface SlimsRunOptions {
   catalogMode: 'append' | 'sync';
   /** The catalogue stages are skipped: each counts the rows of its tables as skipped `catalog_skipped`. */
   skipCatalog: boolean;
+  // ---- Komunitas (SLiMS members and circulation) ----
+  people: SlimsPeopleRunOptions;
+}
+
+/** The member, visit and circulation options of a run, defaults filled in (options.ts peopleOptions). */
+export interface SlimsPeopleRunOptions {
+  membersMode: 'append' | 'update';
+  /** `auto`: the first visit ALTIS recorded itself in the target branch (none: every visit). */
+  visitsBefore: string;
+  unknownMemberGroup: AccredGroup | null;
+  circulationMode: 'append' | 'replace';
+  fineMode: 'major' | 'minor' | 'skip';
+  fineOutlierMajor: number;
+  migrateGender: boolean;
+  defaultMemberTypeId: string | null;
+  /** SLiMS member type id → accreditation group (the wizard's); a type left out is guessed from its name. */
+  memberTypeGroups: Record<string, AccredGroup>;
+  staffUsers: boolean;
+  typeLimitAsTotal: boolean;
 }
 
 /** Text repairs counted per column (§11.5). */
