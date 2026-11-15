@@ -151,6 +151,42 @@ describe('holds at the desk', () => {
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Pesan' }));
     expect(await within(dialog).findByText('Ada eksemplar yang tersedia di rak')).toBeTruthy();
   });
+
+  it('while "Tambah reservasi" is open a scan lends nothing, and Esc closes the dialog without ending the visit', async () => {
+    const member = deskMember();
+    const loans: unknown[] = [];
+    startApp({
+      me: adminMe(),
+      path: '/admin/layanan',
+      routes: {
+        'GET branches': () => ({ items: [BRANCH_VIEW] }),
+        'POST branches/:branchId/circulation/members/search': () => ({ items: [] }),
+        'POST branches/:branchId/circulation/members/lookup': () => member,
+        'GET branches/:branchId/circulation/members/:memberId': () => member,
+        'POST branches/:branchId/circulation/loans': (req) => {
+          loans.push(req.body);
+          return problem(404, 'NOT_FOUND');
+        },
+      },
+    });
+    await scan('A001');
+    expect(await screen.findByRole('region', { name: 'Anggota Budi Santoso' })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'F7' });
+    fireEvent.keyDown(window, { key: 'F7' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Tambah reservasi…' }));
+    const dialog = await screen.findByRole('dialog');
+    // A scanner is a keyboard: a burst of keys ending with Enter, aimed at the dialog's search box.
+    const target = document.activeElement ?? document.body;
+    for (const key of ['B', '0', '0', '0', '2', 'Enter']) fireEvent.keyDown(target, { key });
+    expect(
+      await screen.findByText('Pindaian B0002 tidak diproses karena ada jendela yang terbuka. Tutup jendela itu, lalu pindai lagi.', { selector: 'p.text-xl' }),
+    ).toBeTruthy();
+    expect(loans).toEqual([]);
+
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => expect(dialog.isConnected).toBe(false));
+    expect(screen.getByRole('region', { name: 'Anggota Budi Santoso' })).toBeTruthy();
+  });
 });
 
 describe('Rak Tunggu & Reservasi', () => {
