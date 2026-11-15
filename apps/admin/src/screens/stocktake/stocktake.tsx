@@ -385,7 +385,7 @@ export function StocktakeSessionScreen() {
     setProblem(null);
     setUploadBusy(true);
     try {
-      const { uploadId } = await uploadFile(file, { context: 'stocktake.codes' });
+      const { uploadId } = await uploadFile(file, { context: 'stocktake.codes', branchId });
       const r = await api<StocktakeJobResponse>('POST', `${base}/uploads`, { uploadId, ...(locationId === '' ? {} : { locationId }) }, { idempotencyKey: crypto.randomUUID() });
       setUploadJob(r.jobId);
     } catch (err) {

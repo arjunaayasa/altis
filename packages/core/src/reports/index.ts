@@ -9,6 +9,7 @@ export {
   listReportRuns,
   openReportRunDownload,
   previewReport,
+  reportBranchOf,
   reportCatalogEntry,
   startReportRun,
   visibleReports,

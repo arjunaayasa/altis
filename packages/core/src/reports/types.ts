@@ -67,6 +67,14 @@ interface ReportBase {
    * the preview and the export routes check it beside {@link permission}. Null: none.
    */
   extraPermission?(params: Readonly<Record<string, unknown>>): Permission | null;
+  // ---- Komunitas K4 (stocktake) ----
+  /**
+   * The branch the parameters (as the body sends them, or as a run stored them) address, for a definition whose
+   * permission is a branch permission (a stocktake report: the session's branch): the routes check the permission at
+   * that branch, so a role granted at one branch only may use the report there. Null (or no such function): no one
+   * branch, and the permission is needed globally.
+   */
+  branchOf?(db: Kysely<DB>, params: Readonly<Record<string, unknown>>): Promise<string | null>;
   params: readonly ReportParamSpec[];
   /** Checks a body's parameters; its output is the stored `def`. */
   paramsSchema: z.ZodType<Record<string, unknown>>;
