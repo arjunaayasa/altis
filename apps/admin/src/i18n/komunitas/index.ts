@@ -16,6 +16,8 @@ import { CHARGES_ADMIN_EN, CHARGES_ADMIN_ID } from './charges';
 import { CIRC_REPORTS_ADMIN_EN, CIRC_REPORTS_ADMIN_ID } from './circ-reports';
 // ---- Komunitas (notices) ----
 import { NOTICES_ADMIN_EN, NOTICES_ADMIN_ID } from './notices';
+// ---- Komunitas K4 (stocktake) ----
+import { STOCKTAKE_ADMIN_EN, STOCKTAKE_ADMIN_ID } from './stocktake';
 import { MEMBERS_EN, MEMBERS_ID } from './members';
 import { MEMBERS_TOOLS_EN, MEMBERS_TOOLS_ID } from './members-tools';
 import { KOMUNITAS_SETTINGS_EN, KOMUNITAS_SETTINGS_ID } from './settings';
@@ -91,6 +93,8 @@ export const KOMUNITAS_AREAS_ID = Object.freeze({
   circReports: CIRC_REPORTS_ADMIN_ID,
   // ---- Komunitas (notices) ----
   notices: NOTICES_ADMIN_ID,
+  // ---- Komunitas K4 (stocktake) ----
+  stocktake: STOCKTAKE_ADMIN_ID,
   placeholder: PLACEHOLDER_ID,
 });
 
@@ -117,6 +121,8 @@ export const KOMUNITAS_AREAS_EN: { readonly [A in keyof typeof KOMUNITAS_AREAS_I
   circReports: CIRC_REPORTS_ADMIN_EN,
   // ---- Komunitas (notices) ----
   notices: NOTICES_ADMIN_EN,
+  // ---- Komunitas K4 (stocktake) ----
+  stocktake: STOCKTAKE_ADMIN_EN,
   placeholder: PLACEHOLDER_EN,
 });
 
@@ -138,6 +144,7 @@ export const KOMUNITAS_ID = {
   ...CHARGES_ADMIN_ID,
   ...CIRC_REPORTS_ADMIN_ID,
   ...NOTICES_ADMIN_ID,
+  ...STOCKTAKE_ADMIN_ID,
   ...PLACEHOLDER_ID,
 } as const;
 
@@ -159,5 +166,6 @@ export const KOMUNITAS_EN: Record<keyof typeof KOMUNITAS_ID, string> = {
   ...CHARGES_ADMIN_EN,
   ...CIRC_REPORTS_ADMIN_EN,
   ...NOTICES_ADMIN_EN,
+  ...STOCKTAKE_ADMIN_EN,
   ...PLACEHOLDER_EN,
 };
