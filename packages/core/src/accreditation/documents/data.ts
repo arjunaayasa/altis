@@ -11,8 +11,9 @@ import { ExportRunFailure } from '../../reports/export/state.js';
 import { collectionDataQualityReport } from '../../reports/collection/data-quality.js';
 import { collectionItemListReport } from '../../reports/collection/item-list.js';
 import { collectionTitleListReport } from '../../reports/collection/title-list.js';
+import { libraryAnnualReport } from '../../reports/library/annual-report.js';
 import { parseDefParams } from '../../reports/runs/service.js';
-import type { DocumentCtx, DocumentResume, ReportColumn, ReportCtx, ReportRow, TableReport } from '../../reports/types.js';
+import type { DocumentCtx, DocumentReport, DocumentResume, ReportColumn, ReportCtx, ReportRow, TableReport } from '../../reports/types.js';
 import { annexActivitiesReport } from '../annexes/activities.js';
 import { annexAdditionsReport } from '../annexes/additions.js';
 import { annexBudgetsReport } from '../annexes/budgets.js';
@@ -213,6 +214,15 @@ const DOCUMENT_REPORTS: ReadonlyMap<string, TableReport> = new Map(
 /** A table report a document prints, by id, or null for one this build does not have. */
 export function documentReport(id: string): TableReport | null {
   return DOCUMENT_REPORTS.get(id) ?? null;
+}
+
+// ---- Komunitas K5 (reports) ----
+/** The document reports an evidence item drafts (a signed document ALTIS drafts), which the evidence ZIP renders. */
+const DRAFT_REPORTS: ReadonlyMap<string, DocumentReport> = new Map([libraryAnnualReport].map((def) => [def.id, def]));
+
+/** A document report an evidence item drafts, by id, or null for any other id. */
+export function draftReport(id: string): DocumentReport | null {
+  return DRAFT_REPORTS.get(id) ?? null;
 }
 
 /** A table report a document prints, by id. @throws TypeError for any other id */

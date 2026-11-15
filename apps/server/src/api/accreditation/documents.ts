@@ -6,6 +6,7 @@ import type { ReportRunStarted } from '@altis/shared/api/reports';
 import { z } from 'zod';
 import { route, type RouteContext, type RouteDecl } from '../../http/route.js';
 import { jobHandlers } from '../../jobs/runtime.js';
+import { holdsOf } from '../reports/catalog.js';
 
 // The routes of a period's accreditation documents (spec §5.2, §10.9). Each starts a report run of its document, in
 // Indonesian whatever the requester reads, and queues its export; the run is downloaded through the report run routes.
@@ -13,7 +14,9 @@ import { jobHandlers } from '../../jobs/runtime.js';
 // `{runId, reportId, format}` (never a parameter value):
 //
 //   POST accreditation/periods/:id/dossier          the evidence file: `{format: pdf | zip | zip_components, part?}`;
-//                                                   it prints the staff's names, so a fresh re-authentication first
+//                                                   it prints the staff's names, so a fresh re-authentication first;
+//                                                   a ZIP leaves out a report an evidence item drafts that the
+//                                                   requester may not export (its run's warnings say so)
 //   POST accreditation/periods/:id/self-assessment  the internal simulation with the estimated score; personal too
 //   POST accreditation/periods/:id/statement-1000   the statement of 1 000 titles with the title list; it names no one,
 //                                                   so it needs no re-authentication
@@ -48,6 +51,7 @@ async function startRun<B extends DossierBody | SelfAssessmentBody | Statement10
     now: rc.now,
     registry: registryOf(rc as RouteContext<unknown, unknown, unknown>),
     keyring: rc.config.keyring,
+    holds: holdsOf(rc as RouteContext<unknown, unknown, unknown>),
   });
   await rc.audit({ entity: 'report_runs', entityId: body.id, meta: { runId: body.id, reportId, format } });
   rc.afterCommit(() => rc.services.jobs?.kick());
