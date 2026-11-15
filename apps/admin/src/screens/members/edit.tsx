@@ -13,7 +13,7 @@ import { useDateTime } from '@/components/data-table';
 import { Badge, Field, Notice, NoticeAlert, ProblemAlert, RefetchProblem, RootError, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
 import { useT, type TKey } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
@@ -23,6 +23,11 @@ import { useApiQuery, useMe } from '@/lib/me';
 import { changedFields, isFieldProblem, isStale, optionalText, putFieldErrors, serverIssues, zodIssues } from '@/screens/catalog/masters/master-table';
 import { DueBadge, MemberStatusBadge, limitText, useCalendarDate, useMemberTypes, useTypeName } from '@/screens/circulation/common';
 import { ExtendDialog, SuspendDialog, refreshMembers, useMember } from './common';
+import { MemberCustomPanel, MemberPhotoPanel, MemberPrivacyPanel, RestoreButton } from './member-extras';
+// ---- Komunitas (member area) ----
+import { MemberPasswordDialog } from './password';
+// ---- Komunitas (charges and payments) ----
+import { MemberChargesTab } from '@/screens/circulation/charges';
 
 /**
  * A member: Anggota baru (`/admin/anggota/baru`) and the member's page (`/admin/anggota/$memberId`).
@@ -369,7 +374,7 @@ export function MemberCreateScreen() {
   );
 }
 
-type DetailTab = 'data' | 'loans' | 'history' | 'events';
+type DetailTab = 'data' | 'loans' | 'history' | 'charges' | 'events';
 
 export function MemberDetailScreen() {
   const t = useT();
@@ -382,7 +387,7 @@ export function MemberDetailScreen() {
   const { memberId = '' } = useParams({ strict: false }) as { memberId?: string };
   const member = useMember(memberId);
   const [tab, setTab] = useState<DetailTab>('data');
-  const [dialog, setDialog] = useState<'extend' | 'suspend' | 'reactivate' | 'archive' | null>(null);
+  const [dialog, setDialog] = useState<'extend' | 'suspend' | 'reactivate' | 'archive' | 'password' | null>(null);
   const [notice, setNotice] = useState<string | null>(location.state.created === true ? t('members.created') : null);
   const canManage = holds(me, 'members.records.manage');
   const canLoans = holds(me, 'circulation.records.read');
@@ -459,23 +464,50 @@ export function MemberDetailScreen() {
               <Button variant="outline" onClick={() => setDialog('archive')}>
                 {t('members.action.archive')}
               </Button>
+              {/* Komunitas (member area) */}
+              <Button variant="outline" onClick={() => setDialog('password')}>
+                {t('members.password.open')}
+              </Button>
             </>
           )}
+          {/* ---- Komunitas K2 (members extended) ---- */}
+          {canManage && m.archived && m.status !== 'anonymized' && <RestoreButton member={m} onDone={setNotice} />}
         </div>
       </div>
       <RefetchProblem query={member} />
       {notice !== null && <Notice kind="success">{notice}</Notice>}
       {m.storedStatus === 'suspended' && m.statusNote !== null && <NoticeAlert>{t('members.suspended_note', { note: m.statusNote })}</NoticeAlert>}
+      {/* Wide screens: the tabs in the wide column, the summary beside them. Narrow screens: the summary first, above
+          the long form; the tabs wrap onto a second row there (WRAPPING_TABS). */}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
-        <Tabs value={tab} onValueChange={(v) => setTab(v as DetailTab)} className="min-w-0 lg:order-1">
-          <TabsList className="flex-wrap">
-            <TabsTrigger value="data">{t('members.tab.data')}</TabsTrigger>
-            {canLoans && <TabsTrigger value="loans">{t('members.tab.loans', { count: m.openLoans })}</TabsTrigger>}
-            {canLoans && <TabsTrigger value="history">{t('members.tab.history')}</TabsTrigger>}
-            <TabsTrigger value="events">{t('members.tab.events')}</TabsTrigger>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as DetailTab)} className="order-1 min-w-0 lg:order-none">
+          <TabsList className={WRAPPING_TABS.list}>
+            <TabsTrigger value="data" className={WRAPPING_TABS.trigger}>
+              {t('members.tab.data')}
+            </TabsTrigger>
+            {canLoans && (
+              <TabsTrigger value="loans" className={WRAPPING_TABS.trigger}>
+                {t('members.tab.loans', { count: m.openLoans })}
+              </TabsTrigger>
+            )}
+            {canLoans && (
+              <TabsTrigger value="history" className={WRAPPING_TABS.trigger}>
+                {t('members.tab.history')}
+              </TabsTrigger>
+            )}
+            {canLoans && (
+              <TabsTrigger value="charges" className={WRAPPING_TABS.trigger}>
+                {t('charges.member_page.tab')}
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="events" className={WRAPPING_TABS.trigger}>
+              {t('members.tab.events')}
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="data">
             <MemberFormView key={m.id} member={m} canManage={canManage && live} onSaved={async () => setNotice(t('members.saved'))} />
+            {/* ---- Komunitas K2 (members extended): custom fields ---- */}
+            <MemberCustomPanel key={`custom-${m.id}-${m.version}`} member={m} canManage={canManage && live} onDone={setNotice} />
           </TabsContent>
           {canLoans && (
             <TabsContent value="loans">
@@ -487,11 +519,18 @@ export function MemberDetailScreen() {
               <MemberLoans memberId={m.id} state="closed" />
             </TabsContent>
           )}
+          {canLoans && (
+            <TabsContent value="charges">
+              <MemberChargesTab memberId={m.id} />
+            </TabsContent>
+          )}
           <TabsContent value="events">
             <MemberEvents memberId={m.id} />
           </TabsContent>
         </Tabs>
         <aside aria-label={t('members.summary')} className="flex h-fit flex-col gap-3 rounded-lg border bg-card p-4 text-sm">
+          {/* ---- Komunitas K2 (members extended): the photo ---- */}
+          {m.status !== 'anonymized' && <MemberPhotoPanel member={m} canManage={canManage && live} onDone={setNotice} />}
           <dl className="grid gap-2">
             <div>
               <dt className="text-muted-foreground">{t('members.col.status')}</dt>
@@ -523,10 +562,13 @@ export function MemberDetailScreen() {
               <dd>{sourceText(t, m.source)}</dd>
             </div>
           </dl>
+          {/* ---- Komunitas K2 (members extended): the member's own data and anonymisation ---- */}
+          <MemberPrivacyPanel member={m} onDone={setNotice} />
         </aside>
       </div>
       <ExtendDialog memberId={m.id} open={dialog === 'extend'} onClose={() => setDialog(null)} onDone={() => setNotice(t('members.extended'))} />
       <SuspendDialog member={m} open={dialog === 'suspend'} onClose={() => setDialog(null)} onDone={() => setNotice(t('members.suspended'))} />
+      <MemberPasswordDialog member={m} open={dialog === 'password'} onClose={() => setDialog(null)} onDone={setNotice} />
       {dialog === 'reactivate' && (
         <ConfirmDialog
           open

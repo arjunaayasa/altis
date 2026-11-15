@@ -31,7 +31,7 @@ describe('detectSlimsVersion', () => {
     const eight = source((t) => {
       for (const name of ['loan_history', 'mst_custom_field', 'files_read', 'item_custom']) t.delete(name);
     });
-    expect(detectSlimsVersion(eight)).toEqual({ version: '8', missing: ['files_read', 'item_custom', 'mst_custom_field'], unknownColumns: {} });
+    expect(detectSlimsVersion(eight)).toEqual({ version: '8', missing: ['files_read', 'item_custom', 'mst_custom_field', 'loan_history'], unknownColumns: {} });
     const senayan = source((t) => {
       for (const name of ['loan_history', 'mst_custom_field', 'files_read', 'biblio_relation', 'mst_voc_ctrl']) t.delete(name);
       t.get('biblio')!.columns = t.get('biblio')!.columns.filter((c) => !c.endsWith('_type_id'));
@@ -63,14 +63,17 @@ describe('slimsTableRole', () => {
     ['biblio', 'read'],
     ['biblio_log', 'read'],
     ['mst_item_status', 'read'],
-    ['member', 'phase3'],
-    ['member_custom', 'phase3'],
-    ['loan_history', 'phase3'],
-    ['group_access', 'phase3'],
-    ['user', 'phase3'],
+    // The member and circulation tables are read by the people stages; the system log is only counted.
+    ['member', 'read'],
+    ['member_custom', 'read'],
+    ['loan_history', 'read'],
+    ['group_access', 'read'],
+    ['user', 'read'],
+    ['system_log', 'phase3'],
+    ['group_rights', 'phase3'],
     ['search_biblio', 'derived'],
     ['index_words', 'derived'],
-    ['read_counter', 'other'],
+    ['read_counter', 'read'],
   ])('%s → %s', (table, role) => {
     expect(slimsTableRole(table)).toBe(role);
   });

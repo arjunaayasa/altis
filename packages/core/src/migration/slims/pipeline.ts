@@ -17,7 +17,7 @@ import {
 } from '@altis/platform';
 import { isDomainError } from '@altis/shared';
 import { ulidField } from '@altis/shared/api/common';
-import type { MigrationCharsetSample, MigrationSummary, SlimsVersion } from '@altis/shared/api/catalog/migration';
+import type { MigrationCharsetSample, MigrationMatchRow, MigrationMemberType, MigrationSummary, SlimsVersion } from '@altis/shared/api/catalog/migration';
 import type { Kysely, Transaction } from 'kysely';
 import { z } from 'zod';
 import { RUN_JSON_MAX_BYTES, finishRun, saveRunSummary, startRun, writeRunReport, type RunEnd, type RunRow } from '../../catalog/data/runs.js';
@@ -179,6 +179,13 @@ export interface SlimsPipelineState {
   /** A real run holds the search index `building` (released when the run ends: ending.ts releaseSlimsSearchIndex). */
   indexBuilding: boolean;
   resume: SlimsResume;
+  // ---- Komunitas (SLiMS members and circulation) ----
+  /** SLiMS member numbers that collide once normalised (the analyze stage's count); null before it ran. */
+  memberNoCollisions: number | null;
+  /** The SLiMS member types and their groups (the analyze stage's). */
+  memberTypes: MigrationMemberType[];
+  /** "Cocokkan dengan SLiMS" (the circulation stage's, a real run). */
+  matches: MigrationMatchRow[] | null;
 }
 
 /** What the framework's own stages (`split`, `analyze`, `report`) get besides the stage context. */
@@ -324,6 +331,9 @@ function stateOf(summary: Record<string, unknown>, payload: MigrateSlimsPayload)
     warnings: strings(summary['warnings']),
     indexBuilding: summary['indexBuilding'] === true,
     resume,
+    memberNoCollisions: typeof summary['memberNoCollisions'] === 'number' ? int(summary['memberNoCollisions']) : null,
+    memberTypes: Array.isArray(summary['memberTypes']) ? (summary['memberTypes'] as MigrationMemberType[]) : [],
+    matches: Array.isArray(summary['matches']) ? (summary['matches'] as MigrationMatchRow[]) : null,
   };
 }
 
@@ -640,6 +650,10 @@ export async function runSlimsMigrationSlice(
       checkSource: { ...state.checkSource },
       vanished: counts.vanished,
       ...(catalogDry ? { changes: counts.changes, catalogChanges: Object.values(counts.changes).reduce((a, b) => a + b, 0) } : {}),
+      // ---- Komunitas (SLiMS members and circulation) ----
+      ...(state.memberNoCollisions === null ? {} : { memberNoCollisions: state.memberNoCollisions }),
+      ...(state.memberTypes.length === 0 ? {} : { memberTypes: state.memberTypes }),
+      ...(state.matches === null ? {} : { matches: state.matches }),
     };
     return bounded(doc);
   }
@@ -747,6 +761,7 @@ export async function runSlimsMigrationSlice(
       after: counts[table],
     }));
     if (status === 'succeeded' && !reconcile(counters.toJSON()).ok) warn('reconciliation_diff');
+    if (status === 'succeeded' && state.matches !== null && state.matches.some((m) => !m.ok)) warn('matches_diff');
     try {
       await flush();
     } catch (error) {

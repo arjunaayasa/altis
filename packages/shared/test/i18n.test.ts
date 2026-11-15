@@ -227,6 +227,9 @@ describe('MESSAGES', () => {
       update_restored: ['version'],
       update_restore_failed: ['version'],
       update_blocked: ['version'],
+      // ---- Komunitas (notices): the hold shelf to clear, and reminders that did not go out ----
+      circulation_hold_shelf: ['count'],
+      circulation_notices_failed: ['failed', 'skipped'],
     };
     for (const locale of LOCALES) {
       const table = MESSAGES[locale] as Record<string, string>;
@@ -650,6 +653,27 @@ const REPORT_IDS = [
   'accreditation.dossier',
   'accreditation.self_assessment',
   'accreditation.statement_1000',
+  'members.list',
+  // ---- Komunitas (member, visit and circulation reports) ----
+  'members.summary',
+  'members.expiring',
+  'members.reprint_list',
+  'visits.monthly',
+  'visits.daily',
+  'visits.list',
+  'circulation.summary',
+  'circulation.loans_by_class',
+  'circulation.item_usage',
+  'circulation.top_titles',
+  'circulation.in_library',
+  'circulation.loan_history',
+  'circulation.open_loans',
+  'circulation.overdue',
+  'circulation.due_soon',
+  'circulation.holds',
+  'circulation.charges',
+  'circulation.payments_daily',
+  'circulation.top_borrowers',
   'test.rows',
   'test.personal',
   'test.document',
@@ -670,6 +694,13 @@ const REPORT_COLUMNS = [
   ...['library', 'parent', 'parent_nonpersonnel', 'collection', 'community', 'participants', 'partner', 'scope'],
   ...['reference', 'issued_on', 'issued_by', 'aspects', 'valid_until'],
   ...['n', 'text', 'amount'],
+  ...['member_no', 'member_type', 'gender', 'member_status', 'joined_on', 'expires_on', 'email', 'phone', 'address'],
+  // ---- Komunitas (member, visit and circulation reports) ----
+  ...['registered', 'active', 'expired', 'suspended', 'days_left', 'source_no', 'source_barcode'],
+  ...['m01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09', 'm10', 'm11', 'm12'],
+  ...['date', 'weekday', 'members', 'guests', 'visited_at', 'institution', 'purpose', 'rank'],
+  ...['loaned_on', 'due_on', 'returned_on', 'renewals', 'outcome', 'days_late', 'fine', 'placed_on', 'queue_position', 'pickup_until'],
+  ...['charged_on', 'description', 'paid', 'waived', 'balance', 'paid_on', 'method', 'staff', 'payments', 'receipt_no', 'voided'],
 ];
 
 /** Every parameter name of the report definitions. */
@@ -679,6 +710,11 @@ const REPORT_PARAMS = [
   ...['fictionOnly', 'localWorkOnly', 'audience', 'status', 'received', 'created', 'access'],
   ...['section', 'window', 'kinds', 'learning', 'externalLiteracy', 'part', 'zipMode'],
   ...['rows', 'texts', 'countless'],
+  ...['memberTypeId', 'className', 'memberStatus', 'homeBranchId', 'joined', 'expires', 'contact'],
+  // ---- Komunitas (member, visit and circulation reports) ----
+  ...['range', 'mainClass', 'year', 'month', 'search', 'minLoans', 'top', 'member', 'titleWords', 'barcode', 'loaned', 'loanState'],
+  ...['overdueOnly', 'groupBy', 'minDaysLate', 'due', 'days', 'holdStatus', 'placed', 'chargeStatus', 'charged', 'method'],
+  ...['view', 'kind', 'guestsOnly', 'institution', 'visited', 'source', 'rowsBy'],
 ];
 
 /** The options of every `status` parameter that has no vocabulary list of its own. */
@@ -690,6 +726,13 @@ const REPORT_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   part: ['all', 'request_letter'],
   zipMode: ['combined', 'components'],
   access: ['public', 'staff'],
+  // ---- Komunitas (member, visit and circulation reports) ----
+  top: ['10', '50'],
+  loanState: ['open', 'returned', 'lost'],
+  groupBy: ['member', 'item'],
+  view: ['days', 'receipts'],
+  kind: ['members', 'items'],
+  rowsBy: ['member_type', 'accred_group', 'class', 'source'],
 };
 
 /** The four shared slot files of the later report owners, with the prefix of their keys. */

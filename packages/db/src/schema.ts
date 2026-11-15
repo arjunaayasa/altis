@@ -889,6 +889,9 @@ export interface MigrationArchiveTable {
   /** JSON. */
   row_json: string;
   created_at: EpochMs;
+  // ---- Komunitas (SLiMS members and circulation): 0046 ----
+  /** A keyed hash naming the member the row is about (anonymisation removes the rows by it); null for none. */
+  subject_key: string | null;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -1327,6 +1330,132 @@ export interface LoansTable {
   updated_by: string | null;
 }
 
+// ---- Komunitas (circulation core) ----
+// Migration 0041: the library calendar, items read in place and numbered clearance letters.
+
+/** Class data. Closed days of the library; `kind` (CALENDAR_KINDS) says which fields count. */
+export interface CalendarsTable {
+  id: string;
+  /** null: every branch (always null in this edition). */
+  branch_id: string | null;
+  /** `weekly` | `dates` | `yearly`. */
+  kind: string;
+  /** ISO weekday 1 (Monday) … 7 (Sunday), for `weekly`. */
+  weekday: number | null;
+  /** `YYYY-MM-DD`, both included, for `dates`. */
+  date_from: string | null;
+  date_to: string | null;
+  /** `MM-DD`, both included and within one year, for `yearly`. */
+  month_day_from: string | null;
+  month_day_to: string | null;
+  name: string;
+  archived_at: EpochMs | null;
+  /** Default 0. */
+  version: Generated<number>;
+  created_at: EpochMs;
+  created_by: string | null;
+  updated_at: EpochMs;
+  updated_by: string | null;
+}
+
+/** Class data. One item read in place, anonymous, with the statistics dimensions of that moment. */
+export interface ItemUsesTable {
+  id: string;
+  item_id: string | null;
+  record_id: string | null;
+  /** The branch where the item was read. */
+  branch_id: string;
+  used_on: string;
+  used_at: EpochMs;
+  member_id: string | null;
+  stat_ddc: string | null;
+  stat_material_type_id: string | null;
+  stat_collection_type_id: string | null;
+  /** `desk` | `migrated`. */
+  source: string;
+  created_by: string | null;
+}
+
+/** Class data. UNIQUE (year, seq): one numbered clearance letter, its number never reused. */
+export interface MemberClearancesTable {
+  id: string;
+  member_id: string;
+  /** The library's year of `issued_on`. */
+  year: number;
+  seq: number;
+  /** `<prefix>/<yyyy>/<seq, 4 digits>`. */
+  number_display: string;
+  issued_on: string;
+  issued_at: EpochMs;
+  issued_by: string;
+  /** `graduation` | `transfer` | `other`. */
+  purpose: string;
+  voided_at: EpochMs | null;
+  voided_by: string | null;
+  /** Personal data (free text). */
+  void_reason: string | null;
+}
+
+// ---- Komunitas K2 (visits) ----
+// Migration 0043: guestbook stations and visits, both branch-scoped. Dates are `YYYY-MM-DD` in the branch's time zone.
+
+/** Class data. UNIQUE (token_hash): one paired device per token (NULLs distinct). */
+export interface VisitStationsTable {
+  id: string;
+  branch_id: string;
+  /** The room (a location) the station stands in, or null. */
+  location_id: string | null;
+  name: string;
+  /** SHA-256 hex of the device token while the station is paired; null otherwise. */
+  token_hash: string | null;
+  /** SHA-256 hex of the pending activation code; null once used or replaced. */
+  activation_hash: string | null;
+  activation_expires_at: EpochMs | null;
+  activated_at: EpochMs | null;
+  last_seen_at: EpochMs | null;
+  revoked_at: EpochMs | null;
+  version: Generated<number>;
+  created_at: EpochMs;
+  created_by: string | null;
+  updated_at: EpochMs;
+  updated_by: string | null;
+}
+
+/** Class data. UNIQUE (day_key): one desk or online visit per member, branch and day. */
+export interface VisitsTable {
+  id: string;
+  branch_id: string;
+  location_id: string | null;
+  visited_on: string;
+  visited_at: EpochMs;
+  /** `VISIT_SOURCES`. */
+  source: string;
+  /** null for a guest, a group, an anonymised visit or a migrated visit of a member who is gone. */
+  member_id: string | null;
+  member_type_id: string | null;
+  /** The population group of the day (`ACCRED_GROUPS`, `guest`, `unknown`). */
+  accred_group: string | null;
+  class_name: string | null;
+  /** Personal data. */
+  guest_name: string | null;
+  /** Personal data. */
+  guest_institution: string | null;
+  /** `VISIT_PURPOSES`. */
+  purpose: string | null;
+  /** Default 1. */
+  headcount: Generated<number>;
+  /** Default 0: a migrated visit within the repeat window of the member's earlier one. */
+  is_repeat: Generated<number>;
+  station_id: string | null;
+  /** `<source>:<member id>:<branch id>:<date>` for desk and online visits; null otherwise. */
+  day_key: string | null;
+  /** Personal data (free text). */
+  note: string | null;
+  voided_at: EpochMs | null;
+  voided_by: string | null;
+  created_by: string | null;
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // The runner's tables (class migrator): made by ensureBootstrap (ddl.ts) and migrator.ts, never by a migration.
 
@@ -1368,6 +1497,183 @@ export interface SchemaMigrationsEditionTable {
 export interface SchemaMigrationsEditionLockTable {
   id: string;
   is_locked: Generated<number>;
+}
+
+// ---- Komunitas (holds) ----
+
+/** A member's hold on a title (0041); queued per record and pickup branch by (`placed_at`, `id`). */
+export interface HoldsTable {
+  id: string;
+  record_id: string;
+  /** The pinned copy, or the copy kept for the member once the hold is `ready`. */
+  item_id: string | null;
+  /** Default 0: 1 when the member wants that one copy. */
+  pinned: Generated<number>;
+  /** null once the hold's history is anonymised. */
+  member_id: string | null;
+  pickup_branch_id: string;
+  /** `HOLD_STATUSES`. */
+  status: string;
+  /** `<member_id>:<record_id>` while `waiting` or `ready` (unique), null once closed. */
+  active_key: string | null;
+  /** The kept copy while `ready` (unique), null otherwise. */
+  trap_item_id: string | null;
+  placed_on: string;
+  placed_at: EpochMs;
+  /** The staff user who placed it, null when the member did. */
+  placed_by: string | null;
+  /** `HOLD_SOURCES`. */
+  source: string;
+  expires_on: string | null;
+  ready_at: EpochMs | null;
+  pickup_until: string | null;
+  closed_at: EpochMs | null;
+  /** `HOLD_CLOSE_REASONS`. */
+  close_reason: string | null;
+  shelf_cleared_at: EpochMs | null;
+  loan_id: string | null;
+  version: Generated<number>;
+  created_at: EpochMs;
+  created_by: string | null;
+  updated_at: EpochMs;
+  updated_by: string | null;
+}
+
+// ---- Komunitas (charges and payments) ----
+// Migration 0045: charges (fines and fees), their adjustments, payments with numbered receipts, and allocations.
+
+/** Class data. One sum a member owes; `paid_minor + waived_minor <= amount_minor`, all in minor units of `currency`. */
+export interface ChargesTable {
+  id: string;
+  member_id: string;
+  /** The branch of the loan, or of the desk that booked the charge. */
+  branch_id: string;
+  loan_id: string | null;
+  item_id: string | null;
+  /** `overdue` | `lost` | `damage` | `card` | `manual` | `migrated`. */
+  kind: string;
+  /** Personal data (free text): the line the member sees. */
+  description: string;
+  amount_minor: number;
+  /** Default 0. */
+  paid_minor: Generated<number>;
+  /** Default 0: waived or cancelled. */
+  waived_minor: Generated<number>;
+  currency: string;
+  /** `open` | `settled` | `cancelled`. */
+  status: string;
+  charged_on: string;
+  charged_at: EpochMs;
+  /** Default 0: a migrated charge whose day was not known. */
+  date_unknown: Generated<Flag>;
+  /** `desk` | `system` | `migrated`. */
+  source: string;
+  /** Default 0. */
+  version: Generated<number>;
+  created_at: EpochMs;
+  created_by: string | null;
+  updated_at: EpochMs;
+  updated_by: string | null;
+}
+
+/** Class data. A waive or a cancellation of a charge (CASCADE with it). */
+export interface ChargeAdjustmentsTable {
+  id: string;
+  charge_id: string;
+  /** `waive` | `cancel`. */
+  kind: string;
+  amount_minor: number;
+  /** Personal data (free text): why it was waived or cancelled. */
+  reason_text: string;
+  at: EpochMs;
+  by: string | null;
+}
+
+/** Class data. UNIQUE (branch_id, receipt_year, receipt_seq): one payment, its receipt number never reused. */
+export interface PaymentsTable {
+  id: string;
+  member_id: string;
+  /** The branch of the desk that took the payment. */
+  branch_id: string;
+  /** The library's year of the receipt; null for a migrated payment. */
+  receipt_year: number | null;
+  receipt_seq: number | null;
+  /** `<branch code>/<yyyy>/<seq, 6 digits>`. */
+  receipt_no: string | null;
+  amount_minor: number;
+  currency: string;
+  /** `cash` | `transfer` | `other`. */
+  method: string;
+  paid_on: string;
+  paid_at: EpochMs;
+  received_by: string | null;
+  /** Personal data (free text). */
+  note: string | null;
+  voided_at: EpochMs | null;
+  voided_by: string | null;
+  /** Personal data (free text). */
+  void_reason: string | null;
+  /** Default 0. */
+  date_unknown: Generated<Flag>;
+  /** `desk` | `migrated`. */
+  source: string;
+  /** Default 0. */
+  version: Generated<number>;
+  created_at: EpochMs;
+  created_by: string | null;
+  updated_at: EpochMs;
+  updated_by: string | null;
+}
+
+/** Class data. PK (payment_id, charge_id): the part of a payment that went to one charge (CASCADE with the payment). */
+export interface PaymentAllocationsTable {
+  payment_id: string;
+  charge_id: string;
+  amount_minor: number;
+}
+
+// ---- Komunitas (notices) ----
+// Migration 0046: the e-mails the library owes members (due soon, overdue, hold ready), ids and states only.
+
+/** Class data. UNIQUE (ref_key): one row per mail, built once however often the build runs. */
+export interface NoticesTable {
+  id: string;
+  member_id: string;
+  /** `due_soon` | `overdue` | `hold_ready`. */
+  kind: string;
+  /** What the mail is about (`due_soon:<memberId>:<due_on>`, …): unique. */
+  ref_key: string;
+  /** `email`. */
+  channel: string;
+  /** `queued` | `sending` | `sent` | `failed` | `skipped`. */
+  status: string;
+  /** Why it was skipped or failed (`no_email`, `smtp_not_configured`, …). */
+  reason: string | null;
+  /** JSON list of the loan ids the mail is about. */
+  loan_ids: string | null;
+  hold_id: string | null;
+  /** Default 0. */
+  attempts: Generated<number>;
+  /** The sender job that claimed it. */
+  job_id: string | null;
+  claimed_at: EpochMs | null;
+  created_at: EpochMs;
+  sent_at: EpochMs | null;
+}
+
+// ---- Komunitas (member area) ----
+
+/** A title a member marked on the OPAC (0044); PK (`member_id`, `record_id`). */
+export interface MemberBookmarksTable {
+  member_id: string;
+  record_id: string;
+  created_at: EpochMs;
+}
+
+/** A member type that may open an attachment of access `members` (0044); none listed: every signed-in member. */
+export interface AttachmentMemberTypesTable {
+  attachment_id: string;
+  member_type_id: string;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -1455,6 +1761,25 @@ export interface DB {
   member_events: MemberEventsTable;
   policies: PoliciesTable;
   loans: LoansTable;
+  // ---- Komunitas (holds) ----
+  holds: HoldsTable;
+  // ---- Komunitas (circulation core) ----
+  calendars: CalendarsTable;
+  item_uses: ItemUsesTable;
+  member_clearances: MemberClearancesTable;
+  // ---- Komunitas K2 (visits) ----
+  visit_stations: VisitStationsTable;
+  visits: VisitsTable;
+  // ---- Komunitas (member area) ----
+  member_bookmarks: MemberBookmarksTable;
+  attachment_member_types: AttachmentMemberTypesTable;
+  // ---- Komunitas (charges and payments) ----
+  charges: ChargesTable;
+  charge_adjustments: ChargeAdjustmentsTable;
+  payments: PaymentsTable;
+  payment_allocations: PaymentAllocationsTable;
+  // ---- Komunitas (notices) ----
+  notices: NoticesTable;
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: SchemaMigrationsEditionTable;
   schema_migrations_edition_lock: SchemaMigrationsEditionLockTable;

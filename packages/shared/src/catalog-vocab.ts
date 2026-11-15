@@ -12,6 +12,7 @@
 
 import { ACCREDITATION_VOCAB_LISTS } from './accreditation-vocab.js';
 import { CIRCULATION_VOCAB_LISTS } from './circulation-vocab.js';
+import { VISITS_VOCAB_LISTS } from './visits-vocab.js';
 
 const hasOwn = (o: object, key: string): boolean => Object.prototype.hasOwnProperty.call(o, key);
 
@@ -39,7 +40,8 @@ export type ItemStatus = (typeof ITEM_STATUSES)[number];
 export const ITEM_TRANSITIONS: Readonly<Record<ItemStatus, readonly ItemStatus[]>> = Object.freeze({
   on_order: Object.freeze(['processing', 'available', 'withdrawn'] as const),
   processing: Object.freeze(['available', 'not_for_loan', 'withdrawn'] as const),
-  available: Object.freeze(['not_for_loan', 'repair', 'missing', 'withdrawn'] as const),
+  // `available → lost`: an item on loan that its borrower declares lost (the loan is closed as lost at the desk).
+  available: Object.freeze(['not_for_loan', 'repair', 'missing', 'withdrawn', 'lost'] as const),
   not_for_loan: Object.freeze(['available', 'repair', 'missing', 'withdrawn'] as const),
   repair: Object.freeze(['available', 'not_for_loan', 'withdrawn'] as const),
   missing: Object.freeze(['available', 'not_for_loan', 'lost'] as const),
@@ -163,7 +165,7 @@ export const CUSTOM_FIELD_TYPES = Object.freeze(['text', 'longtext', 'number', '
 export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];
 
 /** The entities a custom field can extend in Phase 2 (§2.2 `custom_field_defs.entity`). */
-export const CUSTOM_FIELD_ENTITIES = Object.freeze(['records', 'items'] as const);
+export const CUSTOM_FIELD_ENTITIES = Object.freeze(['records', 'items', 'members'] as const);
 
 export type CustomFieldEntity = (typeof CUSTOM_FIELD_ENTITIES)[number];
 
@@ -174,8 +176,11 @@ export const ATTACHMENT_KINDS = Object.freeze(['file', 'url'] as const);
 
 export type AttachmentKind = (typeof ATTACHMENT_KINDS)[number];
 
-/** Who may open an attachment: everyone (the OPAC) or staff only. */
-export const ATTACHMENT_ACCESS = Object.freeze(['public', 'staff'] as const);
+/**
+ * Who may open an attachment: everyone (the OPAC), staff only, or (the member area) members signed in to the OPAC,
+ * of the types the attachment lists (none listed: every member).
+ */
+export const ATTACHMENT_ACCESS = Object.freeze(['public', 'staff', 'members'] as const);
 
 export type AttachmentAccess = (typeof ATTACHMENT_ACCESS)[number];
 
@@ -418,6 +423,8 @@ export const VOCAB_LISTS = Object.freeze({
   ...ACCREDITATION_VOCAB_LISTS,
   // ---- Komunitas (members and circulation) ----
   ...CIRCULATION_VOCAB_LISTS,
+  // ---- Komunitas K2 (members extended and visits) ----
+  ...VISITS_VOCAB_LISTS,
 });
 
 export type VocabList = keyof typeof VOCAB_LISTS;

@@ -165,6 +165,67 @@ export const AUDIT_ACTIONS = Object.freeze([
   'circulation.policy.create',
   'circulation.policy.update',
   'circulation.policy.archive',
+  // ---- Komunitas (holds) ----
+  // holds and the hold shelf (`circulation.holds.run` is one entry per run of the expiry job, `meta`: counts)
+  'circulation.hold.create',
+  'circulation.hold.cancel',
+  'circulation.hold.ready',
+  'circulation.hold.shelf_clear',
+  'circulation.holds.run',
+  // ---- Komunitas (circulation core) ----
+  // the desk: voiding the last loan, a loan declared lost, a due date changed by hand
+  'circulation.loan.void',
+  'circulation.loan.lost',
+  'circulation.loan.due_change',
+  // the library calendar
+  'circulation.calendar.create',
+  'circulation.calendar.update',
+  'circulation.calendar.archive',
+  // numbered clearance letters
+  'members.clearance.issue',
+  'members.clearance.void',
+  // ---- Komunitas K2 (members extended and visits) ----
+  // `meta` holds field names, counts and reason names only, never a personal value.
+  // members: restore an archived one, the bulk actions (one entry, `meta.count`), the photo, the card sheet
+  'members.member.restore',
+  'members.member.bulk_update',
+  'members.member.photo_set',
+  'members.card.print',
+  // personal data: a member's own data exported by staff, and anonymisation (by staff; the daily job as the system)
+  'members.privacy.export',
+  'members.privacy.anonymize',
+  'privacy.anonymize.run',
+  // visits (a staff check-in is not audited: it is a count, not a change) and guestbook stations
+  'visits.visit.create',
+  'visits.visit.void',
+  'visits.station.create',
+  'visits.station.activation_code',
+  'visits.station.revoke',
+  // written with the station as the actor when a station is activated with its code
+  'visits.station.activated',
+  // ---- Komunitas (member area) ----
+  // staff setting a member's OPAC password, and what a member does in the OPAC member area (`login_locked`: once when a
+  // sign-in bucket first fills up in its window). A member's renewals, holds and cancellations use the circulation
+  // actions above with a member actor.
+  'members.member.password_set',
+  'members.self.password_change',
+  'members.self.password_reset',
+  'members.self.data_export',
+  'members.self.login_locked',
+  // ---- Komunitas (charges and payments) ----
+  // a charge booked by hand, a waive; a payment with its numbered receipt, a voided payment
+  'circulation.charge.create',
+  'circulation.charge.waive',
+  'circulation.payment.create',
+  'circulation.payment.void',
+  // ---- Komunitas (notices) ----
+  // reminders sent by hand from the desk or the overdue list (`meta`: kind and count; a test send: kind and `test`), and
+  // one entry per run of the daily notices job (`meta`: counts)
+  'circulation.notice.send',
+  'circulation.notices.run',
+  // ---- Komunitas (SLiMS members and circulation) ----
+  // an item of the SLiMS cut-over checklist marked done (the reprint list opened; serving started in ALTIS)
+  'catalog.migration.cutover',
 ] as const);
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

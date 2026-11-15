@@ -2,6 +2,7 @@ import type { DB } from '@altis/db';
 import { DomainError } from '@altis/shared';
 import type { Transaction } from 'kysely';
 import type { TxCtx } from '../../context.js';
+import { moveHoldsOnMerge } from '../../circulation/holds.js';
 import { afterRecordWrite, lockRecordRows, readRecordRow, recordNotFound, recordStale } from './service.js';
 
 // Merging a duplicate record into another (Phase 2 spec §3.3; Review Focus 4, decision P2-20), in one transaction:
@@ -180,6 +181,8 @@ export async function mergeRecord(tx: TxCtx, targetId: string, sourceId: string,
     subjects: await moveSubjectLinks(trx, targetId, sourceId),
     relations: await moveRelations(trx, targetId, sourceId),
   };
+  // Circulation: the source's holds (one active hold per member per title kept) and loans follow its items.
+  await moveHoldsOnMerge(tx, targetId, sourceId);
 
   await trx
     .updateTable('records')

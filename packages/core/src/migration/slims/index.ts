@@ -38,3 +38,11 @@ export type { SlimsDbTarget, SlimsRunSettings } from './options.js';
 export { createCounters as createSlimsCounters } from './counters.js';
 export { reconcile as reconcileSlimsMigration } from './reconcile.js';
 export { assertTargetEmpty as assertSlimsTargetEmpty } from './guard.js';
+
+// ---- Komunitas (SLiMS members and circulation) ----
+// The member, staff, visit and circulation stages run in SLIMS_STAGES; the cut-over checklist; the anonymisation step
+// for the archived rows about a member (registered on import).
+import './privacy.js';
+export { markSlimsCutoverStep, slimsCutover } from './cutover.js';
+export { liveCirculationCount } from './stages/circulation.js';
+export { slimsPassword } from './stages/members.js';

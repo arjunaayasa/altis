@@ -27,11 +27,11 @@ const statusSelect = async (): Promise<HTMLSelectElement> => (await screen.findB
 const optionsOf = (select: HTMLSelectElement): string[] => [...select.options].map((o) => o.value);
 
 describe('ItemEditScreen: the status select', () => {
-  it('an available item offers exactly not_for_loan, repair, missing and withdrawn besides its current status', async () => {
+  it('an available item offers exactly not_for_loan, repair, missing, withdrawn and lost besides its current status', async () => {
     startApp({ me: adminMe(), path: PATH, routes: itemRoutes(() => itemDetail({ status: 'available' })) });
     const select = await statusSelect();
-    expect(optionsOf(select)).toEqual(['available', 'not_for_loan', 'repair', 'missing', 'withdrawn']);
-    expect([...select.options].map((o) => o.textContent)).toEqual(['Tersedia (saat ini)', 'Baca di tempat', 'Perbaikan', 'Tidak ditemukan di rak', 'Disiangi']);
+    expect(optionsOf(select)).toEqual(['available', 'not_for_loan', 'repair', 'missing', 'withdrawn', 'lost']);
+    expect([...select.options].map((o) => o.textContent)).toEqual(['Tersedia (saat ini)', 'Baca di tempat', 'Perbaikan', 'Tidak ditemukan di rak', 'Disiangi', 'Dinyatakan hilang']);
     expect(select.value).toBe('available');
   });
 

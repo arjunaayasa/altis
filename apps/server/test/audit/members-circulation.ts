@@ -1,6 +1,15 @@
 import type { AreaAuditScript } from './catalog.js';
+import { AUDIT as CHARGES } from './komunitas-charges.js';
+import { AUDIT as CIRC_CORE } from './komunitas-circ-core.js';
 import { AUDIT as CIRCULATION } from './komunitas-circulation.js';
+import { AUDIT as HOLDS } from './komunitas-holds.js';
 import { AUDIT as MEMBERS } from './komunitas-members.js';
+// ---- Komunitas (member area) ----
+import { AUDIT as MEMBER_AREA } from './komunitas-member-area.js';
+// ---- Komunitas (notices) ----
+import { AUDIT as NOTICES } from './komunitas-notices.js';
+// ---- Komunitas (SLiMS members and circulation) ----
+import { AUDIT as SLIMS_PEOPLE } from './komunitas-slims-people.js';
 
 // The audit scripts of the members and circulation actions: one script per area, each in a file of its own that only
 // its owning change fills. db/audit-coverage.test.ts runs them after the community's, on the same installation and in
@@ -12,6 +21,18 @@ import { AUDIT as MEMBERS } from './komunitas-members.js';
 export const MEMBERS_CIRCULATION_AUDIT_SCRIPTS: Readonly<Record<string, AreaAuditScript>> = Object.freeze({
   members: MEMBERS,
   circulation: CIRCULATION,
+  // ---- Komunitas (holds) ----
+  holds: HOLDS,
+  // ---- Komunitas (circulation core) ----
+  'circ-core': CIRC_CORE,
+  // ---- Komunitas (member area) ----
+  'member-area': MEMBER_AREA,
+  // ---- Komunitas (charges and payments) ----
+  charges: CHARGES,
+  // ---- Komunitas (notices) ----
+  notices: NOTICES,
+  // ---- Komunitas (SLiMS members and circulation): the cut-over checklist ----
+  'slims-people': SLIMS_PEOPLE,
 });
 
 /** While true, a script that is still null lists its actions as pending; both scripts are written, so every action is covered. */

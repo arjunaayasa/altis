@@ -14,6 +14,9 @@ import {
   type MemberView,
 } from '@altis/shared/api/members';
 import { sql, type Expression, type Selectable, type SqlBool, type Transaction, type Updateable } from 'kysely';
+import { closeMemberHolds } from '../circulation/holds.js';
+// ---- Komunitas (charges and payments) ----
+import { memberBalances } from '../circulation/charge-views.js';
 import type { TxCtx } from '../context.js';
 import {
   libraryToday,
@@ -33,6 +36,25 @@ import {
 } from './common.js';
 import { memberNameKey, memberNoDisplay, memberNoProblem, nameKeyWords, normalizeMemberNo } from './keys.js';
 import { lockLiveMemberType } from './types.js';
+// ---- Komunitas K2 (members extended) ----
+import { customValuesSchema, loadCustomDefs, readCustomValues, writeCustomValues } from '../catalog/data/custom-fields.js';
+
+/**
+ * Writes the member's custom field values `values` (checked against the live `members` definitions; a required one
+ * is not enforced on a member, whose record often starts from an import).
+ *
+ * @throws DomainError VALIDATION_FAILED at `custom.<code>`
+ */
+async function saveMemberCustom(tx: TxCtx, id: string, values: Record<string, unknown>): Promise<void> {
+  const defs = await loadCustomDefs(tx.trx, 'members');
+  const parsed = customValuesSchema(defs, 'patch').safeParse(values);
+  if (!parsed.success) {
+    throw memberValidationFailed(parsed.error.issues.map((issue) => ({ path: ['custom', ...issue.path.map(String)].join('.'), code: issue.code === 'unrecognized_keys' ? 'unknown_field' : issue.code })));
+  }
+  await writeCustomValues(tx.trx, 'members', id, parsed.data, defs, { now: tx.now, actor: tx.actor.id });
+}
+// ---- Komunitas (member area) ----
+import { revokeMemberSessions } from './area/sessions.js';
 
 // Members: create, edit (suspend and reactivate are an edit of `status`), extend, archive, read, look up by number,
 // search, and the member's history.
@@ -44,7 +66,7 @@ import { lockLiveMemberType } from './types.js';
 //   today; `expires_on` = the typed date, else `valid_from + membership_days` of the type (null when the type never
 //   expires). A member is valid up to and including `expires_on`. Changing the type never changes the dates.
 // - Every write locks the member first (lockLiveMember), compares `version` and bumps it. Archiving a member with open
-//   loans is 409 MEMBER_IN_USE `{openLoans, balanceMinor}` (no fines in this edition yet: the balance is 0).
+//   loans or an unpaid balance is 409 MEMBER_IN_USE `{openLoans, balanceMinor}`.
 // - Each write records its history (`member_events`: `created` or `imported`, `updated` with the field names,
 //   `suspended`, `reactivated`, `extended` with the old and new expiry, `archived`) and, in `interactive` mode, audits
 //   `members.member.*` with the field names only.
@@ -174,6 +196,7 @@ export async function createMember(tx: TxCtx, input: MemberBody, o: MemberSaveOp
       })
       .execute(),
   );
+  if (b.custom !== undefined) await saveMemberCustom(tx, id, b.custom);
   const fields = Object.keys(b)
     .filter((k) => {
       const v = b[k as keyof typeof b];
@@ -268,6 +291,10 @@ export async function updateMember(tx: TxCtx, id: string, input: MemberPatchBody
     events.push({ type: toStatus === 'suspended' ? 'suspended' : 'reactivated', meta: { fields: ['status'] } });
   }
   if (errors.length > 0) throw memberValidationFailed(errors);
+  if (p.custom !== undefined && Object.keys(p.custom).length > 0) {
+    await saveMemberCustom(tx, id, p.custom);
+    fields.push('custom');
+  }
 
   const updated = await takenOnRace('memberNo', () =>
     trx
@@ -282,6 +309,8 @@ export async function updateMember(tx: TxCtx, id: string, input: MemberPatchBody
   const rest = fields.filter((f) => f !== 'status' && f !== 'statusNote');
   if (rest.length > 0 || (events.length === 0 && fields.length > 0)) events.push({ type: o.eventType ?? 'updated', meta: { fields: events.length === 0 ? fields : rest } });
   await writeMemberEvents(tx, id, events);
+  // ---- Komunitas (member area): a new member number or a suspension ends the member's OPAC sessions ----
+  if (set.member_no_key !== undefined || (toStatus === 'suspended' && fromStatus !== 'suspended')) await revokeMemberSessions(trx, id);
   if ((o.mode ?? 'interactive') === 'interactive') await tx.audit({ action: 'members.member.update', entity: 'members', entityId: id, meta: { fields } });
   return { id, version: p.version + 1 };
 }
@@ -319,7 +348,7 @@ export async function extendMember(tx: TxCtx, id: string, input: MemberExtendBod
 }
 
 /**
- * Archives a member without open loans (`archived_at = now`, version + 1), history `archived`, audit
+ * Archives a member without open loans and without an unpaid balance (`archived_at = now`, version + 1), history `archived`, audit
  * `members.member.archive`. The member's data stays (deleting is anonymisation, later work).
  *
  * @throws DomainError NOT_FOUND (none, or archived already); CONFLICT_STALE; MEMBER_IN_USE `{openLoans, balanceMinor}`
@@ -328,10 +357,17 @@ export async function archiveMember(tx: TxCtx, id: string, version: number): Pro
   const { trx } = tx;
   await lockedMember(trx, id, version);
   const openLoans = await openLoanCount(trx, id);
+  const balanceMinor = (await memberBalances(trx, [id])).get(id) ?? 0;
   if (openLoans > 0) {
     throw new DomainError('MEMBER_IN_USE', {
       detail: `Anggota ini masih meminjam ${openLoans} eksemplar; kembalikan dahulu / This member still has ${openLoans} open loan(s); return them first`,
-      meta: { openLoans, balanceMinor: 0 },
+      meta: { openLoans, balanceMinor },
+    });
+  }
+  if (balanceMinor > 0) {
+    throw new DomainError('MEMBER_IN_USE', {
+      detail: 'Anggota ini masih punya tanggungan biaya; lunasi atau hapuskan dahulu / This member still owes a balance; settle or waive it first',
+      meta: { openLoans, balanceMinor },
     });
   }
   const updated = await trx
@@ -341,6 +377,10 @@ export async function archiveMember(tx: TxCtx, id: string, version: number): Pro
     .where('version', '=', version)
     .executeTakeFirst();
   if (Number(updated.numUpdatedRows) !== 1) throw memberStale();
+  // The member's active holds are cancelled (a kept copy goes to the next in its queue).
+  await closeMemberHolds(tx, id);
+  // ---- Komunitas (member area): an archived member's OPAC sessions end ----
+  await revokeMemberSessions(trx, id);
   await writeMemberEvents(tx, id, [{ type: 'archived' }]);
   await tx.audit({ action: 'members.member.archive', entity: 'members', entityId: id, meta: {} });
   return { id, version: version + 1 };
@@ -400,7 +440,10 @@ function memberView(row: MemberRow, type: MemberTypeRef, today: string, openLoan
 
 async function viewOf(db: Db, row: MemberRow, now: number): Promise<MemberView> {
   const type = (await typeRefs(db, [row.member_type_id])).get(row.member_type_id) ?? missingType(row.member_type_id);
-  return memberView(row, type, await libraryToday(db, now), await openLoanCount(db, row.id));
+  const view = memberView(row, type, await libraryToday(db, now), await openLoanCount(db, row.id));
+  // ---- Komunitas K2 (members extended) ----
+  view.custom = (await readCustomValues(db, 'members', [row.id])).get(row.id) ?? {};
+  return view;
 }
 
 /**

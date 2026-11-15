@@ -42,7 +42,25 @@ export type BucketName =
   // ISBN/SRU lookups per staff user (hit by the handler, `tx: 'self'`).
   | 'opac_search'
   | 'oai'
-  | 'catalog_lookup';
+  | 'catalog_lookup'
+  // ---- Komunitas K2 (visits) ----
+  // A guestbook station's activation per client IP (a route's `ipLimits`), and its check-ins per station (hit by
+  // the handler).
+  | 'visit_station_activate:ip'
+  | 'visit_station_checkin'
+  // ---- Komunitas (member area) ----
+  // The OPAC member area: sign-in per member number and IP, per IP (only with a trusted IP) and per member number; the
+  // forgotten-password mail per member and per IP; the reset per IP; the member's own writes per session; the download
+  // of the member's own data per member.
+  | 'member_login:user-ip'
+  | 'member_login:ip'
+  | 'member_login:user'
+  | 'member_forgot:member:5m'
+  | 'member_forgot:member:1d'
+  | 'member_forgot:ip'
+  | 'member_reset:ip'
+  | 'member_write'
+  | 'member_export:member';
 
 const MIN = 60_000;
 
@@ -68,6 +86,19 @@ export const BUCKETS: Readonly<Record<BucketName, Readonly<{ limit: number; wind
   opac_search: bucket(120, MIN),
   oai: bucket(60, MIN),
   catalog_lookup: bucket(30, MIN),
+  // ---- Komunitas K2 (visits) ----
+  'visit_station_activate:ip': bucket(10, 15 * MIN),
+  visit_station_checkin: bucket(120, MIN),
+  // ---- Komunitas (member area) ----
+  'member_login:user-ip': bucket(5, 15 * MIN),
+  'member_login:ip': bucket(20, 15 * MIN),
+  'member_login:user': bucket(50, 60 * MIN),
+  'member_forgot:member:5m': bucket(1, 5 * MIN),
+  'member_forgot:member:1d': bucket(5, 24 * 60 * MIN),
+  'member_forgot:ip': bucket(10, 60 * MIN),
+  'member_reset:ip': bucket(20, 60 * MIN),
+  member_write: bucket(30, MIN),
+  'member_export:member': bucket(3, 60 * MIN),
 });
 
 /** One counted hit: where it was counted, and the decision. */

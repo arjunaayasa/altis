@@ -14,7 +14,7 @@ import { IsbnLookupButton, SruCopyDialog, type CopyPick } from '@/components/cat
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Badge, Notice, NoticeAlert, ProblemAlert, RefetchProblem, RootError } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
 import { useT, type TKey } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
@@ -509,11 +509,20 @@ function RecordEditor({ record, masters, canManage, initialTab, created, reload 
         formPart
       ) : (
         <Tabs value={tab} onValueChange={(v) => setTab(parseTab(v))}>
-          <TabsList aria-label={t('catalog.records.tabs')} className="flex-wrap">
-            <TabsTrigger value="data">{t('catalog.records.tab.data')}</TabsTrigger>
-            <TabsTrigger value="items">{t('catalog.records.tab.items', { count: record.itemCounts.total })}</TabsTrigger>
-            <TabsTrigger value="attachments">{t('catalog.records.tab.attachments')}</TabsTrigger>
-            <TabsTrigger value="marc">{t('catalog.records.tab.marc')}</TabsTrigger>
+          {/* On a narrow screen the tabs wrap onto a second row (WRAPPING_TABS). */}
+          <TabsList aria-label={t('catalog.records.tabs')} className={WRAPPING_TABS.list}>
+            <TabsTrigger value="data" className={WRAPPING_TABS.trigger}>
+              {t('catalog.records.tab.data')}
+            </TabsTrigger>
+            <TabsTrigger value="items" className={WRAPPING_TABS.trigger}>
+              {t('catalog.records.tab.items', { count: record.itemCounts.total })}
+            </TabsTrigger>
+            <TabsTrigger value="attachments" className={WRAPPING_TABS.trigger}>
+              {t('catalog.records.tab.attachments')}
+            </TabsTrigger>
+            <TabsTrigger value="marc" className={WRAPPING_TABS.trigger}>
+              {t('catalog.records.tab.marc')}
+            </TabsTrigger>
           </TabsList>
           {/* The form stays mounted while another tab is open: nothing typed is lost. */}
           <TabsContent value="data" forceMount className="data-[state=inactive]:hidden">

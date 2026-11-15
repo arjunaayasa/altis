@@ -1,3 +1,4 @@
+import { DEFAULT_CARD_PROFILE } from '@altis/shared/api/member-ops';
 import type { RoleItem } from '@altis/shared/api/roles';
 import type {
   AccreditationSettingsView,
@@ -24,7 +25,7 @@ afterEach(() => {
 const LIBRARY: LibrarySettings = { name: 'Perpustakaan Arsya', type: 'sekolah', address: null, timezone: 'Asia/Jakarta', locale: 'id' };
 const EMAIL: EmailSettings = {
   senderName: 'Pustaka Arsya',
-  templates: { passwordReset: { id: { subject: null, body: null }, en: { subject: null, body: null } } },
+  templates: { passwordReset: { id: { subject: null, body: null }, en: { subject: null, body: null } }, circulationDueSoon: { id: { subject: null, body: null }, en: { subject: null, body: null } }, circulationOverdue: { id: { subject: null, body: null }, en: { subject: null, body: null } }, circulationHoldReady: { id: { subject: null, body: null }, en: { subject: null, body: null } } },
 };
 const SECURITY: SecuritySettings = { passwordMinLength: 10, sessionIdleMinutes: 30 };
 const OPAC: OpacSettings = {
@@ -89,6 +90,27 @@ function settingsStore() {
     opac: structuredClone(OPAC),
     catalog: structuredClone(CATALOG),
     accreditation: structuredClone(ACCREDITATION),
+    // ---- Komunitas (circulation core) ----
+    circulation: {
+      holds: { enabled: true, opac: true, onlyWhenNoneAvailable: true, pickupDays: 3 },
+      renew: { opac: true },
+      loanVoidMinutes: 10,
+      lost: { useItemPrice: true, processingFeeMinor: 0 },
+      block: { unpaidOverMinor: null, overdue: false },
+      fines: { skipClosedDays: true },
+      receipt: { paperMm: 80, footer: { id: null, en: null } },
+      notices: { dueSoonDays: 2, overdueEveryDays: 7, overdueMax: 3, holdReady: true },
+    },
+    // ---- Komunitas K2: members (clearance and card), visits and privacy ----
+    members: {
+      password: { minLength: 8 },
+      opac: { enabled: true },
+      session: { idleMinutes: 20, absoluteHours: 8 },
+      clearance: { prefix: 'BP', profile: { paper: 'A4', city: '', signerTitle: 'Kepala Perpustakaan', signerName: '', signerId: '', bodyText: '' } },
+      card: { profile: structuredClone(DEFAULT_CARD_PROFILE) },
+    },
+    visits: { dedupeMinutes: 60, fromDesk: true, fromOnline: true, askPurpose: false, station: { showPhoto: false, welcome: { id: null, en: null } } },
+    privacy: { loans: { anonymizeAfterYears: 5 }, visits: { anonymizeAfterYears: 2 }, members: { anonymizeArchivedAfterYears: null } },
   };
   const puts: { group: string; body: unknown }[] = [];
   const routes: Record<string, FakeHandler> = {

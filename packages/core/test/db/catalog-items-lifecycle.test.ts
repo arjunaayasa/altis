@@ -30,10 +30,10 @@ describe.skipIf(!ctx.available)(`items: lifecycle [${engineLabel()}]`, () => {
     await db?.close();
   });
 
-  it('available → lost → 409 ITEM_STATUS_TRANSITION, nothing changed', async () => {
-    const id = await itemIn('available');
-    expect(await failure(setStatus(id, 'lost'))).toMatchObject({ code: 'ITEM_STATUS_TRANSITION', meta: { from: 'available', to: 'lost' } });
-    expect(await itemRow(db, id)).toMatchObject({ status: 'available', version: 0 });
+  it('repair → lost → 409 ITEM_STATUS_TRANSITION, nothing changed', async () => {
+    const id = await itemIn('repair');
+    expect(await failure(setStatus(id, 'lost'))).toMatchObject({ code: 'ITEM_STATUS_TRANSITION', meta: { from: 'repair', to: 'lost' } });
+    expect(await itemRow(db, id)).toMatchObject({ status: 'repair', version: 0 });
     expect(await itemEvents(db, id)).toEqual([]);
   });
 
@@ -59,7 +59,7 @@ describe.skipIf(!ctx.available)(`items: lifecycle [${engineLabel()}]`, () => {
     const table: Record<ItemStatus, readonly ItemStatus[]> = {
       on_order: ['processing', 'available', 'withdrawn'],
       processing: ['available', 'not_for_loan', 'withdrawn'],
-      available: ['not_for_loan', 'repair', 'missing', 'withdrawn'],
+      available: ['not_for_loan', 'repair', 'missing', 'withdrawn', 'lost'],
       not_for_loan: ['available', 'repair', 'missing', 'withdrawn'],
       repair: ['available', 'not_for_loan', 'withdrawn'],
       missing: ['available', 'not_for_loan', 'lost'],

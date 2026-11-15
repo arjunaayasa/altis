@@ -36,4 +36,11 @@ function TabsContent({ className, ...props }: ComponentProps<typeof TabsPrimitiv
   return <TabsPrimitive.Content data-slot="tabs-content" className={cn('flex-1 outline-none', className)} {...props} />;
 }
 
-export { Tabs, TabsContent, TabsList, TabsTrigger };
+/**
+ * The classes of a tab list whose tabs may wrap onto more rows on a narrow screen: the list grows with its rows, and
+ * each tab keeps the height of one row. (A tab's default height is a share of the list's, which overflows the list
+ * once the tabs wrap and covers the panel below, so its lower tabs can no longer be clicked.)
+ */
+const WRAPPING_TABS = Object.freeze({ list: 'h-auto flex-wrap', trigger: 'h-7.5' } as const);
+
+export { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS };

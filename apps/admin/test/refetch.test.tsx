@@ -1,3 +1,4 @@
+import { DEFAULT_CARD_PROFILE } from '@altis/shared/api/member-ops';
 import type { SettingsView } from '@altis/shared/api/settings';
 import type { SystemConfigView } from '@altis/shared/api/system-config';
 import type { QueryKey } from '@tanstack/react-query';
@@ -35,7 +36,7 @@ const REFETCH_FAILED = 'Data terbaru gagal dimuat; yang tampil masih data yang d
 
 const SETTINGS: SettingsView = {
   library: { name: 'Perpustakaan Arsya', type: 'sekolah', address: null, timezone: 'Asia/Jakarta', locale: 'id' },
-  email: { senderName: 'Pustaka Arsya', templates: { passwordReset: { id: { subject: null, body: null }, en: { subject: null, body: null } } } },
+  email: { senderName: 'Pustaka Arsya', templates: { passwordReset: { id: { subject: null, body: null }, en: { subject: null, body: null } }, circulationDueSoon: { id: { subject: null, body: null }, en: { subject: null, body: null } }, circulationOverdue: { id: { subject: null, body: null }, en: { subject: null, body: null } }, circulationHoldReady: { id: { subject: null, body: null }, en: { subject: null, body: null } } } },
   security: { passwordMinLength: 10, sessionIdleMinutes: 30 },
   opac: {
     welcome: { id: 'Halo, pengunjung.', en: null },
@@ -76,6 +77,27 @@ const SETTINGS: SettingsView = {
     visits: { dedupeLegacy: true },
     unknownMemberGroup: { default: 'auto' },
   },
+  // ---- Komunitas (circulation core) ----
+  circulation: {
+      holds: { enabled: true, opac: true, onlyWhenNoneAvailable: true, pickupDays: 3 },
+      renew: { opac: true },
+      loanVoidMinutes: 10,
+      lost: { useItemPrice: true, processingFeeMinor: 0 },
+      block: { unpaidOverMinor: null, overdue: false },
+      fines: { skipClosedDays: true },
+      receipt: { paperMm: 80, footer: { id: null, en: null } },
+      notices: { dueSoonDays: 2, overdueEveryDays: 7, overdueMax: 3, holdReady: true },
+    },
+  // ---- Komunitas K2: members (clearance and card), visits and privacy (their screens have their own tests) ----
+  members: {
+    password: { minLength: 8 },
+    opac: { enabled: true },
+    session: { idleMinutes: 20, absoluteHours: 8 },
+    clearance: { prefix: 'BP', profile: { paper: 'A4', city: '', signerTitle: 'Kepala Perpustakaan', signerName: '', signerId: '', bodyText: '' } },
+    card: { profile: DEFAULT_CARD_PROFILE },
+  },
+  visits: { dedupeMinutes: 60, fromDesk: true, fromOnline: true, askPurpose: false, station: { showPhoto: false, welcome: { id: null, en: null } } },
+  privacy: { loans: { anonymizeAfterYears: 5 }, visits: { anonymizeAfterYears: 2 }, members: { anonymizeArchivedAfterYears: null } },
 };
 
 const SYSTEM: SystemConfigView = {

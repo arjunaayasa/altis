@@ -41,8 +41,19 @@ export function redirect301(c: Context<AppEnv>, location: string): Response {
   return c.redirect(location, 301);
 }
 
-/** The statuses of the OPAC status page (S17). */
-export type OpacStatus = 404 | 410 | 429 | 503;
+/** The statuses of the OPAC status page (S17); the member area adds its refusals (400, 403, 413, 415, 422). */
+export type OpacStatus = 404 | 410 | 429 | 503 | AkunRefusalStatus;
+
+// ---- Komunitas (member area) ----
+/** The refusals of a member-area form that a browser gets as a page (a CSRF or Origin refusal, a broken form). */
+export type AkunRefusalStatus = 400 | 403 | 413 | 415 | 422;
+
+const AKUN_REFUSALS: ReadonlySet<number> = new Set([400, 403, 413, 415, 422]);
+
+/** Whether a failure of `path` with `status` is a member-area refusal answered with the OPAC status page. */
+export function isAkunRefusal(path: string, status: number): status is AkunRefusalStatus {
+  return (path === '/akun' || path.startsWith('/akun/')) && AKUN_REFUSALS.has(status);
+}
 
 /** A `Retry-After` the page keeps: whole seconds (what problem+json sends). */
 const RETRY_AFTER = /^\d{1,10}$/;
@@ -58,6 +69,8 @@ function statusText(locale: Locale, status: OpacStatus): { title: string; body: 
       return { title: opacText(locale, 'shell.status.429.title'), body: opacText(locale, 'shell.status.429.body') };
     case 503:
       return { title: opacText(locale, 'shell.status.503.title'), body: opacText(locale, 'shell.status.503.body') };
+    default:
+      return { title: opacText(locale, 'akun.status.refused.title'), body: opacText(locale, 'akun.status.refused.body') };
   }
 }
 

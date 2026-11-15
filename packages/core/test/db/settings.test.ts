@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
 import { openValue, secretAad, type KeyringEntry } from '../../src/crypto/secret-box.js';
 import { SETTINGS, groupKeys, type SettingKey, type SettingsGroup } from '../../src/settings/registry.js';
+import { DEFAULT_CARD_PROFILE } from '@altis/shared/api/member-ops';
 import { createSettingsCache, readSecret, readSettings, writeSettings } from '../../src/settings/service.js';
 import { loadAccredSettings } from '../../src/settings/accreditation.js';
 import { uploadContext } from '../../src/files/contexts.js';
@@ -171,6 +172,58 @@ const SAMPLE: Record<SettingKey, unknown> = {
   'accreditation.visits.dedupeLegacy': false,
   'accreditation.unknownMemberGroup.default': 'teacher',
   'visits.dedupeMinutes': 30,
+  // ---- Komunitas (holds) ----
+  'circulation.holds.enabled': false,
+  'circulation.holds.opac': false,
+  'circulation.holds.onlyWhenNoneAvailable': false,
+  'circulation.holds.pickupDays': 5,
+  // ---- Komunitas (circulation core) ----
+  'circulation.loanVoidMinutes': 5,
+  'circulation.lost.useItemPrice': false,
+  'circulation.lost.processingFeeMinor': 500_000,
+  'members.clearance.prefix': 'SBP',
+  'members.clearance.profile': { paper: 'A5', city: 'Bandung', signerTitle: 'Kepala Perpustakaan', signerName: 'Contoh', signerId: 'NIP 1', bodyText: '' },
+  // ---- Komunitas K2 (members extended, visits, privacy) ----
+  'members.card.profile': { ...DEFAULT_CARD_PROFILE, qr: false },
+  'visits.fromDesk': false,
+  'visits.fromOnline': false,
+  'visits.askPurpose': true,
+  'visits.station.showPhoto': true,
+  'visits.station.welcome.id': 'Selamat datang',
+  'visits.station.welcome.en': 'Welcome',
+  'privacy.loans.anonymizeAfterYears': 3,
+  'privacy.visits.anonymizeAfterYears': 1,
+  'privacy.members.anonymizeArchivedAfterYears': 10,
+  // ---- Komunitas (member area) ----
+  'members.password.minLength': 10,
+  'members.opac.enabled': false,
+  'members.session.idleMinutes': 30,
+  'members.session.absoluteHours': 4,
+  'circulation.renew.opac': false,
+  // ---- Komunitas (charges and payments) ----
+  'circulation.block.unpaidOverMinor': 1_000_000,
+  'circulation.block.overdue': true,
+  'circulation.fines.skipClosedDays': false,
+  'circulation.receipt.paperMm': 58,
+  'circulation.receipt.footer.id': 'Terima kasih',
+  'circulation.receipt.footer.en': 'Thank you',
+  // ---- Komunitas (notices) ----
+  'circulation.notices.dueSoonDays': 3,
+  'circulation.notices.overdueEveryDays': 5,
+  'circulation.notices.overdueMax': 2,
+  'circulation.notices.holdReady': false,
+  'email.template.circulation_due_soon.id.subject': 'Segera jatuh tempo',
+  'email.template.circulation_due_soon.id.body': 'Halo {name}\n{loans}',
+  'email.template.circulation_due_soon.en.subject': 'Due soon',
+  'email.template.circulation_due_soon.en.body': 'Hello {name}\n{loans}',
+  'email.template.circulation_overdue.id.subject': 'Terlambat',
+  'email.template.circulation_overdue.id.body': 'Halo {name}\n{loans}',
+  'email.template.circulation_overdue.en.subject': 'Overdue',
+  'email.template.circulation_overdue.en.body': 'Hello {name}\n{loans}',
+  'email.template.circulation_hold_ready.id.subject': 'Reservasi siap',
+  'email.template.circulation_hold_ready.id.body': 'Halo {name}\n{title}',
+  'email.template.circulation_hold_ready.en.subject': 'Hold ready',
+  'email.template.circulation_hold_ready.en.body': 'Hello {name}\n{title}',
 };
 
 /** Every key of scope `instance` (machine state of this installation, kept by a restore), in registry order; all are in group `system`. */
@@ -205,7 +258,7 @@ const NON_NULL_1D_DEFAULTS: Partial<Record<SettingKey, unknown>> = {
   'update.channel': 'stable',
 };
 
-const GROUPS: SettingsGroup[] = ['library', 'email', 'security', 'opac', 'smtp', 'system', 'catalog', 'accreditation', 'visits'];
+const GROUPS: SettingsGroup[] = ['library', 'email', 'security', 'opac', 'smtp', 'system', 'catalog', 'accreditation', 'visits', 'circulation', 'members', 'privacy'];
 
 /** The accreditation keys, in registry order: the sixteen of group `accreditation`. */
 const ACCREDITATION_KEYS: readonly SettingKey[] = [
@@ -264,7 +317,7 @@ describe('SETTINGS registry', () => {
       'library.timezone',
       'library.locale',
     ]);
-    expect(groupKeys('email')).toHaveLength(5);
+    expect(groupKeys('email')).toHaveLength(17); // the sender name, the password reset (4) and the three member notices (12)
     expect(groupKeys('security')).toEqual(['security.password_min_length', 'security.session_idle_minutes']);
     expect(groupKeys('opac')).toEqual(['opac.welcome.id', 'opac.welcome.en', 'opac.accent', ...PHASE2_OPAC_KEYS]);
     expect(groupKeys('catalog')).toEqual(CATALOG_KEYS);
@@ -278,7 +331,54 @@ describe('SETTINGS registry', () => {
     ]);
     expect(groupKeys('system')).toEqual(INSTANCE_KEYS);
     expect(groupKeys('accreditation')).toEqual(ACCREDITATION_KEYS);
-    expect(groupKeys('visits')).toEqual(['visits.dedupeMinutes']);
+    expect(groupKeys('visits')).toEqual([
+      'visits.dedupeMinutes',
+      'visits.fromDesk',
+      'visits.fromOnline',
+      'visits.askPurpose',
+      'visits.station.showPhoto',
+      'visits.station.welcome.id',
+      'visits.station.welcome.en',
+    ]);
+    // ---- Komunitas (holds, circulation core) ----
+    expect(groupKeys('circulation')).toEqual([
+      'circulation.holds.enabled',
+      'circulation.holds.opac',
+      'circulation.holds.onlyWhenNoneAvailable',
+      'circulation.holds.pickupDays',
+      'circulation.loanVoidMinutes',
+      'circulation.lost.useItemPrice',
+      'circulation.lost.processingFeeMinor',
+      // ---- Komunitas (member area) ----
+      'circulation.renew.opac',
+      // ---- Komunitas (charges and payments) ----
+      'circulation.block.unpaidOverMinor',
+      'circulation.block.overdue',
+      'circulation.fines.skipClosedDays',
+      'circulation.receipt.paperMm',
+      'circulation.receipt.footer.id',
+      'circulation.receipt.footer.en',
+      // ---- Komunitas (notices) ----
+      'circulation.notices.dueSoonDays',
+      'circulation.notices.overdueEveryDays',
+      'circulation.notices.overdueMax',
+      'circulation.notices.holdReady',
+    ]);
+    expect(groupKeys('members')).toEqual([
+      'members.clearance.prefix',
+      'members.clearance.profile',
+      'members.card.profile',
+      // ---- Komunitas (member area) ----
+      'members.password.minLength',
+      'members.opac.enabled',
+      'members.session.idleMinutes',
+      'members.session.absoluteHours',
+    ]);
+    expect(groupKeys('privacy')).toEqual([
+      'privacy.loans.anonymizeAfterYears',
+      'privacy.visits.anonymizeAfterYears',
+      'privacy.members.anonymizeArchivedAfterYears',
+    ]);
     expect(GROUPS.flatMap((g) => groupKeys(g)).sort()).toEqual(Object.keys(SETTINGS).sort());
     // The group is the key's first segment, but for the instance keys of 1c that read `audit.*` and `realtime.*`: all system.
     for (const key of Object.keys(SETTINGS) as SettingKey[]) {

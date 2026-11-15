@@ -7,6 +7,7 @@ import type { Kysely, Selectable, Transaction, Updateable } from 'kysely';
 import type { z } from 'zod';
 import type { AuditInput, TxCtx } from '../../context.js';
 import { refuseItemOnLoan } from '../../circulation/availability.js';
+import { returnKeptHoldsToQueue } from '../../circulation/holds.js';
 import { publish } from '../../events/publish.js';
 import { indexRecords } from '../../search/index-records.js';
 import { readSettings } from '../../settings/service.js';
@@ -705,6 +706,8 @@ export async function updateItem(tx: TxCtx, branchId: string, id: string, patch:
       .executeTakeFirst(),
   );
   if (Number(updated.numUpdatedRows) !== 1) throw itemStale();
+  // A copy kept on a hold shelf that leaves `available` is no longer kept: its hold goes back to the queue.
+  if (toStatus !== fromStatus && toStatus !== 'available') await returnKeptHoldsToQueue(tx, [id]);
 
   changed.sort();
   const toLocation = set.location_id !== undefined ? (set.location_id as string | null) : before.location_id;
@@ -748,6 +751,7 @@ export async function archiveItem(tx: TxCtx, branchId: string, id: string, versi
     .where('version', '=', version)
     .executeTakeFirst();
   if (Number(updated.numUpdatedRows) !== 1) throw itemStale();
+  await returnKeptHoldsToQueue(tx, [id]);
   await writeItemEvents(tx, [{ itemId: id, type: 'archived', fromStatus: from, toStatus: ARCHIVED_STATUS, fields: from === ARCHIVED_STATUS ? [] : ['status'] }]);
   await afterItemsWrite(tx, [{ id, recordId: before.record_id }], {
     publicRecords: [before.record_id],

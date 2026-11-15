@@ -4,8 +4,20 @@ import { ACCREDITATION_REGISTERS_EN, ACCREDITATION_REGISTERS_ID } from '../accre
 import { ACCREDITATION_USAGE_EN, ACCREDITATION_USAGE_ID } from '../accreditation/usage';
 import { ACCREDITATION_WORKSPACE_EN, ACCREDITATION_WORKSPACE_ID } from '../accreditation/workspace';
 import { REPORTS_EN, REPORTS_ID } from '../reports';
+import { CIRC_CORE_EN, CIRC_CORE_ID } from './circ-core';
 import { CIRCULATION_EN, CIRCULATION_ID } from './circulation';
+// ---- Komunitas (holds) ----
+import { HOLDS_EN, HOLDS_ID } from './holds';
+// ---- Komunitas (member area) ----
+import { MEMBER_AREA_EN, MEMBER_AREA_ID } from './member-area';
+// ---- Komunitas (charges and payments) ----
+import { CHARGES_ADMIN_EN, CHARGES_ADMIN_ID } from './charges';
+// ---- Komunitas (member, visit and circulation reports) ----
+import { CIRC_REPORTS_ADMIN_EN, CIRC_REPORTS_ADMIN_ID } from './circ-reports';
+// ---- Komunitas (notices) ----
+import { NOTICES_ADMIN_EN, NOTICES_ADMIN_ID } from './notices';
 import { MEMBERS_EN, MEMBERS_ID } from './members';
+import { MEMBERS_TOOLS_EN, MEMBERS_TOOLS_ID } from './members-tools';
 import { KOMUNITAS_SETTINGS_EN, KOMUNITAS_SETTINGS_ID } from './settings';
 
 // The admin copy of reports and accreditation, members and circulation: one file per area, each owned by the task that builds its screens,
@@ -65,6 +77,20 @@ export const KOMUNITAS_AREAS_ID = Object.freeze({
   settings: KOMUNITAS_SETTINGS_ID,
   members: MEMBERS_ID,
   circulation: CIRCULATION_ID,
+  // ---- Komunitas (holds) ----
+  holds: HOLDS_ID,
+  // ---- Komunitas (circulation core) ----
+  circCore: CIRC_CORE_ID,
+  // ---- Komunitas K2 (members extended and visits) ----
+  membersTools: MEMBERS_TOOLS_ID,
+  // ---- Komunitas (member area) ----
+  'member-area': MEMBER_AREA_ID,
+  // ---- Komunitas (charges and payments) ----
+  charges: CHARGES_ADMIN_ID,
+  // ---- Komunitas (member, visit and circulation reports) ----
+  circReports: CIRC_REPORTS_ADMIN_ID,
+  // ---- Komunitas (notices) ----
+  notices: NOTICES_ADMIN_ID,
   placeholder: PLACEHOLDER_ID,
 });
 
@@ -79,6 +105,18 @@ export const KOMUNITAS_AREAS_EN: { readonly [A in keyof typeof KOMUNITAS_AREAS_I
   settings: KOMUNITAS_SETTINGS_EN,
   members: MEMBERS_EN,
   circulation: CIRCULATION_EN,
+  holds: HOLDS_EN,
+  // ---- Komunitas (circulation core) ----
+  circCore: CIRC_CORE_EN,
+  // ---- Komunitas K2 (members extended and visits) ----
+  membersTools: MEMBERS_TOOLS_EN,
+  'member-area': MEMBER_AREA_EN,
+  // ---- Komunitas (charges and payments) ----
+  charges: CHARGES_ADMIN_EN,
+  // ---- Komunitas (member, visit and circulation reports) ----
+  circReports: CIRC_REPORTS_ADMIN_EN,
+  // ---- Komunitas (notices) ----
+  notices: NOTICES_ADMIN_EN,
   placeholder: PLACEHOLDER_EN,
 });
 
@@ -93,6 +131,13 @@ export const KOMUNITAS_ID = {
   ...KOMUNITAS_SETTINGS_ID,
   ...MEMBERS_ID,
   ...CIRCULATION_ID,
+  ...HOLDS_ID,
+  ...CIRC_CORE_ID,
+  ...MEMBERS_TOOLS_ID,
+  ...MEMBER_AREA_ID,
+  ...CHARGES_ADMIN_ID,
+  ...CIRC_REPORTS_ADMIN_ID,
+  ...NOTICES_ADMIN_ID,
   ...PLACEHOLDER_ID,
 } as const;
 
@@ -107,5 +152,12 @@ export const KOMUNITAS_EN: Record<keyof typeof KOMUNITAS_ID, string> = {
   ...KOMUNITAS_SETTINGS_EN,
   ...MEMBERS_EN,
   ...CIRCULATION_EN,
+  ...HOLDS_EN,
+  ...CIRC_CORE_EN,
+  ...MEMBERS_TOOLS_EN,
+  ...MEMBER_AREA_EN,
+  ...CHARGES_ADMIN_EN,
+  ...CIRC_REPORTS_ADMIN_EN,
+  ...NOTICES_ADMIN_EN,
   ...PLACEHOLDER_EN,
 };

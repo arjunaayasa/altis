@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { BUCKETS, txCtx, type Actor, type AuditInput, type BucketName, type InstallSession, type TxCtx } from '@altis/core';
+import { BUCKETS, hit, txCtx, type Actor, type AuditInput, type BucketName, type InstallSession, type TxCtx } from '@altis/core';
 import { withTx, type DbHandle } from '@altis/db';
 import {
   DomainError,
@@ -26,10 +26,15 @@ import { applyPersistedIpTrust, countIpLimits } from './client-ip.js';
 import { checkCsrfOrigin, checkOpsCsrfOrigin, checkSideEffectGet } from './csrf.js';
 import { beginIdempotency, finishIdempotency, releaseIdempotency, replayResponse, type IdempotencyClaim } from './idempotency.js';
 import { maintenanceRefusal, refusalResponse } from './maintenance.js';
+// ---- Komunitas (member area) ----
+import { readFormBody, type FormBody } from './form.js';
+import { checkMemberCsrf, memberRedirect, memberSignInRedirect, resolveMemberAuth, type MemberAuthState } from './member-auth.js';
 import { isOverridden } from './method-override.js';
 import { opsCookieOp, opsSessionAllowed, type OpsAuth } from './ops-auth.js';
 import type { AppEnv } from './request-id.js';
 import { validateInput } from './validate.js';
+// ---- Komunitas K2 (visits) ----
+import { checkFormCsrf, readFormBody as readStationFormBody, resolveVisitStation, type VisitStationAuth } from './visit-station.js';
 
 // The route-declaration contract (spec §4.6) and the per-route part of the middleware chain (§4.7, steps 5-13).
 //
@@ -126,6 +131,17 @@ import { validateInput } from './validate.js';
 // handler built itself included. A route that ends in an error keeps only those set before `prepare` and the handler
 // ran (steps 7 and 9: a rotated or cleared `altis_sid`, `X-CSRF-Token`, the test gate): a cookie the handler set for
 // work its rolled-back transaction undid never goes out.
+//
+// ---- Komunitas (member area) ----
+// A route of the OPAC member area is declared `member` (`required` | `optional`) with `public: true` and `session:
+// 'none'`, under `/akun`: step 7 reads no staff cookie for it and resolves the member session of `altis_msid` instead
+// (http/member-auth.ts; `rc.member`, the actor `{type: 'member', id}`); a `form: true` route's HTML form body is read
+// first (http/form.ts: urlencoded, ≤ 16 KB, no field twice), so that step 8 takes the token from its `_csrf` field
+// (or `X-CSRF-Token`): the Origin rule, then the member session's token, or the pre-session token for the sign-in,
+// forgotten-password and set-password forms (PRE_SESSION_FORMS). A `required` route without a signed-in member is a
+// 303 to `/akun/masuk` (a GET carries its own path as `lanjut`), a member who must set a new password reaches only
+// MUST_RESET_ROUTES, and a member's write counts `member_write` per session. Step 11 validates the form's fields
+// (without `_csrf`) with the route's `body` schema.
 
 export type RouteMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -211,6 +227,26 @@ export interface RouteDecl<B = unknown, Q = unknown, P = unknown> {
    * otherwise). See the top of this file for the checks it runs instead of steps 7-9.
    */
   install?: 'page' | 'claim' | 'claimed';
+  // ---- Komunitas K2 (visits) ----
+  /**
+   * A guestbook station's page (`/kunjungan` and below; `public` without a `session`): step 7 never reads the staff
+   * session (`altis_sid`), only the station's own cookie `altis_vs` (rc.visitStation, null without a live station).
+   */
+  visitStation?: true;
+  // ---- Komunitas (member area) ----
+  /**
+   * A route of the OPAC member area (see the top of this file): `required` or `optional` member session. Only with
+   * `public: true`, `session: 'none'` and a path at or under `/akun`; besides, `GET /files/:id` may be `optional` (its
+   * handler reads the member session for an attachment of access `members`).
+   */
+  member?: 'required' | 'optional';
+  /**
+   * An HTML form body (`application/x-www-form-urlencoded`, at most 16 KB), read before step 8, which takes the CSRF
+   * token from the `_csrf` field. On a POST of a `visitStation` route (http/visit-station.ts) or a non-GET `member`
+   * route (http/form.ts); `idempotency: 'none'`, no `rawBody`; the `body` schema validates the fields (`_csrf` is
+   * removed before it).
+   */
+  form?: true;
   /** Strict Zod objects (`z.strictObject`) whose nested objects are strict too, spec §7.4. */
   body?: z.ZodType<B>;
   query?: z.ZodType<Q>;
@@ -286,6 +322,11 @@ export interface RouteContext<B = unknown, Q = unknown, P = unknown> {
   installSession: InstallSession | null;
   /** What `opsAuth` decided for an `opsAuth` route (1c Task 15, http/ops-auth.ts); null on every other route. */
   opsAuth: OpsAuth | null;
+  /** The guestbook station of a `visitStation` route's `altis_vs` cookie (Komunitas K2); null otherwise. */
+  visitStation: VisitStationAuth | null;
+  // ---- Komunitas (member area) ----
+  /** The signed-in member of a `member` route (http/member-auth.ts); null without one, and on every other route. */
+  member: MemberAuthState | null;
 }
 
 /** What mountRoutes runs the routes with. */
@@ -326,6 +367,8 @@ const ENUM_KEYS: Readonly<Record<string, readonly unknown[]>> = {
   idempotency: ['store', 'none'],
   auth: ['cookie', 'bearer'],
   tx: ['handler', 'self'],
+  // ---- Komunitas (member area) ----
+  member: ['required', 'optional'],
 };
 
 /** The parts of a Zod (v4) schema definition the strictness walk reads. */
@@ -393,6 +436,18 @@ function pathParams(path: string): string[] {
 /** `METHOD path` with parameter names erased: `/x/:id` and `/x/:key` are the same route. */
 function routeKey(decl: RouteDecl): string {
   return `${decl.method} ${decl.path.replace(/:[^/]+/g, ':')}`;
+}
+
+// ---- Komunitas (member area) ----
+/** The forms posted before a member is signed in: their CSRF token is the pre-session one of `altis_csrf`. */
+export const PRE_SESSION_FORMS: ReadonlySet<string> = new Set(['/akun/masuk', '/akun/lupa-sandi', '/akun/atur-sandi/:token']);
+
+/** The routes a member who must set a new password may still reach (the password page, signing out). */
+export const MUST_RESET_ROUTES: ReadonlySet<string> = new Set(['akun.password', 'akun.password.change', 'akun.logout']);
+
+/** A route of the OPAC member area: `member` with `session: 'none'` (not `GET /files/:id`, which reads it itself). */
+export function isMemberRoute(d: RouteDecl): boolean {
+  return d.member !== undefined && d.session === 'none';
 }
 
 // ---- Phase 2 (catalog): Task 2 ----
@@ -493,9 +548,32 @@ function declProblem(d: RouteDecl): string | null {
     const wizardPath = d.install === 'page' ? d.path === '/install' && d.method === 'GET' : d.path.startsWith('/install/api/');
     if (!wizardPath) return 'install_decl_invalid';
   }
+  // ---- Komunitas K2 (visits) ----
+  if (raw['visitStation'] !== undefined) {
+    const underStation = d.path === '/kunjungan' || d.path.startsWith('/kunjungan/');
+    if (raw['visitStation'] !== true || d.public !== true || d.session !== undefined || !underStation || (d.auth ?? 'cookie') !== 'cookie') {
+      return 'visit_station_invalid';
+    }
+  }
+  // ---- Komunitas (member area) ----
+  if (raw['member'] !== undefined) {
+    const filesRoute = d.method === 'GET' && d.path === '/files/:id' && d.member === 'optional' && d.public === true;
+    const akunPath = d.path === '/akun' || d.path.startsWith('/akun/');
+    if (!filesRoute && (d.public !== true || d.session !== 'none' || !akunPath)) return 'member_decl_invalid';
+  }
+  if (raw['form'] !== undefined) {
+    if (d.visitStation === true) {
+      if (raw['form'] !== true || d.method !== 'POST' || d.body === undefined || raw['rawBody'] !== undefined || d.idempotency !== 'none') {
+        return 'form_invalid';
+      }
+    } else {
+      if (raw['form'] !== true) return 'invalid_value';
+      if (d.method === 'GET' || !isMemberRoute(d) || d.idempotency !== 'none' || raw['rawBody'] !== undefined) return 'form_decl_invalid';
+    }
+  }
   // Phase 2 (catalog): Task 2 — a cookieless read-only route is the one non-GET `session: 'none'` route outside the
-  // wizard (isCookielessRead).
-  const writesWithoutSession = d.method !== 'GET' && d.install === undefined && !isCookielessRead(d);
+  // wizard (isCookielessRead); Komunitas (member area): a member route reads the member session instead.
+  const writesWithoutSession = d.method !== 'GET' && d.install === undefined && !isCookielessRead(d) && !isMemberRoute(d);
   if (d.session === 'none' && (d.partialAuth === true || d.reauth === true || d.idempotency === 'store' || writesWithoutSession)) {
     return 'session_none_conflict';
   }
@@ -544,6 +622,10 @@ function declProblem(d: RouteDecl): string | null {
  *
  *   Phase 2 (Task 2): a non-GET `session: 'none'` route outside the wizard is valid only as a cookieless read-only
  *   route (isCookielessRead); any other stays `session_none_conflict`.
+ *
+ *   Komunitas (member area): `member_decl_invalid` (`member` on a route that is not public with `session: 'none'` under
+ *   `/akun`, other than an `optional` GET /files/:id); `form_decl_invalid` (`form` on a GET route, without `member`,
+ *   with `idempotency: 'store'` or a `rawBody`); a member route may be a non-GET `session: 'none'` route.
  */
 export function defineRoutes(decls: RouteDecl[]): RouteDecl[] {
   const ids = new Set<string>();
@@ -750,7 +832,8 @@ async function runRoute(decl: RouteDecl, c: Context<AppEnv>, o: MountOptions, lo
   // Step 3's persisted part: `system.ip_trust`, a database read that `session: 'none'` routes never make (S29), nor
   // any route during a restore (S2: its tables may be gone; the request then keeps the trust step 3 derived).
   const restoring = fence?.restoreInProgress() === true;
-  if (!restoring && (decl.session !== 'none' || decl.ipLimits !== undefined)) {
+  const memberRoute = isMemberRoute(decl); // Komunitas (member area)
+  if (!restoring && (decl.session !== 'none' || decl.ipLimits !== undefined || memberRoute)) {
     await applyPersistedIpTrust(c, services.settings, state.db);
   }
   await countIpLimits(state.db, decl.ipLimits ?? [], ip, c.get('ipTrust'), now); // step 6
@@ -760,7 +843,10 @@ async function runRoute(decl: RouteDecl, c: Context<AppEnv>, o: MountOptions, lo
   // point of no return, in `ops_wait`, or (1d review C16) in `updating` without a database or while an op moves the
   // schema reads no session (S3, B4; http/ops-auth.ts opsSessionAllowed).
   const sessionStep =
-    decl.session !== 'none' && cookieAuth && (opsGate === undefined || opsSessionAllowed({ ...opsGate, db: state.db }));
+    decl.session !== 'none' &&
+    decl.visitStation !== true && // Komunitas K2: a station page never reads the staff session
+    cookieAuth &&
+    (opsGate === undefined || opsSessionAllowed({ ...opsGate, db: state.db }));
   const noSession: ResolvedAuth = { auth: null, csrfSessionId: null };
   const readSession = (): Promise<ResolvedAuth> =>
     resolveAuth(c, {
@@ -793,10 +879,41 @@ async function runRoute(decl: RouteDecl, c: Context<AppEnv>, o: MountOptions, lo
     decl.install === undefined
       ? null
       : await checkInstallRoute(c, decl.install, { install: services.install, now, sideEffects: decl.sideEffects === true });
+  // ---- Komunitas K2 (visits) ----
+  // A station page's own cookie (in place of step 7's session), and a form body read before step 8 (its `_csrf`).
+  const visitStation = decl.visitStation === true ? await resolveVisitStation(c, state.db) : null;
+  const stationForm = decl.form === true && decl.visitStation === true ? await readStationFormBody(c) : null;
+  // ---- Komunitas (member area): the member session, the form body, step 8 and the member's gate ----
+  const member: MemberAuthState | null = memberRoute
+    ? await resolveMemberAuth(c, { db: state.db, services, now, touch: decl.method !== 'GET' || c.req.method !== 'HEAD' })
+    : null;
+  const form: FormBody | null = decl.form === true && memberRoute ? await readFormBody(c) : null;
+  if (memberRoute) {
+    const preSession = decl.form === true && PRE_SESSION_FORMS.has(decl.path);
+    if (decl.method !== 'GET') {
+      if (decl.member === 'required' && member === null) {
+        checkMemberCsrf(c, { sessionId: null, preSession: false, formToken: undefined, originOnly: true });
+        return { result: memberSignInRedirect(c, '/akun'), hooks: [] };
+      }
+      checkMemberCsrf(c, { sessionId: member?.session.id ?? null, preSession, formToken: form?.csrf });
+    } else if (decl.member === 'required' && member === null) {
+      const url = new URL(c.req.url);
+      return { result: memberSignInRedirect(c, `${url.pathname}${url.search}`), hooks: [] };
+    }
+    if (member !== null && member.mustResetPassword && decl.member === 'required' && !MUST_RESET_ROUTES.has(decl.id)) {
+      return { result: memberRedirect(c, '/akun/sandi'), hooks: [] };
+    }
+    if (member !== null && decl.method !== 'GET' && decl.member === 'required') {
+      const h = await withTx(state.db!, (trx) => hit(trx, 'member_write', member.session.id, now));
+      if (!h.allowed) throw new DomainError('AUTH_TOO_MANY_ATTEMPTS', { meta: { retryAfterS: h.retryAfterS } });
+    }
+  }
   // Step 8; Bearer routes are exempt (§7.4), a wizard route was checked just above, and a cookieless read-only route
-  // (Phase 2, Task 2: OAI-PMH's POST) reads no cookie and changes nothing.
-  const step8 = cookieAuth && decl.install === undefined && !isCookielessRead(decl);
-  if (step8 && decl.method !== 'GET' && opsGate !== undefined) {
+  // (Phase 2, Task 2: OAI-PMH's POST) reads no cookie and changes nothing; a member route was checked just above.
+  const step8 = cookieAuth && decl.install === undefined && !isCookielessRead(decl) && !memberRoute;
+  if (step8 && stationForm !== null) {
+    checkFormCsrf(c, stationForm.csrf, visitStation);
+  } else if (step8 && decl.method !== 'GET' && opsGate !== undefined) {
     checkOpsCsrfOrigin(c, resolved.csrfSessionId, await opsCookieOp(c, opsGate.ops)); // 1c Task 15
   } else if (step8 && decl.method !== 'GET') {
     checkCsrfOrigin(c, resolved.csrfSessionId);
@@ -812,7 +929,12 @@ async function runRoute(decl: RouteDecl, c: Context<AppEnv>, o: MountOptions, lo
 
   // The request context exists from step 10 on (the edition gate receives it); the validated input joins it at step 11.
   const owner = {};
-  const actor: Actor = auth === null ? { type: 'anonymous', id: null, ip } : { type: 'staff', id: auth.subjectId, ip };
+  const actor: Actor =
+    auth !== null
+      ? { type: 'staff', id: auth.subjectId, ip }
+      : member !== null
+        ? { type: 'member', id: member.memberId, ip }
+        : { type: 'anonymous', id: null, ip };
   const committed = { declared: 0, foreign: 0 };
   const responseHooks: RouteHook[] = [];
   const handlerTx = decl.method !== 'GET' && (decl.tx ?? 'handler') === 'handler';
@@ -933,10 +1055,13 @@ async function runRoute(decl: RouteDecl, c: Context<AppEnv>, o: MountOptions, lo
     c,
     installSession,
     opsAuth,
+    visitStation,
+    member,
   };
 
   await rc.services.editionGate(rc, decl); // step 10 (ruling R2): before anything reads the body
-  const input = await validateInput(c, decl); // step 11
+  const formFields = stationForm?.fields ?? form?.fields;
+  const input = await validateInput(c, decl, formFields === undefined ? undefined : { body: formFields }); // step 11
   rc.body = input.body;
   rc.query = input.query;
   rc.params = input.params;

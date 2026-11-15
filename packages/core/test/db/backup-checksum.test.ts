@@ -10,6 +10,16 @@ import { catalogSampleRows, type CatalogTable } from '../../../db/test/fixtures/
 import { k1SampleRows, type K1Table } from '../../../db/test/fixtures/komunitas-k1-tables.js';
 // ---- Komunitas (members and circulation) ----
 import { circulationSampleRows, type CirculationTable } from '../../../db/test/fixtures/komunitas-members-circulation-tables.js';
+// ---- Komunitas (holds) ----
+import { holdsSampleRows } from '../../../db/test/fixtures/komunitas-holds-tables.js';
+// ---- Komunitas (circulation core) ----
+import { circCoreSampleRows, type CircCoreTable } from '../../../db/test/fixtures/komunitas-circ-core-tables.js';
+// ---- Komunitas K2 (visits) ----
+import { visitsSampleRows, type VisitsTableName } from '../../../db/test/fixtures/komunitas-visits-tables.js';
+// ---- Komunitas (charges and payments) ----
+import { chargesSampleRows } from '../../../db/test/fixtures/komunitas-charges-tables.js';
+// ---- Komunitas (notices) ----
+import { noticesSampleRows } from '../../../db/test/fixtures/komunitas-notices-tables.js';
 import { backupTables, tableChecksumFromDb } from '../../src/backup/canonical.js';
 import { createExporter, type ExportCheckpoint } from '../../src/backup/exporter.js';
 import { readManifest, type BackupManifest } from '../../src/backup/manifest.js';
@@ -70,6 +80,18 @@ function k1Rows(): ReturnType<typeof k1SampleRows> {
 function circulationRows(): ReturnType<typeof circulationSampleRows> {
   let n = 0;
   return circulationSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JS${String((n += 1)).padStart(22, '0')}` });
+}
+
+/** The holds sample rows with ids numbered from another fixed prefix. */
+function holdRows(): ReturnType<typeof holdsSampleRows> {
+  let n = 0;
+  return holdsSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JT${String((n += 1)).padStart(22, '0')}` });
+}
+
+/** The visits sample rows with ids numbered from another fixed prefix. */
+function visitsRows(): ReturnType<typeof visitsSampleRows> {
+  let n = 0;
+  return visitsSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JV${String((n += 1)).padStart(22, '0')}` });
 }
 
 /** The same rows, written through Kysely, on any dialect. */
@@ -212,6 +234,36 @@ async function seed(db: Kysely<DB>): Promise<void> {
   for (const t of tableLoadOrder(circulationTables).order as CirculationTable[]) {
     await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(circulation[t]).execute();
   }
+  // ---- Komunitas (holds) ----
+  await db.insertInto('holds').values(holdRows().holds).execute();
+  // ---- Komunitas (circulation core): the calendar, items read in place, clearance letters ----
+  const circCore = circCoreRows();
+  for (const t of Object.keys(circCore) as CircCoreTable[]) {
+    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(circCore[t]).execute();
+  }
+  // ---- Komunitas K2 (visits) ----
+  const visits = visitsRows();
+  for (const t of Object.keys(visits) as VisitsTableName[]) {
+    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(visits[t]).execute();
+  }
+  // ---- Komunitas (member area): a bookmark of a sample member, a type list of a sample attachment ----
+  await db.insertInto('member_bookmarks').values({ member_id: circulation.members[0]!.id, record_id: '01JU0000000000000000000001', created_at: 1767225600000 }).execute();
+  await db.insertInto('attachment_member_types').values({ attachment_id: rows.attachments[0]!.id, member_type_id: '01JU0000000000000000000002' }).execute();
+  // ---- Komunitas (charges and payments): parents first ----
+  let c = 0;
+  const charges = chargesSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JW${String((c += 1)).padStart(22, '0')}` });
+  for (const t of ['charges', 'charge_adjustments', 'payments', 'payment_allocations'] as const) {
+    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(charges[t]).execute();
+  }
+  // ---- Komunitas (notices): no foreign key, fixed ids ----
+  let nn = 0;
+  await db.insertInto('notices').values(noticesSampleRows({ newId: () => `01JX${String((nn += 1)).padStart(22, '0')}` }).notices).execute();
+}
+
+/** The circulation core sample rows with ids numbered from another fixed prefix. */
+function circCoreRows(): ReturnType<typeof circCoreSampleRows> {
+  let n = 0;
+  return circCoreSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JU${String((n += 1)).padStart(22, '0')}` });
 }
 
 /** Runs a whole export of `h` into `dataDir` and returns its manifest. */

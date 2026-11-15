@@ -1,8 +1,18 @@
 import { MATRIX as Catalog } from './komunitas-catalog.js';
+import { MATRIX as Charges } from './komunitas-charges.js';
+import { MATRIX as CircCore } from './komunitas-circ-core.js';
 import { MATRIX as Circulation } from './komunitas-circulation.js';
+// ---- Komunitas (member, visit and circulation reports) ----
+import { MATRIX as CircReports } from './komunitas-circ-reports.js';
 import { MATRIX as Documents } from './komunitas-documents.js';
 import { MATRIX as Evidence } from './komunitas-evidence.js';
+import { MATRIX as Holds } from './komunitas-holds.js';
+// ---- Komunitas (member area) ----
+import { MATRIX as MemberArea } from './komunitas-member-area.js';
 import { MATRIX as Members } from './komunitas-members.js';
+// ---- Komunitas (notices) ----
+import { MATRIX as Notices } from './komunitas-notices.js';
+import { MATRIX as MembersExt } from './komunitas-members-ext.js';
 import { MATRIX as Periods } from './komunitas-periods.js';
 import { MATRIX as Registers } from './komunitas-registers.js';
 import { MATRIX as Reports } from './komunitas-reports.js';
@@ -34,6 +44,20 @@ const AREAS: Readonly<Record<string, AreaMatrix>> = Object.freeze({
   // ---- Komunitas (members and circulation) ----
   members: Members,
   circulation: Circulation,
+  // ---- Komunitas (holds) ----
+  holds: Holds,
+  // ---- Komunitas (circulation core) ----
+  'circ-core': CircCore,
+  // ---- Komunitas K2 (members extended and visits) ----
+  'members-ext': MembersExt,
+  // ---- Komunitas (member area) ----
+  'member-area': MemberArea,
+  // ---- Komunitas (charges and payments) ----
+  charges: Charges,
+  // ---- Komunitas (member, visit and circulation reports) ----
+  'circ-reports': CircReports,
+  // ---- Komunitas (notices) ----
+  notices: Notices,
 });
 
 /** Every community area, merged. */

@@ -13,6 +13,12 @@ import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { MasterTable, type MasterColumn } from '@/screens/catalog/masters/master-table';
 import { useCalendarDate, useMemberTypes, useTypeName } from './common';
+// ---- Komunitas (charges and payments) ----
+import { useMoney } from './charges';
+// ---- Komunitas (member, visit and circulation reports) ----
+import { ReportLinks } from '@/screens/reports/report-links';
+// ---- Komunitas (notices) ----
+import { SendRemindersButton } from './notices';
 
 /**
  * Terlambat & Jatuh Tempo (`/admin/layanan/terlambat`): the open loans past their due date, the longest-overdue first
@@ -45,6 +51,7 @@ export function OverdueScreen() {
   const t = useT();
   const me = useMe();
   const day = useCalendarDate();
+  const money = useMoney();
   const typeName = useTypeName();
   const ids = useId();
   const types = useMemberTypes(true);
@@ -119,7 +126,14 @@ export function OverdueScreen() {
     {
       id: 'late',
       header: t('circulation.col.late'),
-      cell: (row) => <Badge tone={row.daysLate > LATE_RED_AFTER_DAYS ? 'danger' : 'warning'}>{t('circulation.due.late', { count: row.daysLate })}</Badge>,
+      cell: (row) => (
+        <div className="grid gap-1">
+          <Badge tone={row.daysLate > LATE_RED_AFTER_DAYS ? 'danger' : 'warning'}>{t('circulation.due.late', { count: row.daysLate })}</Badge>
+          {row.finePreview !== null && (
+            <span className="text-xs text-destructive">{t('charges.fine_preview', { amount: money(row.finePreview.amount, row.finePreview.currency), days: row.finePreview.days })}</span>
+          )}
+        </div>
+      ),
     },
     ...(canServe
       ? [
@@ -128,9 +142,13 @@ export function OverdueScreen() {
             header: t('table.actions'),
             cell: (row: LoanListItem) =>
               row.member === null ? null : (
-                <Button asChild size="sm" variant="outline">
-                  <Link to={`/admin/layanan?member=${encodeURIComponent(row.member.id)}`}>{t('circulation.overdue.serve')}</Link>
-                </Button>
+                <div className="flex flex-wrap items-start gap-2">
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={`/admin/layanan?member=${encodeURIComponent(row.member.id)}`}>{t('circulation.overdue.serve')}</Link>
+                  </Button>
+                  {/* ---- Komunitas (notices) ---- */}
+                  <SendRemindersButton loans={[{ branchId: row.branchId, memberId: row.member.id }]} label="notices.send.overdue" />
+                </div>
               ),
           },
         ]
@@ -140,6 +158,7 @@ export function OverdueScreen() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold">{t('nav.circulation.overdue')}</h1>
+      <ReportLinks reports={[{ id: 'circulation.overdue', permission: 'circulation.records.read' }, { id: 'circulation.due_soon', permission: 'circulation.records.read' }]} />
       <form noValidate onSubmit={apply} className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-4" aria-label={t('circulation.overdue.filters')}>
         <Field id={`${ids}-type`} label={t('circulation.overdue.type')}>
           <select id={`${ids}-type`} className={SELECT_CLASS} value={draft.memberTypeId} onChange={(e) => setDraft({ ...draft, memberTypeId: e.target.value })}>
@@ -200,6 +219,8 @@ export function OverdueScreen() {
               {t(list.hasNextPage ? 'circulation.overdue.summary_loaded' : 'circulation.overdue.summary', { loans: rows.length, members, days: longest })}
             </p>
           )}
+          {/* ---- Komunitas (notices): an overdue reminder for every member shown ---- */}
+          {rows.length > 0 && <SendRemindersButton loans={rows.map((r) => ({ branchId: r.branchId, memberId: r.member?.id ?? null }))} label="notices.send.overdue_all" />}
           <MasterTable
             caption={t('circulation.overdue.caption')}
             columns={columns}

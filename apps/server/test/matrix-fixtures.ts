@@ -34,6 +34,8 @@ import type { AppEnv } from '../src/app.js';
 import { loadConfig, type Config } from '../src/config.js';
 import { cookieName, isSecureBase } from '../src/http/cookies.js';
 import { csrfKey, opsCsrfToken, preSessionCsrfToken } from '../src/http/csrf.js';
+// ---- Komunitas (member area) ----
+import { memberCsrfToken } from '../src/http/member-auth.js';
 import type { RouteDecl } from '../src/http/route.js';
 import { createAgent, type AgentReply } from './agent.js';
 import { CATALOG_MATRIX } from './matrix/catalog.js';
@@ -504,6 +506,12 @@ export interface MatrixCall {
   headers?: Record<string, string>;
   /** The permission of the kind of the op the fixture made current: what expected() then asks of a session. */
   op?: Permission;
+  // ---- Komunitas (member area) ----
+  /**
+   * A member-area call: the member session to send (`altis_msid` and its CSRF token), or `pre` for a pre-session form
+   * (an `altis_csrf` cookie and its token); sendCall makes the tokens with the app's config.
+   */
+  member?: { token: string; sessionId: string } | 'pre';
 }
 
 export type MatrixFixture = (seed: MatrixSeed) => Promise<MatrixCall>;
@@ -646,6 +654,9 @@ export const MATRIX_FIXTURES: Record<string, MatrixFixture> = {
   'catalog.config': none,
   // ---- Komunitas K1 (settings) ----
   'settings.accreditation.put': async () => ({ body: {} }),
+  // ---- Komunitas (circulation core) ----
+  'settings.circulation.put': async () => ({ body: {} }),
+  'settings.members.put': async () => ({ body: {} }),
   'system.config.get': none,
   'system.config.put': async () => ({ body: {} }),
   'system.config.email_test': async () => ({ body: { to: 'uji@example.test' } }),
@@ -1071,6 +1082,15 @@ export async function sendCall(
   if (o.ops !== undefined && o.ops !== null) {
     agent.setCookie(cookieName('altis_ops', secure), o.ops.token);
     if (o.token === null && decl.opsAuth === true) csrf = opsCsrfToken(csrfKey(config), o.ops.opId);
+  }
+  // ---- Komunitas (member area): the member side's cookie and token ----
+  if (call.member === 'pre') {
+    const value = randomToken(32);
+    agent.setCookie(cookieName('altis_csrf', secure), value);
+    csrf = preSessionCsrfToken(csrfKey(config), value);
+  } else if (call.member !== undefined) {
+    agent.setCookie(cookieName('altis_msid', secure), call.member.token);
+    csrf = memberCsrfToken(csrfKey(config), call.member.sessionId);
   }
   const url = routeUrl(decl, call);
   const headers = { 'x-csrf-token': csrf, ...call.headers };

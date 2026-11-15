@@ -14,6 +14,8 @@ import { problemText } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
 import { MasterTable, type MasterColumn } from '@/screens/catalog/masters/master-table';
 import { MemberStatusBadge, useCalendarDate, useMemberTypes, useTypeName } from '@/screens/circulation/common';
+// ---- Komunitas K2 (members extended) ----
+import { BulkBar } from './bulk';
 
 /**
  * Daftar Anggota (`/admin/anggota`): search by member number, name, identity number or e-mail, filter by type, class and
@@ -65,6 +67,17 @@ export function MembersListScreen() {
     enabled: me !== undefined,
   });
   const rows = list.data?.pages.flatMap((p) => p.items) ?? [];
+  // ---- Komunitas K2 (members extended): the selection of the bulk bar ----
+  const [selection, setSelection] = useState<Map<string, MemberListItem>>(new Map());
+  const toggle = (r: MemberListItem): void =>
+    setSelection((prev) => {
+      const next = new Map(prev);
+      if (next.has(r.id)) next.delete(r.id);
+      else next.set(r.id, r);
+      return next;
+    });
+  const allSelected = rows.length > 0 && rows.every((r) => selection.has(r.id));
+  const toggleAll = (): void => setSelection(allSelected ? new Map() : new Map(rows.map((r) => [r.id, r])));
   const filtered = filters.q.trim() !== '' || filters.typeId !== '' || filters.status !== '' || filters.className.trim() !== '';
 
   const apply = (event: FormEvent<HTMLFormElement>): void => {
@@ -77,6 +90,21 @@ export function MembersListScreen() {
   };
 
   const columns: MasterColumn<MemberListItem>[] = [
+    {
+      id: 'select',
+      header: (
+        <input type="checkbox" className="size-4 accent-primary" aria-label={t('members.tools.select_all')} checked={allSelected} onChange={toggleAll} />
+      ),
+      cell: (r) => (
+        <input
+          type="checkbox"
+          className="size-4 accent-primary"
+          aria-label={t('members.tools.select_one', { name: r.name })}
+          checked={selection.has(r.id)}
+          onChange={() => toggle(r)}
+        />
+      ),
+    },
     {
       id: 'no',
       header: t('members.col.member_no'),
@@ -116,6 +144,12 @@ export function MembersListScreen() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold">{t('members.title')}</h1>
         <div className="flex flex-wrap gap-2">
+          {/* ---- Komunitas K2 (members extended): the member list report, which exports it (personal data) ---- */}
+          {holds(me, 'members.export.run') && (
+            <Button asChild variant="outline">
+              <Link to={`/admin/reports/${encodeURIComponent('members.list')}`}>{t('members.tools.export')}</Link>
+            </Button>
+          )}
           {canImport && (
             <Button asChild variant="outline">
               <Link to="/admin/anggota/impor">
@@ -211,6 +245,7 @@ export function MembersListScreen() {
         </div>
       ) : (
         <>
+          {(canManage || selection.size > 0) && <BulkBar selected={[...selection.values()]} canManage={canManage} onClear={() => setSelection(new Map())} />}
           <MasterTable caption={t('members.caption')} columns={columns} rows={rows} empty={t('members.empty_filtered')} />
           {list.hasNextPage && (
             <Button variant="outline" className="w-fit" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>

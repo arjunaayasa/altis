@@ -1,14 +1,19 @@
-import { groupKeys, readSettings, writeSettings, type SettingKey } from '@altis/core';
+import { claimSettingsFiles, groupKeys, readSettings, writeSettings, type SettingKey, type TxCtx } from '@altis/core';
 import { DomainError, isDomainError } from '@altis/shared';
 import {
   AccreditationSettingsBody,
   CatalogSettingsBody,
+  CirculationSettingsBody,
   EmailSettingsBody,
   LibrarySettingsBody,
+  MembersSettingsBody,
   OpacSettingsBody,
+  PrivacySettingsBody,
   SETTINGS_GROUPS,
+  VisitsSettingsBody,
   SecuritySettingsBody,
   type BarcodePattern,
+  type CardProfileForSettings as CardProfile,
   type BarcodeSymbology,
   type CatalogConfigView,
   type LabelProfile,
@@ -42,6 +47,10 @@ import { SYSTEM_CONFIG_ROUTES } from './system-config.js';
 
 const SETTINGS_PATH = '/api/v1/settings';
 
+// ---- Komunitas (notices) ----
+/** The body name of each member notice's template in `PUT settings/email`. */
+const NOTICE_TEMPLATE_NAMES = { circulation_due_soon: 'circulationDueSoon', circulation_overdue: 'circulationOverdue', circulation_hold_ready: 'circulationHoldReady' } as const;
+
 /** Where each setting of a group sits in its body and its view: the path of property names, and the setting. */
 type FieldMap = readonly (readonly [path: readonly string[], key: SettingKey])[];
 
@@ -59,6 +68,14 @@ const FIELDS: Readonly<Record<SettingsGroupName, FieldMap>> = Object.freeze({
     [['templates', 'passwordReset', 'id', 'body'], 'email.template.password_reset.id.body'],
     [['templates', 'passwordReset', 'en', 'subject'], 'email.template.password_reset.en.subject'],
     [['templates', 'passwordReset', 'en', 'body'], 'email.template.password_reset.en.body'],
+    // ---- Komunitas (notices) ----
+    ...(['circulation_due_soon', 'circulation_overdue', 'circulation_hold_ready'] as const).flatMap((kind) =>
+      (['id', 'en'] as const).flatMap((locale) =>
+        (['subject', 'body'] as const).map(
+          (part) => [['templates', NOTICE_TEMPLATE_NAMES[kind], locale, part], `email.template.${kind}.${locale}.${part}`] as const,
+        ),
+      ),
+    ),
   ],
   security: [
     [['passwordMinLength'], 'security.password_min_length'],
@@ -109,6 +126,58 @@ const FIELDS: Readonly<Record<SettingsGroupName, FieldMap>> = Object.freeze({
     [['undatedShareMaxPct'], 'accreditation.undatedShareMaxPct'],
     [['visits', 'dedupeLegacy'], 'accreditation.visits.dedupeLegacy'],
     [['unknownMemberGroup', 'default'], 'accreditation.unknownMemberGroup.default'],
+  ],
+  // ---- Komunitas (circulation core) ----
+  circulation: [
+    // ---- Komunitas (holds) ----
+    [['holds', 'enabled'], 'circulation.holds.enabled'],
+    [['holds', 'opac'], 'circulation.holds.opac'],
+    [['holds', 'onlyWhenNoneAvailable'], 'circulation.holds.onlyWhenNoneAvailable'],
+    [['holds', 'pickupDays'], 'circulation.holds.pickupDays'],
+    // ---- Komunitas (circulation core) ----
+    [['loanVoidMinutes'], 'circulation.loanVoidMinutes'],
+    [['lost', 'useItemPrice'], 'circulation.lost.useItemPrice'],
+    [['lost', 'processingFeeMinor'], 'circulation.lost.processingFeeMinor'],
+    // ---- Komunitas (member area) ----
+    [['renew', 'opac'], 'circulation.renew.opac'],
+    // ---- Komunitas (charges and payments) ----
+    [['block', 'unpaidOverMinor'], 'circulation.block.unpaidOverMinor'],
+    [['block', 'overdue'], 'circulation.block.overdue'],
+    [['fines', 'skipClosedDays'], 'circulation.fines.skipClosedDays'],
+    [['receipt', 'paperMm'], 'circulation.receipt.paperMm'],
+    [['receipt', 'footer', 'id'], 'circulation.receipt.footer.id'],
+    [['receipt', 'footer', 'en'], 'circulation.receipt.footer.en'],
+    // ---- Komunitas (notices) ----
+    [['notices', 'dueSoonDays'], 'circulation.notices.dueSoonDays'],
+    [['notices', 'overdueEveryDays'], 'circulation.notices.overdueEveryDays'],
+    [['notices', 'overdueMax'], 'circulation.notices.overdueMax'],
+    [['notices', 'holdReady'], 'circulation.notices.holdReady'],
+  ],
+  members: [
+    [['clearance', 'prefix'], 'members.clearance.prefix'],
+    [['clearance', 'profile'], 'members.clearance.profile'],
+    // ---- Komunitas K2 (members extended) ----
+    [['card', 'profile'], 'members.card.profile'],
+    // ---- Komunitas (member area) ----
+    [['password', 'minLength'], 'members.password.minLength'],
+    [['opac', 'enabled'], 'members.opac.enabled'],
+    [['session', 'idleMinutes'], 'members.session.idleMinutes'],
+    [['session', 'absoluteHours'], 'members.session.absoluteHours'],
+  ],
+  // ---- Komunitas K2 (members extended, visits, privacy) ----
+  visits: [
+    [['dedupeMinutes'], 'visits.dedupeMinutes'],
+    [['fromDesk'], 'visits.fromDesk'],
+    [['fromOnline'], 'visits.fromOnline'],
+    [['askPurpose'], 'visits.askPurpose'],
+    [['station', 'showPhoto'], 'visits.station.showPhoto'],
+    [['station', 'welcome', 'id'], 'visits.station.welcome.id'],
+    [['station', 'welcome', 'en'], 'visits.station.welcome.en'],
+  ],
+  privacy: [
+    [['loans', 'anonymizeAfterYears'], 'privacy.loans.anonymizeAfterYears'],
+    [['visits', 'anonymizeAfterYears'], 'privacy.visits.anonymizeAfterYears'],
+    [['members', 'anonymizeArchivedAfterYears'], 'privacy.members.anonymizeArchivedAfterYears'],
   ],
 });
 
@@ -212,7 +281,11 @@ async function changesAny(rc: RouteContext<unknown, unknown, unknown>, patch: Pa
  * handler never writes those keys for such a caller, so a super admin's change committed between `prepare` and the
  * handler is never undone by it.
  */
-function settingsPut<B>(group: SettingsGroupName, body: z.ZodType<B>, o: { reauth?: true; superAdminOnly?: SuperAdminOnly } = {}): RouteDecl {
+function settingsPut<B>(
+  group: SettingsGroupName,
+  body: z.ZodType<B>,
+  o: { reauth?: true; superAdminOnly?: SuperAdminOnly; afterWrite?: (tx: TxCtx, patch: Partial<Record<SettingKey, unknown>>) => Promise<void> } = {},
+): RouteDecl {
   const fields = FIELDS[group];
   const guarded = o.superAdminOnly ?? [];
   return route({
@@ -248,6 +321,7 @@ function settingsPut<B>(group: SettingsGroupName, body: z.ZodType<B>, o: { reaut
       } catch (error) {
         throw inBodyTerms(error, fields);
       }
+      if (o.afterWrite !== undefined) await o.afterWrite(tx, patch);
       await tx.audit({ action: 'settings.update', entity: 'settings', entityId: null, meta: { group, keys } });
       rc.afterCommit(() => rc.services.settings.invalidate());
       const response: SettingsPutResponse = { changed: keys };
@@ -302,6 +376,18 @@ const catalogConfig = route({
   },
 });
 
+// ---- Komunitas K2 (members extended) ----
+/**
+ * Claims the card pictures (logo, signature, stamp) the saved card profile names, as files of the setting; the ones it
+ * no longer names lose their owner and are swept as orphan uploads a day later.
+ */
+async function claimCardAssets(tx: TxCtx, patch: Partial<Record<SettingKey, unknown>>): Promise<void> {
+  const profile = patch['members.card.profile'] as CardProfile | undefined;
+  if (profile === undefined) return;
+  const ids = [profile.logoFileId, profile.back.signatureFileId, profile.back.stampFileId].filter((id): id is string => id !== null);
+  await claimSettingsFiles(tx.trx, 'members.card.profile', 'members.card_asset', ids);
+}
+
 /** The settings routes, then the system configuration's (route catalog order). */
 export const SETTINGS_ROUTES: RouteDecl[] = [
   settingsGet,
@@ -316,5 +402,12 @@ export const SETTINGS_ROUTES: RouteDecl[] = [
   catalogConfig,
   // ---- Komunitas K1 (settings) ----
   settingsPut('accreditation', AccreditationSettingsBody),
+  // ---- Komunitas (circulation core) ----
+  settingsPut('circulation', CirculationSettingsBody),
+  // ---- Komunitas K2 (members extended): the card pictures are claimed as files of the setting ----
+  settingsPut('members', MembersSettingsBody, { afterWrite: claimCardAssets }),
+  // ---- Komunitas K2 (visits, privacy): the retention periods need a fresh password confirmation ----
+  settingsPut('visits', VisitsSettingsBody),
+  settingsPut('privacy', PrivacySettingsBody, { reauth: true }),
   ...SYSTEM_CONFIG_ROUTES,
 ];

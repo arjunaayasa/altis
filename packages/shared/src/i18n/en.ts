@@ -11,6 +11,20 @@ import { ANNEX_REGISTERS_EN } from './k1/annex-registers.js';
 import { ANNEX_USAGE_EN } from './k1/annex-usage.js';
 import { COLLECTION_REPORTS_EN } from './k1/collection-reports.js';
 import { MEMBERS_CIRCULATION_EN } from './members-circulation.js';
+// ---- Komunitas (holds) ----
+import { HOLDS_EN } from './holds.js';
+import { CIRCULATION_CORE_EN } from './circulation-core.js';
+import { MEMBERS_VISITS_EN } from './members-visits.js';
+// ---- Komunitas (member area) ----
+import { MEMBER_AREA_EN } from './member-area.js';
+// ---- Komunitas (charges and payments) ----
+import { CHARGES_EN } from './charges.js';
+// ---- Komunitas (member, visit and circulation reports) ----
+import { CIRC_REPORTS_EN } from './circ-reports.js';
+// ---- Komunitas (notices) ----
+import { NOTICES_EN } from './notices.js';
+// ---- Komunitas (SLiMS members and circulation) ----
+import { SLIMS_PEOPLE_EN } from './slims-people.js';
 
 const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   // ---- error.<CODE> ---------------------------------------------------------------------------------------
@@ -620,6 +634,7 @@ const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   'vocab.custom_field_type.url': 'Web address (URL)',
   'vocab.custom_field_entity.records': 'Records',
   'vocab.custom_field_entity.items': 'Items',
+  'vocab.custom_field_entity.members': 'Members',
   'vocab.attachment_kind.file': 'File',
   'vocab.attachment_kind.url': 'Link',
   'vocab.attachment_access.public': 'Public',
@@ -1521,6 +1536,22 @@ const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   ...ANNEX_COLLECTION_EN,
   // ---- Komunitas (members and circulation) ----
   ...MEMBERS_CIRCULATION_EN,
+  // ---- Komunitas (holds) ----
+  ...HOLDS_EN,
+  // ---- Komunitas (circulation core) ----
+  ...CIRCULATION_CORE_EN,
+  // ---- Komunitas K2 (members extended and visits) ----
+  ...MEMBERS_VISITS_EN,
+  // ---- Komunitas (member area) ----
+  ...MEMBER_AREA_EN,
+  // ---- Komunitas (charges and payments) ----
+  ...CHARGES_EN,
+  // ---- Komunitas (member, visit and circulation reports) ----
+  ...CIRC_REPORTS_EN,
+  // ---- Komunitas (notices) ----
+  ...NOTICES_EN,
+  // ---- Komunitas (SLiMS members and circulation) ----
+  ...SLIMS_PEOPLE_EN,
 };
 
 /** Spread in only under the test profile, like the Indonesian one (see `id.ts`). */

@@ -53,7 +53,7 @@ export type ReportRow = readonly ReportCell[];
 interface ReportBase {
   /** `<module>.<name>`, at most 64 characters (`report_runs.report_id`). */
   id: string;
-  module: 'collection' | 'accreditation';
+  module: 'collection' | 'accreditation' | 'members' | 'visits' | 'circulation';
   /** `report.<id>.title`. */
   titleKey: string;
   /** What it takes to see and preview the report. */
@@ -62,6 +62,11 @@ interface ReportBase {
   exportPermission?: Permission;
   /** The report holds personal data: its export needs a fresh re-authentication and is audited. */
   personal: boolean;
+  /**
+   * A further permission some values of the parameters need (as the body sends them, before the definition's schema):
+   * the preview and the export routes check it beside {@link permission}. Null: none.
+   */
+  extraPermission?(params: Readonly<Record<string, unknown>>): Permission | null;
   params: readonly ReportParamSpec[];
   /** Checks a body's parameters; its output is the stored `def`. */
   paramsSchema: z.ZodType<Record<string, unknown>>;

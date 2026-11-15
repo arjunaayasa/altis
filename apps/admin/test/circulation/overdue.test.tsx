@@ -47,6 +47,7 @@ function overdueLoan(n: number, daysLate: number): LoanListItem {
     item: { id: `01JZ0000000000000000000I0${n}`, barcode: `B000${n}`, callNumber: null },
     record: { id: `01JZ0000000000000000000R0${n}`, title: `Judul ${n}` },
     member: { id: `01JZ0000000000000000000A0${n}`, memberNo: `A00${n}`, name: `Anggota ${n}`, className: null, typeId: '01JZ0000000000000000000T01' },
+    finePreview: null,
   };
 }
 

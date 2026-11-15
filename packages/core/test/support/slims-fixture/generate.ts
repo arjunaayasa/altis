@@ -123,7 +123,8 @@ export interface SlimsFixtureExpected {
   /** Rows per table, for every table of the dump (§11.6 `sumber`). */
   tables: Record<string, { source: number }>;
   /** The tables of the dump that the migration reads, does not read in Phase 2, skips as derived, or does not know. */
-  roles: { read: string[]; archived: string[]; phase3: string[]; derived: string[]; other: string[] };
+  /** `people`: the member and circulation tables, read by the member, visit and circulation stages. */
+  roles: { read: string[]; archived: string[]; phase3: string[]; people: string[]; derived: string[]; other: string[] };
   /** The entries of the files zip (regular files only). */
   zipFiles: string[];
   traps: SlimsFixtureTraps;
@@ -1088,18 +1089,23 @@ export function generateSlimsFixture(
   const tables: Record<string, { source: number }> = {};
   for (const table of FIXTURE_TABLES) tables[table.name] = { source: data.rows.get(table.name)?.length ?? 0 };
   const archived = ['serial', 'kardex', 'mst_frequency', 'stock_take', 'stock_take_item', 'mst_label', 'biblio_log', 'mst_item_status'];
-  // The usage tables (`visitor_count`, `mst_member_type`) are not read by the catalogue migration either.
-  const phase3 = ['member', 'loan', 'loan_history', 'visitor_count', 'mst_member_type'];
+  // The member and circulation tables are read by the migration's member, visit and circulation stages (`people`),
+  // apart from the catalogue's (`read`): the usage option adds rows to them.
+  const phase3: string[] = [];
+  const people = [
+    'member', 'loan', 'loan_history', 'visitor_count', 'mst_member_type', 'read_counter', 'member_custom', 'biblio_mark', 'comment', 'user',
+    'user_group', 'group_access', 'mst_module', 'system_log', 'mst_visitor_room', 'mst_loan_rules', 'holiday', 'fines', 'reserve',
+  ];
   const derived = ['search_biblio'];
-  const other = ['read_counter'];
-  const read = FIXTURE_TABLES.map((t) => t.name).filter((t) => !phase3.includes(t) && !derived.includes(t) && !other.includes(t));
+  const other: string[] = [];
+  const read = FIXTURE_TABLES.map((t) => t.name).filter((t) => !phase3.includes(t) && !people.includes(t) && !derived.includes(t) && !other.includes(t));
   return {
     dump,
     filesZip,
     expected: {
       seed,
       tables,
-      roles: { read, archived, phase3, derived, other },
+      roles: { read, archived, phase3, people, derived, other },
       zipFiles: data.zip.filter((e) => !String(e.name).endsWith('/')).map((e) => String(e.name)),
       traps: data.traps,
     },

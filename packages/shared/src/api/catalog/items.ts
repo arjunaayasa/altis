@@ -181,9 +181,12 @@ export interface ItemLocationPath {
  * `available`). `on_loan` with the due date (`YYYY-MM-DD`) and the loan's id; null when the item is not out.
  */
 export interface ItemCirculation {
-  state: 'on_loan' | null;
+  /** `on_hold`: kept on the hold shelf for a member (with the hold's pickup deadline). */
+  state: 'on_loan' | 'on_hold' | null;
   dueOn?: string;
   loanId?: string;
+  holdId?: string;
+  pickupUntil?: string;
 }
 
 /** One item as the admin sees it. Dates are `YYYY-MM-DD`; `price` is a decimal string in `currency`. */

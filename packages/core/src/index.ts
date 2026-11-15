@@ -647,3 +647,6 @@ export * from './accreditation/index.js';
 // Members (member types, members, the CSV member import) and circulation (loan rules, the desk, the loan list).
 export * from './members/index.js';
 export * from './circulation/index.js';
+// ---- Komunitas K2 (members extended and visits) ----
+export * from './visits/index.js';
+export * from './members/ext/index.js';

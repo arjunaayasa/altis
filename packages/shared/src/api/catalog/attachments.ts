@@ -15,6 +15,9 @@ const attachmentCommon = {
   title: shortText(191).min(1),
   description: longText.nullable().optional(),
   access: z.enum(ATTACHMENT_ACCESS),
+  // ---- Komunitas (member area) ----
+  /** With access `members`: the member types that may open it (none: every signed-in member); ignored otherwise. */
+  memberTypeIds: z.array(ulidField).max(50).optional(),
 };
 
 /**
@@ -36,6 +39,8 @@ export const AttachmentPatchBody = z.strictObject({
   description: longText.nullable().optional(),
   access: z.enum(ATTACHMENT_ACCESS).optional(),
   sortOrder: sortOrderField.optional(),
+  // ---- Komunitas (member area) ----
+  memberTypeIds: z.array(ulidField).max(50).optional(),
 });
 
 export type AttachmentPatchBody = z.infer<typeof AttachmentPatchBody>;
@@ -56,6 +61,9 @@ export interface AttachmentView {
   readCount: number;
   sortOrder: number;
   version: number;
+  // ---- Komunitas (member area) ----
+  /** With access `members`: the member types that may open it (empty: every signed-in member). */
+  memberTypeIds: string[];
 }
 
 /** The attachments of a record, in `sort_order`. */

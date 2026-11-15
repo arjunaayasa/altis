@@ -9,8 +9,9 @@ import type { SlimsTableInfo, SlimsVersionInfo } from './types.js';
 //   (role 23), `files.file_key` and `content.is_draft` (role 31), `item_custom` (role 36).
 
 /**
- * The columns this release knows, per table the migration reads (§11.4), in SLiMS 9.8's order. `biblio_custom` and
- * `item_custom` also hold one `cf_*` column per custom field, named by `mst_custom_field.dbfield`.
+ * The columns this release knows, per table the migration reads, in SLiMS 9.8's order. `biblio_custom`,
+ * `item_custom` and `member_custom` also hold one `cf_*` column per custom field, named by `mst_custom_field.dbfield`.
+ * `system_log` is not staged: the staff stage counts its rows from the table list.
  */
 export const SLIMS_COLUMNS: Readonly<Record<string, readonly string[]>> = Object.freeze({
   // The catalogue.
@@ -64,6 +65,37 @@ export const SLIMS_COLUMNS: Readonly<Record<string, readonly string[]>> = Object
   stock_take_item: ['stock_take_id', 'item_id', 'item_code', 'title', 'gmd_name', 'classification', 'coll_type_name', 'call_number', 'location', 'status', 'checked_by', 'last_update'],
   mst_label: ['label_id', 'label_name', 'label_desc', 'label_image', 'input_date', 'last_update'],
   biblio_log: ['biblio_log_id', 'biblio_id', 'user_id', 'realname', 'title', 'ip', 'action', 'affectedrow', 'rawdata', 'additional_information', 'date'],
+  // ---- Komunitas (SLiMS members and circulation) ----
+  // Members, staff and visits.
+  mst_member_type: [
+    'member_type_id', 'member_type_name', 'loan_limit', 'loan_periode', 'enable_reserve', 'reserve_limit', 'member_periode', 'reborrow_limit',
+    'fine_each_day', 'grace_periode', 'input_date', 'last_update',
+  ],
+  member: [
+    'member_id', 'member_name', 'gender', 'birth_date', 'member_type_id', 'member_address', 'member_mail_address', 'member_email', 'postal_code',
+    'inst_name', 'is_new', 'member_image', 'pin', 'member_phone', 'member_fax', 'member_since_date', 'register_date', 'expire_date',
+    'member_notes', 'is_pending', 'mpasswd', 'last_login', 'last_login_ip', 'input_date', 'last_update',
+  ],
+  member_custom: ['member_id'],
+  biblio_mark: ['id', 'member_id', 'biblio_id', 'created_at'],
+  comment: ['comment_id', 'biblio_id', 'member_id', 'comment', 'input_date', 'last_update'],
+  user: ['user_id', 'username', 'realname', 'passwd', 'email', 'user_type', 'user_image', 'social_media', 'last_login', 'last_login_ip', 'groups', 'input_date', 'last_update'],
+  user_group: ['group_id', 'group_name', 'input_date', 'last_update'],
+  group_access: ['group_id', 'module_id', 'menus', 'r', 'w'],
+  mst_module: ['module_id', 'module_name', 'module_path', 'module_desc'],
+  mst_visitor_room: ['room_id', 'room_name', 'unique_code', 'created_at', 'updated_at'],
+  visitor_count: ['visitor_id', 'member_id', 'member_name', 'institution', 'room_code', 'checkin_date'],
+  // Circulation.
+  mst_loan_rules: ['loan_rules_id', 'member_type_id', 'coll_type_id', 'gmd_id', 'loan_limit', 'loan_periode', 'reborrow_limit', 'fine_each_day', 'grace_periode', 'input_date', 'last_update'],
+  holiday: ['holiday_id', 'holiday_dayname', 'holiday_date', 'description'],
+  loan: ['loan_id', 'item_code', 'member_id', 'loan_date', 'due_date', 'renewed', 'loan_rules_id', 'actual', 'is_lent', 'is_return', 'return_date', 'input_date', 'last_update', 'uid'],
+  loan_history: [
+    'loan_id', 'item_code', 'biblio_id', 'title', 'call_number', 'classification', 'gmd_name', 'language_name', 'location_name', 'collection_type_name',
+    'member_id', 'member_name', 'member_type_name', 'loan_date', 'due_date', 'renewed', 'is_lent', 'is_return', 'return_date', 'input_date', 'last_update',
+  ],
+  fines: ['fines_id', 'fines_date', 'member_id', 'debet', 'credit', 'description'],
+  reserve: ['reserve_id', 'member_id', 'biblio_id', 'item_code', 'reserve_date'],
+  read_counter: ['id', 'item_code', 'title', 'uid', 'created_at'],
 } satisfies Record<string, readonly string[]>);
 
 /** The tables §11.4 archives raw into `migration_archive` (a subset of {@link SLIMS_COLUMNS}). */
@@ -119,7 +151,7 @@ export function detectSlimsVersion(tables: SlimsTableInfo[]): SlimsVersionInfo {
   for (const [table, known] of Object.entries(SLIMS_COLUMNS)) {
     const info = byName.get(table);
     if (info === undefined) continue;
-    const custom = table === 'biblio_custom' || table === 'item_custom';
+    const custom = table === 'biblio_custom' || table === 'item_custom' || table === 'member_custom';
     const extra = info.columns.filter((c) => !known.includes(c) && !(custom && CUSTOM_COLUMN.test(c)));
     if (extra.length > 0) unknownColumns[table] = extra;
   }

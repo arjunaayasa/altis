@@ -3,7 +3,7 @@ import type { MeResponse } from '@altis/shared/api/auth';
 import { describe, expect, it } from 'vitest';
 import { editionNav } from '@/edition';
 import { ADMIN_MESSAGES } from '@/i18n';
-import { NAV, NAV_GROUPS, visibleNav, visibleNavSections } from '@/lib/nav';
+import { NAV, NAV_GROUPS, activeNavPath, visibleNav, visibleNavSections } from '@/lib/nav';
 
 // Permission-based navigation (spec §13.3 "Kerangka admin"). The menus only hide: the server refuses whatever they
 // hide anyway (§4.8).
@@ -63,19 +63,31 @@ const REPORTS_SECTIONS: [string, string][] = [
   ['/admin/accreditation', 'accreditation.workspace.read'],
 ];
 
-/** Layanan: the desk and quick return (granted per branch), the overdue list and the loan rules. */
+/**
+ * Layanan: the desk, quick return and read in place (granted per branch), the overdue list, the loan rules and the
+ * calendar.
+ */
 const CIRCULATION_SECTIONS: [string, string][] = [
   ['/admin/layanan', 'circulation.desk.use'],
   ['/admin/layanan/kembali', 'circulation.desk.use'],
+  ['/admin/layanan/rak-tunggu', 'circulation.desk.use'],
+  ['/admin/layanan/baca', 'circulation.desk.use'],
+  ['/admin/layanan/denda', 'circulation.records.read'],
   ['/admin/layanan/terlambat', 'circulation.records.read'],
+  ['/admin/layanan/pengingat', 'circulation.records.read'],
   ['/admin/layanan/aturan', 'circulation.policies.manage'],
+  ['/admin/layanan/kalender', 'circulation.policies.manage'],
+  ['/admin/layanan/kunjungan', 'visits.records.read'],
+  ['/admin/layanan/buku-tamu', 'visits.stations.manage'],
 ];
 
-/** Anggota: the member list, the member types and the CSV import. */
+/** Anggota: the member list, the member types, the CSV import and the clearance letters. */
 const MEMBERS_SECTIONS: [string, string][] = [
   ['/admin/anggota', 'members.records.read'],
   ['/admin/anggota/tipe', 'members.types.manage'],
   ['/admin/anggota/impor', 'members.import.run'],
+  ['/admin/anggota/bebas-pustaka', 'members.records.manage'],
+  ['/admin/anggota/kartu', 'members.records.read'],
 ];
 
 const sectionsOf = (m: FullMe) => visibleNavSections(m).map((s) => [s.group, paths(s.items)]);
@@ -154,10 +166,10 @@ describe('visibleNav', () => {
     ]);
   });
 
-  it('the desk permission held at one branch only shows Meja Layanan and Kembali Cepat; a global grant elsewhere does not', () => {
+  it('the desk permission held at one branch only shows Meja Layanan, Kembali Cepat, the hold shelf and Baca di Tempat; a global grant elsewhere does not', () => {
     expect(sectionsOf(me({ permissions: [], branchPermissions: { B1: ['circulation.desk.use'] } }))).toEqual([
       [null, ['/admin']],
-      ['circulation', ['/admin/layanan', '/admin/layanan/kembali']],
+      ['circulation', ['/admin/layanan', '/admin/layanan/kembali', '/admin/layanan/rak-tunggu', '/admin/layanan/baca']],
       ['system', ['/admin/about']],
     ]);
     // Only the desk is granted per branch: another permission held at a branch opens no menu item.
@@ -167,8 +179,8 @@ describe('visibleNav', () => {
     ]);
     expect(sectionsOf(me({ permissions: ['members.records.read', 'circulation.records.read'] }))).toEqual([
       [null, ['/admin']],
-      ['circulation', ['/admin/layanan/terlambat']],
-      ['members', ['/admin/anggota']],
+      ['circulation', ['/admin/layanan/denda', '/admin/layanan/terlambat', '/admin/layanan/pengingat']],
+      ['members', ['/admin/anggota', '/admin/anggota/kartu']],
       ['system', ['/admin/about']],
     ]);
   });
@@ -265,5 +277,30 @@ describe('visibleNav', () => {
     expect(visibleNav(undefined)).toEqual([]);
     expect(visibleNav({ authenticated: false, csrfToken: 'x', library: { name: 'P', locale: 'id' }, build: '0.1.0' })).toEqual([]);
     expect(visibleNav({ ...me({ permissions: [] }), stage: 'mfa' })).toEqual([]);
+  });
+});
+
+describe('activeNavPath: the one menu item a page marks', () => {
+  it('a page with its own item marks that item alone, not the item whose path it lies under', () => {
+    expect(activeNavPath(NAV, '/admin/layanan')).toBe('/admin/layanan');
+    expect(activeNavPath(NAV, '/admin/layanan/kembali')).toBe('/admin/layanan/kembali');
+    expect(activeNavPath(NAV, '/admin/layanan/terlambat')).toBe('/admin/layanan/terlambat');
+    expect(activeNavPath(NAV, '/admin/anggota/tipe')).toBe('/admin/anggota/tipe');
+    expect(activeNavPath(NAV, '/admin/anggota/impor/')).toBe('/admin/anggota/impor');
+  });
+
+  it('a page without an item of its own marks the closest item above it; Beranda only itself', () => {
+    expect(activeNavPath(NAV, '/admin/anggota/01J0000000000000000000000A')).toBe('/admin/anggota');
+    expect(activeNavPath(NAV, '/admin/anggota/baru')).toBe('/admin/anggota');
+    expect(activeNavPath(NAV, '/admin/catalog/records/new')).toBe('/admin/catalog/records');
+    expect(activeNavPath(NAV, '/admin')).toBe('/admin');
+    expect(activeNavPath(NAV, '/admin/')).toBe('/admin');
+    expect(activeNavPath(NAV, '/admin/profile')).toBeNull();
+    expect(activeNavPath(NAV, '/admin/layanan-lain')).toBeNull();
+  });
+
+  it('only the items given count: a hidden item leaves the page to the item above it', () => {
+    const shown = NAV.filter((item) => item.to !== '/admin/anggota/tipe');
+    expect(activeNavPath(shown, '/admin/anggota/tipe')).toBe('/admin/anggota');
   });
 });

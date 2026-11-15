@@ -13,16 +13,24 @@
 import { textWidth } from './afm.js';
 import type { PdfFont } from './afm.js';
 import { PdfDocument } from './pdf.js';
-import type { PdfPage } from './pdf.js';
+import type { PdfColor, PdfImage, PdfPage } from './pdf.js';
 import { toWinAnsi } from './winansi.js';
 
-export type PaperSize = 'A4' | 'F4';
+export type PaperSize = 'A4' | 'F4' | 'A5' | 'Roll58' | 'Roll80';
 
-/** The paper sizes in millimetres, portrait (F4 is the Indonesian folio). */
+/**
+ * The paper sizes in millimetres, portrait (F4 is the Indonesian folio). `Roll58` and `Roll80` are receipt rolls, 58 and 80
+ * mm wide: each page is cut to its content (with its bottom margin), so a receipt printer feeds no blank paper; the
+ * height is the longest a page may get, past which the content goes on on the next page.
+ */
 export const PAPER_SIZES_MM: Readonly<Record<PaperSize, { readonly width: number; readonly height: number }>> =
   Object.freeze({
     A4: Object.freeze({ width: 210, height: 297 }),
     F4: Object.freeze({ width: 215, height: 330 }),
+    // ---- Komunitas (circulation core): letters on A5 and on receipt rolls ----
+    A5: Object.freeze({ width: 148, height: 210 }),
+    Roll58: Object.freeze({ width: 58, height: 2000 }),
+    Roll80: Object.freeze({ width: 80, height: 2000 }),
   });
 
 export interface PdfLayoutOptions {
@@ -223,6 +231,36 @@ interface TableState {
   headerPage: number;
 }
 
+/**
+ * A page of a receipt roll while its content is laid out: the drawing is kept, measured from the top of a page as long
+ * as the paper allows, and replayed onto a page cut to the content's length when the file is written (every drawing
+ * moved down by the length cut off), so the written page holds only what is printed.
+ */
+class RollPage implements PdfPage {
+  readonly #ops: ((page: PdfPage, cut: number) => void)[] = [];
+
+  text(x: number, y: number, s: string, o: { font: PdfFont; size: number; color?: PdfColor }): void {
+    this.#ops.push((page, cut) => page.text(x, y - cut, s, o));
+  }
+
+  rect(x: number, y: number, w: number, h: number, o?: { fill?: boolean; stroke?: boolean; color?: PdfColor }): void {
+    this.#ops.push((page, cut) => page.rect(x, y - cut, w, h, o));
+  }
+
+  line(x1: number, y1: number, x2: number, y2: number, o?: { width?: number }): void {
+    this.#ops.push((page, cut) => page.line(x1, y1 - cut, x2, y2 - cut, o));
+  }
+
+  image(img: PdfImage, x: number, y: number, w: number, h: number): void {
+    this.#ops.push((page, cut) => page.image(img, x, y - cut, w, h));
+  }
+
+  /** Draws the kept content on `page`, `cut` points lower. */
+  replay(page: PdfPage, cut: number): void {
+    for (const op of this.#ops) op(page, cut);
+  }
+}
+
 /** A paginated document; see the top of this file. Methods add blocks in order; `toBytes()` writes the file once. */
 export class PdfLayout {
   readonly #doc: PdfDocument;
@@ -237,6 +275,10 @@ export class PdfLayout {
   readonly #header: Header | null;
   readonly #footer: (page: number, pages: number) => string;
   readonly #note: string;
+  /** A receipt roll: the pages are cut to their content when the file is written (RollPage). */
+  readonly #roll: boolean;
+  /** The cursor where each page before the current one was left (how far down its content goes). */
+  readonly #ends: number[] = [];
   #page: PdfPage;
   /** The top of the next block on the current page. */
   #y: number;
@@ -277,6 +319,7 @@ export class PdfLayout {
     this.#footer = o.footer ?? ((page, pages) => `${page}/${pages}`);
     this.#note = o.nonLatinNote;
     this.#doc = new PdfDocument(o.title === undefined ? undefined : { title: o.title });
+    this.#roll = o.paper === 'Roll58' || o.paper === 'Roll80';
     this.#page = this.#addPage();
     this.#y = this.#contentTop;
   }
@@ -527,13 +570,19 @@ export class PdfLayout {
     if (!this.#empty) this.#addPageAndMove();
   }
 
-  /** Draws the header and the footer on every page and writes the file; later calls answer the same bytes. */
+  /**
+   * Draws the header and the footer on every page and writes the file; later calls answer the same bytes. A page of a
+   * receipt roll is first cut to its content: the footer and the bottom margin follow right under it.
+   */
   toBytes(): Uint8Array {
     if (this.#bytes !== null) return this.#bytes;
     const pages = this.#pageList.length;
+    const ends = [...this.#ends, this.#y];
     this.#pageList.forEach((page, k) => {
+      const cut = page instanceof RollPage ? Math.max(0, ends[k]! - this.#contentBottom) : 0;
       if (this.#header !== null) this.#drawHeader(page, this.#header);
-      this.#drawFooter(page, this.#footer(k + 1, pages));
+      this.#drawFooter(page, this.#footer(k + 1, pages), cut);
+      if (page instanceof RollPage) page.replay(this.#doc.addPage(this.#width, this.#height - cut), cut);
     });
     this.#bytes = this.#doc.toBytes();
     return this.#bytes;
@@ -544,12 +593,13 @@ export class PdfLayout {
   }
 
   #addPage(): PdfPage {
-    const page = this.#doc.addPage(this.#width, this.#height);
+    const page = this.#roll ? new RollPage() : this.#doc.addPage(this.#width, this.#height);
     this.#pageList.push(page);
     return page;
   }
 
   #addPageAndMove(): void {
+    this.#ends.push(this.#y);
     this.#page = this.#addPage();
     this.#y = this.#contentTop;
     this.#empty = true;
@@ -696,8 +746,11 @@ export class PdfLayout {
     page.line(this.#left, ruleY, right, ruleY);
   }
 
-  /** The footer at the bottom of the page, wrapped to two lines; a longer text is printed smaller. */
-  #drawFooter(page: PdfPage, text: string): void {
+  /**
+   * The footer at the bottom of the page, wrapped to two lines; a longer text is printed smaller. `cut` lifts it by the
+   * length a roll page loses at the bottom.
+   */
+  #drawFooter(page: PdfPage, text: string, cut: number): void {
     let size = FOOTER_SIZE;
     let lines = wrapText(text, REGULAR, size, this.#printable);
     while (lines.length > FOOTER_LINES && size > FOOTER_MIN_SIZE) {
@@ -706,7 +759,7 @@ export class PdfLayout {
     }
     lines = lines.slice(0, FOOTER_LINES);
     const lead = size * LEADING;
-    const bottom = this.#margins.bottom;
+    const bottom = this.#margins.bottom + cut;
     lines.forEach((line, i) => {
       const baseline = bottom + (lines.length - 1 - i) * lead + (lead - size);
       if (line !== '') page.text(this.#left, baseline, line, { font: REGULAR, size });

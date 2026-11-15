@@ -35,6 +35,8 @@ import { checkPdf } from '../../../../packages/core/test/support/pdf-check.js';
 import { SLIMS_FIXTURE_SEED, slimsFixtureBytes } from '../../../../packages/core/test/support/slims-fixture/index.js';
 import type { UsageExpectation } from '../../../../packages/core/test/support/slims-fixture/generate-usage.js';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
+import { AKUN_ROUTES } from '../../src/opac/akun/routes.js';
+import { VISIT_STATION_ROUTES } from '../../src/opac/visits/routes.js';
 import { ALL_ROUTES, KOMUNITAS_ROUTES } from '../../src/routes.js';
 import type { AgentReply } from '../agent.js';
 import { K1_PENDING_ALLOWED, KOMUNITAS_AUDIT_SCRIPTS } from '../audit/komunitas.js';
@@ -92,7 +94,10 @@ function columnText(pdf: Uint8Array, header: string): string {
 describe('the community routes are covered: matrix rows, personas, audit scripts', () => {
   it('every community route, the records bulk edit included, has its matrix row and a matrix fixture', () => {
     const rows = Object.keys(KOMUNITAS_MATRIX.rows);
-    const ids = [...KOMUNITAS_ROUTES.map((d) => d.id), 'catalog.records.bulk'];
+    // The community routes served outside KOMUNITAS_ROUTES: the guestbook station's pages and the OPAC member area
+    // (after the OPAC's catalogue routes), and the settings groups of members, visits and privacy (SETTINGS_ROUTES).
+    const outside = [...VISIT_STATION_ROUTES, ...AKUN_ROUTES].map((d) => d.id);
+    const ids = [...KOMUNITAS_ROUTES.map((d) => d.id), ...outside, 'settings.members.put', 'settings.visits.put', 'settings.privacy.put', 'catalog.records.bulk'];
     expect(ids.length).toBeGreaterThan(40);
     expect(ids.filter((id) => !rows.includes(id))).toEqual([]);
     expect(rows.filter((id) => !ids.includes(id))).toEqual([]);
@@ -115,8 +120,10 @@ describe('the community routes are covered: matrix rows, personas, audit scripts
     for (const [area, script] of Object.entries(KOMUNITAS_AUDIT_SCRIPTS)) expect([area, script.run === null]).toEqual([area, false]);
     const scripted = new Set(Object.values(KOMUNITAS_AUDIT_SCRIPTS).flatMap((s) => [...s.actions]));
     expect(k1Actions.filter((a) => !scripted.has(a))).toEqual([]);
-    // The members and circulation routes audit actions of their own (audit/members-circulation.ts).
-    for (const d of KOMUNITAS_ROUTES.filter((r) => !r.id.startsWith('members.') && !r.id.startsWith('circulation.'))) {
+    // The members, visits and circulation routes audit actions of their own (audit/members-circulation.ts and the
+    // scripts after it).
+    const own = ['members.', 'visits.', 'circulation.'];
+    for (const d of KOMUNITAS_ROUTES.filter((r) => !own.some((p) => r.id.startsWith(p)))) {
       if (d.audit === null) continue;
       expect([d.id, (k1Actions as readonly string[]).includes(d.audit)]).toEqual([d.id, true]);
     }

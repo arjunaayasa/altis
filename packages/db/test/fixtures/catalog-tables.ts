@@ -523,6 +523,8 @@ export const CATALOG_COLUMNS: Record<CatalogTable, Record<string, string>> = {
     legacy_key: 'varchar(191)',
     row_json: 'text',
     created_at: 'bigint',
+    // ---- Komunitas (SLiMS members and circulation): 0046 ----
+    subject_key: 'char(64) null',
   },
 };
 
@@ -1104,6 +1106,7 @@ export function catalogSampleRows(o: { branchId: string; staffId: string; newId?
         legacy_key: '7',
         row_json: '{"biblio_id":42,"action":"update"}',
         created_at: EPOCH_MS,
+        subject_key: null,
       },
     ],
   };

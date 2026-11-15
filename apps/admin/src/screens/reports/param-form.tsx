@@ -1,6 +1,7 @@
 import type { PeriodListResponse } from '@altis/shared/api/accreditation';
 import type { BranchListResponse } from '@altis/shared/api/branches';
 import type { LocationListResponse } from '@altis/shared/api/catalog/locations';
+import type { MemberTypeListResponse } from '@altis/shared/api/members';
 import type { CollectionTypeView, LanguageView, MasterListResponse, MaterialTypeView } from '@altis/shared/api/catalog/masters';
 import type { ReportCatalogEntry, ReportParamKind, ReportParamSpec } from '@altis/shared/api/reports';
 import { RotateCcwIcon } from 'lucide-react';
@@ -22,8 +23,9 @@ import { useApiQuery, useMe } from '@/lib/me';
  * - `year`, `int`: a whole number within the parameter's `min`/`max`;
  * - `period`, `branch`, `location`, `collectionType`, `materialType`, `language`: a select from the existing lists
  *   (`GET accreditation/periods` for a holder of `accreditation.workspace.read`, `GET branches`, and the catalogue's
- *   locations and masters for a holder of `catalog.records.read`); a list the user may not read leaves the filter
- *   empty and says so. The locations follow the branch chosen in the same form;
+ *   locations and masters for a holder of `catalog.records.read`), and `memberType` from `GET members/types` for a
+ *   holder of `members.records.read`; a list the user may not read leaves the filter empty and says so. The locations
+ *   follow the branch chosen in the same form;
  * - `status`: a select of its options, or a group of checkboxes when it takes several, labelled
  *   `<optionLabelPrefix><value>` (a vocabulary) or `report.option.<name>.<value>`;
  * - `bool`: a checkbox; `classPrefix`, `text` (and the kinds of later milestones): a text, one value per line when the
@@ -57,7 +59,7 @@ export interface Choice {
 }
 
 /** The kinds whose control is a select of a list the server keeps. */
-const LIST_KINDS = ['period', 'branch', 'location', 'collectionType', 'materialType', 'language'] as const;
+const LIST_KINDS = ['period', 'branch', 'location', 'collectionType', 'materialType', 'language', 'memberType'] as const;
 
 type ListKind = (typeof LIST_KINDS)[number];
 
@@ -318,6 +320,14 @@ export function useParamOptions(entry: ReportCatalogEntry): ParamOptions {
     staleTime: 60_000,
   });
 
+  // ---- Komunitas (member, visit and circulation reports) ----
+  const memberTypes = useApiQuery<MemberTypeListResponse>({
+    queryKey: ['reports', 'options', 'member-types'],
+    path: 'members/types?includeArchived=true',
+    enabled: uses('memberType') && holds(me, 'members.records.read'),
+    staleTime: 60_000,
+  });
+
   const wanted = {
     period: uses('period') && accreditation,
     branch: uses('branch'),
@@ -325,6 +335,7 @@ export function useParamOptions(entry: ReportCatalogEntry): ParamOptions {
     collectionType: uses('collectionType') && catalog,
     materialType: uses('materialType') && catalog,
     language: uses('language') && catalog,
+    memberType: uses('memberType') && holds(me, 'members.records.read'),
   };
   const state = (q: { data: unknown; isError: boolean }, readable: boolean): 'loading' | 'unavailable' | 'ready' =>
     !readable || q.isError ? 'unavailable' : q.data === undefined ? 'loading' : 'ready';
@@ -334,6 +345,7 @@ export function useParamOptions(entry: ReportCatalogEntry): ParamOptions {
   const collectionTypeState = state(collectionTypes, wanted.collectionType);
   const materialTypeState = state(materialTypes, wanted.materialType);
   const languageState = state(languages, wanted.language);
+  const memberTypeState = state(memberTypes, wanted.memberType);
 
   return useMemo((): ParamOptions => {
     const states: Record<ListKind, 'loading' | 'unavailable' | 'ready'> = {
@@ -343,6 +355,7 @@ export function useParamOptions(entry: ReportCatalogEntry): ParamOptions {
       collectionType: collectionTypeState,
       materialType: materialTypeState,
       language: languageState,
+      memberType: memberTypeState,
     };
     const name = (n: { nameId: string; nameEn: string }): string => (locale === 'en' ? n.nameEn : n.nameId);
     const archived = (label: string, isArchived: boolean): string => (isArchived ? t('reports.params.archived_option', { name: label }) : label);
@@ -377,6 +390,12 @@ export function useParamOptions(entry: ReportCatalogEntry): ParamOptions {
         (materialTypes.data?.items ?? []).map((m) => ({ value: m.id, label: archived(`${name(m)} (${m.code})`, m.archived) })),
       ),
       language: listOf('language', () => (languages.data?.items ?? []).map((m) => ({ value: m.id, label: archived(`${name(m)} (${m.code})`, m.archived) }))),
+      memberType: listOf('memberType', () =>
+        (memberTypes.data?.items ?? []).map((m) => ({
+          value: m.id,
+          label: archived(`${locale === 'en' ? (m.nameEn ?? m.nameId) : m.nameId} (${m.code})`, m.archived),
+        })),
+      ),
     };
     return { lists, locations: locationChoices };
   }, [
@@ -386,12 +405,14 @@ export function useParamOptions(entry: ReportCatalogEntry): ParamOptions {
     collectionTypeState,
     materialTypeState,
     languageState,
+    memberTypeState,
     periods.data,
     branches.data,
     locations.data,
     collectionTypes.data,
     materialTypes.data,
     languages.data,
+    memberTypes.data,
     t,
     locale,
   ]);

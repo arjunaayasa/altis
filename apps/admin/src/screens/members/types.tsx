@@ -51,6 +51,10 @@ interface TypeForm {
   periodMode: 'days' | 'never';
   membershipDays: string;
   sortOrder: string;
+  // ---- Komunitas (member area): the type's member services in the OPAC ----
+  holdsAllowed: boolean;
+  holdsLimit: string;
+  onlineRenewal: boolean;
 }
 
 const count = (s: string): number | string => (/^\d{1,5}$/.test(s.trim()) ? Number(s.trim()) : s.trim());
@@ -64,12 +68,28 @@ function bodyOf(v: TypeForm): Record<string, unknown> {
     loanLimit: v.limitMode === 'none' ? null : v.limitMode === 'zero' ? 0 : count(v.loanLimit),
     membershipDays: v.periodMode === 'never' ? null : count(v.membershipDays),
     sortOrder: v.sortOrder.trim() === '' ? 0 : count(v.sortOrder),
+    holdsAllowed: v.holdsAllowed,
+    holdsLimit: v.holdsLimit.trim() === '' ? 0 : count(v.holdsLimit),
+    onlineRenewal: v.onlineRenewal,
   };
 }
 
 function formOf(row: MemberTypeView | null): TypeForm {
   if (row === null) {
-    return { code: '', nameId: '', nameEn: '', accredGroup: 'student', limitMode: 'limit', loanLimit: '3', periodMode: 'days', membershipDays: '365', sortOrder: '0' };
+    return {
+      code: '',
+      nameId: '',
+      nameEn: '',
+      accredGroup: 'student',
+      limitMode: 'limit',
+      loanLimit: '3',
+      periodMode: 'days',
+      membershipDays: '365',
+      sortOrder: '0',
+      holdsAllowed: true,
+      holdsLimit: '2',
+      onlineRenewal: true,
+    };
   }
   return {
     code: row.code,
@@ -81,6 +101,9 @@ function formOf(row: MemberTypeView | null): TypeForm {
     periodMode: row.membershipDays === null ? 'never' : 'days',
     membershipDays: row.membershipDays === null ? '' : String(row.membershipDays),
     sortOrder: String(row.sortOrder),
+    holdsAllowed: row.holdsAllowed,
+    holdsLimit: String(row.holdsLimit),
+    onlineRenewal: row.onlineRenewal,
   };
 }
 
@@ -94,6 +117,7 @@ function TypeFormBody({ row, canManage, onSaved, onCancel }: { row: MemberTypeVi
   useDirtyGuard(isDirty);
   const limitMode = form.watch('limitMode');
   const periodMode = form.watch('periodMode');
+  const holdsAllowed = form.watch('holdsAllowed');
 
   const submit = form.handleSubmit(async (values) => {
     setProblem(null);
@@ -181,6 +205,23 @@ function TypeFormBody({ row, canManage, onSaved, onCancel }: { row: MemberTypeVi
           <label className="flex items-center gap-2 text-sm">
             <input type="radio" value="never" className="size-4 accent-primary" {...form.register('periodMode')} />
             {t('members.never_expires')}
+          </label>
+        </fieldset>
+        {/* Komunitas (member area): the type's member services in the OPAC. */}
+        <fieldset className="grid content-start gap-2 sm:col-span-2">
+          <legend className="mb-1 text-sm font-medium">{t('members.types.field.opac')}</legend>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="size-4 accent-primary" {...form.register('holdsAllowed')} />
+            {t('members.types.field.holds_allowed')}
+          </label>
+          {holdsAllowed && (
+            <Field label={t('members.types.field.holds_limit')} error={errors.holdsLimit} className="ml-6 max-w-40">
+              {(c) => <Input {...c} inputMode="numeric" autoComplete="off" {...form.register('holdsLimit')} />}
+            </Field>
+          )}
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="size-4 accent-primary" {...form.register('onlineRenewal')} />
+            {t('members.types.field.online_renewal')}
           </label>
         </fieldset>
         <Field label={t('members.types.field.sort_order')} error={errors.sortOrder}>

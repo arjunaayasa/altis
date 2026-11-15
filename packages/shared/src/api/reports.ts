@@ -108,7 +108,7 @@ export type ReportCell = string | number | null;
  */
 export interface ReportCatalogEntry {
   id: string;
-  module: 'collection' | 'accreditation';
+  module: 'collection' | 'accreditation' | 'members' | 'visits' | 'circulation';
   kind: 'table' | 'document';
   titleKey: string;
   personal: boolean;
