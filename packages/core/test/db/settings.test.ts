@@ -226,13 +226,14 @@ const SAMPLE: Record<SettingKey, unknown> = {
   'email.template.circulation_hold_ready.en.body': 'Hello {name}\n{title}',
   // ---- Komunitas (OPAC home page) ----
   'opac.home': {
-    title: 'Ruang baca dan layanan perpustakaan',
-    hero: { fileId: '01J0000000000000000000000D', alt: 'Ruang baca dengan rak buku', position: 60 },
-    about: { text: 'Berdiri sejak 1987.', photo: null, founded: 1987, librarians: 3 },
+    title: { id: 'Ruang baca dan layanan perpustakaan', en: 'Reading room and library services' },
+    hero: { fileId: '01J0000000000000000000000D', alt: 'Ruang baca dengan rak buku', position: 60, overlay: 65 },
+    brand: '#1e3a8a',
+    about: { text: { id: 'Berdiri sejak 1987.', en: null }, photo: null, founded: 1987, librarians: 3 },
     services: [{ title: 'Peminjaman', text: null }],
     facilities: [],
-    hours: [{ days: 'Senin–Jumat', time: '07.00–15.00' }],
-    blocks: { classes: true, popular: true, newTitles: true, promoted: false, about: true, services: true, news: true, visit: true },
+    hours: [{ days: 'Senin–Jumat', time: '07.00–15.00', weekdays: [1, 2, 3, 4, 5] }],
+    blocks: { classes: true, popular: true, newTitles: true, promoted: false, about: true, services: true, readingClasses: true, news: true, visit: true },
   },
 };
 
