@@ -28,7 +28,11 @@ import { cachedForRun, cutChars, keyOf, mappedRows, oneLine, scanAll, sourceKeys
 //    and their start and end in the library's time zone. A session SLiMS has finished comes in `finished`; one still
 //    active (`is_active`) comes in `cancelled`, since ALTIS does not go on with it, and the report names it
 //    (`stocktake_active_cancelled`). A session without a valid start date is skipped `invalid_date`. A session keeps
-//    the totals SLiMS kept for it (in the scope, found, on loan; the rest not found), except as step 3 says.
+//    the totals SLiMS kept for it (in the scope, found, on loan; the rest not found), except as step 3 says. A session
+//    an earlier run brought in `cancelled` (still active in SLiMS then, untouched in ALTIS since) that SLiMS has
+//    finished meanwhile comes in again, `finished` with its end and totals, and the report names it
+//    (`stocktake_finished_since`): when it is the last session its rows are brought again from the source (the
+//    earlier run's rows and their legacy map go first), otherwise the rows it has stay, with no result left open.
 // 2. `stock_take_item` → the copies of the last session (the latest start, then the highest id; entity
 //    `stock_take_item`, key `<stock_take_id>|<item_id>`): the copy through the item's legacy map, else through its item
 //    code (a copy ALTIS lacks: skipped `item_missing`; a second row of one copy: `duplicate_item`); SLiMS's `e` is
@@ -60,24 +64,75 @@ function startOf(tz: string, row: SlimsRow): { at: number; sort: string } | null
   return { at: localEpoch(tz, date, time), sort: `${date} ${time}` };
 }
 
-/** The legacy key of the last session of the source (the latest valid start, then the highest id), or null. */
-function lastSession(c: SlimsStageContext): Promise<string | null> {
+/** The last session of the source (the latest valid start, then the highest id): its legacy key and whether SLiMS has it active. */
+function lastSessionOf(c: SlimsStageContext): Promise<{ key: string; active: boolean } | null> {
   return cachedForRun(c, 'stocktake:last', async () => {
     const tz = await runTimeZone(c);
-    let best: { key: string; sort: string; id: number } | null = null;
+    let best: { key: string; sort: string; id: number; active: boolean } | null = null;
     await scanAll(c, TS, (row) => {
       const key = keyOf(row['stock_take_id']);
       const start = startOf(tz, row);
       if (key === '' || start === null) return;
       const id = intCell(row['stock_take_id']) ?? 0;
-      if (best === null || start.sort > best.sort || (start.sort === best.sort && id > best.id)) best = { key, sort: start.sort, id };
+      if (best === null || start.sort > best.sort || (start.sort === best.sort && id > best.id)) best = { key, sort: start.sort, id, active: flagCell(row['is_active']) === true };
     });
-    return (best as { key: string } | null)?.key ?? null;
+    const found = best as { key: string; active: boolean } | null;
+    return found === null ? null : { key: found.key, active: found.active };
   });
+}
+
+/** The legacy key of the last session of the source, or null. */
+async function lastSession(c: SlimsStageContext): Promise<string | null> {
+  return (await lastSessionOf(c))?.key ?? null;
+}
+
+/** Whether the ALTIS session `id` is one a run brought in `cancelled` (active in SLiMS then) that no one touched since. */
+async function reopenable(db: Db, id: string): Promise<boolean> {
+  const row = await db.selectFrom('stocktakes').select(['status', 'source', 'finished_at', 'version']).where('id', '=', id).executeTakeFirst();
+  return row !== undefined && row.status === 'cancelled' && row.source === 'migrated' && row.finished_at === null && Number(row.version) === 0;
+}
+
+/**
+ * Brings the session `id` (legacy key `key`), which an earlier run brought in `cancelled`, in again as SLiMS finished it:
+ * `finished` with `header`'s end and totals, its legacy map moved to this run; as the last session its rows go, with
+ * their legacy map, for the rows of the source to come in again, otherwise its rows stay with no result left open.
+ */
+async function reopenSession(
+  c: SlimsStageContext,
+  trx: Transaction<DB>,
+  key: string,
+  id: string,
+  header: { finishedAt: number | null; total: number; found: number; onLoan: number },
+  last: boolean,
+): Promise<void> {
+  await trx
+    .updateTable('stocktakes')
+    .set({ status: 'finished', finished_at: header.finishedAt, total: header.total, found: header.found, on_loan: header.onLoan, misplaced: 0, updated_at: c.now })
+    .where('id', '=', id)
+    .execute();
+  await trx.updateTable('migration_map').set({ run_id: c.runId }).where('source', '=', c.options.sourceName).where('entity', '=', TS).where('legacy_key', '=', key).execute();
+  if (!last) {
+    await trx.updateTable('stocktake_items').set({ result: 'none' }).where('stocktake_id', '=', id).where('result', 'is', null).execute();
+    return;
+  }
+  const items = (await trx.selectFrom('stocktake_items').select('item_id').where('stocktake_id', '=', id).execute()).map((r) => r.item_id);
+  for (let i = 0; i < items.length; i += 500) {
+    const maps = await trx
+      .selectFrom('migration_map')
+      .select('legacy_key')
+      .where('source', '=', c.options.sourceName)
+      .where('entity', '=', TI)
+      .where('target_id', 'in', items.slice(i, i + 500))
+      .execute();
+    const keys = maps.map((m) => m.legacy_key).filter((k) => k.startsWith(`${key}|`));
+    if (keys.length > 0) await trx.deleteFrom('migration_map').where('source', '=', c.options.sourceName).where('entity', '=', TI).where('legacy_key', 'in', keys).execute();
+  }
+  await trx.deleteFrom('stocktake_items').where('stocktake_id', '=', id).execute();
 }
 
 async function sessionsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: BatchIo, l: Ledger): Promise<void> {
   const tz = await runTimeZone(c);
+  const last = await lastSession(c);
   const maps = await mappedRows(c, io.db, TS, rows.map((r) => keyOf(r['stock_take_id'])));
   const toMap: LegacyMapping[] = [];
   for (const row of rows) {
@@ -86,8 +141,11 @@ async function sessionsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io
       l.skipped(TS, 'empty_key');
       continue;
     }
-    const state = stateOf(c, maps.get(key));
-    if (state === 'done') {
+    const map = maps.get(key);
+    const state = stateOf(c, map);
+    const active = flagCell(row['is_active']) === true;
+    const reopen = state === 'done' && !active && (await reopenable(io.db, map!.targetId));
+    if (state === 'done' && !reopen) {
       l.skipped(TS, 'already_migrated');
       continue;
     }
@@ -98,9 +156,9 @@ async function sessionsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io
       continue;
     }
     const name = cutChars(oneLine(textOf(l, TS, 'stock_take_name', row['stock_take_name']) ?? ''), 191) || `SLiMS ${key}`;
-    const active = flagCell(row['is_active']) === true;
     l.migrated(TS);
     if (active) l.report(TS, key, 'stocktake_active_cancelled', name);
+    if (reopen) l.report(TS, key, 'stocktake_finished_since', name);
     if (state === 'replay' || io.trx === null) continue;
     const endDate = dateCell(row['end_date'], { placeholder: true });
     const end = endDate === null ? null : localEpoch(tz, endDate, timeCell(row['end_date']));
@@ -110,6 +168,10 @@ async function sessionsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io
     const found = n('total_item_exists');
     const onLoan = n('total_item_loan');
     const total = Math.max(n('total_item_stock_taked'), found + onLoan + n('total_item_lost'));
+    if (reopen) {
+      await reopenSession(c, io.trx, key, map!.targetId, { finishedAt, total, found, onLoan }, key === last);
+      continue;
+    }
     const id = newId(c.now);
     await io.trx
       .insertInto('stocktakes')
@@ -179,6 +241,10 @@ async function itemsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: B
     if (target !== undefined) targets.set(r, target);
   }
   const facts = await copyFacts(io.db, [...new Set(targets.values())]);
+  // A dry run where the last session is one a real run would bring in again (see the top of this file): the rows an
+  // earlier run brought count as that run would bring them again.
+  const dryReopen =
+    io.trx === null && session !== undefined && stateOf(c, session) === 'done' && (await lastSessionOf(c))?.active === false && (await reopenable(io.db, session.targetId));
   // A dry run: the copies the source's `item` table holds (by id, or by code) are the ones a real run would find.
   const sourceIds = io.trx === null ? await sourceKeys(c, 'item', 'item_id') : new Set<string>();
   const sourceCodes = io.trx === null ? await sourceItemIds(c) : new Map<string, string>();
@@ -192,7 +258,7 @@ async function itemsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: B
     return byCodeId === undefined ? null : `slims:${byCodeId}`;
   };
   const present = new Set<string>();
-  if (session !== undefined && targets.size > 0) {
+  if (session !== undefined && targets.size > 0 && !dryReopen) {
     const ids = [...new Set(targets.values())];
     for (let i = 0; i < ids.length; i += 500) {
       for (const r of await io.db.selectFrom('stocktake_items').select('item_id').where('stocktake_id', '=', session.targetId).where('item_id', 'in', ids.slice(i, i + 500)).execute()) present.add(r.item_id);
@@ -217,7 +283,7 @@ async function itemsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: B
       continue;
     }
     const state = stateOf(c, maps.get(key));
-    if (state === 'done') {
+    if (state === 'done' && !dryReopen) {
       l.skipped(TI, 'already_migrated');
       continue;
     }

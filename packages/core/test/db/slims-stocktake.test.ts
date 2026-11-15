@@ -27,7 +27,8 @@ import { ACTOR, NOW, openItemsDb, seedItem, seedRecord, type ItemsDb } from './c
 // session comes in (an older one with the totals SLiMS kept, one without a start date skipped), the last one with its
 // rows mapped to ALTIS copies (found by the officer's name, missing, on loan; a copy ALTIS lacks, a second row of one
 // copy and a row of an older session skipped), keeping the totals SLiMS kept for it as it finished it; a session still
-// active comes in cancelled, its counters counted from its rows, and is named in the report; both tables are also
+// active comes in cancelled, its counters counted from its rows, and is named in the report, and comes in again finished,
+// with its rows as SLiMS left them, once SLiMS finished it; both tables are also
 // archived, and the reconciliation balances; a re-run skips what an earlier run brought, row by row, and a run after one
 // that ended within the rows brings the rest; a dry run writes nothing and counts alike; a run stopped after every batch, with its
 // counts lost after every other commit, ends as one that never stopped; a source without the tables reads the rows an
@@ -311,6 +312,56 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
     ]);
     expect(await reportText(runId)).toContain('"stock_take","2","stocktake_active_cancelled","Inventarisasi 2023"');
     expect((await summaryOf(runId)).reconciliation?.ok).toBe(true);
+  });
+
+  it('a session active at an earlier run and finished in SLiMS since comes in again, finished, with its rows as SLiMS left them', async () => {
+    await wipe();
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ active: true }) }));
+    const first = await start();
+    expect(await runToEnd(first.jobId)).toBe('succeeded');
+    const before = await db.h.db.selectFrom('stocktakes').select(['id', 'status']).where('name', '=', 'Inventarisasi 2023').executeTakeFirstOrThrow();
+    expect(before.status).toBe('cancelled');
+    // SLiMS finished it since: B002 turned up after all.
+    const later = slimsTables();
+    later['stock_take_item']!.rows.find((r) => r['item_id'] === 102)!['status'] = 'e';
+
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: later }));
+    const dry = await start({ dryRun: true });
+    expect(await runToEnd(dry.jobId)).toBe('succeeded');
+    const drySummary = await summaryOf(dry.runId);
+
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: later }));
+    const again = await start();
+    expect(await runToEnd(again.jobId)).toBe('succeeded');
+    const last = await db.h.db.selectFrom('stocktakes').selectAll().where('name', '=', 'Inventarisasi 2023').executeTakeFirstOrThrow();
+    expect(last.id).toBe(before.id);
+    expect(last.status).toBe('finished');
+    expect(Number(last.finished_at)).toBeGreaterThan(Number(last.started_at));
+    expect([last.total, last.found, last.on_loan]).toEqual([5, 3, 1]);
+    const rows = await db.h.db.selectFrom('stocktake_items').select(['item_id', 'state', 'result']).where('stocktake_id', '=', last.id).execute();
+    expect(new Map(rows.map((r) => [r.item_id, [r.state, r.result]]))).toEqual(
+      new Map([
+        [items.get(101)!, ['found', 'none']],
+        [items.get(102)!, ['found', 'none']],
+        [items.get(103)!, ['on_loan', 'none']],
+      ]),
+    );
+    const s = await summaryOf(again.runId);
+    expect(s.reconciliation?.ok).toBe(true);
+    expect(s.tables['stock_take']).toEqual({ source: 3, migrated: 1, merged: 0, skipped: { already_migrated: 1, invalid_date: 1 }, archived: 0 });
+    expect(s.tables['stock_take_item']).toEqual({ source: 6, migrated: 3, merged: 0, skipped: { item_missing: 1, duplicate_item: 1, older_session: 1 }, archived: 0 });
+    expect(await reportText(again.runId)).toContain('"stock_take","2","stocktake_finished_since","Inventarisasi 2023"');
+    // The dry run before it counted alike (B005, an item of the source, as a real run after the catalogue would).
+    expect(drySummary.tables['stock_take']).toEqual(s.tables['stock_take']);
+    expect(drySummary.tables['stock_take_item']).toMatchObject({ source: 6, migrated: 4, skipped: { duplicate_item: 1, older_session: 1 } });
+
+    // A third run finds it finished: nothing changes.
+    const snap = await snapshot();
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: later }));
+    const third = await start();
+    expect(await runToEnd(third.jobId)).toBe('succeeded');
+    expect(await snapshot()).toEqual(snap);
+    expect((await summaryOf(third.runId)).tables['stock_take']?.skipped).toEqual({ already_migrated: 2, invalid_date: 1 });
   });
 
   it('a dry run writes nothing and counts as the real run does', async () => {
