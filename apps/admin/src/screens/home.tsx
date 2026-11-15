@@ -4,6 +4,8 @@ import { useMe } from '@/lib/me';
 import { Dashboard } from '@/screens/dashboard';
 // ---- Komunitas (member, visit and circulation reports) ----
 import { TodayStrip } from '@/screens/dashboard-today';
+// ---- Komunitas K5 (reports) ----
+import { LibraryStatistics } from '@/screens/dashboard-library';
 
 /** Beranda: the first screen after signing in, a welcome above the system dashboard (§13.3 "Dasbor sistem", 1c Task 31). */
 export function HomeScreen() {
@@ -18,6 +20,7 @@ export function HomeScreen() {
         <p className="text-muted-foreground">{t('home.intro', { shortcut: paletteShortcut() })}</p>
       </div>
       <TodayStrip />
+      <LibraryStatistics />
       <Dashboard />
     </div>
   );

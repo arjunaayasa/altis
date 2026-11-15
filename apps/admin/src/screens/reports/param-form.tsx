@@ -526,10 +526,13 @@ export interface ParamFormProps {
   onApply(): void;
   /** "Kosongkan": every parameter back to empty. */
   onReset(): void;
+  // ---- Komunitas K5 (reports) ----
+  /** The form feeds a preview ("Terapkan"); false for a document, which is only exported (default true). */
+  previews?: boolean;
 }
 
 /** The filter form (see the top of this file). */
-export function ParamForm({ entry, values, errors, options, onChange, onApply, onReset }: ParamFormProps) {
+export function ParamForm({ entry, values, errors, options, onChange, onApply, onReset, previews = true }: ParamFormProps) {
   const t = useT();
   const headingId = useId();
   const branchSpec = entry.params.find((p) => p.kind === 'branch');
@@ -537,7 +540,7 @@ export function ParamForm({ entry, values, errors, options, onChange, onApply, o
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    onApply();
+    if (previews) onApply();
   };
 
   return (
@@ -562,7 +565,7 @@ export function ParamForm({ entry, values, errors, options, onChange, onApply, o
         </div>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit">{t('reports.params.apply')}</Button>
+        {previews && <Button type="submit">{t('reports.params.apply')}</Button>}
         {entry.params.length > 0 && (
           <Button type="button" variant="outline" onClick={onReset}>
             <RotateCcwIcon aria-hidden="true" />
