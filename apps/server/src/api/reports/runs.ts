@@ -37,7 +37,9 @@ import { definitionOf, holdsOf, outputLocaleOf } from './catalog.js';
 //                                     `reports.run.start {runId, reportId, format}` (never a parameter value): a run of
 //                                     a table report that holds no personal data, and its export job → {id, jobId}.
 //                                     A personal report is refused here (`personal_report`: it has its own route), a
-//                                     document too (`document_report`: the accreditation routes make documents).
+//                                     document too (`document_report`: the accreditation routes make documents),
+//                                     unless the document is made through these routes (`runRoutes`: the annual
+//                                     library report).
 //   POST reports/runs/personal        the same for a table report that holds personal data, behind a fresh
 //                                     re-authentication (declared); any other report is `not_personal`.
 //   GET  reports/runs                 any signed-in staff member: their own runs, newest first; with the jobs
@@ -90,7 +92,7 @@ function prepareStart(personal: boolean) {
     // ---- Komunitas (member, visit and circulation reports) ----
     const extra = def.extraPermission?.(rc.body.params) ?? null;
     if (extra !== null && !holdsOf(rc)(extra)) throw await rc.authzDenied(extra);
-    if (def.kind === 'document') throw wrongRoute('document_report');
+    if (def.kind === 'document' && def.runRoutes !== true) throw wrongRoute('document_report');
     if (def.personal !== personal) throw wrongRoute(personal ? 'not_personal' : 'personal_report');
     return { def, locale: await outputLocaleOf(rc, def) };
   };

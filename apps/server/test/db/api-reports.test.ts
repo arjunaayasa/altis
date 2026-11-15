@@ -174,6 +174,10 @@ describe.skipIf(!ctx.available)(`reports API [${engineLabel()}]`, () => {
       expect(reports.map((r) => r.id)).toEqual(REPORTS.map((d) => d.id));
       expect(reports.find((r) => r.id === 'test.document')).toMatchObject({ kind: 'document', canExport: false });
       expect(reports.find((r) => r.id === 'test.rows')).toMatchObject({ kind: 'table', canExport: true });
+      // ---- Komunitas K5 (reports) ----
+      expect(reports.find((r) => r.id === 'library.annual_report')).toMatchObject({ kind: 'document', module: 'library', canExport: true, formats: ['pdf'] });
+      expect(reports.find((r) => r.id === 'visits.monthly')).toMatchObject({ chart: { kind: 'totals' } });
+      expect(reports.find((r) => r.id === 'test.rows')).toMatchObject({ chart: null });
     });
 
     it('a user holding neither permission sees nothing', async () => {
@@ -325,6 +329,16 @@ describe.skipIf(!ctx.available)(`reports API [${engineLabel()}]`, () => {
         const res = await stats.post(`${REPORTS_API}/${route}`, { reportId: 'test.document', format: 'csv', params: {} });
         expect([route, res.status, errors(res)]).toEqual([route, 422, [{ path: 'reportId', code: 'document_report' }]]);
       }
+    });
+
+    // ---- Komunitas K5 (reports) ----
+    it('the annual library report, a document of these routes, is started as a PDF on /runs; another format or route is refused', async () => {
+      const id = await started(stats, { reportId: 'library.annual_report', format: 'pdf', params: { year: 2026 } });
+      expect(await runRow(id)).toMatchObject({ report_id: 'library.annual_report', format: 'pdf', personal: 0, status: 'queued' });
+      const csv = await stats.post(`${REPORTS_API}/runs`, { reportId: 'library.annual_report', format: 'csv', params: {} });
+      expect([csv.status, errors(csv)]).toEqual([422, [{ path: 'format', code: 'invalid_value' }]]);
+      const personal = await stats.post(`${REPORTS_API}/runs/personal`, { reportId: 'library.annual_report', format: 'pdf', params: {} });
+      expect([personal.status, errors(personal)]).toEqual([422, [{ path: 'reportId', code: 'not_personal' }]]);
     });
 
     it('refuses an export over its format’s row limit and parameters over 8 000 bytes, writing no run', async () => {

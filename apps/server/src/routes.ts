@@ -31,6 +31,8 @@ import { OPAC_ROUTES } from './opac/routes.js';
 import { VISITS_ROUTES } from './api/visits/index.js';
 // ---- Komunitas K4 (stocktake) ----
 import { STOCKTAKE_ROUTES } from './api/stocktake.js';
+// ---- Komunitas K5 (reports) ----
+import { LIBRARY_STATISTICS_ROUTES } from './api/library-statistics.js';
 import { VISIT_STATION_ROUTES } from './opac/visits/routes.js';
 // ---- Komunitas (member area) ----
 import { AKUN_ROUTES } from './opac/akun/routes.js';
@@ -63,6 +65,8 @@ const health = route({
 export const KOMUNITAS_ROUTES: RouteDecl[] = [
   ...REPORTS_ROUTES,
   ...ACCREDITATION_ROUTES,
+  // ---- Komunitas K5 (reports): the dashboard's library figures, literal paths before `members/:id` ----
+  ...LIBRARY_STATISTICS_ROUTES,
   ...MEMBERS_ROUTES,
   ...CIRCULATION_ROUTES,
   // ---- Komunitas K2 (visits) ----

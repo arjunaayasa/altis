@@ -47,11 +47,13 @@ export function reportCatalogEntry(def: ReportDefinition, holds: (p: Permission)
     kind: def.kind,
     titleKey: def.titleKey,
     personal: def.personal,
-    canExport: def.kind === 'table' && holds(exportPermissionOf(def)),
+    canExport: (def.kind === 'table' || def.runRoutes === true) && holds(exportPermissionOf(def)),
     formats: [...def.formats],
     orientation: def.orientation,
     params: def.params.map((p) => ({ ...p, ...(p.options === undefined ? {} : { options: [...p.options] }) })),
     columns: def.kind === 'table' && typeof def.columns !== 'function' ? def.columns.map(columnView) : null,
+    // ---- Komunitas K5 (reports) ----
+    chart: def.kind === 'table' && def.chart !== undefined ? def.chart : null,
   };
 }
 

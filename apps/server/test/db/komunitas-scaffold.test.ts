@@ -21,6 +21,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
 import { ACCREDITATION_ROUTES } from '../../src/api/accreditation/index.js';
 import { CIRCULATION_ROUTES } from '../../src/api/circulation/index.js';
+// ---- Komunitas K5 (reports) ----
+import { LIBRARY_STATISTICS_ROUTES } from '../../src/api/library-statistics.js';
 import { MEMBERS_ROUTES } from '../../src/api/members/index.js';
 import { REPORTS_ROUTES } from '../../src/api/reports/index.js';
 import { STOCKTAKE_ROUTES } from '../../src/api/stocktake.js';
@@ -49,7 +51,15 @@ const K1_JOB_TYPES = ['reports.export', 'reports.housekeeping', 'accreditation.e
 describe('the community routes in ALL_ROUTES', () => {
   it('ALL_ROUTES still validates and holds every route of the community lists, the reports first', () => {
     expect(() => defineRoutes([...ALL_ROUTES])).not.toThrow();
-    expect(KOMUNITAS_ROUTES).toEqual([...REPORTS_ROUTES, ...ACCREDITATION_ROUTES, ...MEMBERS_ROUTES, ...CIRCULATION_ROUTES, ...VISITS_ROUTES, ...STOCKTAKE_ROUTES]);
+    expect(KOMUNITAS_ROUTES).toEqual([
+      ...REPORTS_ROUTES,
+      ...ACCREDITATION_ROUTES,
+      ...LIBRARY_STATISTICS_ROUTES,
+      ...MEMBERS_ROUTES,
+      ...CIRCULATION_ROUTES,
+      ...VISITS_ROUTES,
+      ...STOCKTAKE_ROUTES,
+    ]);
     for (const route of KOMUNITAS_ROUTES) expect(ALL_ROUTES).toContain(route);
   });
 
