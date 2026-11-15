@@ -22,6 +22,7 @@ import { useDirtyGuard } from '@/lib/dirty-forms';
 import { fieldErrorKey, problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { uploadFile } from '@/lib/upload';
+import { cn } from '@/lib/utils';
 import { PHOTO_SOURCE_MAX_BYTES, PHOTO_SOURCE_TYPES, PhotoCropDialog, photoSourceOf, type PhotoSource } from './crop';
 import { bodyOf, comparable, draftOf, newRowKey, type HomeDraft, type PhotoDraft } from './draft';
 
@@ -222,23 +223,57 @@ function PhotoUpload({ label, size, onUploaded }: { label: string; size: { width
   );
 }
 
-/** The hero preview: the photo (or the library colour), the overlay, the heading, the lead and the search box. */
+/**
+ * The proportions of the site's hero band, which are not the photo's 16:9: on a wide screen the band is 30 rem high
+ * under a laptop's width (about 3:1, so the photo's top and bottom are cut and its position picks the part shown), on a
+ * phone 24 rem or more under a phone's width (about 4:5, so its sides are cut).
+ */
+const HERO_FRAMES = Object.freeze({ wide: '3 / 1', phone: '4 / 5' });
+
+/** One frame of the hero preview: the photo at its position (or the library colour) and the overlay, then `children`. */
+function HeroFrame({ draft, view, ratio, label, className, children }: { draft: HomeDraft; view: OpacHomeView; ratio: string; label: string; className?: string; children?: ReactNode }) {
+  const id = useId();
+  return (
+    <figure aria-labelledby={id} className={cn('grid gap-1', className)}>
+      <div className="relative flex items-end overflow-hidden rounded-lg text-white" style={{ aspectRatio: ratio, backgroundColor: HERO_COLORS[view.accent] }}>
+        {draft.hero !== null && (
+          <>
+            <img src={fileSrc(draft.hero.fileId)} alt="" className="absolute inset-0 size-full object-cover" style={{ objectPosition: `50% ${draft.hero.position}%` }} />
+            <div aria-hidden="true" className="absolute inset-0" style={{ backgroundColor: 'rgb(8 12 20 / 0.64)' }} />
+          </>
+        )}
+        {children}
+      </div>
+      <figcaption id={id} className="text-xs text-muted-foreground">
+        {label}
+      </figcaption>
+    </figure>
+  );
+}
+
+/**
+ * The hero preview in the band's proportions (see {@link HERO_FRAMES}): on a wide screen with the heading, the lead
+ * and the search box, on a phone the photo alone.
+ */
 function HeroPreview({ draft, view }: { draft: HomeDraft; view: OpacHomeView }) {
   const t = useT();
   const title = draft.title.trim() === '' ? view.libraryName : draft.title;
   const lead = draft.lead.id.trim() !== '' ? draft.lead.id : draft.lead.en;
   return (
-    <div className="relative flex aspect-video items-end overflow-hidden rounded-lg p-4 text-white" style={{ backgroundColor: HERO_COLORS[view.accent] }}>
-      {draft.hero !== null && (
-        <>
-          <img src={fileSrc(draft.hero.fileId)} alt="" className="absolute inset-0 size-full object-cover" style={{ objectPosition: `50% ${draft.hero.position}%` }} />
-          <div aria-hidden="true" className="absolute inset-0" style={{ backgroundColor: 'rgb(8 12 20 / 0.64)' }} />
-        </>
-      )}
-      <div className="relative grid gap-1.5">
-        <p className="text-lg leading-tight font-bold text-balance">{title}</p>
-        {lead.trim() !== '' && <p className="line-clamp-3 text-xs whitespace-pre-line">{lead}</p>}
-        <span className="mt-1 w-max rounded bg-background px-2 py-1 text-[11px] text-muted-foreground">{t('opacHome.preview.search')}</span>
+    <div className="grid gap-3">
+      <HeroFrame draft={draft} view={view} ratio={HERO_FRAMES.wide} label={t('opacHome.preview.wide')}>
+        <div className="relative grid gap-1 p-3">
+          <p className="line-clamp-2 text-sm leading-tight font-bold text-balance">{title}</p>
+          {lead.trim() !== '' && <p className="line-clamp-2 text-[11px] leading-snug whitespace-pre-line">{lead}</p>}
+          <span className="w-max rounded bg-background px-2 py-0.5 text-[10px] text-muted-foreground">{t('opacHome.preview.search')}</span>
+        </div>
+      </HeroFrame>
+      <div className="flex items-start gap-3">
+        <HeroFrame draft={draft} view={view} ratio={HERO_FRAMES.phone} label={t('opacHome.preview.phone')} className="w-24 shrink-0" />
+        <div className="grid gap-2 text-xs text-muted-foreground">
+          <p>{t('opacHome.preview.crop')}</p>
+          <p>{t('opacHome.preview.hint')}</p>
+        </div>
       </div>
     </div>
   );
@@ -336,7 +371,6 @@ function HomeEditor({
       <aside aria-label={t('opacHome.preview.title')} className="grid gap-2 xl:sticky xl:top-4 xl:order-2">
         <h2 className="text-sm font-semibold">{t('opacHome.preview.title')}</h2>
         <HeroPreview draft={draft} view={view} />
-        <p className="text-xs text-muted-foreground">{t('opacHome.preview.hint')}</p>
       </aside>
       <form ref={form} noValidate className="grid gap-6 xl:order-1" onSubmit={(e) => void save(e)}>
         <Section title={t('opacHome.hero.title')} description={t('opacHome.hero.description')}>
