@@ -94,6 +94,9 @@ export interface StocktakeView {
   jobId: string | null;
   /** The code lists still being applied. */
   pendingUploads: number;
+  // ---- the SLiMS report of a migrated session ----
+  /** The report file SLiMS wrote for the session, brought over by the migration (`…/:id/slims-report`), else null. */
+  migratedReport: { name: string; size: number } | null;
 }
 
 export interface StocktakeListResponse {

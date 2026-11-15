@@ -9,6 +9,7 @@ import {
   fileResponseHeaders,
   localStorageDriver,
   memberMayOpenFile,
+  minutesLinkedAsEvidence,
   prepareUpload,
   uploadContext,
   uploadOwner,
@@ -270,7 +271,11 @@ const filesGet = route({
     if (row === undefined || row.status !== 'ok') throw new DomainError('NOT_FOUND');
     // A snapshot's evidence file copy is served only through its snapshot (re-authenticated and audited there).
     if (row.context === SNAPSHOT_DOSSIER_CONTEXT) throw new DomainError('NOT_FOUND');
-    const access = await catalogFileAccess(rc.db.db, row);
+    // ---- the stocktake minutes as evidence ----
+    // A session's stored minutes are served here only while a period links them as evidence, and only to the readers of
+    // the accreditation workspace (below); otherwise the session's own route is their only way out.
+    const minutesEvidence = await minutesLinkedAsEvidence(rc.db.db, { id, context: row.context, owner_type: row.owner_type });
+    const access = minutesEvidence ? 'staff' : await catalogFileAccess(rc.db.db, row);
     if (access === 'never') throw new DomainError('NOT_FOUND');
     // ---- Komunitas (member area) ----
     // A members' attachment file without a staff session: only the member session (`altis_msid`, read here and nowhere
@@ -287,7 +292,7 @@ const filesGet = route({
     }
     // An accreditation file (evidence, a training certificate, a partnership agreement, a document) is for the readers
     // of the accreditation workspace: to other staff it does not exist.
-    if (row.context === ACCREDITATION_EVIDENCE_CONTEXT && (rc.auth === null || !can(rc.auth.grants, 'accreditation.workspace.read'))) {
+    if ((row.context === ACCREDITATION_EVIDENCE_CONTEXT || minutesEvidence) && (rc.auth === null || !can(rc.auth.grants, 'accreditation.workspace.read'))) {
       throw new DomainError('NOT_FOUND');
     }
     const size = Number(row.size);

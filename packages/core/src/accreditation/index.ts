@@ -87,3 +87,5 @@ export {
 export type { ImportSlimsUsagePayload, SlimsUsageRunSettings } from './slims-usage/index.js';
 export { startDocumentRun } from './documents/index.js';
 export type { AccredDocumentId } from './documents/index.js';
+// ---- the stocktake minutes as evidence ----
+export { attachMinutesEvidence, listMinutesForEvidence, minutesLinkedAsEvidence, stocktakeBranchOf } from './evidence/index.js';
