@@ -190,7 +190,8 @@ describe.skipIf(!ctx.available)(`stocktake [${engineLabel()}]`, () => {
     expect((await result(lost.id)).result).toBe('restored');
     expect(await status(onShelf.id)).toBe('available');
     const events = await db.h.db.selectFrom('item_events').select(['to_status', 'meta']).where('item_id', '=', lost.id).where('type', '=', 'status').orderBy('at').orderBy('id').execute();
-    expect(JSON.parse(events.at(-1)!.meta)).toMatchObject({ via: 'stocktake' });
+    // Both changes happen at the same instant here: the restore is the change to `available`.
+    expect(events.filter((e) => e.to_status === 'available').map((e) => JSON.parse(e.meta).via)).toEqual(['stocktake']);
     const charge = await db.h.db.selectFrom('charges').select(['status', 'waived_minor']).where('loan_id', '=', lostLoan.id).where('kind', '=', 'lost').executeTakeFirstOrThrow();
     expect(charge.status).toBe('cancelled');
     const adj = await db.h.db.selectFrom('charge_adjustments as a').innerJoin('charges as c', 'c.id', 'a.charge_id').select('a.reason_text').where('c.loan_id', '=', lostLoan.id).execute();
