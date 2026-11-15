@@ -3,6 +3,7 @@ import type { DB } from '@altis/db';
 import { isCalendarDate } from '@altis/shared';
 import type { Kysely, Transaction } from 'kysely';
 import { readSettings } from '../../../settings/service.js';
+import { cleanText } from '../source/clean-text.js';
 import { phpUnserialize } from '../source/php-unserialize.js';
 import type { SlimsRow } from '../source/types.js';
 import type { SlimsStageContext } from '../stage.js';
@@ -104,6 +105,18 @@ export async function runPeoplePhases(
 
 // ---------------------------------------------------------------------------------------------------------------
 // Cells
+
+/**
+ * A cell of personal data as clean text (stage-b-kit's textOf), its repairs counted under `<table>.<column>` with the
+ * values masked: a run's report and summary never show a person's name, address or note.
+ */
+export function personalText(l: Ledger, table: string, column: string, v: SlimsRow[string] | undefined): string | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'number') return String(v);
+  const { value, fixes } = cleanText(v);
+  if (fixes.length > 0) l.fixed(`${table}.${column}`, fixes, '***', '***');
+  return value;
+}
 
 /** A SLiMS integer cell (digits, a number), or null. */
 export function intCell(v: SlimsRow[string] | undefined): number | null {

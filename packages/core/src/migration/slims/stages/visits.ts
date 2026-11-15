@@ -7,7 +7,7 @@ import { pipelineOf } from '../pipeline.js';
 import type { SlimsRow } from '../source/types.js';
 import type { SlimsStage, SlimsStageContext } from '../stage.js';
 import { againOnRace, cachedForRun, cutChars, keyOf, mappedRows, oneLine, scanAll, stateOf, tableOf, textOf, type BatchIo, type Ledger } from './stage-b-kit.js';
-import { dateCell, localEpoch, mapped, runPeoplePhases, runTimeZone, timeCell, type PeoplePhase } from './people-kit.js';
+import { dateCell, localEpoch, mapped, personalText, runPeoplePhases, runTimeZone, timeCell, type PeoplePhase } from './people-kit.js';
 
 // Visits (spec K2: the SLiMS tables `mst_visitor_room` and `visitor_count`). SLiMS 9 table/column names
 // (interoperability facts, no SLiMS code).
@@ -301,8 +301,8 @@ async function visitsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: 
         member_type_id: member?.type ?? null,
         accred_group: guest ? 'guest' : memberId === null ? 'unknown' : (member?.group ?? null),
         class_name: member?.className ?? null,
-        guest_name: guest ? cutChars(oneLine(textOf(l, TV, 'member_name', row['member_name']) ?? ''), 191) || null : null,
-        guest_institution: guest ? cutChars(oneLine(textOf(l, TV, 'institution', row['institution']) ?? ''), 191) || null : null,
+        guest_name: guest ? cutChars(oneLine(personalText(l, TV, 'member_name', row['member_name']) ?? ''), 191) || null : null,
+        guest_institution: guest ? cutChars(oneLine(personalText(l, TV, 'institution', row['institution']) ?? ''), 191) || null : null,
         purpose: null,
         headcount: 1,
         is_repeat: repeat,
