@@ -23,6 +23,12 @@ export const OPAC_CSS_FILE = `opac-${OPAC_CSS_HASH}.css`;
 /** The id of `<main>`, the skip link's target. */
 export const MAIN_ID = 'isi';
 
+/**
+ * The page icon: an empty `data:` URL (the CSP's `img-src` allows `data:`). Without an icon link a browser asks for
+ * `/favicon.ico`, which ALTIS does not serve, and logs the 404 as an error on every first page load.
+ */
+export const NO_ICON = 'data:,';
+
 /** One link of the menu: a local path and its label (`lang` when the label is not in the page's language). */
 export interface FrameLink {
   href: string;
@@ -183,6 +189,7 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
         {robots === undefined ? null : <meta name="robots" content={robots} />}
         {refresh === undefined ? null : <meta http-equiv="refresh" content={String(refresh)} />}
         <title>{title}</title>
+        <link rel="icon" href={NO_ICON} />
         <link rel="stylesheet" href={`/assets/${OPAC_CSS_FILE}`} />
         {brand === null ? null : <style nonce={nonce}>{`.hero-band{--hero-bg:${brand}}`}</style>}
         {props.head ?? null}

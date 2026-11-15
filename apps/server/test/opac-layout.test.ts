@@ -15,6 +15,7 @@ import { keptPath, keptQuery, opacPage, pageFrame, type OpacContext, type OpacPa
 import { opacStatusResponse } from '../src/opac/catalog/respond.js';
 import { robotsTxt } from '../src/opac/catalog/robots.js';
 import { SITEMAP_MAX_URLS, sitemapIndexXml, urlsetXml, w3cDate } from '../src/opac/catalog/sitemap.js';
+import { NO_ICON } from '../src/opac/layout.js';
 import { renderError, renderMaintenance, renderNotFound } from '../src/opac/pages.js';
 
 // The OPAC shell's page frame and its pure parts (Phase 2 Task 21; spec §9.1, §9.2, §9.4, §9.7, §9.9; S6, S7, S17):
@@ -198,6 +199,14 @@ describe('opacPage: the frame (§9.2)', () => {
     expect(html).not.toMatch(/<[a-z][^>]*\s(?:style|on[a-z]+)=/i);
     expect(await (await page()).text()).not.toMatch(/<script/i);
   });
+
+  it('head: an empty data: icon the policy allows, so the browser asks for no /favicon.ico (a 404 in its console)', async () => {
+    const res = await page();
+    expect(await res.text()).toContain('<link rel="icon" href="data:,"/>');
+    expect(res.headers.get('content-security-policy')).toMatch(/img-src [^;]*\bdata:/);
+    const base = { locale: 'en' as const, nonce: 'abc_DEF-123' };
+    for (const html of [renderMaintenance(base), renderError({ ...base, code: 'ABCD1234' })]) expect(html).toContain('<link rel="icon" href="data:,"/>');
+  });
 });
 
 describe('S7: links that keep the request path start with config.baseUrl', () => {
@@ -214,8 +223,8 @@ describe('S7: links that keep the request path start with config.baseUrl', () =>
       for (const hreflang of ['id', 'en', 'x-default']) expect(alternate(html, hreflang)?.startsWith(`${BASE}/`)).toBe(true);
       for (const link of links(html)) {
         expect(link.startsWith('//') || link.startsWith('/\\'), link).toBe(false);
-        // The footer's source link (AGPL-3.0 §13) is the one fixed absolute link; it keeps no request path.
-        expect(link.startsWith(BASE) || link.startsWith('/') || link.startsWith('#') || link === COMMUNITY_SOURCE_URL, link).toBe(true);
+        // The footer's source link (AGPL-3.0 §13) and the empty icon are the fixed links; they keep no request path.
+        expect(link.startsWith(BASE) || link.startsWith('/') || link.startsWith('#') || link === COMMUNITY_SOURCE_URL || link === NO_ICON, link).toBe(true);
       }
       expect(html).not.toMatch(/https?:\/\/evil\.example/);
     },
