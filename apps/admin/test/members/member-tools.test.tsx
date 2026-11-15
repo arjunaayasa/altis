@@ -133,6 +133,39 @@ describe('Perangkat Buku Tamu and Kunjungan', () => {
     await waitFor(() => expect(screen.getByText('Menunggu kode')).toBeTruthy());
   });
 
+  it('a new station can be placed in a room of the branch, and the list names its room', async () => {
+    const ROOM = '01JZ0000000000000000000L01';
+    const stations: StationView[] = [];
+    const bodies: unknown[] = [];
+    const room = { id: ROOM, branchId: BRANCH.id, parentId: null, kind: 'room', code: 'RB', name: 'Ruang Baca', shelfHint: null, classFrom: null, classTo: null, mapFileId: null, box: null, isPublic: true, sortOrder: 0, itemCount: 0, archived: false, version: 1 };
+    startApp({
+      me: adminMe(),
+      path: '/admin/layanan/buku-tamu',
+      routes: {
+        'GET branches': () => ({ items: [BRANCH] }),
+        'GET catalog/locations': () => ({ items: [room, { ...room, id: '01JZ0000000000000000000L02', kind: 'shelf', parentId: ROOM, code: 'RB-1', name: 'Rak 1' }] }),
+        'GET visits/stations': () => ({ items: stations }),
+        'POST branches/:branchId/visits/stations': (req) => {
+          bodies.push(req.body);
+          stations.push({ id: '01JZ0000000000000000000S02', branchId: BRANCH.id, locationId: ROOM, name: 'Ruang baca', paired: false, codeExpiresAt: 1_900_000_000_000, activatedAt: null, lastSeenAt: null, revokedAt: null, createdAt: 1_800_000_000_000 });
+          return new Response(JSON.stringify({ id: '01JZ0000000000000000000S02', code: 'WXYZ2345', expiresAt: 1_900_000_000_000 }), {
+            status: 201,
+            headers: { 'Content-Type': 'application/json', 'X-Altis-Build': '0.1.0' },
+          });
+        },
+      },
+    });
+    const select = (await screen.findByLabelText('Ruang')) as HTMLSelectElement;
+    // Rooms only: a shelf is no place for a station.
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Tanpa ruang', 'Ruang Baca (RB)']);
+    fireEvent.change(screen.getByLabelText('Nama perangkat'), { target: { value: 'Ruang baca' } });
+    fireEvent.change(select, { target: { value: ROOM } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tambah perangkat' }));
+    expect(await screen.findByText('WXYZ-2345')).toBeTruthy();
+    expect(bodies).toEqual([{ name: 'Ruang baca', locationId: ROOM }]);
+    await waitFor(() => expect(screen.getAllByText('Ruang Baca').length).toBeGreaterThan(0));
+  });
+
   it('a staff check-in by member number greets the member, a repeat says it is not counted again', async () => {
     let calls = 0;
     const app = startApp({
