@@ -163,7 +163,7 @@ export function PeopleFields({ value, onChange, memberTypes }: { value: PeopleDr
             </select>
           )}
         </Field>
-        <div className="grid gap-2">
+        <div className="grid content-start gap-2">
           <CheckField label={t('catalog.migration.people.visits_auto')} hint={t('catalog.migration.people.visits_auto_hint')} checked={auto} onChange={(e) => set('visitsBefore', e.target.checked ? 'auto' : '')} />
           {!auto && (
             <Field label={t('catalog.migration.people.visits_before')} error={DATE.test(value.visitsBefore) ? undefined : 'catalog.migration.people.visits_before_required'}>
@@ -171,7 +171,7 @@ export function PeopleFields({ value, onChange, memberTypes }: { value: PeopleDr
             </Field>
           )}
         </div>
-        <div className="grid gap-2">
+        <div className="grid content-start gap-2">
           <CheckField label={t('catalog.migration.people.staff_users')} hint={t('catalog.migration.people.staff_users_hint')} checked={value.staffUsers} onChange={(e) => set('staffUsers', e.target.checked)} />
           <CheckField label={t('catalog.migration.people.migrate_gender')} hint={t('catalog.migration.people.migrate_gender_hint')} checked={value.migrateGender} onChange={(e) => set('migrateGender', e.target.checked)} />
           <CheckField label={t('catalog.migration.people.type_limit')} hint={t('catalog.migration.people.type_limit_hint')} checked={value.typeLimitAsTotal} onChange={(e) => set('typeLimitAsTotal', e.target.checked)} />
