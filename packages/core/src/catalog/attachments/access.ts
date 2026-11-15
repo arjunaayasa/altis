@@ -7,7 +7,9 @@ import type { Kysely, Transaction } from 'kysely';
 //   never        a run report (`owner_type 'catalog_runs'` or context `catalog.report`): never served by `/files/:id`,
 //                to anyone, a super admin included. A report holds legacy rows, titles and source host names, and
 //                streams only through `GET catalog/runs/:id/report` (Task 19), which applies `catalog.records.read`
-//                and hides migration runs from whoever lacks `catalog.migration.run` (P2-27).
+//                and hides migration runs from whoever lacks `catalog.migration.run` (P2-27). The stored minutes of a
+//                stocktake session (`owner_type 'stocktakes'`) too: they are branch data, served only by the session's
+//                minutes route, which checks the permission at the session's branch.
 //   staff        `files.access` is not `public`: staff only.
 //   unpublished  a public cover (`owner_type 'records'`) or attachment file whose record is hidden from the OPAC,
 //                archived or merged, or whose attachment is archived or `staff` (or gone): served as a staff file;
@@ -31,7 +33,7 @@ export async function catalogFileAccess(
   db: Db,
   f: { context: string; owner_type: string | null; owner_id: string | null; access: string },
 ): Promise<CatalogFileAccess> {
-  if (f.owner_type === 'catalog_runs' || f.context === 'catalog.report') return 'never';
+  if (f.owner_type === 'catalog_runs' || f.context === 'catalog.report' || f.owner_type === 'stocktakes') return 'never';
   if (f.access !== 'public') return 'staff';
   if (f.owner_type === 'records') return (await recordPublished(db, f.owner_id)) ? 'public' : 'unpublished';
   if (f.owner_type === 'attachments') {
