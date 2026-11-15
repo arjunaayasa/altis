@@ -57,7 +57,7 @@ describe('the catalog routes in ALL_ROUTES (Wave 0)', () => {
     for (const route of [...CATALOG_ROUTES, ...OPAC_CATALOG_ROUTES]) expect(ALL_ROUTES).toContain(route);
   });
 
-  it('routes.ts spreads CATALOG_ROUTES before INSTALL_ROUTES (only the community routes between), and OPAC_CATALOG_ROUTES right before OPAC_ROUTES', async () => {
+  it('routes.ts spreads CATALOG_ROUTES before INSTALL_ROUTES (only the community routes between), and OPAC_CATALOG_ROUTES before OPAC_ROUTES (only the guestbook station between)', async () => {
     const text = await fsp.readFile(new URL('../../src/routes.ts', import.meta.url), 'utf8');
     const spreads = [...text.matchAll(/^\s*\.\.\.([A-Z_]+)|^\s*\.\.\.(testOnlyRoutes)\(\)/gm)].map((m) => m[1] ?? m[2]);
     expect(spreads.indexOf('CATALOG_ROUTES')).toBeGreaterThan(spreads.indexOf('DIAGNOSTICS_ROUTES'));
@@ -66,7 +66,11 @@ describe('the catalog routes in ALL_ROUTES (Wave 0)', () => {
       'KOMUNITAS_ROUTES',
       'INSTALL_ROUTES',
     ]);
-    expect(spreads.indexOf('OPAC_CATALOG_ROUTES')).toBe(spreads.indexOf('OPAC_ROUTES') - 1);
+    expect(spreads.slice(spreads.indexOf('OPAC_CATALOG_ROUTES'), spreads.indexOf('OPAC_ROUTES') + 1)).toEqual([
+      'OPAC_CATALOG_ROUTES',
+      'VISIT_STATION_ROUTES', // Komunitas K2: the guestbook station's pages (`/kunjungan`), before the OPAC's own
+      'OPAC_ROUTES',
+    ]);
   });
 });
 
