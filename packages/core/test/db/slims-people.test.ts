@@ -394,6 +394,8 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
     expect(s.matches?.find((m) => m.key === 'unpaid_fines_minor')).toMatchObject({ source: 15_200_000, altis: 15_100_000, explained: 100_000, ok: true });
     expect(s.matches?.filter((m) => m.key === 'visits_month').map((m) => [m.scope, m.source, m.altis])).toEqual([['2026-03', 3, 3], ['2026-04', 4, 4]]);
     expect(s.warnings).toContain('matches_diff');
+    // The summary names no one: member numbers and counts only.
+    for (const name of ['Anggota M001', 'Tamu A', 'SMP 2', 'Jl. Contoh', 'Petugas Satu']) expect(JSON.stringify(s), name).not.toContain(name);
 
     // The cut-over checklist holds "Mulai melayani" back.
     const view = await slimsCutover(db.h.db);

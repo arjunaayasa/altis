@@ -21,6 +21,7 @@ import {
   intCell,
   localEpoch,
   mapped,
+  personalText,
   runPeoplePhases,
   runTimeZone,
   settingFlag,
@@ -828,7 +829,7 @@ async function finesBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: B
     const day = dateCell(row['fines_date']);
     const chargedOn = day ?? todayIs;
     if (day === null) l.report(TF, key, 'date_unknown', `fines_date=${keyOf(row['fines_date']) || '-'}`);
-    const description = cutChars(oneLine(textOf(l, TF, 'description', row['description']) ?? ''), 191) || 'Denda SLiMS';
+    const description = cutChars(oneLine(personalText(l, TF, 'description', row['description']) ?? ''), 191) || 'Denda SLiMS';
     const lower = description.toLowerCase();
     const loan = (memberId === null ? [] : (loans.get(memberId) ?? [])).find(
       (x) => x.barcode !== '' && lower.includes(x.barcode.toLowerCase()) && x.due_on < chargedOn && (x.returned_on === null || chargedOn <= addDays(x.returned_on, 1)),

@@ -37,6 +37,7 @@ import {
   intCell,
   localEpoch,
   mapped,
+  personalText,
   runPeoplePhases,
   runTimeZone,
   settingFlag,
@@ -307,11 +308,11 @@ interface Wanted {
 
 async function wantedOf(c: SlimsStageContext, l: Ledger, key: string, row: SlimsRow, typeId: string, today: string, facts: MemberFacts): Promise<Wanted> {
   const text = (column: string, max: number): string | null => {
-    const v = oneLine(textOf(l, TM, column, row[column]) ?? '');
+    const v = oneLine(personalText(l, TM, column, row[column]) ?? '');
     return v === '' ? null : cutChars(v, max);
   };
   const long = (column: string): string | null => {
-    const v = (textOf(l, TM, column, row[column]) ?? '').trim();
+    const v = (personalText(l, TM, column, row[column]) ?? '').trim();
     return v === '' ? null : cutChars(v, 20_000);
   };
   const display = memberNoDisplay(key);

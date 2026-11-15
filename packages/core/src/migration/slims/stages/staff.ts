@@ -3,7 +3,7 @@ import { mapLegacy, type LegacyMapping } from '../../../catalog/data/legacy-map.
 import type { SlimsRow } from '../source/types.js';
 import type { SlimsStage, SlimsStageContext } from '../stage.js';
 import { againOnRace, cachedForRun, cutChars, keyOf, mappedRows, oneLine, scanAll, stateOf, tableOf, textOf, type BatchIo, type Ledger } from './stage-b-kit.js';
-import { flagCell, runPeoplePhases, type PeoplePhase } from './people-kit.js';
+import { flagCell, personalText, runPeoplePhases, type PeoplePhase } from './people-kit.js';
 
 // Staff (spec K2: the SLiMS tables `user`, `user_group`, `group_access`, `mst_module`, `system_log`). SLiMS 9
 // table/column names (interoperability facts, no SLiMS code).
@@ -44,7 +44,7 @@ async function usersBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: B
       continue;
     }
     const username = cutChars(oneLine(textOf(l, TU, 'username', row['username']) ?? ''), 60) || `slims-${key}`;
-    const name = cutChars(oneLine(textOf(l, TU, 'realname', row['realname']) ?? ''), 191) || username;
+    const name = cutChars(oneLine(personalText(l, TU, 'realname', row['realname']) ?? ''), 191) || username;
     l.migrated(TU);
     if (io.trx === null) continue;
     let display = username;
