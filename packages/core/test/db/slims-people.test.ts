@@ -276,6 +276,14 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
   const summaryOf = async (runId: string): Promise<MigrationSummary> =>
     JSON.parse((await db.h.db.selectFrom('catalog_runs').select('summary').where('id', '=', runId).executeTakeFirstOrThrow()).summary) as MigrationSummary;
   const memberByNo = (no: string) => db.h.db.selectFrom('members').selectAll().where('member_no_key', '=', no).executeTakeFirst();
+  /** The text of the run's report. */
+  async function reportText(runId: string): Promise<string> {
+    const fileId = (await db.h.db.selectFrom('catalog_runs').select('report_file_id').where('id', '=', runId).executeTakeFirstOrThrow()).report_file_id;
+    if (fileId === null) throw new Error('the run has no report');
+    const parts: Uint8Array[] = [];
+    for await (const part of (await localStorageDriver(db.dataDir).get(fileId))!) parts.push(part);
+    return Buffer.concat(parts).toString('utf8');
+  }
   const count = async (table: 'members' | 'loans' | 'visits' | 'holds' | 'charges' | 'payments' | 'policies' | 'calendars' | 'item_uses' | 'staff_users' | 'member_bookmarks'): Promise<number> =>
     Number((await db.h.db.selectFrom(table).select((eb) => eb.fn.countAll().as('n')).executeTakeFirstOrThrow()).n);
 
@@ -557,6 +565,37 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
     expect(s.tables['loan']).toMatchObject({ source: 8, migrated: 7, skipped: { open_loan_unresolved: 1 } });
     expect(s.dryLists?.find((x) => x.key === 'open_loan_item_missing')).toMatchObject({ count: 1 });
     expect(await count('loans')).toBe(0);
+  });
+
+  it('a dry run after a real run checks the open loans against the rules as ALTIS has them: one edited since, one the library made', async () => {
+    await wipe();
+    const tables = slimsTables();
+    // M006 (Siswa) borrows B003 under no SLiMS rule: ALTIS resolves one for it.
+    tables['loan']!.rows.push({ loan_id: 32, item_code: 'B003', member_id: 'M006', loan_date: '2026-08-21', due_date: '2026-08-28', renewed: 0, loan_rules_id: 0, is_lent: 1, is_return: 0, return_date: null, uid: 2 });
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables }));
+    const real = await start();
+    expect(await runToEnd(real.jobId)).toBe('succeeded');
+    // During the training weeks the librarian raises the fine of SLiMS rule 2 to 1000 a day, and makes a rule of their
+    // own for Siswa, UMUM and books, more specific than every rule the run made.
+    await db.h.db.updateTable('policies').set({ fine_per_day_minor: 100_000, version: 1 }).where('code_key', '=', 'SLIMS-R2').execute();
+    const r2 = await db.h.db.selectFrom('policies').selectAll().where('code_key', '=', 'SLIMS-R2').executeTakeFirstOrThrow();
+    const buku = (await db.h.db.selectFrom('records').select('material_type_id').where('id', '=', (await db.h.db.selectFrom('items').select('record_id').where('id', '=', items.get(103)!).executeTakeFirstOrThrow()).record_id).executeTakeFirstOrThrow()).material_type_id;
+    const own = newId(NOW);
+    await db.h.db
+      .insertInto('policies')
+      .values({ ...r2, id: own, code_display: 'SISWA-BUKU', code_key: 'SISWA-BUKU', name: 'Siswa buku', material_type_id: buku, scope_key: `${r2.member_type_id}/${r2.collection_type_id}/${buku}/*`, loan_days: 14, fine_per_day_minor: 200_000, fine_cap_minor: null, version: 0 })
+      .execute();
+
+    const dry = await start({ dryRun: true, people: { circulationMode: 'replace' } });
+    expect(await runToEnd(dry.jobId)).toBe('succeeded');
+    const s = await summaryOf(dry.runId);
+    // B001 runs under SLiMS rule 2: SLiMS fines 500 a day, ALTIS's rule 2 now 1000. B003 has no SLiMS rule: ALTIS gives
+    // it the library's own rule (14 days, 2000 a day), not the rule this run would make.
+    const terms = s.dryLists?.find((x) => x.key === 'loan_terms_differ');
+    expect(terms?.samples).toEqual(expect.arrayContaining(['M001 · B001', 'M006 · B003']));
+    const report = await reportText(dry.runId);
+    expect(report).toMatch(/"loan","1","dry_loan_terms_differ","M001 · B001: fine_per_day=50000->100000;/);
+    expect(report).toMatch(/"loan","32","dry_loan_terms_differ","M006 · B003: loan_days=7->14; fine_per_day=50000->200000;/);
   });
 
   it('anonymising a migrated member removes the archived rows about them', async () => {
