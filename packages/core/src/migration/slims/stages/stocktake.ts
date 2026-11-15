@@ -2,7 +2,15 @@ import { countGrouped, type DB } from '@altis/db';
 import { ddcClassOf, newId } from '@altis/shared';
 import type { Insertable, Kysely, Transaction } from 'kysely';
 import { mapLegacy, type LegacyMapping } from '../../../catalog/data/legacy-map.js';
+import {
+  STOCKTAKE_SLIMS_REPORT_CONTEXT,
+  STOCKTAKE_SLIMS_REPORT_MAX_BYTES,
+  STOCKTAKE_SLIMS_REPORT_MIME,
+  STOCKTAKE_SLIMS_REPORT_OWNER,
+  stocktakeReportFileId,
+} from '../../../stocktake/slims-report.js';
 import { SLIMS_COLUMNS } from '../source/detect.js';
+import { safeRelativePath } from '../source/files-source.js';
 import type { SlimsRow, SlimsSource, SlimsTableInfo } from '../source/types.js';
 import type { SlimsCounters, SlimsStage, SlimsStageContext } from '../stage.js';
 import {
@@ -19,7 +27,23 @@ import {
   timeCell,
   type PeoplePhase,
 } from './people-kit.js';
-import { cachedForRun, cutChars, keyOf, mappedRows, oneLine, scanAll, sourceKeys, stateOf, tableOf, textOf, type BatchIo, type Ledger } from './stage-b-kit.js';
+import {
+  cachedForRun,
+  cutChars,
+  keyFits,
+  keyOf,
+  mappedRows,
+  oneLine,
+  readSourceFile,
+  scanAll,
+  sourceKeys,
+  stateOf,
+  storeBlob,
+  tableOf,
+  textOf,
+  type BatchIo,
+  type Ledger,
+} from './stage-b-kit.js';
 
 // Stocktake (the SLiMS tables `stock_take` and `stock_take_item`). SLiMS 9 table/column names
 // (interoperability facts, no SLiMS code).
@@ -27,10 +51,8 @@ import { cachedForRun, cutChars, keyOf, mappedRows, oneLine, scanAll, sourceKeys
 // 1. `stock_take` → stocktake sessions of the run's branch (entity `stock_take`, `source = migrated`), with their name
 //    and their start and end in the library's time zone. A session SLiMS has finished comes in `finished`; one still
 //    active (`is_active`) comes in `cancelled`, since ALTIS does not go on with it, and the report names it
-//    (`stocktake_active_cancelled`). The report file SLiMS names for a session (`report_file`) is not brought over:
-//    the report names it (`stocktake_report_not_migrated`). A session without a valid start date is skipped
-//    `invalid_date`. A session keeps the totals SLiMS kept for it (in the scope, found, on loan; the rest not found),
-//    except as step 3 says. A session
+//    (`stocktake_active_cancelled`). A session without a valid start date is skipped `invalid_date`. A session keeps
+//    the totals SLiMS kept for it (in the scope, found, on loan; the rest not found), except as step 3 says. A session
 //    an earlier run brought in `cancelled` (still active in SLiMS then, untouched in ALTIS since) that SLiMS has
 //    finished meanwhile comes in again, `finished` with its end and totals, and the report names it
 //    (`stocktake_finished_since`): when it is the last session its rows are brought again from the source (the
@@ -45,8 +67,20 @@ import { cachedForRun, cutChars, keyOf, mappedRows, oneLine, scanAll, sourceKeys
 //    that ended within the rows brings the rows it had not into the session that run made.
 // 3. the last session's counters are counted again from its rows, when it has any, unless SLiMS finished it and kept
 //    its totals: those stand, since they also count the rows of copies ALTIS lacks (copies SLiMS removed, for one).
+// 4. the report file SLiMS names for a session (`report_file`) → `files/reports/<name>` of the run's files source,
+//    stored as the session's staff-only file (stocktake/slims-report.ts) and named by `report_file_id` (entity
+//    `stock_take_report`, key the session's). Counted as a table of its own, `stock_take.report_file`: one row per
+//    session that names a file; migrated when stored, else skipped and, where the file is the reason, reported
+//    (`stocktake_report_not_migrated`): one the source lacks (`missing_file`), larger than 20 MB (`file_too_large`),
+//    empty (`empty_file`), or whose name is no plain file name of that folder (`unsafe_name`: the name comes from
+//    another system's database). A session the run did not bring (`session_missing`) or that has its report already
+//    (`already_migrated`) reports nothing. The bytes are read and stored before the batch's transaction, under an id
+//    derived from the session's (a run that died before its commit, or the next run, stores them again under the same
+//    key: no blob is left behind); the transaction writes the `files` row, the session's `report_file_id` (only while
+//    it has none) and the map row.
 //
-// A dry run writes nothing: a row whose copy the source's `item` table holds counts as the run would write it.
+// A dry run writes nothing: a row whose copy the source's `item` table holds counts as the run would write it, and a
+// report file counts as stored when the source has it with a size the run takes.
 //
 // The rows are read from the source. A source without `stock_take` whose rows an earlier run archived
 // (`migration_archive` under the run's source name) is read from there instead, outside the reconciliation: those
@@ -55,6 +89,12 @@ import { cachedForRun, cutChars, keyOf, mappedRows, oneLine, scanAll, sourceKeys
 
 const TS = 'stock_take';
 const TI = 'stock_take_item';
+/** The report files the sessions name, counted as a table of their own (see the top of this file). */
+const TR = 'stock_take.report_file';
+/** The map entity of a stored report file (key: the session's). */
+const ER = 'stock_take_report';
+/** The folder of the files source that holds SLiMS's stocktake reports. */
+const REPORTS_DIR = 'files/reports';
 
 type Db = Kysely<DB> | Transaction<DB>;
 
@@ -161,9 +201,6 @@ async function sessionsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io
     l.migrated(TS);
     if (active) l.report(TS, key, 'stocktake_active_cancelled', name);
     if (reopen) l.report(TS, key, 'stocktake_finished_since', name);
-    // SLiMS's own report file of the session is not brought over (it stays in the files source): the report names it.
-    const reportFile = oneLine(keyOf(row['report_file']));
-    if (reportFile !== '') l.report(TS, key, 'stocktake_report_not_migrated', cutChars(reportFile, 200));
     if (state === 'replay' || io.trx === null) continue;
     const endDate = dateCell(row['end_date'], { placeholder: true });
     const end = endDate === null ? null : localEpoch(tz, endDate, timeCell(row['end_date']));
@@ -357,10 +394,155 @@ async function recountOnce(c: SlimsStageContext, _rows: readonly SlimsRow[], io:
     .execute();
 }
 
+// ---- 4. the report files ------------------------------------------------------------------------------------------
+
+/** A report file stored before the batch's transaction. */
+interface StoredReport {
+  fileId: string;
+  sessionId: string;
+  name: string;
+  size: number;
+  sha256: string;
+}
+
+/** What phase 4 does with a session that names a report file: skip it (with a report row's detail), store it, count it again. */
+type ReportPlan = { kind: 'skip'; reason: string; detail: string | null } | { kind: 'attach'; file: StoredReport | null } | { kind: 'replay' };
+
+/** `files/reports/<name>` for a plain file name of that folder, else null (the name is another system's data). */
+function reportPath(name: string): string | null {
+  if (name.includes('/') || Array.from(name).length > 255) return null;
+  const rel = `${REPORTS_DIR}/${name}`;
+  return safeRelativePath(rel) ? rel : null;
+}
+
+/**
+ * Plans each session of the batch that names a report file, outside the transaction: reads its file, and in a real run
+ * stores it under the session's report file id (see the top of this file).
+ */
+async function reportsBefore(c: SlimsStageContext, rows: readonly SlimsRow[]): Promise<Map<string, ReportPlan>> {
+  const out = new Map<string, ReportPlan>();
+  const named = rows
+    .map((row) => ({ row, key: keyOf(row['stock_take_id']), name: oneLine(keyOf(row['report_file'])) }))
+    .filter((r) => keyFits(r.key) && r.name !== '');
+  if (named.length === 0) return out;
+  const tz = await runTimeZone(c);
+  const keys = named.map((r) => r.key);
+  const sessions = await mappedRows(c, c.h.db, TS, keys);
+  const stored = await mappedRows(c, c.h.db, ER, keys);
+  const held = new Set<string>();
+  const ids = [...sessions.values()].map((m) => m.targetId);
+  for (let i = 0; i < ids.length; i += 500) {
+    for (const r of await c.h.db.selectFrom('stocktakes').select('id').where('id', 'in', ids.slice(i, i + 500)).where('report_file_id', 'is not', null).execute()) held.add(r.id);
+  }
+  const skip = (key: string, reason: string, detail: string | null = null): void => void out.set(key, { kind: 'skip', reason, detail });
+  for (const { row, key, name } of named) {
+    if (out.has(key)) continue;
+    const state = stateOf(c, stored.get(key));
+    if (state === 'replay') {
+      out.set(key, { kind: 'replay' });
+      continue;
+    }
+    const session = sessions.get(key);
+    if (state === 'done' || (session !== undefined && held.has(session.targetId))) {
+      skip(key, 'already_migrated');
+      continue;
+    }
+    // The session of a real run is the one the sessions phase mapped; a dry run's, one that phase would bring.
+    if (session === undefined && (!c.dryRun || startOf(tz, row) === null)) {
+      skip(key, 'session_missing');
+      continue;
+    }
+    const rel = reportPath(name);
+    if (rel === null) {
+      skip(key, 'unsafe_name', `${cutChars(name, 200)}: nama berkas tidak aman / unsafe file name`);
+      continue;
+    }
+    const file = await readSourceFile(c, rel, STOCKTAKE_SLIMS_REPORT_MAX_BYTES, { declaredOnly: c.dryRun });
+    if (file.kind === 'missing') {
+      skip(key, 'missing_file', cutChars(rel, 200));
+      continue;
+    }
+    if (file.kind === 'too_large') {
+      skip(key, 'file_too_large', `${cutChars(rel, 200)} > 20 MB`);
+      continue;
+    }
+    if (file.size === 0) {
+      skip(key, 'empty_file', `${cutChars(rel, 200)}: kosong / empty`);
+      continue;
+    }
+    if (c.dryRun || session === undefined) {
+      out.set(key, { kind: 'attach', file: null });
+      continue;
+    }
+    const stream = await c.files!.open(rel, { maxBytes: file.size });
+    if (stream === null) {
+      skip(key, 'missing_file', cutChars(rel, 200));
+      continue;
+    }
+    const fileId = stocktakeReportFileId(session.targetId);
+    await storeBlob(c, fileId, stream, { size: file.size, sha256: file.sha256 });
+    out.set(key, { kind: 'attach', file: { fileId, sessionId: session.targetId, name: cutChars(name, 191), size: file.size, sha256: file.sha256 } });
+  }
+  return out;
+}
+
+/** Counts and reports each planned session in source order; a real run writes the stored files (see the top of this file). */
+async function reportsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: BatchIo, l: Ledger, pre: unknown): Promise<void> {
+  const plans = pre as Map<string, ReportPlan>;
+  if (plans.size === 0) return;
+  const toMap: LegacyMapping[] = [];
+  const done = new Set<string>();
+  for (const row of rows) {
+    const key = keyOf(row['stock_take_id']);
+    const plan = plans.get(key);
+    if (plan === undefined || done.has(key)) continue;
+    done.add(key);
+    l.source(TR);
+    if (plan.kind === 'skip') {
+      l.skipped(TR, plan.reason);
+      if (plan.detail !== null) l.report(TS, key, 'stocktake_report_not_migrated', plan.detail);
+      continue;
+    }
+    l.migrated(TR);
+    if (plan.kind === 'replay' || plan.file === null || io.trx === null) continue;
+    const f = plan.file;
+    // The session's report is set only while it has none (the plan saw none; nothing else writes it during a run).
+    const set = await io.trx.updateTable('stocktakes').set({ report_file_id: f.fileId }).where('id', '=', f.sessionId).where('report_file_id', 'is', null).executeTakeFirst();
+    if (Number(set.numUpdatedRows) !== 1) throw new TypeError('SLiMS stage stocktake: a session got a report file while its file was stored');
+    await io.trx
+      .insertInto('files')
+      .values({
+        id: f.fileId,
+        original_name: f.name,
+        mime: STOCKTAKE_SLIMS_REPORT_MIME,
+        size: f.size,
+        sha256: f.sha256,
+        context: STOCKTAKE_SLIMS_REPORT_CONTEXT,
+        owner_type: STOCKTAKE_SLIMS_REPORT_OWNER,
+        owner_id: f.sessionId,
+        access: 'staff',
+        status: 'ok',
+        created_at: c.now,
+        created_by: null,
+      })
+      .execute();
+    toMap.push({ source: c.options.sourceName, entity: ER, legacyKey: key, targetId: f.fileId, runId: c.runId });
+  }
+  if (io.trx !== null) await mapLegacy(io.trx, toMap);
+}
+
+/** The report files a failed batch stored are removed again (best effort): no row names them. */
+async function undoReports(c: SlimsStageContext, pre: unknown): Promise<void> {
+  for (const plan of (pre as Map<string, ReportPlan>).values()) {
+    if (plan.kind === 'attach' && plan.file !== null) await c.storage.delete(plan.file.fileId).catch(() => undefined);
+  }
+}
+
 const PHASES: readonly PeoplePhase[] = Object.freeze([
   { table: TS, run: (c, rows, io, l) => sessionsBatch(c, rows, io, l) },
   { table: TI, run: (c, rows, io, l) => itemsBatch(c, rows, io, l) },
   { table: null, run: (c, rows, io) => recountOnce(c, rows, io) },
+  { table: TS, before: reportsBefore, undo: undoReports, run: (c, rows, io, l, _at, pre) => reportsBatch(c, rows, io, l, pre) },
 ] satisfies PeoplePhase[]);
 
 // ---- the archive as the source -----------------------------------------------------------------------------------
@@ -410,9 +592,9 @@ function archiveSource(c: SlimsStageContext, source: SlimsSource): SlimsSource {
   };
 }
 
-/** Counters that leave the two stocktake tables out (their rows read from the archive are no rows of the source). */
+/** Counters that leave the stocktake tables out (their rows read from the archive are no rows of the source). */
 function withoutStocktakeCounts(counters: SlimsCounters): SlimsCounters {
-  const pass = (table: string): boolean => table !== TS && table !== TI;
+  const pass = (table: string): boolean => table !== TS && table !== TI && table !== TR;
   return {
     source: (t, n) => (pass(t) ? counters.source(t, n) : undefined),
     migrated: (t, n) => (pass(t) ? counters.migrated(t, n) : undefined),

@@ -121,6 +121,11 @@ export class Ledger {
     if (n > 0) this.ops.push((c) => c.counters.merged(table, n));
   }
 
+  /** Rows a stage counts itself: a column of a source table counted as a table of its own (the files it names). */
+  source(table: string, n = 1): void {
+    if (n > 0) this.ops.push((c) => c.counters.source(table, n));
+  }
+
   archived(table: string, n = 1): void {
     if (n > 0) this.ops.push((c) => c.counters.archived(table, n));
   }

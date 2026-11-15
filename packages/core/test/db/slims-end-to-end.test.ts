@@ -470,6 +470,16 @@ describe.skipIf(!ctx.available)(`SLiMS migration end to end (K15) [${engineLabel
       { status: 'finished', source: 'migrated', total: 10, found: 9, on_loan: 0 },
     ]);
     expect(await h.db.selectFrom('migration_archive').select('id').where('table_name', '=', 'stock_take_item').execute()).toHaveLength(fixture.expected.tables['stock_take_item']!.source);
+    // The report files the sessions name: the one in the zip is the session's staff-only file, the other is reported.
+    expect(s.tables['stock_take.report_file']).toEqual({ source: 2, migrated: take.reports.present.length, merged: 0, skipped: { missing_file: take.reports.missing.length }, archived: 0 });
+    for (const r of take.reports.present) {
+      const id = (await legacyTarget(h.db, 'slims', 'stock_take', String(r.session)))!;
+      const row = await h.db.selectFrom('stocktakes as t').innerJoin('files as f', 'f.id', 't.report_file_id').select(['f.context', 'f.access', 'f.owner_id']).where('t.id', '=', id).executeTakeFirstOrThrow();
+      expect(row).toEqual({ context: 'stocktake.slims_report', access: 'staff', owner_id: id });
+    }
+    for (const r of take.reports.missing) {
+      expect(whole.rows).toContainEqual(['stock_take', String(r.session), 'stocktake_report_not_migrated', r.rel]);
+    }
     for (const table of [...roles.phase3, ...roles.derived]) {
       expect(s.unread, table).toContain(table);
       expect([table, s.tables[table]?.source]).toEqual([table, fixture.expected.tables[table]!.source]);

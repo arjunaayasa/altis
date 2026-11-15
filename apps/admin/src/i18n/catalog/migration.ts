@@ -48,7 +48,7 @@ export const MIGRATION_ID = {
   'catalog.migration.dump.required': 'Pilih berkas dump SLiMS.',
   'catalog.migration.files.file': 'Arsip berkas lampiran dan sampul (.zip, tidak wajib)',
   'catalog.migration.files.hint':
-    'Zip berisi folder repository/ dan images/docs/ (dan images/content/ bila ada) dari folder SLiMS. Tanpa arsip ini, lampiran dicatat sebagai berkas hilang yang bisa diganti kemudian. Arsip hanya dapat dipilih sebelum uji kering; migrasinya memakai arsip yang sama.',
+    'Zip berisi folder repository/ dan images/docs/ (dan images/content/ serta files/reports/ berisi laporan inventarisasi, bila ada) dari folder SLiMS. Tanpa arsip ini, lampiran dicatat sebagai berkas hilang yang bisa diganti kemudian. Arsip hanya dapat dipilih sebelum uji kering; migrasinya memakai arsip yang sama.',
   'catalog.migration.file.chosen': 'Dipilih: {name} ({size})',
 
   // Step 2: the options.
@@ -356,7 +356,7 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.dump.required': 'Choose the SLiMS dump file.',
   'catalog.migration.files.file': 'Archive of attachment and cover files (.zip, optional)',
   'catalog.migration.files.hint':
-    'A zip holding the repository/ and images/docs/ folders (and images/content/ if there is one) of the SLiMS folder. Without it, attachments are recorded as missing files that can be replaced later. The archive can only be chosen before the dry run; the migration uses the same one.',
+    'A zip holding the repository/ and images/docs/ folders (and images/content/ and files/reports/ with the stocktake reports, if there are any) of the SLiMS folder. Without it, attachments are recorded as missing files that can be replaced later. The archive can only be chosen before the dry run; the migration uses the same one.',
   'catalog.migration.file.chosen': 'Chosen: {name} ({size})',
 
   'catalog.migration.options.title': 'Options',
