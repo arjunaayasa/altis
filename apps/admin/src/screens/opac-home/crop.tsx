@@ -1,5 +1,5 @@
 import { OPAC_HOME_PHOTO_MAX_BYTES } from '@altis/shared/api/opac-home';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Field, ProblemAlert } from '@/components/form-field';
 import { useReturnFocus } from '@/components/return-focus';
 import { Button } from '@/components/ui/button';
@@ -82,7 +82,9 @@ export function PhotoCropDialog({
 }) {
   const t = useT();
   const focus = useReturnFocus();
-  const canvas = useRef<HTMLCanvasElement>(null);
+  // The dialog's content mounts in a portal after this component's own first render, so the canvas is kept as state
+  // (a callback ref): drawing waits until it exists, and draws again whenever the crop changes.
+  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
   const [zoom, setZoom] = useState(1);
   const [dx, setDx] = useState(0);
   const [dy, setDy] = useState(0);
@@ -91,19 +93,19 @@ export function PhotoCropDialog({
   const [problem, setProblem] = useState<unknown>(null);
 
   useEffect(() => {
-    if (canvas.current !== null) drawCrop(canvas.current, source, zoom, dx, dy);
-  }, [source, zoom, dx, dy]);
+    if (canvas !== null) drawCrop(canvas, source, zoom, dx, dy);
+  }, [canvas, source, zoom, dx, dy]);
 
   const save = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     // The dialog sits in a portal, but React events still bubble to the page's form around it.
     event.stopPropagation();
-    if (canvas.current === null) return;
+    if (canvas === null) return;
     setBusy(true);
     setProblem(null);
     setTooLarge(false);
     try {
-      const jpeg = await jpegOf(canvas.current);
+      const jpeg = await jpegOf(canvas);
       if (jpeg === null) {
         setTooLarge(true);
         setBusy(false);
@@ -124,7 +126,7 @@ export function PhotoCropDialog({
           <DialogDescription>{t('opacHome.crop.hint')}</DialogDescription>
         </DialogHeader>
         <form noValidate className="grid gap-3" onSubmit={(e) => void save(e)}>
-          <canvas ref={canvas} width={width} height={height} className="w-full rounded border" style={{ aspectRatio: `${width} / ${height}` }} />
+          <canvas ref={setCanvas} width={width} height={height} className="w-full rounded border" style={{ aspectRatio: `${width} / ${height}` }} />
           {(
             [
               ['opacHome.crop.zoom', zoom, setZoom, 1, 3],

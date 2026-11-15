@@ -215,9 +215,11 @@ describe('OPAC › Halaman awal', () => {
     expect(heading.value).toBe('Judul saya');
   });
 
-  it('"Pakai foto ini" in the crop dialog uploads the photo into the draft and does not save the page', async () => {
+  it('"Pakai foto ini" in the crop dialog uploads the photo, drawn in its frame as soon as the dialog opens, into the draft and does not save the page', async () => {
     vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 1600, height: 900, close: vi.fn() })));
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({ drawImage: vi.fn(), fillRect: vi.fn() })) as unknown as HTMLCanvasElement['getContext']);
+    // Only the crop fills its frame (the decoding draws the bitmap alone).
+    const fillRect = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({ drawImage: vi.fn(), fillRect })) as unknown as HTMLCanvasElement['getContext']);
     vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((done: BlobCallback) => done(new Blob(['x'], { type: 'image/jpeg' })));
     vi.mocked(uploadFile).mockResolvedValue({ uploadId: PHOTO } as never);
     const { requests } = startApp({
@@ -227,7 +229,10 @@ describe('OPAC › Halaman awal', () => {
     });
     const [hero] = await screen.findAllByLabelText(t('opacHome.photo.upload'), undefined, FIRST);
     fireEvent.change(hero!, { target: { files: [new File([new Uint8Array(10)], 'gedung.jpg', { type: 'image/jpeg' })] } });
-    fireEvent.click(await screen.findByRole('button', { name: t('opacHome.crop.use') }));
+    const use = await screen.findByRole('button', { name: t('opacHome.crop.use') });
+    // The dialog's content mounts in a portal: the crop is drawn once its canvas is there, before any slider moves.
+    await waitFor(() => expect(fillRect).toHaveBeenCalledWith(0, 0, 1600, 900));
+    fireEvent.click(use);
     expect(await screen.findByLabelText(t('opacHome.photo.replace'))).toBeTruthy();
     expect(vi.mocked(uploadFile)).toHaveBeenCalledTimes(1);
     expect(screen.getByText(t('opacHome.dirty'))).toBeTruthy();
