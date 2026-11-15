@@ -86,6 +86,8 @@ export const NAV: readonly NavItem[] = Object.freeze([
   // ---- Komunitas K2 (visits) ----
   { to: '/admin/layanan/kunjungan', labelKey: 'nav.circulation.visits', permission: 'visits.records.read', group: 'circulation' },
   { to: '/admin/layanan/buku-tamu', labelKey: 'nav.circulation.stations', permission: 'visits.stations.manage', anyBranch: true, group: 'circulation' },
+  // ---- Komunitas K4 (stocktake): the sessions of a branch, scanning, the finish ----
+  { to: '/admin/layanan/inventarisasi', labelKey: 'nav.circulation.stocktake', permission: 'stocktake.scan.use', anyBranch: true, group: 'circulation' },
   { to: '/admin/anggota', labelKey: 'nav.members.list', permission: 'members.records.read', group: 'members' },
   { to: '/admin/anggota/tipe', labelKey: 'nav.members.types', permission: 'members.types.manage', group: 'members' },
   { to: '/admin/anggota/impor', labelKey: 'nav.members.import', permission: 'members.import.run', group: 'members' },
