@@ -12,6 +12,8 @@ import { claimById } from '../../src/jobs/claim.js';
 import { createJobRegistry } from '../../src/jobs/registry.js';
 import { runSlice } from '../../src/jobs/slice.js';
 import { lendItem, returnItem } from '../../src/circulation/desk.js';
+import { cancelHold } from '../../src/circulation/holds.js';
+import { ensureReceiptLockRow, receiptYearOf, takePayment } from '../../src/circulation/payments.js';
 import { anonymizeMember } from '../../src/members/ext/privacy.js';
 import { readCustomValues } from '../../src/catalog/data/custom-fields.js';
 import { updateMember } from '../../src/members/members.js';
@@ -646,5 +648,43 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
     expect(await runToEnd(dry.jobId)).toBe('succeeded');
     // Rule 2 (Siswa, collection type 1) is made; rule 3 repeats its tuple; rule 4's collection type 7 is in no table.
     expect((await summaryOf(dry.runId)).tables['mst_loan_rules']).toMatchObject({ source: 4, migrated: 1, archived: 1, skipped: { duplicate_rule: 1, coll_type_missing: 1 } });
+  });
+
+  it('a re-run after ALTIS returned a migrated loan, took a payment on a migrated fine and cancelled a migrated hold still balances "Cocokkan dengan SLiMS"', async () => {
+    await wipe();
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables() }));
+    const first = await start();
+    expect(await runToEnd(first.jobId)).toBe('succeeded');
+    expect(((await summaryOf(first.runId)).matches ?? []).filter((m) => !m.ok)).toEqual([]);
+    const openBefore = (await db.h.db.selectFrom('loans').select('id').where('source', '=', 'migrated').where('open_item_id', 'is not', null).execute()).length;
+
+    // The library serves in ALTIS: the desk takes a migrated loan back, M001 pays part of a migrated fine, and a
+    // migrated hold is cancelled.
+    const loan = await db.h.db
+      .selectFrom('loans as l')
+      .innerJoin('items as i', 'i.id', 'l.item_id')
+      .select(['l.id', 'i.barcode_display'])
+      .where('l.source', '=', 'migrated')
+      .where('l.open_item_id', 'is not', null)
+      .orderBy('l.id')
+      .executeTakeFirstOrThrow();
+    await db.run((tx) => returnItem(tx, { branchId: db.branchId, barcode: loan.barcode_display }));
+    const m1 = (await memberByNo('M001'))!;
+    const charge = await db.h.db.selectFrom('charges').select('id').where('member_id', '=', m1.id).where('source', '=', 'migrated').where('status', '=', 'open').orderBy('id').executeTakeFirstOrThrow();
+    const { timeZone, year } = await receiptYearOf(db.h.db, db.branchId, NOW);
+    await ensureReceiptLockRow(db.h, db.branchId, year);
+    await db.run((tx) => takePayment(tx, { branchId: db.branchId, memberId: m1.id, amount: '500', method: 'cash', timeZone, year, chargeIds: [charge.id] }));
+    const hold = await db.h.db.selectFrom('holds').select('id').where('source', '=', 'migrated').where('status', '=', 'waiting').orderBy('id').executeTakeFirstOrThrow();
+    await db.run((tx) => cancelHold(tx, { holdId: hold.id, by: 'staff', branchId: db.branchId }));
+
+    // The same frozen source again: nothing comes in twice, and what ALTIS did itself is explained.
+    const again = await start();
+    expect(await runToEnd(again.jobId)).toBe('succeeded');
+    expect((await db.h.db.selectFrom('loans').select('id').where('source', '=', 'migrated').where('open_item_id', 'is not', null).execute()).length).toBe(openBefore - 1);
+    const s = await summaryOf(again.runId);
+    expect((s.matches ?? []).filter((m) => !m.ok)).toEqual([]);
+    const byKey = (key: string) => s.matches?.find((m) => m.key === key);
+    expect(byKey('open_loans')).toMatchObject({ altis: openBefore - 1, ok: true });
+    expect(byKey('unpaid_fines_minor')?.explained).toBeGreaterThanOrEqual(50_000);
   });
 });
