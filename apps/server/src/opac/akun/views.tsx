@@ -287,6 +287,7 @@ export function MemberSummary(props: { locale: Locale; self: MemberSelf; typeNam
 /** The open loans, with the online renewal when it is open to the member. */
 export function OpenLoans(props: { locale: Locale; keep: Keep; csrf: string; loans: MemberLoanPage; canRenew: boolean }) {
   const { locale, keep, loans } = props;
+  const col = (key: 'barcode' | 'loaned' | 'due' | 'renewals'): string => opacText(locale, `akun.loans.col.${key}`);
   return (
     <section aria-labelledby="pinjaman">
       <h2 id="pinjaman">{opacText(locale, 'akun.loans.title')}</h2>
@@ -296,24 +297,26 @@ export function OpenLoans(props: { locale: Locale; keep: Keep; csrf: string; loa
         <>
           {props.canRenew ? null : <p class="akun-hint">{opacText(locale, 'akun.loans.renew_closed')}</p>}
           <div class="table-scroll">
-            <table class="akun-table">
+            <table class="akun-table akun-stack">
               <thead>
                 <tr>
                   <th scope="col">{opacText(locale, 'akun.loans.col.title')}</th>
-                  <th scope="col">{opacText(locale, 'akun.loans.col.barcode')}</th>
-                  <th scope="col">{opacText(locale, 'akun.loans.col.loaned')}</th>
-                  <th scope="col">{opacText(locale, 'akun.loans.col.due')}</th>
-                  <th scope="col">{opacText(locale, 'akun.loans.col.renewals')}</th>
+                  <th scope="col">{col('barcode')}</th>
+                  <th scope="col">{col('loaned')}</th>
+                  <th scope="col">{col('due')}</th>
+                  <th scope="col">{col('renewals')}</th>
                   {props.canRenew ? <th scope="col">{opacText(locale, 'akun.loans.col.action')}</th> : null}
                 </tr>
               </thead>
               <tbody>
                 {loans.rows.map((l) => (
                   <tr>
-                    <td>{l.title ?? '—'}</td>
-                    <td class="akun-no">{l.barcode ?? '—'}</td>
-                    <td>{day(locale, l.loanedOn)}</td>
-                    <td>
+                    <td class="akun-stack-main">{l.title ?? '—'}</td>
+                    <td class="akun-no" data-label={col('barcode')}>
+                      {l.barcode ?? '—'}
+                    </td>
+                    <td data-label={col('loaned')}>{day(locale, l.loanedOn)}</td>
+                    <td data-label={col('due')}>
                       {day(locale, l.dueOn)}
                       {l.daysLate > 0 ? (
                         <>
@@ -322,9 +325,9 @@ export function OpenLoans(props: { locale: Locale; keep: Keep; csrf: string; loa
                         </>
                       ) : null}
                     </td>
-                    <td>{opacText(locale, 'akun.loans.renewals_of', { n: l.renewals, limit: l.renewLimit })}</td>
+                    <td data-label={col('renewals')}>{opacText(locale, 'akun.loans.renewals_of', { n: l.renewals, limit: l.renewLimit })}</td>
                     {props.canRenew ? (
-                      <td>
+                      <td class="akun-stack-action">
                         <form method="post" action={keep(`/akun/pinjaman/${l.id}/perpanjang`)}>
                           <Csrf token={props.csrf} />
                           <button type="submit" aria-label={opacText(locale, 'akun.loans.renew_label', { title: l.title ?? l.barcode ?? '' })}>
@@ -348,27 +351,33 @@ export function OpenLoans(props: { locale: Locale; keep: Keep; csrf: string; loa
 export function HistoryView(props: { locale: Locale; keep: Keep; loans: MemberLoanPage }) {
   const { locale, keep, loans } = props;
   if (loans.total === 0) return <p>{opacText(locale, 'akun.history.empty')}</p>;
+  const barcode = opacText(locale, 'akun.loans.col.barcode');
+  const loaned = opacText(locale, 'akun.loans.col.loaned');
+  const returned = opacText(locale, 'akun.history.col.returned');
+  const outcome = opacText(locale, 'akun.history.col.outcome');
   return (
     <>
       <div class="table-scroll">
-        <table class="akun-table">
+        <table class="akun-table akun-stack">
           <thead>
             <tr>
               <th scope="col">{opacText(locale, 'akun.loans.col.title')}</th>
-              <th scope="col">{opacText(locale, 'akun.loans.col.barcode')}</th>
-              <th scope="col">{opacText(locale, 'akun.loans.col.loaned')}</th>
-              <th scope="col">{opacText(locale, 'akun.history.col.returned')}</th>
-              <th scope="col">{opacText(locale, 'akun.history.col.outcome')}</th>
+              <th scope="col">{barcode}</th>
+              <th scope="col">{loaned}</th>
+              <th scope="col">{returned}</th>
+              <th scope="col">{outcome}</th>
             </tr>
           </thead>
           <tbody>
             {loans.rows.map((l) => (
               <tr>
-                <td>{l.title ?? '—'}</td>
-                <td class="akun-no">{l.barcode ?? '—'}</td>
-                <td>{day(locale, l.loanedOn)}</td>
-                <td>{l.returnedOn === null ? '—' : day(locale, l.returnedOn)}</td>
-                <td>
+                <td class="akun-stack-main">{l.title ?? '—'}</td>
+                <td class="akun-no" data-label={barcode}>
+                  {l.barcode ?? '—'}
+                </td>
+                <td data-label={loaned}>{day(locale, l.loanedOn)}</td>
+                <td data-label={returned}>{l.returnedOn === null ? '—' : day(locale, l.returnedOn)}</td>
+                <td data-label={outcome}>
                   {l.outcome === null ? '' : t(locale, `vocab.loan_outcome.${l.outcome as LoanOutcome}`)}
                   {l.daysLate > 0 ? ` · ${opacText(locale, 'akun.loans.overdue', { days: l.daysLate })}` : ''}
                 </td>
@@ -392,26 +401,28 @@ export function holdRefusalText(locale: Locale, reason: string): string {
 
 export function HoldsView(props: { locale: Locale; keep: Keep; csrf: string; active: readonly HoldView[]; closed: readonly HoldView[] }) {
   const { locale, keep } = props;
+  const status = opacText(locale, 'akun.holds.col.status');
+  const pickup = opacText(locale, 'akun.holds.col.pickup');
   return (
     <>
       {props.active.length === 0 ? (
         <p>{opacText(locale, 'akun.holds.empty')}</p>
       ) : (
         <div class="table-scroll">
-          <table class="akun-table">
+          <table class="akun-table akun-stack">
             <thead>
               <tr>
                 <th scope="col">{opacText(locale, 'akun.holds.col.title')}</th>
-                <th scope="col">{opacText(locale, 'akun.holds.col.status')}</th>
-                <th scope="col">{opacText(locale, 'akun.holds.col.pickup')}</th>
+                <th scope="col">{status}</th>
+                <th scope="col">{pickup}</th>
                 <th scope="col">{opacText(locale, 'akun.loans.col.action')}</th>
               </tr>
             </thead>
             <tbody>
               {props.active.map((h) => (
                 <tr>
-                  <td>{h.record.title}</td>
-                  <td>
+                  <td class="akun-stack-main">{h.record.title}</td>
+                  <td data-label={status}>
                     {h.status === 'ready' ? (
                       <span class="status status-ok">
                         {h.pickupUntil === null ? t(locale, 'vocab.hold_status.ready') : opacText(locale, 'akun.holds.ready_until', { date: day(locale, h.pickupUntil) })}
@@ -420,8 +431,8 @@ export function HoldsView(props: { locale: Locale; keep: Keep; csrf: string; act
                       <span>{h.position === null ? t(locale, 'vocab.hold_status.waiting') : opacText(locale, 'akun.holds.position', { n: h.position })}</span>
                     )}
                   </td>
-                  <td>{h.pickupBranch.name}</td>
-                  <td>
+                  <td data-label={pickup}>{h.pickupBranch.name}</td>
+                  <td class="akun-stack-action">
                     <form method="post" action={keep(`/akun/reservasi/${h.id}/batal`)}>
                       <Csrf token={props.csrf} />
                       <button type="submit" aria-label={opacText(locale, 'akun.holds.cancel_label', { title: h.record.title })}>

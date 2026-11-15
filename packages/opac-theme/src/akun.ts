@@ -59,6 +59,22 @@ export const AKUN_CSS: string = [
   '.akun-list li{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem .5rem;min-height:2.75rem;padding:.25rem 0;' +
     'border-bottom:1px solid var(--border)}',
   '.akun-bookmarks input[type=checkbox]{width:1.25rem;height:1.25rem}',
+  // Below the shell's 48 rem a table of loans or holds (`.akun-stack`) becomes one card per row, so a phone shows the due
+  // date and the button without a sideways scroll: the header row stays for screen readers only, the title heads the
+  // card, each other cell carries its column's name (`data-label`), and the action's button spans the card.
+  '@media (max-width:47.99rem){' +
+    '.akun-stack thead{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);' +
+    'white-space:nowrap;border:0}' +
+    '.akun-stack,.akun-stack tbody,.akun-stack tr,.akun-stack td{display:block;width:100%}' +
+    '.akun-stack tr{margin:0 0 .75rem;padding:.25rem .75rem;border:1px solid var(--card-border);border-radius:var(--radius);' +
+    'background:var(--card-bg)}' +
+    '.akun-stack td{padding:.375rem 0;border-bottom:1px solid var(--border);overflow-wrap:anywhere}' +
+    '.akun-stack td:last-child{border-bottom:0}' +
+    '.akun-stack td[data-label]::before{content:attr(data-label);display:inline-block;min-width:7.5rem;margin:0 .5rem 0 0;' +
+    'color:var(--muted);font-size:.875rem;font-weight:600}' +
+    '.akun-stack .akun-stack-main{font-weight:600}' +
+    '.akun-stack .akun-stack-action button{width:100%}' +
+    '}',
   '.akun-pager{display:flex;flex-wrap:wrap;gap:.75rem 1rem;align-items:center;margin:1rem 0 0}',
   '.akun-pager a{display:inline-flex;align-items:center;min-height:2.75rem}',
 
