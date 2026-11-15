@@ -29,6 +29,7 @@ import type { JobHandler } from '../jobs/types.js';
 import { readOpFile, type OpFile } from '../ops/files.js';
 import { scheduleWindowSchema, type ScheduleWindow } from '../scheduler/registry.js';
 import { readSettings, writeSettings } from '../settings/service.js';
+import { stocktakeDiagnostics } from '../stocktake/diagnostics.js';
 import { failedBefore } from '../updates/bundled.js';
 import { releaseSourceMode } from '../updates/source-mode.js';
 import { exposureJob, type ExposureJobDeps } from './exposure.js';
@@ -57,6 +58,8 @@ import { wasmProbe } from './wasm.js';
 //
 // Komunitas K1 (edition lane): `editionLane.applied`, the migrations of another lane the database records (a count of
 // `schema_migrations_edition`), shown as "Migrasi jalur lain terpasang: N".
+//
+// Komunitas K4 (stocktake): `stocktakes`, the sessions under way and their jobs (stocktake/diagnostics.ts).
 
 /** The search provider interface (spec §10.10). Phase 1 brings the interface and the full-text detection only. */
 export interface SearchProvider {
@@ -359,6 +362,8 @@ export async function collectDiagnostics(o: CollectOptions): Promise<Diagnostics
     },
     // ---- Komunitas K1 (edition lane) ----
     editionLane: { applied: (await editionLaneState(h.db)).rows },
+    // ---- Komunitas K4 (stocktake) ----
+    stocktakes: await stocktakeDiagnostics(h.db, now),
   };
 }
 

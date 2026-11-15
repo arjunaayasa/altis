@@ -223,6 +223,7 @@ describe.skipIf(!ctx.available)(`SLiMS migration framework [${engineLabel()}]`, 
       'attachments',
       'covers',
       'content',
+      'stocktake',
       'archive',
       'report',
     ]);

@@ -7,6 +7,7 @@
  * 413 (or a WAF's 403) deletes the session, halves the chunk size (never below 256 KiB) and starts again.
  */
 import { z } from 'zod';
+import { ulidField } from './common.js';
 
 /**
  * The contexts an upload can be declared for; `test` exists only in the test build profile (the server refuses it
@@ -56,6 +57,12 @@ export const UploadCreateBody = z.strictObject({
   size: z.int().min(1),
   sha256: sha256Field,
   chunkBytes: z.int().min(1).max(2_147_483_647).optional(),
+  // ---- Komunitas K4 (stocktake) ----
+  /**
+   * The branch the file is for, when the context's permission is a branch permission (a stocktake code list): the
+   * permission is checked at that branch. Without it such a permission must be held globally.
+   */
+  branchId: ulidField.optional(),
 });
 
 export type UploadCreateBody = z.infer<typeof UploadCreateBody>;
