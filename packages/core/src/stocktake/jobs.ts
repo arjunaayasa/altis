@@ -9,8 +9,10 @@ import { lockItemRecords, lockItemRows } from '../catalog/items/service.js';
 import { cancelLostCharges } from '../circulation/charges.js';
 import { locking, lockMemberRow } from '../circulation/desk.js';
 import { txCtx, type Actor, type TxCtx } from '../context.js';
+import type { StorageDriver } from '../files/serve.js';
 import type { JobHandler, JobOutcome } from '../jobs/types.js';
 import { lockSession, matchesClass, parseScope, withDescendants } from './common.js';
+import { closeStocktakeFinish } from './minutes.js';
 import { scanLocked } from './scan.js';
 
 // The three stocktake jobs, each sliced within its budget, idempotent and resumable after a crash:
@@ -33,7 +35,8 @@ import { scanLocked } from './scan.js';
 //   stocktake"). The batch's rows are read with a locking read, so the first plain read of the transaction (which
 //   fixes a MySQL/MariaDB snapshot) comes after the copies' locks and sees a loan committed meanwhile. Status changes go
 //   through bulkUpdateItems (the item lifecycle, the item → record lock order, the history rows with `via:
-//   stocktake`). At the end the session is `finished` and its branch free for the next one.
+//   stocktake`). At the end the session is `finished`, its branch free for the next one, and its minutes stored as a
+//   file (minutes.ts closeStocktakeFinish).
 
 const PREPARE_BATCH = 1000;
 const INSERT_CHUNK = 250;
@@ -367,8 +370,11 @@ export async function finishBatch(tx: TxCtx, branchId: string, id: string, o: { 
   return true;
 }
 
-/** `stocktake.finish`: the staff member who asked for the finish may drive it; the copies change in that name. */
-export function stocktakeFinishJob(): JobHandler<FinishPayload> {
+/**
+ * `stocktake.finish`: the staff member who asked for the finish may drive it; the copies change in that name. With
+ * `deps`, the minutes are stored through its storage driver when the session is finished.
+ */
+export function stocktakeFinishJob(deps?: () => { storage: StorageDriver }): JobHandler<FinishPayload> {
   return {
     type: 'stocktake.finish',
     permission: 'system.jobs.manage',
@@ -391,15 +397,7 @@ export function stocktakeFinishJob(): JobHandler<FinishPayload> {
         first = false;
         const more = await withTx(ctx.handle, (trx) => finishBatch(txCtx(trx, ctx.now(), staff(s.finished_by)), s.branch_id, p.stocktakeId, options));
         if (!more) {
-          const now = ctx.now();
-          await withTx(ctx.handle, async (trx) => {
-            await lockSession(trx, s.branch_id, p.stocktakeId, 'finishing');
-            await trx
-              .updateTable('stocktakes')
-              .set((eb) => ({ status: 'finished', active_key: null, finished_at: now, updated_at: now, version: eb('version', '+', 1) }))
-              .where('id', '=', p.stocktakeId)
-              .execute();
-          });
+          await closeStocktakeFinish(ctx.handle, deps?.().storage ?? null, s.branch_id, p.stocktakeId, ctx.now());
           return { done: true };
         }
       }
