@@ -11,12 +11,13 @@ import { localStorageDriver } from '../../src/files/serve.js';
 import { claimById } from '../../src/jobs/claim.js';
 import { createJobRegistry } from '../../src/jobs/registry.js';
 import { runSlice } from '../../src/jobs/slice.js';
-import { lendItem, returnItem } from '../../src/circulation/desk.js';
+import { changeLoanDue } from '../../src/circulation/desk-actions.js';
+import { lendItem, renewLoan, returnItem } from '../../src/circulation/desk.js';
 import { cancelHold } from '../../src/circulation/holds.js';
 import { ensureReceiptLockRow, receiptYearOf, takePayment } from '../../src/circulation/payments.js';
 import { anonymizeMember } from '../../src/members/ext/privacy.js';
 import { readCustomValues } from '../../src/catalog/data/custom-fields.js';
-import { updateMember } from '../../src/members/members.js';
+import { archiveMember, extendMember, updateMember } from '../../src/members/members.js';
 import { markSlimsCutoverStep, slimsCutover } from '../../src/migration/slims/cutover.js';
 import { __setSlimsSourceFactory, __setSlimsStages } from '../../src/migration/slims/factory.js';
 import { startSlimsMigration, type SlimsStartInput } from '../../src/migration/slims/job.js';
@@ -686,5 +687,49 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
     const byKey = (key: string) => s.matches?.find((m) => m.key === key);
     expect(byKey('open_loans')).toMatchObject({ altis: openBefore - 1, ok: true });
     expect(byKey('unpaid_fines_minor')?.explained).toBeGreaterThanOrEqual(50_000);
+  });
+
+  it('a re-run after ALTIS renewed or re-dated migrated loans, extended an expired member and archived another still balances "Cocokkan dengan SLiMS"', async () => {
+    await wipe();
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables() }));
+    const first = await start();
+    expect(await runToEnd(first.jobId)).toBe('succeeded');
+    // (B004 is in ALTIS only once the re-run test above has run: its open loan is the one difference then left.)
+    const differences = (rows: MigrationSummary['matches']) => (rows ?? []).filter((m) => !m.ok && m.key !== 'open_loans_item_missing');
+    expect(differences((await summaryOf(first.runId)).matches)).toEqual([]);
+
+    // The library serves in ALTIS: the desk renews the overdue loan of B005 and moves the overdue B001's due date past
+    // today; it moves B002's (not due yet) to before today; staff extend the expired M002 and archive M006.
+    const openLoan = async (barcode: string) =>
+      db.h.db
+        .selectFrom('loans as l')
+        .innerJoin('items as i', 'i.id', 'l.item_id')
+        .select('l.id')
+        .where('i.barcode_display', '=', barcode)
+        .where('l.open_item_id', 'is not', null)
+        .executeTakeFirstOrThrow();
+    const b5 = await openLoan('B005');
+    expect((await db.run((tx) => renewLoan(tx, { branchId: db.branchId, loanId: b5.id }))).dueOn > '2026-09-02').toBe(true);
+    const b1 = await openLoan('B001');
+    await db.run((tx) => changeLoanDue(tx, { branchId: db.branchId, loanId: b1.id, dueOn: '2026-09-20', note: 'Diperpanjang di meja' }));
+    const b2 = await openLoan('B002');
+    await db.run((tx) => changeLoanDue(tx, { branchId: db.branchId, loanId: b2.id, dueOn: '2026-09-01', note: 'Ditarik' }));
+    const m2 = (await memberByNo('M002'))!;
+    await db.run((tx) => extendMember(tx, m2.id, { version: Number(m2.version), from: 'today', days: 365 }));
+    const m6 = (await memberByNo('M006'))!;
+    await db.run((tx) => archiveMember(tx, m6.id, Number(m6.version)));
+
+    // The same frozen source again: what ALTIS changed itself is explained.
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables() }));
+    const again = await start();
+    expect(await runToEnd(again.jobId)).toBe('succeeded');
+    const s = await summaryOf(again.runId);
+    expect(differences(s.matches)).toEqual([]);
+    const byKey = (key: string, scope = '') => s.matches?.find((m) => m.key === key && m.scope === scope);
+    // Source overdue: B001, B004, B005 twice (one a double); in ALTIS B001 and B005 are no longer overdue, B002 is.
+    expect(byKey('overdue_loans')).toMatchObject({ source: 4, ok: true });
+    // Siswa: M001 and M006 active, M002 expired in SLiMS; ALTIS: M001 and M002 active, M006 archived.
+    expect(byKey('active_members', '1')).toMatchObject({ source: 2, altis: 2, explained: 0, ok: true });
+    expect(byKey('expired_members', '1')).toMatchObject({ source: 1, altis: 0, explained: 1, ok: true });
   });
 });
