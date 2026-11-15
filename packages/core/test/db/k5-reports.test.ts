@@ -205,4 +205,30 @@ describe.skipIf(!ctx.available)(`the second round of reports [${engineLabel()}]`
     );
     expect(csv).toBe('VALIDATION_FAILED');
   }, 120_000);
+
+  it('the copies received this year on the dashboard follow the acquisition date of the reports, not the receiving date alone', async () => {
+    const h = db.h.db;
+    /** A copy whose first history row is `type` at `at`, its record made at `recordAt`. */
+    async function copyOf(barcode: string, type: 'created' | 'migrated', at: string, recordAt = at): Promise<void> {
+      const { recordId, itemId } = await seedCopy(h, { branchId, title: `Judul ${barcode}`, barcode });
+      await h.updateTable('records').set({ created_at: Date.parse(recordAt) }).where('id', '=', recordId).execute();
+      await h.updateTable('items').set({ created_at: Date.parse(at) }).where('id', '=', itemId).execute();
+      await h
+        .insertInto('item_events')
+        .values({ id: newId(), item_id: itemId, at: Date.parse(at), type, from_status: null, to_status: 'available', from_location_id: null, to_location_id: null, actor_type: 'system', actor_id: null, meta: '{}' })
+        .execute();
+    }
+    const before = (await libraryCollectionStatistics(h, NOW)).receivedThisYear;
+    // Made here on 1 January 2026 at 00:30 in Jakarta (counted), and on 31 December 2025 at 23:30 there (not counted).
+    await copyOf('C0001', 'created', '2025-12-31T17:30:00Z');
+    await copyOf('C0002', 'created', '2025-12-31T16:30:00Z');
+    // Migrated: dated by its record's creation in the source system (counted), unless that is a migration's own clock.
+    await copyOf('C0003', 'migrated', '2026-03-01T03:00:00Z', '2026-02-10T03:00:00Z');
+    await copyOf('C0004', 'migrated', '2026-03-01T03:00:00Z', '2026-03-01T03:00:00Z');
+    await h
+      .insertInto('catalog_runs')
+      .values({ id: newId(), kind: 'migration', status: 'succeeded', format: null, options: '{}', summary: '{}', report_file_id: null, output_name: null, output_size: null, expires_at: null, job_id: null, created_at: Date.parse('2026-03-01T02:00:00Z'), created_by: null, finished_at: Date.parse('2026-03-01T04:00:00Z') })
+      .execute();
+    expect((await libraryCollectionStatistics(h, NOW)).receivedThisYear).toBe(before + 2);
+  });
 });
