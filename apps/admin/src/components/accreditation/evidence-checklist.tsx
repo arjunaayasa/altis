@@ -1,9 +1,10 @@
 import { vocabKey } from '@altis/shared';
-import type { EvidenceListResponse, IndicatorEvidenceView, IndicatorResultView } from '@altis/shared/api/accreditation';
+import { MINUTES_EVIDENCE_CODE, type EvidenceListResponse, type IndicatorEvidenceView, type IndicatorResultView } from '@altis/shared/api/accreditation';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState, type JSX } from 'react';
+import { EvidenceMinutes } from '@/components/accreditation/evidence-minutes';
 import { EvidenceUpload } from '@/components/accreditation/evidence-upload';
 import { accredKeys, accredPaths } from '@/components/accreditation/usage/queries';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -39,6 +40,9 @@ export function screenName(t: Translate, screen: string): string {
  * A signed document ALTIS drafts (the annual library report behind the routine-reports item) names that report, with a
  * link to make it for the period's span when the user may read the statistics reports.
  *
+ * An item that takes the minutes of a stocktake session also links the minutes a finished session stored, without a
+ * download and an upload (evidence-minutes.tsx).
+ *
  * The same manager removes a file after a confirmation (`DELETE accreditation/evidence/:id`): a wrong upload must not
  * stay in the evidence file and its ZIPs, nor keep the item "ada". The results name a file only; its evidence row comes
  * from the period's evidence list, read once for every checklist of the page.
@@ -63,7 +67,9 @@ export function EvidenceChecklist({
   const readsReports = holds(useMe(), 'reports.statistics.read');
   const evidence = useApiQuery<EvidenceListResponse>({ queryKey: accredKeys.evidence(periodId), path: accredPaths.evidence(periodId), enabled: canUpload });
   const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
-  const evidenceOf = (fileId: string): string | undefined => evidence.data?.evidence.find((e) => e.fileId === fileId)?.id;
+  // One file can be linked to several items (a session's minutes under two indicators): the row of this item's link.
+  const evidenceOf = (fileId: string, itemCode: string): string | undefined =>
+    evidence.data?.evidence.find((e) => e.fileId === fileId && e.indicatorCode === indicatorCode && e.evidenceCode === itemCode)?.id;
 
   const remove = async (id: string): Promise<void> => {
     await api<StoreResponse>('DELETE', `accreditation/evidence/${encodeURIComponent(id)}`);
@@ -114,7 +120,7 @@ export function EvidenceChecklist({
             {state !== undefined && state.files.length > 0 && (
               <ul className="grid gap-1">
                 {state.files.map((file) => {
-                  const id = canUpload ? evidenceOf(file.id) : undefined;
+                  const id = canUpload ? evidenceOf(file.id, item.code) : undefined;
                   return (
                     <li key={file.id} className="flex flex-wrap items-center gap-2">
                       <span>
@@ -150,7 +156,7 @@ export function EvidenceChecklist({
               </ul>
             )}
             {canUpload && item.kind !== 'generated' && (
-              <div>
+              <div className="flex flex-wrap gap-2">
                 <EvidenceUpload
                   periodId={periodId}
                   indicatorCode={indicatorCode}
@@ -158,6 +164,8 @@ export function EvidenceChecklist({
                   label={t('accreditation.workspace.evidence.upload')}
                   onDone={onUploaded}
                 />
+                {/* ---- the stocktake minutes as evidence: the stored minutes of a finished session ---- */}
+                {item.code === MINUTES_EVIDENCE_CODE && <EvidenceMinutes periodId={periodId} indicatorCode={indicatorCode} onDone={onUploaded} />}
               </div>
             )}
           </li>

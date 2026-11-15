@@ -179,6 +179,24 @@ describe('openFilesZip', () => {
     }
   });
 
+  // ---- the stocktake reports ----
+  it('reads the stocktake reports `files/reports/`, from a top folder that holds only them too', async () => {
+    const only = await openFilesZip(await zipAt(rawZip([regular('slims9/files/reports/stock_take_1_report.html', 'r1'), regular('slims9/files/cache/x.tmp', 'x')])));
+    try {
+      expect((await read(only, 'files/reports/stock_take_1_report.html'))?.toString()).toBe('r1');
+      expect(await only.open('slims9/files/reports/stock_take_1_report.html')).toBeNull();
+    } finally {
+      await only.close();
+    }
+    const both = await openFilesZip(await zipAt(rawZip([regular('repository/a.pdf', 'a'), regular('files/reports/stock_take_2_report.html', 'r2')])));
+    try {
+      expect((await read(both, 'files/reports/stock_take_2_report.html'))?.toString()).toBe('r2');
+      expect(await both.open('files/reports/../../repository/a.pdf')).toBeNull();
+    } finally {
+      await both.close();
+    }
+  });
+
   it('refuses a zip holding two SLiMS folders side by side (files_zip_ambiguous) rather than picking one (C18)', async () => {
     const zip = rawZip([regular('slims8/repository/a.pdf', 'a'), regular('slims9/images/docs/b.jpg', 'b')]);
     const error = await failure(openFilesZip(await zipAt(zip)));

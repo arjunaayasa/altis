@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { acceptChunk, completeUpload, createUpload, uploadContext, uploadOwner } from '@altis/core';
+import { acceptChunk, completeUpload, createUpload, localStorageDriver, uploadContext, uploadOwner } from '@altis/core';
 import { withTx } from '@altis/db';
 import { newId } from '@altis/shared';
 import type { MatrixFixture, MatrixSeed } from '../matrix-fixtures.js';
@@ -8,7 +8,7 @@ import { seedBranch, seedItem } from './komunitas-circulation.js';
 
 // The matrix rows, fixtures and `system` route ids of stocktake (inventarisasi): one row per route id in the row format
 // of db/matrix.test.ts's CATALOG, one fixture per route in the same order. Every route is `deny` in maintenance; the
-// minutes PDF is a download (`mode: system`). Each call gets a branch of its own with an active session (and, for an
+// minutes PDF and a migrated session's SLiMS report are downloads (`mode: system`). Each call gets a branch of its own with an active session (and, for an
 // undo, a copy the caller scanned), so that a super admin's call succeeds (audit once).
 
 const SCAN = 'P:stocktake.scan.use@branchId';
@@ -73,6 +73,8 @@ const rows: Record<string, string> = {
   'stocktake.sessions.finish': `POST ${API}/:id/finish | ${MANAGE} | - | reauth | write | deny | store | stocktake.session.finish | handler | -`,
   'stocktake.sessions.cancel': `POST ${API}/:id/cancel | ${MANAGE} | - | - | write | deny | store | stocktake.session.cancel | handler | -`,
   'stocktake.sessions.minutes': `GET ${API}/:id/minutes | ${SCAN} | - | - | system | deny | none | null | - | -`,
+  // ---- the SLiMS report of a migrated session ----
+  'stocktake.sessions.slims_report': `GET ${API}/:id/slims-report | ${SCAN} | - | - | system | deny | none | null | - | -`,
 };
 
 const onSession =
@@ -118,11 +120,39 @@ const fixtures: Record<string, MatrixFixture> = {
   'stocktake.sessions.finish': onSession(() => ({ confirmName: 'Sesi Matriks', markMissing: true, restoreFound: true })),
   'stocktake.sessions.cancel': onSession(),
   'stocktake.sessions.minutes': onSession(),
+  // ---- the SLiMS report of a migrated session: a finished session with its stored report ----
+  'stocktake.sessions.slims_report': async (s) => {
+    const { branchId, id } = await seedSession(s, 'finished');
+    if (s.dataDir === undefined) throw new Error('the SLiMS report fixture needs the DATA_DIR of the app');
+    const bytes = Buffer.from('<html><body>Laporan</body></html>', 'utf8');
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    const fileId = newId();
+    await localStorageDriver(s.dataDir).put(fileId, bytes, { size: bytes.byteLength, sha256 });
+    await s.h.db
+      .insertInto('files')
+      .values({
+        id: fileId,
+        original_name: 'stock_take_report.html',
+        mime: 'application/octet-stream',
+        size: bytes.byteLength,
+        sha256,
+        context: 'stocktake.slims_report',
+        owner_type: 'stocktakes',
+        owner_id: id,
+        access: 'staff',
+        status: 'ok',
+        created_at: s.now,
+        created_by: null,
+      })
+      .execute();
+    await s.h.db.updateTable('stocktakes').set({ report_file_id: fileId, source: 'migrated' }).where('id', '=', id).execute();
+    return { params: { branchId, id } };
+  },
 };
 
 export const MATRIX: AreaMatrix = {
   rows,
   fixtures,
   maintenance: {},
-  systemRoutes: ['stocktake.sessions.minutes'],
+  systemRoutes: ['stocktake.sessions.minutes', 'stocktake.sessions.slims_report'],
 };

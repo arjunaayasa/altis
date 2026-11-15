@@ -109,6 +109,11 @@ export const STOCKTAKE_ADMIN_ID = {
   'stocktake.ui.diag.stuck.no_job': 'Sesi ini {status} tetapi tidak punya tugas yang berjalan. Batalkan sesinya, atau periksa Tugas.',
   'stocktake.ui.diag.stuck.job_ended': 'Tugas sesi ini berhenti sebelum selesai. Periksa Tugas dan jalankan ulang tugasnya.',
   'stocktake.ui.diag.stuck.stalled': 'Tugas sesi ini tidak bergerak lebih dari 10 menit. Periksa apakah pelaksana tugas berjalan.',
+  // ---- the SLiMS report of a migrated session ----
+  'stocktake.ui.col.slims_report': 'Laporan SLiMS',
+  'stocktake.ui.slims_report.download': 'Unduh',
+  'stocktake.ui.slims_report.download_named': 'Unduh laporan SLiMS sesi {name}',
+  'stocktake.ui.slims_report.session': 'Laporan SLiMS (unduh)',
 } as const;
 
 export const STOCKTAKE_ADMIN_EN: Record<keyof typeof STOCKTAKE_ADMIN_ID, string> = {
@@ -217,4 +222,9 @@ export const STOCKTAKE_ADMIN_EN: Record<keyof typeof STOCKTAKE_ADMIN_ID, string>
   'stocktake.ui.diag.stuck.no_job': 'This session is {status} but has no job running. Cancel the session, or look at Jobs.',
   'stocktake.ui.diag.stuck.job_ended': 'This session’s job stopped before it was done. Look at Jobs and run the job again.',
   'stocktake.ui.diag.stuck.stalled': 'This session’s job has not moved for more than 10 minutes. Check that the job runner is running.',
+  // ---- the SLiMS report of a migrated session ----
+  'stocktake.ui.col.slims_report': 'SLiMS report',
+  'stocktake.ui.slims_report.download': 'Download',
+  'stocktake.ui.slims_report.download_named': 'Download the SLiMS report of session {name}',
+  'stocktake.ui.slims_report.session': 'SLiMS report (download)',
 };

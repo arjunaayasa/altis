@@ -41,7 +41,8 @@ import { readStored, writeStored } from '@/screens/circulation/common';
  * job while it runs, the scan box (a scanner anywhere on the page, or typing and Enter) with the shelf being checked,
  * clear feedback for every scan, my last scans with "Batalkan", a code list upload, the lists by state, the unknown
  * codes and the officers, the finish (re-authentication, the session's name typed in full), cancelling, and the
- * minutes PDF.
+ * minutes PDF. A session the SLiMS migration brought with the report file SLiMS wrote for it offers that file as a
+ * download, in the history and on its page.
  */
 
 const BRANCH_KEY = 'altis.stocktake-branch';
@@ -102,6 +103,11 @@ function useLocations(branchId: string | null): { id: string; label: string; par
   }, [q.data, branchId]);
 }
 
+/** The API path of a migrated session's SLiMS report (a download: another system's HTML page, never shown here). */
+function slimsReportPath(s: StocktakeView): string {
+  return `branches/${encodeURIComponent(s.branch.id)}/stocktakes/${encodeURIComponent(s.id)}/slims-report`;
+}
+
 function statusTone(status: StocktakeView['status']): 'info' | 'warning' | 'neutral' {
   return status === 'active' ? 'info' : status === 'preparing' || status === 'finishing' ? 'warning' : 'neutral';
 }
@@ -146,6 +152,23 @@ export function StocktakeListScreen() {
     { id: 'found', header: t('stocktake.ui.count.found'), cell: (s) => `${s.counts.found} / ${s.counts.total}` },
     { id: 'pending', header: t('stocktake.ui.count.pending'), cell: (s) => s.counts.pending },
     { id: 'source', header: t('stocktake.ui.col.source'), cell: (s) => t(`vocab.stocktake_source.${s.source}`) },
+    // ---- the SLiMS report of a migrated session ----
+    {
+      id: 'slims_report',
+      header: t('stocktake.ui.col.slims_report'),
+      cell: (s) =>
+        s.migratedReport === null ? (
+          '—'
+        ) : (
+          <a
+            href={`/api/v1/${slimsReportPath(s)}`}
+            download
+            aria-label={t('stocktake.ui.slims_report.download_named', { name: s.name })}
+            className="text-primary underline-offset-4 hover:underline">
+            {t('stocktake.ui.slims_report.download')}
+          </a>
+        ),
+    },
   ];
   return (
     <div className="flex max-w-6xl flex-col gap-4">
@@ -575,6 +598,11 @@ export function StocktakeSessionScreen() {
         <a href={`/api/v1/${base}/minutes`} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted">
           {t('stocktake.ui.minutes')}
         </a>
+        {s.migratedReport !== null && (
+          <a href={`/api/v1/${base}/slims-report`} download className="inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted">
+            {t('stocktake.ui.slims_report.session')}
+          </a>
+        )}
         {manage && active && (
           <Button variant="destructive" onClick={() => setFinishing(true)}>
             {t('stocktake.ui.finish.open')}

@@ -932,3 +932,39 @@ export interface SnapshotView {
 export interface SnapshotListResponse {
   snapshots: Omit<SnapshotView, 'values'>[];
 }
+
+// ---- the stocktake minutes as evidence ------------------------------------------------------------------------------
+
+/** The checklist item that takes the minutes of a stocktake session (berita acara inventarisasi). */
+export const MINUTES_EVIDENCE_CODE = 'stocktake_minutes';
+
+/**
+ * `POST accreditation/evidence/stocktake-minutes`: the stored minutes of a finished stocktake session linked as
+ * evidence of a period's indicator, under its minutes item. The evidence row names the stored file itself (nothing is
+ * copied); the caption defaults to the session's name.
+ */
+export const EvidenceMinutesBody = z.strictObject({
+  stocktakeId: ulidField,
+  periodId: ulidField,
+  indicatorCode: z.string().min(1).max(16),
+  caption: shortText(191).optional(),
+  sortOrder: sortOrderField.optional(),
+});
+
+export type EvidenceMinutesBody = z.infer<typeof EvidenceMinutesBody>;
+
+/** A finished stocktake session whose minutes are stored, as the evidence picker lists it. */
+export interface EvidenceMinutesCandidate {
+  stocktakeId: string;
+  name: string;
+  branch: { id: string; code: string; name: string };
+  finishedAt: number;
+  fileId: string;
+  fileName: string;
+  size: number;
+}
+
+/** `GET accreditation/evidence/stocktake-minutes`: the sessions whose minutes the user may link (newest first). */
+export interface EvidenceMinutesListResponse {
+  items: EvidenceMinutesCandidate[];
+}
