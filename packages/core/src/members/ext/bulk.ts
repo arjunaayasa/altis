@@ -2,7 +2,9 @@ import type { DB } from '@altis/db';
 import { DomainError, addDays, newId, type MemberBulkRefusal, type MemberEventType } from '@altis/shared';
 import { MEMBER_CLASS_MOVE_MAX, MemberBulkBody, type MemberBulkRefused, type MemberBulkResponse } from '@altis/shared/api/member-ops';
 import type { Selectable, Transaction, Updateable } from 'kysely';
+import { closeMemberHolds } from '../../circulation/holds.js';
 import type { TxCtx } from '../../context.js';
+import { revokeMemberSessions } from '../area/sessions.js';
 import { libraryToday, memberNotFound, memberStale, memberValidationFailed, openLoanCount, parseMemberBody, textOrNull } from '../common.js';
 import { lockLiveMemberType } from '../types.js';
 import { memberBalanceMinor } from './hooks.js';
@@ -226,6 +228,10 @@ export async function bulkMembers(tx: TxCtx, input: MemberBulkBody): Promise<Mem
           continue;
         }
         await apply(tx, row, { archived_at: tx.now }, [{ type: 'archived', meta: {} }]);
+        // As the single archive: the member's active holds are cancelled (a kept copy goes to the next in its queue)
+        // and the member's OPAC sessions end.
+        await closeMemberHolds(tx, id);
+        await revokeMemberSessions(trx, id);
         done += 1;
         break;
       }

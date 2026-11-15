@@ -1,10 +1,12 @@
 import type { DB } from '@altis/db';
-import { DomainError, isDomainError, type Locale, type MemberStatus } from '@altis/shared';
+import { DomainError, type Locale, type MemberStatus } from '@altis/shared';
 import type { Kysely, Transaction } from 'kysely';
 import type { TxCtx } from '../../context.js';
 import { readSettings } from '../../settings/service.js';
 import { renewLoan } from '../../circulation/desk.js';
 import { libraryToday, lockLiveMember, memberStatusOf } from '../common.js';
+import { registerMemberDataSection, registerMemberErasureStep } from '../ext/hooks.js';
+import { memberDataSectionsOf } from '../ext/privacy.js';
 
 // What a signed-in member sees and does in the OPAC member area, besides the password (auth.ts): the account and its
 // card, the open loans and the loan history (paged), the online renewal, the bookmarks, the attachments of access
@@ -20,9 +22,9 @@ import { libraryToday, lockLiveMember, memberStatusOf } from '../common.js';
 //   hidden from the list, not deleted.
 // - Attachments of access `members`: open to a signed-in member whose type the attachment lists (none listed: every
 //   member), on a record the OPAC shows.
-// - The download of the member's own data: every personal column of the member, the extra fields, the history, the
-//   loans, the holds and the bookmarks; the other parts of the library (visits, fines) add theirs through
-//   MEMBER_EXPORT_SECTIONS.
+// - The download of the member's own data: every personal column of the member and the extra fields, then the same
+//   sections as the export staff download (members/ext/privacy.ts): the history, the loans, the visits, and every
+//   section the other parts of the library register (holds, charges, payments, clearance letters, bookmarks, notices).
 
 type Db = Kysely<DB> | Transaction<DB>;
 
@@ -374,15 +376,6 @@ export async function memberMayOpenFile(db: Db, f: { owner_type: string | null; 
 // ---------------------------------------------------------------------------------------------------------------
 // The member's own data
 
-/** One part of the download of a member's own data, added by the part of the library that owns it. */
-export interface MemberExportSection {
-  key: string;
-  read(db: Db, memberId: string): Promise<unknown>;
-}
-
-/** Further parts of the download (visits, fines and payments, ...), pushed by their owners. */
-export const MEMBER_EXPORT_SECTIONS: MemberExportSection[] = [];
-
 /** The columns of a member row the download carries: every personal column and the membership facts. */
 const PROFILE_COLUMNS = [
   'member_no_display',
@@ -435,57 +428,12 @@ export async function memberDataExport(db: Db, memberId: string, now: number): P
     .where('v.entity_id', '=', memberId)
     .orderBy('d.sort_order')
     .execute();
-  const events = await db.selectFrom('member_events').select(['at', 'type', 'actor_type', 'meta']).where('member_id', '=', memberId).orderBy('at').orderBy('id').execute();
-  const loans = await db
-    .selectFrom('loans as l')
-    .leftJoin('items as i', 'i.id', 'l.item_id')
-    .leftJoin('records as r', 'r.id', 'l.record_id')
-    .select(['r.title', 'i.barcode_display', 'l.loaned_on', 'l.due_on', 'l.returned_on', 'l.outcome', 'l.renewals'])
-    .where('l.member_id', '=', memberId)
-    .orderBy('l.loaned_at')
-    .orderBy('l.id')
-    .execute();
-  const holds = await db
-    .selectFrom('holds as h')
-    .leftJoin('records as r', 'r.id', 'h.record_id')
-    .select(['r.title', 'h.status', 'h.placed_on', 'h.pickup_until', 'h.close_reason', 'h.source'])
-    .where('h.member_id', '=', memberId)
-    .orderBy('h.placed_at')
-    .orderBy('h.id')
-    .execute();
-  const bookmarks = await db
-    .selectFrom('member_bookmarks as b')
-    .leftJoin('records as r', 'r.id', 'b.record_id')
-    .select(['b.record_id', 'r.title', 'b.created_at'])
-    .where('b.member_id', '=', memberId)
-    .orderBy('b.created_at')
-    .execute();
-  const out: Record<string, unknown> = {
+  return {
     exportedAt: new Date(now).toISOString(),
     profile,
     customFields: custom.map((c) => ({ code: c.code_display, label: c.label, value: parseJson(c.value) })),
-    events: events.map((e) => ({ at: new Date(Number(e.at)).toISOString(), type: e.type, by: e.actor_type, meta: parseJson(e.meta) })),
-    loans: loans.map((l) => ({
-      title: l.title,
-      barcode: l.barcode_display,
-      loanedOn: l.loaned_on,
-      dueOn: l.due_on,
-      returnedOn: l.returned_on,
-      outcome: l.outcome,
-      renewals: Number(l.renewals),
-    })),
-    holds: holds.map((h) => ({ title: h.title, status: h.status, placedOn: h.placed_on, pickupUntil: h.pickup_until, closeReason: h.close_reason, source: h.source })),
-    bookmarks: bookmarks.map((b) => ({ recordId: b.record_id, title: b.title, at: new Date(Number(b.created_at)).toISOString() })),
+    ...(await memberDataSectionsOf(db, memberId)),
   };
-  for (const section of MEMBER_EXPORT_SECTIONS) {
-    try {
-      out[section.key] = await section.read(db, memberId);
-    } catch (error) {
-      if (!isDomainError(error)) throw error;
-      out[section.key] = null;
-    }
-  }
-  return out;
 }
 
 function parseJson(text: string | null): unknown {
@@ -496,3 +444,25 @@ function parseJson(text: string | null): unknown {
     return text;
   }
 }
+
+// A member's bookmarks are part of the member's own data; anonymising the member deletes them.
+registerMemberDataSection({
+  name: 'bookmarks',
+  read: async (db, memberId) => {
+    const rows = await db
+      .selectFrom('member_bookmarks as b')
+      .leftJoin('records as r', 'r.id', 'b.record_id')
+      .select(['b.record_id', 'r.title', 'b.created_at'])
+      .where('b.member_id', '=', memberId)
+      .orderBy('b.created_at')
+      .orderBy('b.record_id')
+      .execute();
+    return rows.map((b) => ({ recordId: b.record_id, title: b.title ?? null, at: Number(b.created_at) }));
+  },
+});
+registerMemberErasureStep({
+  name: 'bookmarks',
+  run: async (tx, memberId) => {
+    await tx.trx.deleteFrom('member_bookmarks').where('member_id', '=', memberId).execute();
+  },
+});

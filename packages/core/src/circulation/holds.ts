@@ -5,9 +5,11 @@ import type { Selectable, Transaction } from 'kysely';
 import { barcodeProblem, normalizeBarcode } from '../catalog/lib/barcode.js';
 import type { TxCtx } from '../context.js';
 import { lockLiveMember, memberNotFound, memberValidationFailed, type Db } from '../members/common.js';
+import { registerHistoryAnonymizeStep, registerMemberDataSection, registerMemberErasureStep } from '../members/ext/hooks.js';
 import { indexRecords } from '../search/index-records.js';
 import { readSettings } from '../settings/service.js';
 import { branchToday, dueDateFor } from './dates.js';
+import { registerCirculationHoldSeam } from './seams.js';
 
 // Holds and the hold shelf (rak tunggu).
 //
@@ -22,7 +24,10 @@ import { branchToday, dueDateFor } from './dates.js';
 //   ready → waiting                  the kept copy changes status, is archived or is lent to someone else by force
 //                                    (returnKeptHoldsToQueue): the hold keeps its place in the queue
 //   waiting, ready → fulfilled       the member borrows a copy of the title (fulfilHoldOnLoan)
-//   waiting, ready → cancelled       the member or staff cancel it (cancelHold), the member is archived
+//   fulfilled → ready, waiting       the loan that fulfilled it is voided (restoreFulfilledHold): a hold that was
+//                                    ready keeps the voided loan's copy until its old pickup deadline
+//   waiting, ready → cancelled       the member or staff cancel it (cancelHold), the member is archived or
+//                                    anonymised (closeMemberHolds)
 //   ready → expired                  the pickup deadline passed (holds-job.ts); the copy goes to the next in the queue,
 //                                    else it is listed to go back to the shelf until staff clear it
 //   waiting → expired                its own end date (`expires_on`) passed
@@ -653,6 +658,64 @@ export async function fulfilHoldOnLoan(tx: TxCtx, input: { memberId: string; rec
 }
 
 /**
+ * The desk voided the loan `loanId` (under its locks: the loan, its copy, its record, its member): the hold the loan
+ * fulfilled is active again, with its place in the queue (its `placed_at` never changed) and its `active_key`. A hold
+ * that was `ready` is ready again with the voided loan's copy kept for it until its old pickup deadline, when that copy
+ * is live, at the hold's pickup branch and kept for no one else; otherwise, like a hold that was `waiting`, it waits
+ * again. The hold's id, or null when the loan fulfilled none (or the member holds the title again already).
+ */
+export async function restoreFulfilledHold(tx: TxCtx, input: { loanId: string }): Promise<string | null> {
+  const { trx } = tx;
+  const h = await trx.selectFrom('holds').selectAll().where('loan_id', '=', input.loanId).where('status', '=', 'fulfilled').executeTakeFirst();
+  if (h === undefined || h.member_id === null) return null;
+  const key = activeKey(h.member_id, h.record_id);
+  if ((await trx.selectFrom('holds').select('id').where('active_key', '=', key).executeTakeFirst()) !== undefined) return null;
+  const loan = await trx.selectFrom('loans').select(['item_id']).where('id', '=', input.loanId).executeTakeFirst();
+  const itemId = loan?.item_id ?? null;
+  let keep = false;
+  if (h.ready_at !== null && itemId !== null) {
+    const item = await trx.selectFrom('items').select(['branch_id', 'archived_at', 'record_id']).where('id', '=', itemId).executeTakeFirst();
+    keep =
+      item !== undefined &&
+      item.archived_at === null &&
+      item.record_id === h.record_id &&
+      item.branch_id === h.pickup_branch_id &&
+      (await keptFor(trx, itemId)) === null &&
+      (await trx.selectFrom('loans').select('id').where('open_item_id', '=', itemId).executeTakeFirst()) === undefined;
+  }
+  const pinned = Number(h.pinned) === 1;
+  const r = await trx
+    .updateTable('holds')
+    .set((eb) => ({
+      status: keep ? 'ready' : 'waiting',
+      active_key: key,
+      ...(keep ? { item_id: itemId, trap_item_id: itemId } : { item_id: pinned ? h.item_id : null, trap_item_id: null, ready_at: null, pickup_until: null }),
+      closed_at: null,
+      close_reason: null,
+      loan_id: null,
+      updated_at: tx.now,
+      updated_by: staffOf(tx),
+      version: eb('version', '+', 1),
+    }))
+    .where('id', '=', h.id)
+    .where('status', '=', 'fulfilled')
+    .where('loan_id', '=', input.loanId)
+    .executeTakeFirst();
+  return Number(r.numUpdatedRows) === 1 ? h.id : null;
+}
+
+/** The members among `memberIds` with a hold `ready` on a hold shelf (a clearance letter waits for them). */
+export async function membersWithReadyHolds(db: Db, memberIds: readonly string[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  const unique = [...new Set(memberIds)];
+  for (let i = 0; i < unique.length; i += 500) {
+    const rows = await db.selectFrom('holds').select('member_id').where('member_id', 'in', unique.slice(i, i + 500)).where('status', '=', 'ready').execute();
+    for (const r of rows) if (r.member_id !== null) out.add(r.member_id);
+  }
+  return out;
+}
+
+/**
  * Whether a renewal of a loan of `itemId` (title `recordId`, loan branch `branchId`) must be refused for the queue: a
  * waiting hold on the title at that branch that is not pinned to another copy.
  */
@@ -748,6 +811,46 @@ export async function anonymizeClosedHolds(trx: Transaction<DB>, closedBefore: n
   const r = await trx.updateTable('holds').set({ member_id: null }).where('id', 'in', ids).where('active_key', 'is', null).executeTakeFirst();
   return Number(r.numUpdatedRows);
 }
+
+// ---- what this module plugs in when it loads ---------------------------------------------------------------------------
+
+// The circulation core's seam: a voided loan gives its hold back; a clearance letter waits for a ready hold.
+registerCirculationHoldSeam({ restoreFulfilledHold, membersWithReadyHolds });
+
+// A member's holds are part of the member's own data; anonymising the member closes the active ones (a kept copy goes
+// to the next in its queue); the daily history anonymisation takes the member from closed holds as old as the loans'
+// period.
+registerMemberDataSection({
+  name: 'holds',
+  read: async (db, memberId) => {
+    const rows = await db
+      .selectFrom('holds as h')
+      .leftJoin('records as r', 'r.id', 'h.record_id')
+      .select(['r.title', 'h.status', 'h.source', 'h.placed_on', 'h.ready_at', 'h.pickup_until', 'h.closed_at', 'h.close_reason'])
+      .where('h.member_id', '=', memberId)
+      .orderBy('h.placed_at')
+      .orderBy('h.id')
+      .execute();
+    return rows.map((h) => ({
+      title: h.title ?? null,
+      status: h.status,
+      source: h.source,
+      placedOn: h.placed_on,
+      readyAt: h.ready_at === null ? null : ok(h.ready_at),
+      pickupUntil: h.pickup_until,
+      closedAt: h.closed_at === null ? null : ok(h.closed_at),
+      closeReason: h.close_reason,
+    }));
+  },
+});
+registerMemberErasureStep({
+  name: 'holds',
+  run: async (tx, memberId) => void (await closeMemberHolds(tx, memberId)),
+});
+registerHistoryAnonymizeStep({
+  name: 'holds',
+  run: async (trx, cut) => (cut.loansBefore === null ? 0 : anonymizeClosedHolds(trx, cut.loansBefore)),
+});
 
 // ---- records: merge --------------------------------------------------------------------------------------------------
 
