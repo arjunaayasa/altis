@@ -185,7 +185,11 @@ function UnreadLabel({ kind }: { kind: 'phase3' | 'derived' | undefined }) {
   return <Badge>{t(kind === 'derived' ? 'catalog.migration.report.unread_derived' : 'catalog.migration.report.unread')}</Badge>;
 }
 
-export function ReportView({ run }: { run: RunView }) {
+/**
+ * `unclosed`: the run ended outside its slices (its job cancelled while queued, or dead) and nothing closed it yet: its
+ * counts of the ALTIS tables are still its first stage's, so they are not shown as its result.
+ */
+export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?: boolean }) {
   const t = useT();
   const locale = useLocale();
   const number = new Intl.NumberFormat(locale === 'en' ? 'en' : 'id');
@@ -292,7 +296,13 @@ export function ReportView({ run }: { run: RunView }) {
             {report.catalogChanges !== undefined && <li>{t('catalog.migration.report.catalog_changes', { count: n(report.catalogChanges) })}</li>}
           </ul>
 
-          {report.targets.length > 0 && (
+          {report.targets.length > 0 && unclosed && !run.dryRun && (
+            <section className="flex flex-col gap-1">
+              <h3 className="text-sm font-semibold">{t('catalog.migration.report.targets')}</h3>
+              <p className="text-sm text-muted-foreground">{t('catalog.migration.report.targets_unclosed')}</p>
+            </section>
+          )}
+          {report.targets.length > 0 && !(unclosed && !run.dryRun) && (
             <ReportTable
               title={t('catalog.migration.report.targets')}
               {...(run.dryRun ? { hint: t('catalog.migration.report.targets_dry') } : {})}

@@ -27,6 +27,7 @@ export {
   checkSlimsAdoption,
   liveSlimsMigration,
   migrateSlimsJob,
+  releaseCancelledSlimsMigration,
   releaseEndedRunWork,
   startSlimsMigration,
 } from './job.js';

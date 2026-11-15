@@ -148,6 +148,8 @@ export const MIGRATION_ID = {
   'catalog.migration.report.unread': 'Tidak dibaca (belum didukung)',
   'catalog.migration.report.targets': 'Baris di tabel ALTIS',
   'catalog.migration.report.targets_dry': 'Uji kering tidak menulis apa pun ke katalog, jadi jumlahnya tetap.',
+  'catalog.migration.report.targets_unclosed':
+    'Baris yang sudah ditulis proses ini dihitung ulang saat proses ini ditutup (ketika migrasi berikutnya dimulai, atau oleh pemeliharaan harian).',
   'catalog.migration.report.col_target': 'Tabel ALTIS',
   'catalog.migration.report.col_before': 'Sebelum',
   'catalog.migration.report.col_after': 'Sesudah',
@@ -455,6 +457,8 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.report.unread': 'Not read (not supported yet)',
   'catalog.migration.report.targets': 'Rows in the ALTIS tables',
   'catalog.migration.report.targets_dry': 'A dry run writes nothing to the catalogue, so the counts stay the same.',
+  'catalog.migration.report.targets_unclosed':
+    'The rows this run has written are counted again once the run is closed (when the next migration starts, or by the daily housekeeping).',
   'catalog.migration.report.col_target': 'ALTIS table',
   'catalog.migration.report.col_before': 'Before',
   'catalog.migration.report.col_after': 'After',
