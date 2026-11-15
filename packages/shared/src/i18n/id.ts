@@ -41,6 +41,8 @@ import { SLIMS_PEOPLE_ID } from './slims-people.js';
 import { STOCKTAKE_ID } from './stocktake.js';
 // ---- Komunitas K5 (reports) ----
 import { REPORTS_K5_ID } from './reports-k5.js';
+// ---- Komunitas (OPAC home page) ----
+import { OPAC_HOME_ID } from './opac-home.js';
 
 /**
  * The keys that exist only in the test profile (spec §12.5, ruling S28), next to `permissionCatalog`'s test entry and the
@@ -1614,6 +1616,8 @@ const BASE = {
   ...STOCKTAKE_ID,
   // ---- Komunitas K5 (reports) ----
   ...REPORTS_K5_ID,
+  // ---- Komunitas (OPAC home page) ----
+  ...OPAC_HOME_ID,
 } satisfies Record<string, string>;
 
 /**

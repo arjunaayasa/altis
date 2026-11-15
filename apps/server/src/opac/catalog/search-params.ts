@@ -14,7 +14,7 @@ import { ATTACHMENT_MEDIA, isUlid, normalizeKey, type Locale } from '@altis/shar
 //   koleksi    a collection type's code    cabang   a branch's code
 //   lokasi     a room's id                 subjek   a subject's id        pengarang   an agent's id
 //   tahun      `1990-2000` or one year     tersedia `1`                   lampiran    one of ATTACHMENT_MEDIA
-//   kelas      0-9 (the `cl` facet, M4)    urut     relevansi|terbaru|judul|tahun_baru|tahun_lama
+//   kelas      0-9 (the `cl` facet, M4)    urut     relevansi|terbaru|judul|tahun_baru|tahun_lama|populer
 //   hal        the page, from 1 (past 50 the search reports the page cap, §4.5)
 //
 // A parameter given twice counts once (its first value). A code is matched as its `code_key` (normalizeKey: NFKC, upper
@@ -54,6 +54,8 @@ export const OPAC_SORTS = Object.freeze({
   judul: 'title',
   tahun_baru: 'year_desc',
   tahun_lama: 'year_asc',
+  // ---- Komunitas (OPAC home page): the popular titles first ----
+  populer: 'popular',
 } as const satisfies Record<string, NonNullable<CatalogSearchQuery['sort']>>);
 
 export type OpacSort = keyof typeof OPAC_SORTS;

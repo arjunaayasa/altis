@@ -29,6 +29,8 @@ import { SLIMS_PEOPLE_EN } from './slims-people.js';
 import { STOCKTAKE_EN } from './stocktake.js';
 // ---- Komunitas K5 (reports) ----
 import { REPORTS_K5_EN } from './reports-k5.js';
+// ---- Komunitas (OPAC home page) ----
+import { OPAC_HOME_EN } from './opac-home.js';
 
 const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   // ---- error.<CODE> ---------------------------------------------------------------------------------------
@@ -1560,6 +1562,8 @@ const BASE: Omit<Record<MessageKey, string>, TestOnlyKey> = {
   ...STOCKTAKE_EN,
   // ---- Komunitas K5 (reports) ----
   ...REPORTS_K5_EN,
+  // ---- Komunitas (OPAC home page) ----
+  ...OPAC_HOME_EN,
 };
 
 /** Spread in only under the test profile, like the Indonesian one (see `id.ts`). */

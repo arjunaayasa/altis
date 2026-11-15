@@ -652,3 +652,6 @@ export * from './visits/index.js';
 export * from './members/ext/index.js';
 // ---- Komunitas K4 (stocktake) ----
 export * from './stocktake/index.js';
+// ---- Komunitas (OPAC home page) ----
+// The home page's content and the popular titles.
+export * from './opac-home/index.js';
