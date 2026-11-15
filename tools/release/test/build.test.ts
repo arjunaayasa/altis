@@ -222,7 +222,8 @@ describe('test-profile release 0.1.0-test', () => {
     const scripts = [...html.matchAll(/<script\b[^>]*>/gi)].map((m) => m[0]);
     expect(scripts.length).toBeGreaterThan(0);
     for (const tag of scripts) expect(tag).toMatch(/\ssrc="\/admin\/assets\/[^"]+\.js"/);
-    for (const [, href] of html.matchAll(/<link\b[^>]*\shref="([^"]+)"/gi)) expect(href).toMatch(/^\/admin\/assets\//);
+    // Every <link> names an asset too, but for the empty `data:` icon that spares the browser a /favicon.ico request.
+    for (const [, href] of html.matchAll(/<link\b[^>]*\shref="([^"]+)"/gi)) expect(href).toMatch(/^(\/admin\/assets\/|data:,$)/);
 
     // Built for this release: the version the API answers with (X-Altis-Build) is the SPA's own (the minifier may quote
     // it with any of ' " `).
@@ -244,7 +245,7 @@ describe('test-profile release 0.1.0-test', () => {
       else expect(tag).toMatch(/\ssrc="\/admin\/assets\/[^"]+\.js"/);
     }
     for (const [, src] of html.matchAll(/\ssrc="\/admin\/assets\/([^"]+)"/gi)) expect(assets).toContain(`${RELEASE}/public/admin/assets/${src}`);
-    for (const [, href] of html.matchAll(/<link\b[^>]*\shref="([^"]+)"/gi)) expect(href).toMatch(/^\/admin\/assets\//);
+    for (const [, href] of html.matchAll(/<link\b[^>]*\shref="([^"]+)"/gi)) expect(href).toMatch(/^(\/admin\/assets\/|data:,$)/);
     // Its own entry: not the admin SPA's script.
     const entry = (doc: string): string[] => [...doc.matchAll(/<script\b[^>]*\ssrc="([^"]+)"/gi)].map((m) => m[1]!);
     expect(entry(html)).not.toEqual(entry(textOf(entries, `${RELEASE}/public/admin/index.html`)));
