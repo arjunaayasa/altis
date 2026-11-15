@@ -635,4 +635,16 @@ describe.skipIf(!ctx.available)(`SLiMS members, staff, visits and circulation [$
     expect(byKey('items_on_loan'), JSON.stringify(byKey('items_on_loan'))).toMatchObject({ ok: true });
     expect((s.matches ?? []).filter((m) => !m.ok)).toEqual([]);
   });
+
+  it('a dry run with no collection type mapped yet counts a SLiMS rule of a collection type the source holds, as the real run makes it', async () => {
+    await wipe();
+    const tables = slimsTables();
+    tables['mst_coll_type'] = t(['coll_type_id', 'coll_type_name'], [{ coll_type_id: 1, coll_type_name: 'Umum' }]);
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables }));
+    // Another source name: nothing of the catalogue is mapped under it, as on a fresh installation.
+    const dry = await start({ dryRun: true, sourceName: 'slims-baru' });
+    expect(await runToEnd(dry.jobId)).toBe('succeeded');
+    // Rule 2 (Siswa, collection type 1) is made; rule 3 repeats its tuple; rule 4's collection type 7 is in no table.
+    expect((await summaryOf(dry.runId)).tables['mst_loan_rules']).toMatchObject({ source: 4, migrated: 1, archived: 1, skipped: { duplicate_rule: 1, coll_type_missing: 1 } });
+  });
 });

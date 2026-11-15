@@ -33,7 +33,7 @@ import {
   sourceItemIds,
   type PeoplePhase,
 } from './people-kit.js';
-import { againOnRace, cachedForRun, cutChars, keyOf, mappedRows, oneLine, rowKey, scanAll, stateOf, tableOf, textOf, type BatchIo, type Ledger } from './stage-b-kit.js';
+import { againOnRace, cachedForRun, cutChars, keyOf, mappedRows, oneLine, rowKey, scanAll, sourceKeys, stateOf, tableOf, textOf, type BatchIo, type Ledger } from './stage-b-kit.js';
 import { visitsCutoff } from './visits.js';
 
 // Circulation (spec K3: the SLiMS tables `mst_loan_rules`, `holiday`, `loan`, `loan_history`, `fines`, `reserve`,
@@ -317,8 +317,9 @@ async function rulesBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: B
     }
     const dry = io.trx === null;
     const typeId = mt === '0' ? null : (altisTypes.get(mt) ?? (dry && types.has(mt) ? `~${mt}` : undefined));
-    const collId = ct === '0' ? null : colls.get(ct);
-    const gmdId = gm === '0' ? null : gmds.get(gm);
+    // A dry run writes no collection type or GMD: one the source holds counts as the catalogue stages would map it.
+    const collId = ct === '0' ? null : (colls.get(ct) ?? (dry && (await sourceKeys(c, 'mst_coll_type', 'coll_type_id')).has(ct) ? `~c${ct}` : undefined));
+    const gmdId = gm === '0' ? null : (gmds.get(gm) ?? (dry && (await sourceKeys(c, 'mst_gmd', 'gmd_id')).has(gm) ? `~g${gm}` : undefined));
     const missing = typeId === undefined ? 'type_missing' : collId === undefined ? 'coll_type_missing' : gmdId === undefined ? 'gmd_missing' : null;
     if (missing !== null) {
       l.skipped(TLR, missing);
