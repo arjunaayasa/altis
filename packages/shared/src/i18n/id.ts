@@ -31,6 +31,8 @@ import { MEMBERS_VISITS_ID } from './members-visits.js';
 import { MEMBER_AREA_ID } from './member-area.js';
 // ---- Komunitas (charges and payments) ----
 import { CHARGES_ID } from './charges.js';
+// ---- Komunitas (member, visit and circulation reports) ----
+import { CIRC_REPORTS_ID } from './circ-reports.js';
 
 /**
  * The keys that exist only in the test profile (spec §12.5, ruling S28), next to `permissionCatalog`'s test entry and the
@@ -1593,6 +1595,8 @@ const BASE = {
   ...MEMBER_AREA_ID,
   // ---- Komunitas (charges and payments) ----
   ...CHARGES_ID,
+  // ---- Komunitas (member, visit and circulation reports) ----
+  ...CIRC_REPORTS_ID,
 } satisfies Record<string, string>;
 
 /**

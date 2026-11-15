@@ -2,6 +2,8 @@ import { MATRIX as Catalog } from './komunitas-catalog.js';
 import { MATRIX as Charges } from './komunitas-charges.js';
 import { MATRIX as CircCore } from './komunitas-circ-core.js';
 import { MATRIX as Circulation } from './komunitas-circulation.js';
+// ---- Komunitas (member, visit and circulation reports) ----
+import { MATRIX as CircReports } from './komunitas-circ-reports.js';
 import { MATRIX as Documents } from './komunitas-documents.js';
 import { MATRIX as Evidence } from './komunitas-evidence.js';
 import { MATRIX as Holds } from './komunitas-holds.js';
@@ -50,6 +52,8 @@ const AREAS: Readonly<Record<string, AreaMatrix>> = Object.freeze({
   'member-area': MemberArea,
   // ---- Komunitas (charges and payments) ----
   charges: Charges,
+  // ---- Komunitas (member, visit and circulation reports) ----
+  'circ-reports': CircReports,
 });
 
 /** Every community area, merged. */
