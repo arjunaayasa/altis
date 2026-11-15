@@ -80,6 +80,9 @@ const reportsPreview = route({
   handler: async (rc) => {
     const def = definitionOf(rc.params.reportId);
     if (!holdsOf(rc)(def.permission)) throw await rc.authzDenied(def.permission);
+    // ---- Komunitas (member, visit and circulation reports) ----
+    const extra = def.extraPermission?.(rc.body.params) ?? null;
+    if (extra !== null && !holdsOf(rc)(extra)) throw await rc.authzDenied(extra);
     const db = rc.db.db;
     const tz = (await readSettings(db, ['library.timezone'], []))['library.timezone'] as string;
     const body: ReportPreviewResponse = await previewReport(db, def, rc.body, {

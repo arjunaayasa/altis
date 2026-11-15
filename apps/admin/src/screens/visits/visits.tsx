@@ -24,6 +24,8 @@ import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { MasterTable, type MasterColumn } from '@/screens/catalog/masters/master-table';
 import { readStored, todayLocal, writeStored } from '@/screens/circulation/common';
+// ---- Komunitas (member, visit and circulation reports) ----
+import { ReportLinks } from '@/screens/reports/report-links';
 
 /**
  * Kunjungan (`/admin/layanan/kunjungan`): today's counts at a branch, a staff check-in (a member number or a guest),
@@ -335,6 +337,7 @@ export function VisitsScreen() {
   return (
     <div className="flex max-w-6xl flex-col gap-4">
       <h1 className="text-2xl font-semibold">{t('visits.title')}</h1>
+      <ReportLinks reports={[{ id: 'visits.monthly', permission: 'reports.statistics.read' }, { id: 'visits.daily', permission: 'reports.statistics.read' }, { id: 'visits.list', permission: 'visits.records.read' }]} />
       {branches !== undefined && branchId !== null && <BranchPicker branches={branches} branchId={branchId} choose={choose} />}
       {readBranch !== null && readable && <Summary branchId={readBranch} />}
       {branchId !== null ? (

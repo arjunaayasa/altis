@@ -15,6 +15,8 @@ import { MasterTable, type MasterColumn } from '@/screens/catalog/masters/master
 import { useCalendarDate, useMemberTypes, useTypeName } from './common';
 // ---- Komunitas (charges and payments) ----
 import { useMoney } from './charges';
+// ---- Komunitas (member, visit and circulation reports) ----
+import { ReportLinks } from '@/screens/reports/report-links';
 
 /**
  * Terlambat & Jatuh Tempo (`/admin/layanan/terlambat`): the open loans past their due date, the longest-overdue first
@@ -150,6 +152,7 @@ export function OverdueScreen() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold">{t('nav.circulation.overdue')}</h1>
+      <ReportLinks reports={[{ id: 'circulation.overdue', permission: 'circulation.records.read' }, { id: 'circulation.due_soon', permission: 'circulation.records.read' }]} />
       <form noValidate onSubmit={apply} className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-4" aria-label={t('circulation.overdue.filters')}>
         <Field id={`${ids}-type`} label={t('circulation.overdue.type')}>
           <select id={`${ids}-type`} className={SELECT_CLASS} value={draft.memberTypeId} onChange={(e) => setDraft({ ...draft, memberTypeId: e.target.value })}>

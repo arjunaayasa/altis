@@ -87,6 +87,9 @@ function prepareStart(personal: boolean) {
     const def = definitionOf(rc.body.reportId);
     const permission = def.exportPermission ?? def.permission;
     if (!holdsOf(rc)(permission)) throw await rc.authzDenied(permission);
+    // ---- Komunitas (member, visit and circulation reports) ----
+    const extra = def.extraPermission?.(rc.body.params) ?? null;
+    if (extra !== null && !holdsOf(rc)(extra)) throw await rc.authzDenied(extra);
     if (def.kind === 'document') throw wrongRoute('document_report');
     if (def.personal !== personal) throw wrongRoute(personal ? 'not_personal' : 'personal_report');
     return { def, locale: await outputLocaleOf(rc, def) };
