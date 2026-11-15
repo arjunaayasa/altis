@@ -1196,7 +1196,7 @@ export const ADMIN_ID = {
   'jobs.type.catalog.export': 'Mengekspor cantuman katalog',
   'jobs.type.catalog.reindex': 'Membangun ulang indeks pencarian katalog',
   'jobs.type.catalog.dedupe_scan': 'Memindai cantuman ganda',
-  'jobs.type.catalog.migrate_slims': 'Memigrasikan katalog SLiMS',
+  'jobs.type.catalog.migrate_slims': 'Memigrasikan data SLiMS',
   'jobs.type.catalog.housekeeping': 'Merawat katalog',
   'jobs.schedule.catalog.housekeeping': 'Perawatan harian katalog',
   // The catalogue's screens: one file per area (i18n/catalog/*.ts, each owned by its task), joined in

@@ -33,7 +33,7 @@ import {
   sourceItemIds,
   type PeoplePhase,
 } from './people-kit.js';
-import { againOnRace, cachedForRun, cutChars, keyOf, mappedRows, oneLine, rowKey, scanAll, stateOf, tableOf, textOf, type BatchIo, type Ledger } from './stage-b-kit.js';
+import { againOnRace, cachedForRun, cutChars, keyOf, mappedRows, oneLine, rowKey, scanAll, sourceKeys, stateOf, tableOf, textOf, type BatchIo, type Ledger } from './stage-b-kit.js';
 import { visitsCutoff } from './visits.js';
 
 // Circulation (spec K3: the SLiMS tables `mst_loan_rules`, `holiday`, `loan`, `loan_history`, `fines`, `reserve`,
@@ -70,7 +70,9 @@ import { visitsCutoff } from './visits.js';
 //    order of `reserve_date`; the rest is archived with its reason (`item_not_on_loan`, `member_missing`,
 //    `item_missing`, `duplicate`).
 // 9. `read_counter` → items read in place (`migrated`).
-// 10. a real run: "Cocokkan dengan SLiMS", each number of the source against ALTIS (the summary's `matches`).
+// 10. a real run: "Cocokkan dengan SLiMS", each number of the source against ALTIS (the summary's `matches`); what
+//     ALTIS did itself since an earlier run (a migrated loan returned, a migrated fine paid or waived, a migrated hold
+//     ended) counts as explained, so a re-run after the library serves in ALTIS still balances.
 // 11. a dry run: the lists to check before the real run (the summary's `dryLists`, see circulationDryLists).
 
 const TLR = 'mst_loan_rules';
@@ -317,8 +319,9 @@ async function rulesBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io: B
     }
     const dry = io.trx === null;
     const typeId = mt === '0' ? null : (altisTypes.get(mt) ?? (dry && types.has(mt) ? `~${mt}` : undefined));
-    const collId = ct === '0' ? null : colls.get(ct);
-    const gmdId = gm === '0' ? null : gmds.get(gm);
+    // A dry run writes no collection type or GMD: one the source holds counts as the catalogue stages would map it.
+    const collId = ct === '0' ? null : (colls.get(ct) ?? (dry && (await sourceKeys(c, 'mst_coll_type', 'coll_type_id')).has(ct) ? `~c${ct}` : undefined));
+    const gmdId = gm === '0' ? null : (gmds.get(gm) ?? (dry && (await sourceKeys(c, 'mst_gmd', 'gmd_id')).has(gm) ? `~g${gm}` : undefined));
     const missing = typeId === undefined ? 'type_missing' : collId === undefined ? 'coll_type_missing' : gmdId === undefined ? 'gmd_missing' : null;
     if (missing !== null) {
       l.skipped(TLR, missing);
@@ -1115,6 +1118,38 @@ function row(key: MigrationMatchRow['key'], scope: string, source: number, altis
   return { key, scope, source, altis, explained, ok: ok ?? source - explained === altis };
 }
 
+/** Of the source loans `keys` (mapped open loans), those whose ALTIS loan is closed now: ALTIS closed it itself. */
+async function closedInAltis(c: SlimsStageContext, db: Db, keys: readonly string[]): Promise<ReadonlySet<string>> {
+  const targets = await mapped(c, db, TL, keys);
+  const byTarget = new Map([...targets].map(([key, id]) => [id, key]));
+  const ids = [...byTarget.keys()];
+  const out = new Set<string>();
+  for (let i = 0; i < ids.length; i += 500) {
+    for (const r of await db.selectFrom('loans').select('id').where('id', 'in', ids.slice(i, i + 500)).where('open_item_id', 'is', null).execute()) {
+      out.add(byTarget.get(r.id)!);
+    }
+  }
+  return out;
+}
+
+/** What ALTIS took or waived itself on the migrated charges, in minor units: all paid and waived less the migration's own payments. */
+async function settledInAltis(db: Db): Promise<number> {
+  const all = await db
+    .selectFrom('charges')
+    .select((eb) => [eb.fn.sum<number | string>('paid_minor').as('p'), eb.fn.sum<number | string>('waived_minor').as('w')])
+    .where('source', '=', 'migrated')
+    .executeTakeFirst();
+  const migrated = await db
+    .selectFrom('payment_allocations as a')
+    .innerJoin('payments as p', 'p.id', 'a.payment_id')
+    .innerJoin('charges as ch', 'ch.id', 'a.charge_id')
+    .select((eb) => eb.fn.sum<number | string>('a.amount_minor').as('s'))
+    .where('p.source', '=', 'migrated')
+    .where('ch.source', '=', 'migrated')
+    .executeTakeFirst();
+  return Math.max(0, Number(all?.p ?? 0) + Number(all?.w ?? 0) - Number(migrated?.s ?? 0));
+}
+
 /** The source's numbers against ALTIS's after the run (see the top of this file). */
 export async function circulationMatches(c: SlimsStageContext, db: Db): Promise<MigrationMatchRow[]> {
   const todayIs = await today(c);
@@ -1125,20 +1160,23 @@ export async function circulationMatches(c: SlimsStageContext, db: Db): Promise<
   const members = await mapped(c, db, 'member', open.map((x) => x.member));
   const unresolved = open.filter((x) => !items.has(x.itemCode) || !members.has(x.member));
   const doubles = open.filter((x) => openWinner.get(x.itemCode) !== x.id && items.has(x.itemCode) && members.has(x.member));
+  // The open loans ALTIS closed itself after a run brought them in (a return or a lost copy at the desk, once the
+  // library serves in ALTIS): the source, frozen since, still has them open; ALTIS's own circulation explains them.
+  const closedHere = await closedInAltis(c, db, open.filter((x) => openWinner.get(x.itemCode) === x.id && items.has(x.itemCode) && members.has(x.member)).map((x) => x.id));
   const count = async (q: Parameters<typeof countGrouped>[0]): Promise<number> => (await countGrouped(q, {}))[0]?.count ?? 0;
   const altisOpen = await count(db.selectFrom('loans').where('source', '=', 'migrated').where('open_item_id', 'is not', null));
-  out.push(row('open_loans', '', open.length, altisOpen, unresolved.length + doubles.length));
+  out.push(row('open_loans', '', open.length, altisOpen, unresolved.length + doubles.length + closedHere.size));
   const openCodes = new Set(open.map((x) => x.itemCode));
   // A copy stays on loan only through its winning open loan (the latest): when that one cannot come over (its copy or
   // its member is missing), the copy's other open loans are closed as doubles, and the copy is not on loan in ALTIS.
   const keptCodes = new Set(open.filter((x) => openWinner.get(x.itemCode) === x.id && items.has(x.itemCode) && members.has(x.member)).map((x) => x.itemCode));
   const altisItems = await count(db.selectFrom('loans').where('source', '=', 'migrated').where('open_item_id', 'is not', null));
-  out.push(row('items_on_loan', '', openCodes.size, altisItems, openCodes.size - keptCodes.size));
+  out.push(row('items_on_loan', '', openCodes.size, altisItems, openCodes.size - keptCodes.size + closedHere.size));
   const missing = open.filter((x) => !items.has(x.itemCode)).length;
   out.push(row('open_loans_item_missing', '', missing, 0, 0, missing === 0));
   const overdue = open.filter((x) => x.dueDate !== null && x.dueDate < todayIs);
   const altisOverdue = await count(db.selectFrom('loans').where('source', '=', 'migrated').where('open_item_id', 'is not', null).where('due_on', '<', todayIs));
-  const overdueGone = overdue.filter((x) => unresolved.includes(x) || doubles.includes(x)).length;
+  const overdueGone = overdue.filter((x) => unresolved.includes(x) || doubles.includes(x) || closedHere.has(x.id)).length;
   out.push(row('overdue_loans', '', overdue.length, altisOverdue, overdueGone));
   // Unpaid fines of the members who came over, in minor units.
   let unpaid = 0;
@@ -1161,7 +1199,7 @@ export async function circulationMatches(c: SlimsStageContext, db: Db): Promise<
     .where('status', '=', 'open')
     .executeTakeFirst();
   const altisUnpaid = Number(charged?.a ?? 0) - Number(charged?.p ?? 0) - Number(charged?.w ?? 0);
-  out.push(row('unpaid_fines_minor', '', unpaid, altisUnpaid, unpaidGone));
+  out.push(row('unpaid_fines_minor', '', unpaid, altisUnpaid, unpaidGone + (await settledInAltis(db))));
   // Members per SLiMS type: active and expired.
   const perType = new Map<string, { id: string; expired: boolean }[]>();
   await scanAll(c, 'member', (r) => {
@@ -1186,12 +1224,14 @@ export async function circulationMatches(c: SlimsStageContext, db: Db): Promise<
     out.push(row('active_members', type, list.filter((m) => !m.expired).length, active, gone(false)));
     out.push(row('expired_members', type, list.filter((m) => m.expired).length, expired, gone(true)));
   }
-  // Holds: per member, the source's rows less the archived ones equal ALTIS's waiting holds.
+  // Holds: per member, the source's rows less the archived ones equal ALTIS's waiting holds; a migrated hold ALTIS has
+  // ended since (picked up, cancelled, expired) is explained by ALTIS's own circulation.
   const reserve: string[] = [];
   await scanAll(c, TRS, (r) => reserve.push(keyOf(r['member_id'])));
   const archived = await count(db.selectFrom('migration_archive').where('source', '=', c.options.sourceName).where('table_name', '=', TRS));
   const altisHolds = await count(db.selectFrom('holds').where('source', '=', 'migrated').where('status', 'in', ['waiting', 'ready']));
-  out.push(row('holds', '', reserve.length, altisHolds, archived));
+  const endedHolds = await count(db.selectFrom('holds').where('source', '=', 'migrated').where('status', 'not in', ['waiting', 'ready']));
+  out.push(row('holds', '', reserve.length, altisHolds, archived + endedHolds));
   // Visits per month, the last 12 months before the cut-off: raw counts.
   const cutoff = (await visitsCutoff(c)) ?? todayIs;
   const from = `${addMonths(cutoff.slice(0, 7) + '-01', -12).slice(0, 7)}`;

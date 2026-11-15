@@ -511,6 +511,25 @@ describe.skipIf(!ctx.available)(`SLiMS migration framework [${engineLabel()}]`, 
     expect(await h.db.selectFrom('search_state').select(['status', 'job_id']).execute()).toEqual([{ status: 'building', job_id: rebuild }]);
   });
 
+  it('a real run whose job was cancelled between two slices is ended by the next start with its rows in the ALTIS tables counted again', async () => {
+    __setSlimsStages([fakeCountingStage('masters', 'mst_author', { write: true, batch: 1 })]);
+    const stopped = await start();
+    const mapRows = async (): Promise<number> => Number((await h.db.selectFrom('migration_map').select((eb) => eb.fn.countAll().as('n')).executeTakeFirstOrThrow()).n);
+    const before = await mapRows();
+    for (let slices = 0; (await mapRows()) === before; slices += 1) {
+      if (slices > 50) throw new Error('the run never wrote');
+      const job = await claimById(h, registry, stopped.jobId, { worker: 'test', now: NOW });
+      expect((await runSlice(h, registry, job!, { mode: 'worker', budgetMs: 1, keyring, log: silent, clock: () => NOW, env: {} })).outcome).toBe('continued');
+    }
+    // The jobs page's cancel, seen after the slice: the job ends, the run is left running until the next start.
+    await h.db.updateTable('jobs').set({ status: 'cancelled', unique_key: null, finished_at: NOW }).where('id', '=', stopped.jobId).execute();
+    await start({ dryRun: true });
+    expect((await runRow(stopped.runId)).status).toBe('cancelled');
+    const map = ((await summaryOf(stopped.runId)).targets as { table: string; before: number; after: number }[]).find((t) => t.table === 'migration_map');
+    expect(map).toEqual({ table: 'migration_map', before, after: await mapRows() });
+    expect(map!.after).toBeGreaterThan(before);
+  });
+
   it('X2-1: a real run never creates the missing search_state over records (a restore): the rebuild the boot and the housekeeping queue builds it', async () => {
     const buku = (await h.db.selectFrom('material_types').select('id').where('code_key', '=', 'BUKU').executeTakeFirstOrThrow()).id;
     // An archived record: the target is empty (§11.2), but a rebuild would index it.
@@ -1006,6 +1025,34 @@ describe.skipIf(!ctx.available)(`SLiMS migration framework [${engineLabel()}]`, 
     expect((await reportRows(started.runId)).filter((r) => r[2] === 'cancelled')).toHaveLength(1);
     const finish = await h.db.selectFrom('audit_log').select('meta').where('action', '=', 'catalog.migration.finish').where('entity_id', '=', started.runId).execute();
     expect(finish.map((e) => JSON.parse(e.meta).status)).toEqual(['cancelled']);
+  });
+
+  it('a stage heartbeat with no progress of its own keeps the bar where the stages of the run are, not back at 0', async () => {
+    let t = NOW;
+    let jobId = '';
+    const seen: number[] = [];
+    __setSlimsStages([
+      fakeCountingStage('masters', 'mst_author'),
+      fakeCountingStage('members', 'mst_author', {
+        async onCall(c) {
+          // A people stage's batch loop beats with 0, as the member, visit and circulation stages do.
+          t += JOB_HEARTBEAT_MS + 1;
+          await c.heartbeat(0, 'members');
+          seen.push(Number((await h.db.selectFrom('jobs').select('progress').where('id', '=', jobId).executeTakeFirstOrThrow()).progress));
+        },
+      }),
+    ]);
+    const started = await start({ dryRun: true });
+    jobId = started.jobId;
+    let outcome = 'continued';
+    for (let slices = 0; outcome === 'continued' && slices < 20; slices += 1) {
+      const job = await claimById(h, registry, jobId, { worker: 'test', now: t });
+      outcome = (await runSlice(h, registry, job!, { mode: 'worker', budgetMs: 2_000, keyring, log: silent, clock: () => t, env: {} })).outcome;
+    }
+    expect(outcome).toBe('succeeded');
+    // Past the stages before it (the pipeline's own stages count too), never 0.
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((p) => p > 0), JSON.stringify(seen)).toBe(true);
   });
 
   it('C17: a run whose job was cancelled while queued is ended by the next start as its job ended, with its finish audited and the index ready again', async () => {

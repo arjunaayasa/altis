@@ -1,4 +1,4 @@
-import { isUlid } from '@altis/shared';
+import { ACCRED_GROUPS, isUlid } from '@altis/shared';
 import { MIGRATION_DRY_LIST_KEYS, MIGRATION_MATCH_KEYS, type MigrationSummary } from '@altis/shared/api/catalog/migration';
 import type { RunView } from '@altis/shared/api/catalog/runs';
 import { Link } from '@tanstack/react-router';
@@ -86,6 +86,11 @@ const ReportSummary = z.object({
     .catch(undefined),
   dryLists: z
     .array(z.object({ key: z.enum(MIGRATION_DRY_LIST_KEYS), count, samples: z.array(z.string()).max(20).catch([]) }))
+    .optional()
+    .catch(undefined),
+  // The SLiMS member types the run saw: their names label the member rows of "Cocokkan dengan SLiMS".
+  memberTypes: z
+    .array(z.object({ id: z.string(), name: z.string(), members: count, group: z.enum(ACCRED_GROUPS) }))
     .optional()
     .catch(undefined),
 });
@@ -226,7 +231,7 @@ export function ReportView({ run }: { run: RunView }) {
             </div>
           )}
 
-          <MatchesReport matches={report.matches} collisions={report.memberNoCollisions} />
+          <MatchesReport matches={report.matches} collisions={report.memberNoCollisions} memberTypes={report.memberTypes} />
           <DryListsReport lists={report.dryLists} />
           {report.reconciliation === null ? (
             <NoticeAlert>{t('catalog.migration.report.reconcile_none')}</NoticeAlert>
