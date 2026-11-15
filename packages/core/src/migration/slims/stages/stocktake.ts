@@ -77,7 +77,9 @@ import {
 //    (`already_migrated`) reports nothing. The bytes are read and stored before the batch's transaction, under an id
 //    derived from the session's (a run that died before its commit, or the next run, stores them again under the same
 //    key: no blob is left behind); the transaction writes the `files` row, the session's `report_file_id` (only while
-//    it has none) and the map row.
+//    it has none) and the map row. A failed batch removes a blob it stored only while no `files` row names it (another
+//    process, or a COMMIT whose answer was lost, may have committed it); a session whose report lost its blob gets it
+//    again from the source on the next real run.
 //
 // A dry run writes nothing: a row whose copy the source's `item` table holds counts as the run would write it, and a
 // report file counts as stored when the source has it with a size the run takes.
@@ -438,12 +440,14 @@ async function reportsBefore(c: SlimsStageContext, rows: readonly SlimsRow[]): P
   for (const { row, key, name } of named) {
     if (out.has(key)) continue;
     const state = stateOf(c, stored.get(key));
+    const session = sessions.get(key);
     if (state === 'replay') {
+      if (session !== undefined) await restoreLostReport(c, session.targetId, name);
       out.set(key, { kind: 'replay' });
       continue;
     }
-    const session = sessions.get(key);
     if (state === 'done' || (session !== undefined && held.has(session.targetId))) {
+      if (session !== undefined) await restoreLostReport(c, session.targetId, name);
       skip(key, 'already_migrated');
       continue;
     }
@@ -531,11 +535,48 @@ async function reportsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io:
   if (io.trx !== null) await mapLegacy(io.trx, toMap);
 }
 
-/** The report files a failed batch stored are removed again (best effort): no row names them. */
+/**
+ * The report files a failed batch stored are removed again (best effort), each only while no `files` row names it: the
+ * key is the session's own, so another process that took the job over meanwhile, or this batch's own COMMIT whose answer
+ * was lost, may have committed the row that names the same blob. A blob whose row cannot be read is kept.
+ */
 async function undoReports(c: SlimsStageContext, pre: unknown): Promise<void> {
   for (const plan of (pre as Map<string, ReportPlan>).values()) {
-    if (plan.kind === 'attach' && plan.file !== null) await c.storage.delete(plan.file.fileId).catch(() => undefined);
+    if (plan.kind !== 'attach' || plan.file === null) continue;
+    const fileId = plan.file.fileId;
+    const named = await c.h.db
+      .selectFrom('files')
+      .select('id')
+      .where('id', '=', fileId)
+      .executeTakeFirst()
+      .then((r) => r !== undefined)
+      .catch(() => true);
+    if (!named) await c.storage.delete(fileId).catch(() => undefined);
   }
+}
+
+/**
+ * A real run: the report a session has already (`replay`, `already_migrated`), stored again from the source when its
+ * blob is gone, as long as the source's file is the one its `files` row describes (best effort: anything else leaves it).
+ */
+async function restoreLostReport(c: SlimsStageContext, sessionId: string, name: string): Promise<void> {
+  if (c.dryRun) return;
+  const fileId = stocktakeReportFileId(sessionId);
+  const row = await c.h.db
+    .selectFrom('stocktakes as s')
+    .innerJoin('files as f', 'f.id', 's.report_file_id')
+    .select(['f.size', 'f.sha256'])
+    .where('s.id', '=', sessionId)
+    .where('f.id', '=', fileId)
+    .executeTakeFirst();
+  if (row === undefined || (await c.storage.stat(fileId)) !== null) return;
+  const rel = reportPath(name);
+  if (rel === null) return;
+  const file = await readSourceFile(c, rel, STOCKTAKE_SLIMS_REPORT_MAX_BYTES);
+  if (file.kind !== 'ok' || file.size !== Number(row.size) || file.sha256 !== row.sha256) return;
+  const stream = await c.files!.open(rel, { maxBytes: file.size });
+  if (stream === null) return;
+  await storeBlob(c, fileId, stream, { size: file.size, sha256: file.sha256 });
 }
 
 const PHASES: readonly PeoplePhase[] = Object.freeze([

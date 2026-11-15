@@ -9,7 +9,7 @@ import { engineLabel, testDbContext } from '../../../../tools/test/test-db.js';
 import type { CatalogJobDeps } from '../../src/catalog/jobs-deps.js';
 import { txCtx, type CoreLogger } from '../../src/context.js';
 import type { KeyringEntry } from '../../src/crypto/secret-box.js';
-import { localStorageDriver } from '../../src/files/serve.js';
+import { localStorageDriver, type StorageDriver } from '../../src/files/serve.js';
 import { claimById } from '../../src/jobs/claim.js';
 import { createJobRegistry } from '../../src/jobs/registry.js';
 import { runSlice } from '../../src/jobs/slice.js';
@@ -129,7 +129,21 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
   let db: ItemsDb;
   let library: string;
   const items = new Map<number, string>();
-  const deps = (): CatalogJobDeps => ({ dataDir: db.dataDir, baseUrl: 'https://perpus.example.sch.id/', keyring, storage: localStorageDriver(db.dataDir), log: silent });
+  /** Called once, right after the next blob is stored (then cleared): what happens meanwhile elsewhere. */
+  let afterPut: ((key: string) => Promise<void>) | null = null;
+  const storageOf = (dataDir: string): StorageDriver => {
+    const base = localStorageDriver(dataDir);
+    return {
+      ...base,
+      async put(key, data, meta) {
+        await base.put(key, data, meta);
+        const then = afterPut;
+        afterPut = null;
+        if (then !== null) await then(key);
+      },
+    };
+  };
+  const deps = (): CatalogJobDeps => ({ dataDir: db.dataDir, baseUrl: 'https://perpus.example.sch.id/', keyring, storage: storageOf(db.dataDir), log: silent });
   const registry = createJobRegistry(slimsJobs(deps));
 
   async function mapRow(entity: string, legacyKey: string, targetId: string, runId = EARLIER_RUN): Promise<void> {
@@ -192,6 +206,11 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
       const claimed = await claimById(db.h, registry, id, { worker: 'test', now: NOW });
       if (claimed === null) throw new Error(`job ${id} cannot be claimed`);
       const r = await runSlice(db.h, registry, claimed, { mode: 'worker', budgetMs: o.budgetMs ?? 20_000, keyring, log: silent, clock: () => NOW, env: {} });
+      if (r.outcome === 'retry') {
+        // A slice the queue retries is retried at once.
+        await db.h.db.updateTable('jobs').set({ run_at: NOW }).where('id', '=', id).execute();
+        continue;
+      }
       if (r.outcome !== 'continued') return r.outcome;
       if (o.lose === true && slices % 2 === 0 && run !== undefined) {
         await db.h.db.updateTable('catalog_runs').set({ summary: run.summary }).where('id', '=', run.id).execute();
@@ -536,6 +555,69 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
     expect(await runToEnd(next.jobId)).toBe('succeeded');
     expect((await sessionOf('Inventarisasi 2023')).report_file_id).toBe(fileId);
     expect((await summaryOf(next.runId)).tables['stock_take.report_file']).toEqual({ source: 1, migrated: 1, merged: 0, skipped: {}, archived: 0 });
+    await noOrphan();
+  });
+
+  it('a batch whose report another process committed meanwhile (or whose COMMIT answer was lost) fails without removing the stored blob', async () => {
+    await wipe();
+    const bytes = html('Inventarisasi 2023');
+    const files = { [REPORT]: bytes };
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ report: 'stock_take_2023_report.html' }), files }));
+    const run = await start({ files: 'dir', filesDir: '/slims' });
+    // Right after this process stored the report, another one that took the job over commits the same report (blob,
+    // row, the session's link and the map row, all under the key derived from the session).
+    afterPut = async (key) => {
+      const session = (await db.h.db.selectFrom('stocktakes').select('id').execute()).find((x) => stocktakeReportFileId(x.id) === key)!;
+      await db.h.db
+        .insertInto('files')
+        .values({
+          id: key,
+          original_name: 'stock_take_2023_report.html',
+          mime: 'application/octet-stream',
+          size: bytes.byteLength,
+          sha256: createHash('sha256').update(bytes).digest('hex'),
+          context: 'stocktake.slims_report',
+          owner_type: 'stocktakes',
+          owner_id: session.id,
+          access: 'staff',
+          status: 'ok',
+          created_at: NOW,
+          created_by: null,
+        })
+        .execute();
+      await db.h.db.updateTable('stocktakes').set({ report_file_id: key }).where('id', '=', session.id).execute();
+      await mapRow('stock_take_report', '2', key, run.runId);
+    };
+    // This process's batch finds the session linked already and fails (and with it this run).
+    expect(await runToEnd(run.jobId)).toBe('succeeded');
+    expect(afterPut).toBeNull();
+    expect((await db.h.db.selectFrom('catalog_runs').select('status').where('id', '=', run.runId).executeTakeFirstOrThrow()).status).toBe('failed');
+    const session = await sessionOf('Inventarisasi 2023');
+    expect(session.report_file_id).toBe(stocktakeReportFileId(session.id));
+    // The file the other process committed is still there to download.
+    const served = await stocktakeSlimsReport(db.h.db, localStorageDriver(db.dataDir), db.branchId, session.id);
+    const parts: Uint8Array[] = [];
+    for await (const part of served.content) parts.push(part);
+    expect(Buffer.concat(parts).equals(Buffer.from(bytes))).toBe(true);
+    await noOrphan();
+  });
+
+  it('a session whose stored report lost its blob gets it again from the source on the next run', async () => {
+    await wipe();
+    const bytes = html('Inventarisasi 2023');
+    const files = { [REPORT]: bytes };
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ report: 'stock_take_2023_report.html' }), files }));
+    const first = await start({ files: 'dir', filesDir: '/slims' });
+    expect(await runToEnd(first.jobId)).toBe('succeeded');
+    const session = await sessionOf('Inventarisasi 2023');
+    await localStorageDriver(db.dataDir).delete(session.report_file_id!);
+    expect(await blobs()).not.toContain(session.report_file_id);
+
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ report: 'stock_take_2023_report.html' }), files }));
+    const again = await start({ files: 'dir', filesDir: '/slims' });
+    expect(await runToEnd(again.jobId)).toBe('succeeded');
+    expect((await summaryOf(again.runId)).tables['stock_take.report_file']).toEqual({ source: 1, migrated: 0, merged: 0, skipped: { already_migrated: 1 }, archived: 0 });
+    expect((await sessionOf('Inventarisasi 2023')).report_file_id).toBe(session.report_file_id);
     await noOrphan();
   });
 
