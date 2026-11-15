@@ -248,7 +248,7 @@ describe('PERSONAL_COLUMNS', () => {
     }
   });
 
-  it('holds the Komunitas entries: supplier contacts, staff accounts, accreditation staff, answer notes, the period profile, members and loan notes', () => {
+  it('holds the Komunitas entries: supplier contacts, staff accounts, accreditation staff, answer notes, the period profile, members, loan notes and the stocktake officer name', () => {
     expect(PERSONAL_COLUMNS).toEqual({
       suppliers: [
         { column: 'contact_name', category: 'identity' },
@@ -299,6 +299,7 @@ describe('PERSONAL_COLUMNS', () => {
         { column: 'note', category: 'free_text' },
         { column: 'void_reason', category: 'free_text' },
       ],
+      stocktake_items: [{ column: 'scanned_by_name', category: 'identity' }],
     });
   });
 
