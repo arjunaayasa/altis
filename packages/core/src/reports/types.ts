@@ -53,7 +53,7 @@ export type ReportRow = readonly ReportCell[];
 interface ReportBase {
   /** `<module>.<name>`, at most 64 characters (`report_runs.report_id`). */
   id: string;
-  module: 'collection' | 'accreditation' | 'members' | 'visits' | 'circulation';
+  module: 'collection' | 'accreditation' | 'members' | 'visits' | 'circulation' | 'stocktake';
   /** `report.<id>.title`. */
   titleKey: string;
   /** What it takes to see and preview the report. */

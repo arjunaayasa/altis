@@ -148,6 +148,28 @@ const CATALOGUE: Readonly<Record<string, { kind: 'table' | 'document'; personal:
   },
   'circulation.payments_daily': { kind: 'table', personal: true, orientation: 'landscape', columns: 'paid_on:date method:text staff:text payments:int amount:money' },
   'circulation.top_borrowers': { kind: 'table', personal: true, orientation: 'portrait', columns: 'rank:int member_no:text name:text member_type:text class:text loans:int' },
+  // ---- Komunitas K4 (stocktake) ----
+  'stocktake.progress': { kind: 'table', personal: false, orientation: 'portrait', columns: 'section:text label:text expected:int found:int misplaced:int on_loan:int pending:int pct:percent' },
+  'stocktake.missing': {
+    kind: 'table',
+    personal: false,
+    orientation: 'landscape',
+    columns: 'barcode:text title:text material_type:text class:text collection_type:text call_number:text expected_location:text',
+  },
+  'stocktake.misplaced': {
+    kind: 'table',
+    personal: false,
+    orientation: 'landscape',
+    columns: 'barcode:text title:text call_number:text expected_location:text scanned_location:text scanned_at:text',
+  },
+  'stocktake.by_officer': { kind: 'table', personal: true, orientation: 'portrait', columns: 'officer:text found:int misplaced:int unexpected:int' },
+  'stocktake.history': {
+    kind: 'table',
+    personal: false,
+    orientation: 'landscape',
+    columns:
+      'session:text branch:text started_at:text finished_at:text status:text source:text expected:int found:int pending:int misplaced:int on_loan:int unexpected:int unknown_codes:int',
+  },
 };
 
 /** The module, permission and export permission of the member, visit and circulation reports. */
@@ -169,6 +191,8 @@ const PERMISSIONS: Readonly<Record<string, readonly [string, string, string]>> =
       ['circulation', 'circulation.records.read', 'circulation.records.read'],
     ]),
   ),
+  // ---- Komunitas K4 (stocktake) ----
+  ...Object.fromEntries(['progress', 'missing', 'misplaced', 'by_officer', 'history'].map((n) => [`stocktake.${n}`, ['stocktake', 'stocktake.scan.use', 'stocktake.scan.use']])),
 };
 
 /** The test profile's definitions, appended after the catalogue. */
@@ -264,7 +288,13 @@ describe('REPORTS', () => {
 
   it('every parameter schema takes the empty values of a first preview (the period aside) and refuses an unknown key', () => {
     for (const def of REPORTS) {
-      const base = def.params.some((p) => p.name === 'periodId') ? { periodId: newId() } : def.id === 'test.rows' ? { rows: 0 } : {};
+      const base = def.params.some((p) => p.name === 'periodId')
+        ? { periodId: newId() }
+        : def.params.some((p) => p.name === 'stocktakeId')
+          ? { stocktakeId: newId() }
+          : def.id === 'test.rows'
+            ? { rows: 0 }
+            : {};
       expect(def.paramsSchema.safeParse(base).success, def.id).toBe(true);
       expect(def.paramsSchema.safeParse({ ...base, nope: 1 }).success, def.id).toBe(false);
       for (const p of def.params) expect(p.labelKey, `${def.id} ${p.name}`).toBe(`report.param.${p.name}`);
@@ -291,6 +321,7 @@ describe('the personal rule', () => {
       'circulation.charges',
       'circulation.payments_daily',
       'circulation.top_borrowers',
+      'stocktake.by_officer',
       'test.personal',
     ]);
   });

@@ -79,6 +79,7 @@ const CIRCULATION_SECTIONS: [string, string][] = [
   ['/admin/layanan/kalender', 'circulation.policies.manage'],
   ['/admin/layanan/kunjungan', 'visits.records.read'],
   ['/admin/layanan/buku-tamu', 'visits.stations.manage'],
+  ['/admin/layanan/inventarisasi', 'stocktake.scan.use'],
 ];
 
 /** Anggota: the member list, the member types, the CSV import and the clearance letters. */

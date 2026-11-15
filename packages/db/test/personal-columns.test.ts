@@ -12,6 +12,8 @@ import { MEMBER_AREA_TABLES_BY_MIGRATION } from './fixtures/komunitas-member-are
 import { CHARGES_TABLES_BY_MIGRATION } from './fixtures/komunitas-charges-tables.js';
 // ---- Komunitas (notices) ----
 import { NOTICES_TABLES_BY_MIGRATION } from './fixtures/komunitas-notices-tables.js';
+// ---- Komunitas K4 (stocktake) ----
+import { STOCKTAKE_TABLES_BY_MIGRATION } from './fixtures/komunitas-stocktake-tables.js';
 
 // The personal-data dictionary (PERSONAL_COLUMNS): which columns hold personal data, so that public output, events,
 // logs and exports can leave them out or ask for re-authentication. Every registered column must exist; every column of
@@ -246,7 +248,7 @@ describe('PERSONAL_COLUMNS', () => {
     }
   });
 
-  it('holds the Komunitas entries: supplier contacts, staff accounts, accreditation staff, answer notes, the period profile, members and loan notes', () => {
+  it('holds the Komunitas entries: supplier contacts, staff accounts, accreditation staff, answer notes, the period profile, members, loan notes and the stocktake officer name', () => {
     expect(PERSONAL_COLUMNS).toEqual({
       suppliers: [
         { column: 'contact_name', category: 'identity' },
@@ -297,6 +299,7 @@ describe('PERSONAL_COLUMNS', () => {
         { column: 'note', category: 'free_text' },
         { column: 'void_reason', category: 'free_text' },
       ],
+      stocktake_items: [{ column: 'scanned_by_name', category: 'identity' }],
     });
   });
 
@@ -403,6 +406,29 @@ describe('PERSONAL_COLUMNS', () => {
     const text = textColumnsOf(tables);
     expect(text.filter((c) => personal.has(c))).toEqual([]);
     expect([...text].sort()).toEqual(Object.keys(NOTICES_CODE_COLUMNS).sort());
+  });
+
+  // ---- Komunitas K4 (stocktake) ----
+  it('stocktake: only the officer name a migrated session carries is personal; the other text columns are codes, names of the library and JSON of ids', () => {
+    const tables = Object.values(STOCKTAKE_TABLES_BY_MIGRATION).flat() as TableName[];
+    expect(tables).toEqual(['stocktakes', 'stocktake_items', 'stocktake_unknown_codes']);
+    const personal = new Set(registered());
+    const text = textColumnsOf(tables);
+    expect(text.filter((c) => personal.has(c))).toEqual(['stocktake_items.scanned_by_name']);
+    expect(text.filter((c) => !personal.has(c)).sort()).toEqual(
+      [
+        'stocktakes.name',
+        'stocktakes.scope',
+        'stocktakes.status',
+        'stocktakes.options',
+        'stocktakes.source',
+        'stocktake_items.state',
+        'stocktake_items.expected_status',
+        'stocktake_items.stat_ddc',
+        'stocktake_items.result',
+        'stocktake_unknown_codes.code_display',
+      ].sort(),
+    );
   });
 
   it('a member: every column a person could be recognised by is registered; the number, type and dates are not', () => {

@@ -226,6 +226,14 @@ export const AUDIT_ACTIONS = Object.freeze([
   // ---- Komunitas (SLiMS members and circulation) ----
   // an item of the SLiMS cut-over checklist marked done (the reprint list opened; serving started in ALTIS)
   'catalog.migration.cutover',
+  // ---- Komunitas K4 (stocktake) ----
+  // a session created, finished, cancelled; a list of codes uploaded; another officer's scan undone (a scan itself is
+  // not audited: it is a count, not a change of the library's data)
+  'stocktake.session.create',
+  'stocktake.session.finish',
+  'stocktake.session.cancel',
+  'stocktake.upload',
+  'stocktake.scan.cancel_other',
 ] as const);
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

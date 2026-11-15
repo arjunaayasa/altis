@@ -81,5 +81,16 @@ export function circulationRoutes(shell: typeof shellRoute) {
       path: 'layanan/pengingat',
       component: lazyScreen(() => import('@/screens/circulation/notices'), 'NoticesScreen'),
     }),
+    // ---- Komunitas K4 (stocktake): the sessions of a branch and one session ----
+    createRoute({
+      getParentRoute: () => shell,
+      path: 'layanan/inventarisasi',
+      component: lazyScreen(() => import('@/screens/stocktake/stocktake'), 'StocktakeListScreen'),
+    }),
+    createRoute({
+      getParentRoute: () => shell,
+      path: 'layanan/inventarisasi/$branchId/$id',
+      component: lazyScreen(() => import('@/screens/stocktake/stocktake'), 'StocktakeSessionScreen'),
+    }),
   ];
 }

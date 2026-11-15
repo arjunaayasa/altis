@@ -261,3 +261,15 @@ export type {
 export { MANUAL_NOTICE_KINDS, NOTICE_KINDS, NOTICE_REASONS, NOTICE_STATUSES } from './circulation-vocab.js';
 export type { ManualNoticeKind, NoticeKind, NoticeReason, NoticeStatus } from './circulation-vocab.js';
 export type { ReportCell, ReportColumnType, ReportColumnView, ReportParamKind, ReportParamSpec } from './api/reports.js';
+// ---- Komunitas K4 (stocktake) ----
+export {
+  STOCKTAKE_ITEM_STATUSES,
+  STOCKTAKE_LIVE_STATUSES,
+  STOCKTAKE_RESULTS,
+  STOCKTAKE_SCAN_OUTCOMES,
+  STOCKTAKE_SOURCES,
+  STOCKTAKE_STATES,
+  STOCKTAKE_STATUSES,
+  STOCKTAKE_VOCAB_LISTS,
+} from './stocktake-vocab.js';
+export type { StocktakeResult, StocktakeScanOutcome, StocktakeSource, StocktakeState, StocktakeStatus } from './stocktake-vocab.js';

@@ -18,6 +18,8 @@ import { MATRIX as Registers } from './komunitas-registers.js';
 import { MATRIX as Reports } from './komunitas-reports.js';
 import { MATRIX as Results } from './komunitas-results.js';
 import { MATRIX as SlimsUsage } from './komunitas-slims-usage.js';
+// ---- Komunitas K4 (stocktake) ----
+import { MATRIX as Stocktake } from './komunitas-stocktake.js';
 import { MATRIX as Usage } from './komunitas-usage.js';
 import { mergeAreaMatrices, type AreaMatrix } from './catalog.js';
 
@@ -58,6 +60,8 @@ const AREAS: Readonly<Record<string, AreaMatrix>> = Object.freeze({
   'circ-reports': CircReports,
   // ---- Komunitas (notices) ----
   notices: Notices,
+  // ---- Komunitas K4 (stocktake) ----
+  stocktake: Stocktake,
 });
 
 /** Every community area, merged. */

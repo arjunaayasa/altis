@@ -1,12 +1,13 @@
 import type { DB } from '@altis/db';
 import { newId, normalizeKey } from '@altis/shared';
 import type { Insertable, Kysely } from 'kysely';
+import { normalizeBarcode } from '../../src/catalog/lib/barcode.js';
 import { titleKey } from '../../src/catalog/lib/title-key.js';
 import { memberNameKey, normalizeMemberNo } from '../../src/members/keys.js';
 
-// Rows of members, loans, in-library uses, visits, holds, charges and payments written straight into the tables, for
-// the tests of the member, visit and circulation reports. Each helper takes what the test cares about and fills the
-// rest with plain defaults; every one answers the new row's id.
+// Rows of members, loans, in-library uses, visits, holds, charges, payments and stocktake sessions written straight into
+// the tables, for the tests of the member, visit, circulation and stocktake reports. Each helper takes what the test
+// cares about and fills the rest with plain defaults; every one answers the new row's id.
 
 type Db = Kysely<DB>;
 
@@ -346,5 +347,90 @@ export async function seedPayment(
       updated_at: AT,
     })
     .execute();
+  return id;
+}
+
+// ---- Komunitas K4 (stocktake) ----
+
+/** A copy of a stocktake session: its state, its DDC statistics key, and who scanned it where (a copy scanned). */
+export interface StocktakeCopy {
+  itemId: string;
+  state: 'pending' | 'found' | 'misplaced' | 'on_loan' | 'unexpected';
+  statDdc?: string | null;
+  scannedBy?: string | null;
+  /** Where it was scanned: the copy's own location unless given. */
+  scannedLocationId?: string | null;
+}
+
+/**
+ * A finished stocktake session at `branchId` that changed no copy (neither option chosen): its copies (each copy's own
+ * location and collection type, an unexpected one outside the expected list), its unknown codes, and the counters
+ * its rows give.
+ */
+export async function seedStocktake(
+  db: Db,
+  o: { branchId: string; name: string; staffId?: string | null; copies: readonly StocktakeCopy[]; unknown?: readonly { code: string; scannedBy?: string | null }[] },
+): Promise<string> {
+  const id = newId();
+  const finishedAt = AT + 3_600_000;
+  const n = (f: (c: StocktakeCopy) => boolean): number => o.copies.filter(f).length;
+  await db
+    .insertInto('stocktakes')
+    .values({
+      id,
+      branch_id: o.branchId,
+      name: o.name,
+      scope: '{}',
+      status: 'finished',
+      active_key: null,
+      options: JSON.stringify({ markMissing: false, restoreFound: false }),
+      total: n((c) => c.state !== 'unexpected'),
+      found: n((c) => c.state === 'found' || c.state === 'misplaced'),
+      misplaced: n((c) => c.state === 'misplaced'),
+      on_loan: n((c) => c.state === 'on_loan'),
+      unexpected: n((c) => c.state === 'unexpected'),
+      unknown_codes: o.unknown?.length ?? 0,
+      started_at: AT,
+      started_by: o.staffId ?? null,
+      finished_at: finishedAt,
+      finished_by: o.staffId ?? null,
+      source: 'altis',
+      version: 2,
+      created_at: AT,
+      created_by: o.staffId ?? null,
+      updated_at: finishedAt,
+      updated_by: o.staffId ?? null,
+    })
+    .execute();
+  for (const [k, c] of o.copies.entries()) {
+    const item = await db.selectFrom('items').select(['location_id', 'collection_type_id', 'status']).where('id', '=', c.itemId).executeTakeFirstOrThrow();
+    const expected = c.state !== 'unexpected';
+    const scanned = c.state === 'found' || c.state === 'misplaced' || c.state === 'unexpected';
+    await db
+      .insertInto('stocktake_items')
+      .values({
+        stocktake_id: id,
+        item_id: c.itemId,
+        expected: expected ? 1 : 0,
+        state: c.state,
+        expected_location_id: item.location_id,
+        expected_status: expected ? item.status : null,
+        stat_ddc: expected ? (c.statDdc ?? null) : null,
+        collection_type_id: expected ? item.collection_type_id : null,
+        scanned_at: scanned ? AT + 60_000 * (k + 1) : null,
+        scanned_by: scanned ? (c.scannedBy ?? null) : null,
+        scanned_by_name: null,
+        scanned_location_id: scanned ? (c.scannedLocationId === undefined ? item.location_id : c.scannedLocationId) : null,
+        result: 'none',
+      })
+      .execute();
+  }
+  for (const [k, u] of (o.unknown ?? []).entries()) {
+    const at = AT + 600_000 + 60_000 * k;
+    await db
+      .insertInto('stocktake_unknown_codes')
+      .values({ stocktake_id: id, code_key: normalizeBarcode(u.code) || u.code, code_display: u.code, first_at: at, last_at: at, seen: 1, scanned_by: u.scannedBy ?? null })
+      .execute();
+  }
   return id;
 }

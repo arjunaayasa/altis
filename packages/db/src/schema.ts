@@ -1661,6 +1661,76 @@ export interface NoticesTable {
   sent_at: EpochMs | null;
 }
 
+// ---- Komunitas K4 (stocktake) ----
+// Migration 0048: stocktake sessions of a branch, their copies and the codes that named no copy.
+
+/** Class data. UNIQUE (active_key): one preparing, active or finishing session per branch. */
+export interface StocktakesTable {
+  id: string;
+  branch_id: string;
+  name: string;
+  /** JSON `{locationIds?, collectionTypeIds?, materialTypeIds?, classPrefixes?}`. */
+  scope: string;
+  /** `preparing` | `active` | `finishing` | `finished` | `cancelled`. */
+  status: string;
+  /** The branch id while the session is live (preparing, active, finishing), else null. */
+  active_key: string | null;
+  /** JSON `{markMissing, restoreFound}` once the finish was asked. */
+  options: string | null;
+  total: Generated<number>;
+  found: Generated<number>;
+  misplaced: Generated<number>;
+  on_loan: Generated<number>;
+  unexpected: Generated<number>;
+  unknown_codes: Generated<number>;
+  started_at: EpochMs;
+  started_by: string | null;
+  finished_at: EpochMs | null;
+  finished_by: string | null;
+  minutes_file_id: string | null;
+  report_file_id: string | null;
+  /** `altis` | `migrated`. */
+  source: string;
+  version: Generated<number>;
+  created_at: EpochMs;
+  created_by: string | null;
+  updated_at: EpochMs;
+  updated_by: string | null;
+}
+
+/** Class data. PK (`stocktake_id`, `item_id`); CASCADE with its session. */
+export interface StocktakeItemsTable {
+  stocktake_id: string;
+  item_id: string;
+  /** 1: in the session's scope when it was prepared; 0: scanned though outside it. */
+  expected: number;
+  /** `pending` | `on_loan` | `found` | `misplaced` | `unexpected`. */
+  state: string;
+  expected_location_id: string | null;
+  expected_status: string | null;
+  stat_ddc: string | null;
+  collection_type_id: string | null;
+  scanned_at: EpochMs | null;
+  scanned_by: string | null;
+  /** The officer's name of a migrated session (personal data). */
+  scanned_by_name: string | null;
+  scanned_location_id: string | null;
+  /** `marked_missing` | `restored` | `status_kept` | `none`, once the finish handled the row. */
+  result: string | null;
+}
+
+/** Class data. PK (`stocktake_id`, `code_key`); CASCADE with its session. */
+export interface StocktakeUnknownCodesTable {
+  stocktake_id: string;
+  code_key: string;
+  code_display: string;
+  first_at: EpochMs;
+  last_at: EpochMs;
+  /** Default 1. */
+  seen: Generated<number>;
+  scanned_by: string | null;
+}
+
 // ---- Komunitas (member area) ----
 
 /** A title a member marked on the OPAC (0044); PK (`member_id`, `record_id`). */
@@ -1780,6 +1850,10 @@ export interface DB {
   payment_allocations: PaymentAllocationsTable;
   // ---- Komunitas (notices) ----
   notices: NoticesTable;
+  // ---- Komunitas K4 (stocktake) ----
+  stocktakes: StocktakesTable;
+  stocktake_items: StocktakeItemsTable;
+  stocktake_unknown_codes: StocktakeUnknownCodesTable;
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: SchemaMigrationsEditionTable;
   schema_migrations_edition_lock: SchemaMigrationsEditionLockTable;
