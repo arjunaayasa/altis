@@ -6,6 +6,7 @@ import type { Selectable, Transaction } from 'kysely';
 import { LOCK_FOREVER } from '../catalog/items/patterns.js';
 import type { TxCtx } from '../context.js';
 import { lockLiveMember, memberNotFound, memberValidationFailed, writeMemberEvents, type Db } from '../members/common.js';
+import { registerMemberDataSection, registerMemberErasureStep } from '../members/ext/hooks.js';
 import { PdfLayout, type PaperSize } from '../print/layout.js';
 import { dateInWords } from '../reports/export/describe.js';
 import { readSettings } from '../settings/service.js';
@@ -381,3 +382,33 @@ export function buildClearancePdf(i: ClearancePdfInput): Uint8Array {
   }
   return pdf.toBytes();
 }
+
+// ---- the member's data -----------------------------------------------------------------------------------------------
+
+// A member's clearance letters are part of the member's own data; anonymising the member empties the free text of a
+// void (the number, dates and purpose stay: a letter's number is never reused).
+registerMemberDataSection({
+  name: 'clearances',
+  read: async (db, memberId) => {
+    const rows = await db
+      .selectFrom('member_clearances')
+      .select(['number_display', 'issued_on', 'purpose', 'voided_at', 'void_reason'])
+      .where('member_id', '=', memberId)
+      .orderBy('issued_at')
+      .orderBy('id')
+      .execute();
+    return rows.map((c) => ({
+      number: c.number_display,
+      issuedOn: c.issued_on,
+      purpose: c.purpose,
+      voidedAt: c.voided_at === null ? null : Number(c.voided_at),
+      voidReason: c.void_reason,
+    }));
+  },
+});
+registerMemberErasureStep({
+  name: 'clearances',
+  run: async (tx, memberId) => {
+    await tx.trx.updateTable('member_clearances').set({ void_reason: null }).where('member_id', '=', memberId).where('void_reason', 'is not', null).execute();
+  },
+});

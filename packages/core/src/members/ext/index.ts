@@ -5,14 +5,16 @@ export { MEMBER_PHOTO_CONTEXT, MEMBER_PHOTO_OWNER, claimSettingsFiles, setMember
 export { buildMemberCardsPdf, cardBarcodeModules, cardMembers, storedPicture } from './cards.js';
 export type { CardMember, CardSheetInput } from './cards.js';
 export { ANONYMIZED_NAME, anonymizeMember, anonymizedMemberNo, exportMemberData } from './privacy.js';
-export { ANONYMIZE_BATCH, privacyAnonymizeJob, privacyAnonymizePayload, registerHistoryAnonymizeStep, yearsBefore } from './anonymize-job.js';
-export type { HistoryAnonymizeStep, PrivacyAnonymizePayload, PrivacyJobDeps } from './anonymize-job.js';
+export { ANONYMIZE_BATCH, privacyAnonymizeJob, privacyAnonymizePayload, yearsBefore } from './anonymize-job.js';
+export type { PrivacyAnonymizePayload, PrivacyJobDeps } from './anonymize-job.js';
 export {
+  historyAnonymizeSteps,
   memberBalanceMinor,
   memberDataSections,
   memberErasureSteps,
   registerMemberBalanceProvider,
   registerMemberDataSection,
+  registerHistoryAnonymizeStep,
   registerMemberErasureStep,
 } from './hooks.js';
-export type { MemberBalanceProvider, MemberDataSection, MemberErasureStep } from './hooks.js';
+export type { HistoryAnonymizeStep, MemberBalanceProvider, MemberDataSection, MemberErasureStep } from './hooks.js';

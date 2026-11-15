@@ -58,7 +58,6 @@ export {
 export type { MemberLoginCtx, MemberLoginOutcome, MemberResetStart, MemberSignInHook } from './area/auth.js';
 export {
   MEMBER_BOOKMARK_LIMIT,
-  MEMBER_EXPORT_SECTIONS,
   MEMBER_LOANS_PER_PAGE,
   addBookmark,
   attachmentMemberTypes,
@@ -77,6 +76,6 @@ export {
   renewOwnLoan,
   setAttachmentMemberTypes,
 } from './area/account.js';
-export type { MemberAttachment, MemberBookmarkRow, MemberExportSection, MemberLoanPage, MemberLoanRow, MemberSelf } from './area/account.js';
+export type { MemberAttachment, MemberBookmarkRow, MemberLoanPage, MemberLoanRow, MemberSelf } from './area/account.js';
 export { MAIL_MEMBER_PASSWORD_RESET, enqueueMemberResetMail, memberResetMailJob } from './area/mail.js';
 export type { MemberResetMail } from './area/mail.js';

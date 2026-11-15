@@ -8,7 +8,7 @@ import { readClockAnomaly } from '../../scheduler/clock.js';
 import { scheduleWindowSchema } from '../../scheduler/registry.js';
 import { readSettings } from '../../settings/service.js';
 import { openLoanCount } from '../common.js';
-import { memberBalanceMinor } from './hooks.js';
+import { historyAnonymizeSteps, memberBalanceMinor } from './hooks.js';
 import { anonymizeMember } from './privacy.js';
 
 // `privacy.anonymize` (daily at 02:15, skipped while the clock looks wrong): the history keeps what statistics need,
@@ -20,7 +20,8 @@ import { anonymizeMember } from './privacy.js';
 //   after);
 // - members archived longer ago than the members' period (off by default), with no open loan and nothing owed:
 //   anonymised in full, as staff would;
-// - the steps other modules register (a closed hold, a settled charge of an anonymised loan) run after the loans.
+// - the steps other modules register (hooks.ts) run after the loans: closed holds as old as the loans' period lose their
+//   member, and a settled or cancelled charge of an anonymised loan loses the loan, the item and its line.
 //
 // Each step works in batches of 500 rows, one short transaction each, until the slice's budget runs low; the job goes
 // on in the next slice from its checkpoint, and running it twice changes nothing more. One audit entry per run
@@ -31,21 +32,6 @@ export const ANONYMIZE_BATCH = 500;
 
 /** Below this much budget left, no further batch starts in this slice. */
 const MARGIN_MS = 2000;
-
-/** One step of the history anonymisation another module registers: answers how many rows it changed in this batch. */
-export interface HistoryAnonymizeStep {
-  name: string;
-  /** One batch (at most {@link ANONYMIZE_BATCH} rows) of rows older than the cutoffs; 0 when none is left. */
-  run(trx: Transaction<DB>, cutoffs: { loansBefore: number | null; visitsBefore: number | null }): Promise<number>;
-}
-
-const historySteps: HistoryAnonymizeStep[] = [];
-
-/** Adds a step to the daily history anonymisation (by a module at load time). */
-export function registerHistoryAnonymizeStep(step: HistoryAnonymizeStep): void {
-  if (historySteps.some((s) => s.name === step.name)) throw new TypeError(`history anonymize step ${step.name} is registered already`);
-  historySteps.push(step);
-}
 
 /** The payload: the schedule window, the step reached, and the counts so far. */
 export const privacyAnonymizePayload = scheduleWindowSchema.extend({
@@ -81,8 +67,8 @@ function steps(cut: { loansBefore: number | null; visitsBefore: number | null; m
       },
     });
   }
-  for (const s of historySteps) {
-    out.push({ name: s.name, batch: async (trx) => ({ changed: await s.run(trx, { loansBefore: cut.loansBefore, visitsBefore: cut.visitsBefore }), files: [] }) });
+  for (const s of historyAnonymizeSteps()) {
+    out.push({ name: s.name, batch: async (trx, tx) => ({ changed: await s.run(trx, { loansBefore: cut.loansBefore, visitsBefore: cut.visitsBefore, now: tx.now }), files: [] }) });
   }
   if (cut.visitsBefore !== null) {
     const before = cut.visitsBefore;

@@ -3,10 +3,11 @@ import type { Kysely, Transaction } from 'kysely';
 import type { TxCtx } from '../../context.js';
 
 // What other modules add to a member's personal-data actions, without this module knowing them: the rows they keep
-// about a member (exported with the member's data), what they erase or unlink when the member is anonymised, and the
-// balance a member still owes (which blocks archiving and anonymising). Each registry is append-only, one block per
-// module, so a module that keeps member rows (holds, fines and payments, bookmarks, notices, the SLiMS migration's
-// archive) registers itself here and nothing else changes.
+// about a member (exported with the member's data), what they erase or unlink when the member is anonymised, the
+// balance a member still owes (which blocks archiving and anonymising), and what the daily history anonymisation
+// unlinks besides loans and visits. Each registry is append-only, one block per module, so a module that keeps member
+// rows (holds, fines and payments, bookmarks, notices, the SLiMS migration's archive) registers itself here when it
+// loads and nothing else changes. This file imports no other module, so any module may register here without a cycle.
 
 type Db = Kysely<DB> | Transaction<DB>;
 
@@ -32,9 +33,20 @@ export interface MemberBalanceProvider {
   balanceMinor(db: Db, memberId: string): Promise<number>;
 }
 
+/** One step of the daily history anonymisation another module registers: answers how many rows it changed in this batch. */
+export interface HistoryAnonymizeStep {
+  name: string;
+  /**
+   * One batch (at most 500 rows) of rows older than the cutoffs (null: that period is off), at `now`; 0 when none is
+   * left.
+   */
+  run(trx: Transaction<DB>, cutoffs: { loansBefore: number | null; visitsBefore: number | null; now: number }): Promise<number>;
+}
+
 const sections: MemberDataSection[] = [];
 const steps: MemberErasureStep[] = [];
 const balances: MemberBalanceProvider[] = [];
+const historySteps: HistoryAnonymizeStep[] = [];
 
 /** Adds a section to the member data export (by a module at load time). */
 export function registerMemberDataSection(section: MemberDataSection): void {
@@ -52,6 +64,17 @@ export function registerMemberErasureStep(step: MemberErasureStep): void {
 export function registerMemberBalanceProvider(provider: MemberBalanceProvider): void {
   if (balances.some((s) => s.name === provider.name)) throw new TypeError(`member balance provider ${provider.name} is registered already`);
   balances.push(provider);
+}
+
+/** Adds a step to the daily history anonymisation (by a module at load time); the steps run after the loans. */
+export function registerHistoryAnonymizeStep(step: HistoryAnonymizeStep): void {
+  if (historySteps.some((s) => s.name === step.name)) throw new TypeError(`history anonymize step ${step.name} is registered already`);
+  historySteps.push(step);
+}
+
+/** The registered history steps, in registration order. */
+export function historyAnonymizeSteps(): readonly HistoryAnonymizeStep[] {
+  return historySteps;
 }
 
 /** The registered data sections, in registration order. */

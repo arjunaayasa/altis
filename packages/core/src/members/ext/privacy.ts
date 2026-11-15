@@ -13,7 +13,8 @@ import { memberBalanceMinor, memberDataSections, memberErasureSteps } from './ho
 //
 // Export: the member row's every column (its personal columns included; never the password hash), the custom field
 // values, the history, the loans (title, barcode, dates), the visits, and the sections other modules register
-// (holds, fines and payments, bookmarks). The photo is named by its file id; staff download it apart.
+// (holds, charges and payments, clearance letters, bookmarks, notices). The photo is named by its file id; staff
+// download it apart. The member's own download (members/area/account.ts) carries the same sections.
 //
 // Anonymisation, in one transaction (the stored photo content after the commit), refused while the member has open
 // loans or owes anything (MEMBER_IN_USE):
@@ -25,8 +26,9 @@ import { memberBalanceMinor, memberDataSections, memberErasureSteps } from './ho
 //      and a visit's day key, which holds the member id, is cleared;
 //   4. the SLiMS migration's map rows that point at the member are deleted;
 //   5. the photo's file row is deleted (its content after the commit);
-//   6. each step other modules registered (holds closed, notices and bookmarks deleted, fine texts emptied, archived
-//      migration rows removed) runs;
+//   6. each step other modules registered runs: active holds closed (a kept copy goes to the next in its queue),
+//      bookmarks and unsent notices deleted, the free text of charges, waives, payments and voided clearance letters
+//      emptied, archived migration rows removed;
 //   7. history `anonymized` (no value).
 // The history rows themselves stay, pointing at the anonymous member: dates, counts, the type, group and class a visit
 // or a loan was counted under. It cannot be undone.
@@ -74,6 +76,16 @@ export async function exportMemberData(db: Db, id: string, now: number): Promise
     }
   }
 
+  const sections = await memberDataSectionsOf(db, id);
+  return { format: 'altis-member-data', version: 1, exportedAt: now, member, custom, photoFileId: row.photo_file_id, sections };
+}
+
+/**
+ * The sections of the member `id`'s data, the same in the export staff download and in the member's own download:
+ * the history, the loans (title, barcode, dates), the visits, and every section another module registered (holds,
+ * charges and their waives, payments, clearance letters, bookmarks, notices).
+ */
+export async function memberDataSectionsOf(db: Db, id: string): Promise<Record<string, unknown[]>> {
   const events = await db.selectFrom('member_events').select(['at', 'type', 'actor_type', 'meta']).where('member_id', '=', id).orderBy('at').orderBy('id').execute();
   const loans = await db
     .selectFrom('loans as l')
@@ -107,7 +119,7 @@ export async function exportMemberData(db: Db, id: string, now: number): Promise
     visits: visits.map((v) => ({ visitedOn: v.visited_on, visitedAt: Number(v.visited_at), branchId: v.branch_id, source: v.source, purpose: v.purpose, className: v.class_name, note: v.note })),
   };
   for (const s of memberDataSections()) sections[s.name] = await s.read(db, id);
-  return { format: 'altis-member-data', version: 1, exportedAt: now, member, custom, photoFileId: row.photo_file_id, sections };
+  return sections;
 }
 
 function safeJson(text: string): unknown {

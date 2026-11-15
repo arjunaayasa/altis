@@ -5,6 +5,7 @@ import type { Selectable, Transaction } from 'kysely';
 import { parsePrice } from '../catalog/items/service.js';
 import type { TxCtx } from '../context.js';
 import { lockLiveMember, memberNotFound, memberValidationFailed, type Db } from '../members/common.js';
+import { registerHistoryAnonymizeStep, registerMemberBalanceProvider, registerMemberDataSection, registerMemberErasureStep } from '../members/ext/hooks.js';
 import { readSettings } from '../settings/service.js';
 import { chargeLeft, chargeViews, libraryCurrency, memberBalances } from './charge-views.js';
 import { branchToday } from './dates.js';
@@ -330,3 +331,87 @@ export const CHARGES_SEAM: CirculationChargeSeam = Object.freeze({
 });
 
 registerCirculationChargeSeam(CHARGES_SEAM);
+
+// ---- the member's data -----------------------------------------------------------------------------------------------
+
+// What a member owes keeps the member from being archived (one by one or in bulk) and from being anonymised.
+registerMemberBalanceProvider({
+  name: 'charges',
+  balanceMinor: async (db, memberId) => (await memberBalances(db, [memberId])).get(memberId) ?? 0,
+});
+
+// A member's charges, with their waives and cancellations, are part of the member's own data.
+registerMemberDataSection({
+  name: 'charges',
+  read: async (db, memberId) => {
+    const rows = await db
+      .selectFrom('charges as c')
+      .leftJoin('items as i', 'i.id', 'c.item_id')
+      .select(['c.id', 'c.kind', 'c.description', 'i.barcode_display', 'c.amount_minor', 'c.paid_minor', 'c.waived_minor', 'c.currency', 'c.status', 'c.charged_on', 'c.source'])
+      .where('c.member_id', '=', memberId)
+      .orderBy('c.charged_at')
+      .orderBy('c.id')
+      .execute();
+    const adjustments = new Map<string, { kind: string; amountMinor: number; reason: string; at: number }[]>();
+    const ids = rows.map((r) => r.id);
+    for (let k = 0; k < ids.length; k += 500) {
+      const found = await db
+        .selectFrom('charge_adjustments')
+        .select(['charge_id', 'kind', 'amount_minor', 'reason_text', 'at'])
+        .where('charge_id', 'in', ids.slice(k, k + 500))
+        .orderBy('at')
+        .orderBy('id')
+        .execute();
+      for (const a of found) adjustments.set(a.charge_id, [...(adjustments.get(a.charge_id) ?? []), { kind: a.kind, amountMinor: ok(a.amount_minor), reason: a.reason_text, at: ok(a.at) }]);
+    }
+    return rows.map((r) => ({
+      kind: r.kind,
+      description: r.description,
+      barcode: r.barcode_display ?? null,
+      amountMinor: ok(r.amount_minor),
+      paidMinor: ok(r.paid_minor),
+      waivedMinor: ok(r.waived_minor),
+      currency: r.currency,
+      status: r.status,
+      chargedOn: r.charged_on,
+      source: r.source,
+      adjustments: adjustments.get(r.id) ?? [],
+    }));
+  },
+});
+
+// Anonymising a member empties the free text of the member's charges and of their waives (amounts, kinds and dates
+// stay, as the financial record).
+registerMemberErasureStep({
+  name: 'charges',
+  run: async (tx, memberId) => {
+    const ids = (await tx.trx.selectFrom('charges').select('id').where('member_id', '=', memberId).execute()).map((r) => r.id);
+    if (ids.length === 0) return;
+    await tx.trx.updateTable('charges').set({ description: '' }).where('member_id', '=', memberId).where('description', '<>', '').execute();
+    for (let k = 0; k < ids.length; k += 500) {
+      await tx.trx.updateTable('charge_adjustments').set({ reason_text: '' }).where('charge_id', 'in', ids.slice(k, k + 500)).where('reason_text', '<>', '').execute();
+    }
+  },
+});
+
+// The daily history anonymisation: once a loan lost its member, its settled or cancelled charges lose the loan, the item
+// and the line (an open one keeps them until it is settled, then a later run takes them).
+registerHistoryAnonymizeStep({
+  name: 'charges',
+  run: async (trx, cut) => {
+    const rows = await trx
+      .selectFrom('charges as c')
+      .innerJoin('loans as l', 'l.id', 'c.loan_id')
+      .select('c.loan_id')
+      .where('l.member_id', 'is', null)
+      .where('c.status', 'in', ['settled', 'cancelled'])
+      .orderBy('c.id')
+      .limit(500)
+      .execute();
+    return anonymizeLoanCharges(
+      trx,
+      rows.map((r) => r.loan_id).filter((id): id is string => id !== null),
+      cut.now,
+    );
+  },
+});

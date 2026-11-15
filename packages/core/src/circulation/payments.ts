@@ -4,6 +4,7 @@ import type { PaymentView, ReceiptPaper } from '@altis/shared/api/charges';
 import { LOCK_FOREVER } from '../catalog/items/patterns.js';
 import type { TxCtx } from '../context.js';
 import { lockLiveMember, memberNotFound, memberValidationFailed, type Db } from '../members/common.js';
+import { registerMemberDataSection, registerMemberErasureStep } from '../members/ext/hooks.js';
 import { PdfLayout } from '../print/layout.js';
 import { readSettings } from '../settings/service.js';
 import { chargeLeft, paymentViews } from './charge-views.js';
@@ -320,3 +321,42 @@ export function buildReceiptPdf(d: ReceiptData): Uint8Array {
   if (d.footer !== null) pdf.paragraph(d.footer, { align: 'center', size });
   return pdf.toBytes();
 }
+
+// ---- the member's data -----------------------------------------------------------------------------------------------
+
+// A member's payments are part of the member's own data; anonymising the member empties their free text (the note,
+// the reason of a void), keeping the amounts, dates and receipt numbers as the financial record.
+registerMemberDataSection({
+  name: 'payments',
+  read: async (db, memberId) => {
+    const rows = await db
+      .selectFrom('payments')
+      .select(['receipt_no', 'amount_minor', 'currency', 'method', 'paid_on', 'note', 'voided_at', 'void_reason', 'source'])
+      .where('member_id', '=', memberId)
+      .orderBy('paid_at')
+      .orderBy('id')
+      .execute();
+    return rows.map((p) => ({
+      receiptNo: p.receipt_no,
+      amountMinor: Number(p.amount_minor),
+      currency: p.currency,
+      method: p.method,
+      paidOn: p.paid_on,
+      note: p.note,
+      voidedAt: p.voided_at === null ? null : Number(p.voided_at),
+      voidReason: p.void_reason,
+      source: p.source,
+    }));
+  },
+});
+registerMemberErasureStep({
+  name: 'payments',
+  run: async (tx, memberId) => {
+    await tx.trx
+      .updateTable('payments')
+      .set({ note: null, void_reason: null })
+      .where('member_id', '=', memberId)
+      .where((eb) => eb.or([eb('note', 'is not', null), eb('void_reason', 'is not', null)]))
+      .execute();
+  },
+});

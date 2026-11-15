@@ -35,10 +35,12 @@ export {
   markHoldReady,
   memberHold,
   memberHolds,
+  membersWithReadyHolds,
   moveHoldsOnMerge,
   pickupBranchFor,
   placeHold,
   renewalHeldBack,
+  restoreFulfilledHold,
   returnKeptHoldsToQueue,
   trapOnReturn,
 } from './holds.js';
