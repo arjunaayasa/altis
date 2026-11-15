@@ -630,7 +630,7 @@ function RunSection({
           <div>{newButton}</div>
         )}
       </section>
-      {!live && <ReportView run={{ ...run, status }} />}
+      {!live && <ReportView run={{ ...run, status }} unclosed={status !== run.status} />}
       {offer &&
         (why === null && options !== null ? (
           <RealRunPanel dryRun={run} options={options} draft={draft} libraryName={libraryName} onOpen={onOpen} />

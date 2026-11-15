@@ -1,6 +1,7 @@
 import {
   SCHEDULES,
   SLICE_BUDGET_MS,
+  SLIMS_MIGRATION_JOB,
   SLIMS_USAGE_JOB,
   can,
   createJobRegistry,
@@ -9,6 +10,7 @@ import {
   nextRun,
   parseCronExpr,
   readSettings,
+  releaseCancelledSlimsMigration,
   releaseCancelledUsageImport,
   requestCancel,
   retryJob,
@@ -72,6 +74,9 @@ import { jobHandlers } from '../jobs/runtime.js';
 // - A SLiMS usage import cancelled while queued never runs a slice again, and its run's folder holds the raw dump the
 //   start moved there (member names and addresses): after the COMMIT the folder and the dump's upload leftovers are
 //   removed and the run is ended (releaseCancelledUsageImport). The housekeeping still ends what a crash left.
+// - A SLiMS migration cancelled while queued (between two slices) is ended after the COMMIT likewise, its rows in the
+//   ALTIS tables counted again and its work folder removed (releaseCancelledSlimsMigration), so its screen shows its
+//   real end at once.
 
 const JOBS = '/api/v1/jobs';
 const SCHEDULES_PATH = '/api/v1/schedules';
@@ -272,6 +277,10 @@ const jobsCancel = route({
     if (result === 'cancelled' && job.type === SLIMS_USAGE_JOB) {
       const { dataDir } = rc.services;
       rc.afterCommit(() => releaseCancelledUsageImport(rc.db, { jobId: job.id, dataDir, now: rc.now, log: rc.log }));
+    }
+    if (result === 'cancelled' && job.type === SLIMS_MIGRATION_JOB) {
+      const { dataDir } = rc.services;
+      rc.afterCommit(() => releaseCancelledSlimsMigration(rc.db, { jobId: job.id, dataDir, now: rc.now, log: rc.log }));
     }
     const after: JobRow =
       result === 'cancelled'

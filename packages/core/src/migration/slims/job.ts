@@ -1,4 +1,4 @@
-import type { DB } from '@altis/db';
+import { withTx, type DB, type DbHandle } from '@altis/db';
 import { removeTree, runWorkDir } from '@altis/platform';
 import { DomainError } from '@altis/shared';
 import type { Kysely, Transaction } from 'kysely';
@@ -183,6 +183,38 @@ async function endOrphanRuns(trx: Transaction<DB>, now: number): Promise<string[
     endedIds.push(r.id);
   }
   return endedIds;
+}
+
+/**
+ * After the COMMIT of the cancel that ended migration job `jobId` while it was queued (between two slices, from the jobs
+ * page): ends its run `cancelled` at `now` with the bookkeeping of ending.ts (its rows in the ALTIS tables counted again,
+ * the search index released, `catalog.migration.finish`), then removes its work folder, as the next start would
+ * (endOrphanRuns): the migration screen shows the run's real end and counts at once. Nothing is done for a job that is
+ * not a cancelled migration, or whose run has ended already. Never rejects: what it could not do is logged, and the next
+ * start or the housekeeping ends the run.
+ */
+export async function releaseCancelledSlimsMigration(h: DbHandle, o: { jobId: string; dataDir: string; now: number; log: CoreLogger }): Promise<void> {
+  try {
+    const job = await h.db.selectFrom('jobs').select(['type', 'status']).where('id', '=', o.jobId).executeTakeFirst();
+    if (job === undefined || job.type !== SLIMS_MIGRATION_JOB || job.status !== 'cancelled') return;
+    const run = await h.db
+      .selectFrom('catalog_runs')
+      .select(['id', 'dry_run'])
+      .where('job_id', '=', o.jobId)
+      .where('kind', '=', 'migration')
+      .where('status', 'in', ['queued', 'running'])
+      .executeTakeFirst();
+    if (run === undefined) return;
+    const ended = await withTx(h, async (trx) => {
+      const r = await trx.updateTable('catalog_runs').set({ status: 'cancelled', finished_at: o.now }).where('id', '=', run.id).where('status', 'in', ['queued', 'running']).executeTakeFirst();
+      if (Number(r.numUpdatedRows) === 0) return false;
+      await closeAbandonedSlimsRun(trx, { runId: run.id, jobId: o.jobId, status: 'cancelled', dryRun: Number(run.dry_run) === 1, now: o.now });
+      return true;
+    });
+    if (ended) await releaseEndedRunWork(o.dataDir, [run.id], o.log);
+  } catch (error) {
+    o.log.warn('SLiMS migration: the run of a cancelled migration job could not be ended', { jobId: o.jobId, ...errorFields(error) });
+  }
 }
 
 /**

@@ -467,6 +467,9 @@ describe('Migrasi SLiMS', () => {
     // It shows the end its job gave it, not "Berjalan".
     expect(screen.getByText('Proses ini dibatalkan.')).toBeTruthy();
     expect(screen.queryByText('Berjalan')).toBeNull();
+    // Its counts of the ALTIS tables are its first stage's until the run is closed: they are not shown as its result.
+    expect(screen.queryByRole('table', { name: 'Baris di tabel ALTIS' })).toBeNull();
+    expect(screen.getByText(/dihitung ulang saat proses ini ditutup/)).toBeTruthy();
   });
 
   it('an admin without catalog.migration.run is told so, and nothing is asked', async () => {
