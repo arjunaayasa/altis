@@ -186,6 +186,7 @@ function selected(select: HTMLSelectElement): string[] {
 
 function NewSession({ branchId }: { branchId: string }) {
   const t = useT();
+  const locale = useLocale();
   const me = useMe();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -258,7 +259,7 @@ function NewSession({ branchId }: { branchId: string }) {
               .filter((c) => !c.archived)
               .map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nameId} ({c.code})
+                  {locale === 'en' && c.nameEn !== '' ? c.nameEn : c.nameId} ({c.code})
                 </option>
               ))}
           </select>
