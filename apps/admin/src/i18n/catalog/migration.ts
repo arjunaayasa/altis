@@ -286,7 +286,7 @@ export const MIGRATION_ID = {
   'catalog.migration.people.group_of': 'Kelompok tipe {name}',
   'catalog.migration.people.collisions': '{count} nomor anggota SLiMS bertabrakan setelah dinormalkan (mis. "b 001" dan "B001"). Ubah nomornya di SLiMS lalu jalankan uji kering lagi.',
   'catalog.migration.people.collision_refused': 'Migrasi ditolak: uji kering menemukan nomor anggota yang bertabrakan. Ubah nomornya di SLiMS lalu jalankan uji kering lagi.',
-  'catalog.migration.people.circulation_live': 'ALTIS sudah mencatat sirkulasi sendiri, jadi mode ganti tidak dapat dipakai lagi.',
+  'catalog.migration.people.circulation_live': 'Perpustakaan sudah melayani di ALTIS atau ALTIS sudah mencatat sirkulasi sendiri, jadi mode Ganti tidak dapat dipakai lagi.',
   'catalog.migration.people.matches': 'Cocokkan dengan SLiMS',
   'catalog.migration.people.matches_hint':
     'Setiap angka SLiMS dibandingkan dengan ALTIS. Kolom "terjelaskan" menghitung baris yang dilewati dan dicatat di laporan, serta pinjaman, denda, dan reservasi hasil migrasi yang sudah diselesaikan di ALTIS sendiri.',
@@ -314,6 +314,10 @@ export const MIGRATION_ID = {
   'catalog.migration.people.col_count': 'Jumlah',
   'catalog.migration.people.col_samples': 'Contoh',
   'catalog.migration.people.item_missing_hint': 'Ada pinjaman terbuka yang eksemplarnya tidak akan ada di ALTIS: jalankan dengan mode katalog Selaraskan.',
+  'catalog.migration.people.scope_no_type': 'tanpa tipe SLiMS',
+  'catalog.migration.people.serve_confirm_title': 'Mulai melayani di ALTIS?',
+  'catalog.migration.people.serve_confirm':
+    'Mulai sekarang layanan perpustakaan berjalan di ALTIS: hentikan transaksi di SLiMS. Migrasi ulang masih bisa menambah dan menyelaraskan data, tetapi mode sirkulasi Ganti tidak dapat dipakai lagi. Langkah ini tidak dapat dibatalkan.',
 } as const;
 
 export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
@@ -586,7 +590,7 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.people.group_of': 'Group of type {name}',
   'catalog.migration.people.collisions': '{count} SLiMS member numbers collide once normalised (e.g. "b 001" and "B001"). Change them in SLiMS, then run the dry run again.',
   'catalog.migration.people.collision_refused': 'The migration was refused: the dry run found member numbers that collide. Change them in SLiMS, then run the dry run again.',
-  'catalog.migration.people.circulation_live': 'ALTIS already records circulation of its own, so replace mode can no longer be used.',
+  'catalog.migration.people.circulation_live': 'The library serves in ALTIS, or ALTIS already records circulation of its own, so the Replace mode can no longer be used.',
   'catalog.migration.people.matches': 'Match with SLiMS',
   'catalog.migration.people.matches_hint':
     'Each SLiMS number against ALTIS. The "explained" column counts the rows skipped and listed in the report, and the migrated loans, fines and holds ALTIS has settled itself.',
@@ -605,7 +609,7 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.people.cutover_title': 'Moving from SLiMS',
   'catalog.migration.people.cutover_hint': 'On moving day: stop transactions in SLiMS, take the latest data, run again with the catalogue mode Re-sync, members Re-sync and circulation Replace. "Start serving" turns on once every required item is done.',
   'catalog.migration.people.stocktake_warning': 'Stocktaking is not in this release yet. Finish any stocktake scheduled in SLiMS before moving.',
-  'catalog.migration.people.serving': 'The library serves in ALTIS since {since}.',
+  'catalog.migration.people.serving': 'The library has been serving in ALTIS since {since}.',
   'catalog.migration.people.serve': 'Start serving',
   'catalog.migration.people.serve_held': 'Finish the required items above first.',
   'catalog.migration.people.dry_lists': 'Check before the real run',
@@ -614,4 +618,8 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.people.col_count': 'Count',
   'catalog.migration.people.col_samples': 'Samples',
   'catalog.migration.people.item_missing_hint': 'Some open loans are of items that will not be in ALTIS: run with the catalogue mode Re-sync.',
+  'catalog.migration.people.scope_no_type': 'no SLiMS type',
+  'catalog.migration.people.serve_confirm_title': 'Start serving in ALTIS?',
+  'catalog.migration.people.serve_confirm':
+    'From now on the library serves in ALTIS: stop transactions in SLiMS. A migration run can still add and re-sync data, but the circulation mode Replace can no longer be used. This cannot be undone.',
 };

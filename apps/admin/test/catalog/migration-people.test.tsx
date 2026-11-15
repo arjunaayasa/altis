@@ -203,4 +203,54 @@ describe('Migrasi SLiMS: members, visits and circulation', () => {
     await waitFor(() => expect(steps).toEqual(['reprint_opened']));
     expect(requests.some((r) => r.method === 'POST' && r.path === 'catalog/migrations/slims/cutover/steps')).toBe(true);
   });
+
+  it('"Mulai melayani" asks first and names what it switches; once confirmed the checklist says since when the library serves', async () => {
+    let state = cutover({ deskStaff: 1, rooms: 1, roomsWithStation: 1, reprintOpenedAt: AT, ready: true });
+    const steps: string[] = [];
+    startApp({
+      me: ME,
+      path: '/admin/catalog/migration',
+      routes: routes({
+        cutover: () => state,
+        step: (req) => {
+          steps.push((req.body as { step: string }).step);
+          state = { ...state, servingSince: Date.UTC(2026, 10, 16, 3) };
+          return state;
+        },
+      }),
+    });
+    const title = await screen.findByRole('heading', { name: 'Pindah dari SLiMS' }, FIRST);
+    const section = title.closest('section') as HTMLElement;
+    fireEvent.click(within(section).getByRole('button', { name: 'Mulai melayani' }));
+    const dialog = await screen.findByRole('alertdialog', { name: 'Mulai melayani di ALTIS?' });
+    expect(within(dialog).getByText(/mode sirkulasi Ganti tidak dapat dipakai lagi/)).toBeTruthy();
+    expect(steps).toEqual([]);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Mulai melayani' }));
+    expect(await within(section).findByText('Perpustakaan melayani di ALTIS sejak 16 November 2026.')).toBeTruthy();
+    expect(steps).toEqual(['serve']);
+  });
+
+  it('"Cocokkan dengan SLiMS" shows the unpaid fines as rupiah and names each SLiMS member type', async () => {
+    const real = run({
+      id: REAL_ID,
+      dryRun: false,
+      summary: summary({
+        memberTypes: [{ id: '1', name: 'Siswa', members: 240, group: 'student' }],
+        matches: [
+          { key: 'unpaid_fines_minor', scope: '', source: 32_700_000, altis: 32_500_000, explained: 200_000, ok: true },
+          { key: 'active_members', scope: '', source: 3, altis: 3, explained: 0, ok: true },
+          { key: 'active_members', scope: '1', source: 90, altis: 90, explained: 0, ok: true },
+        ],
+      }),
+    });
+    startApp({ me: ME, path: `/admin/catalog/migration?run=${REAL_ID}`, routes: routes({ runs: [real] }) });
+    const title = await screen.findByRole('heading', { name: 'Cocokkan dengan SLiMS' }, FIRST);
+    const section = title.closest('section') as HTMLElement;
+    const rows = within(section).getAllByRole('row').filter((r) => r.getAttribute('data-match') !== null);
+    expect(rows.map((r) => r.textContent)).toEqual([
+      'Total denda belum lunasRp 327.000Rp 325.000Rp 2.000Cocok',
+      'Anggota aktif · tanpa tipe SLiMS330Cocok',
+      'Anggota aktif · Siswa (1)90900Cocok',
+    ]);
+  });
 });
