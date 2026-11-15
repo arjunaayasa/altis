@@ -1,5 +1,6 @@
 import { VISIT_PURPOSES, VISIT_SOURCES, type Permission, type VisitPurpose, type VisitSource } from '@altis/shared';
 import type { BranchListResponse, BranchView } from '@altis/shared/api/branches';
+import type { LocationListResponse } from '@altis/shared/api/catalog/locations';
 import type {
   StationCodeResponse,
   StationListResponse,
@@ -31,8 +32,9 @@ import { ReportLinks } from '@/screens/reports/report-links';
  * Kunjungan (`/admin/layanan/kunjungan`): today's counts at a branch, a staff check-in (a member number or a guest),
  * a class or group visit with its head count (and how many of the class checked in on their own already), and the
  * visit list by date range and source, with "Batalkan" for a visit recorded by mistake. Perangkat Buku Tamu
- * (`/admin/layanan/buku-tamu`): the stations of a branch, a new one with its activation code shown once, a new code,
- * and revoking one. The branch is chosen once and kept in this browser.
+ * (`/admin/layanan/buku-tamu`): the stations of a branch, a new one (in a room of the branch, or none) with its activation
+ * code shown once, a new code, and revoking one. A station's room is what the visits it records are counted in, and
+ * what the checklist of the move from SLiMS asks a station for (one per room SLiMS recorded visits in). The branch is chosen once and kept in this browser.
  */
 
 const BRANCH_KEY = 'altis.visits-branch';
@@ -366,8 +368,10 @@ export function StationsScreen() {
   const t = useT();
   const time = useTime();
   const queryClient = useQueryClient();
+  const me = useMe();
   const { branches, branchId, choose } = useBranchFor('visits.stations.manage');
   const [name, setName] = useState('');
+  const [roomId, setRoomId] = useState('');
   const [code, setCode] = useState<(StationCodeResponse & { name: string }) | null>(null);
   const [problem, setProblem] = useState<unknown>(null);
   const [revoking, setRevoking] = useState<StationView | null>(null);
@@ -377,6 +381,18 @@ export function StationsScreen() {
     path: `visits/stations?branchId=${encodeURIComponent(branchId ?? '')}`,
     enabled: branchId !== null,
   });
+  // The rooms of the branch (a holder of the catalogue's read permission sees them; without it, a station has no room).
+  const locations = useApiQuery<LocationListResponse>({
+    queryKey: ['catalog', 'locations', branchId],
+    path: `catalog/locations?branchId=${encodeURIComponent(branchId ?? '')}`,
+    enabled: branchId !== null && holds(me, 'catalog.records.read'),
+    staleTime: 60_000,
+  });
+  const rooms = useMemo(
+    () => (locations.data?.items ?? []).filter((l) => l.kind === 'room' && !l.archived && l.branchId === branchId).sort((a, b) => a.name.localeCompare(b.name)),
+    [locations.data, branchId],
+  );
+  const roomName = (id: string | null): string => (id === null ? '—' : (rooms.find((l) => l.id === id)?.name ?? '—'));
 
   if (branches !== undefined && branchId === null) {
     return (
@@ -393,9 +409,13 @@ export function StationsScreen() {
     setProblem(null);
     setNotice(null);
     try {
-      const r = await api<StationCodeResponse>('POST', `branches/${encodeURIComponent(branchId)}/visits/stations`, { name: name.trim() });
+      const r = await api<StationCodeResponse>('POST', `branches/${encodeURIComponent(branchId)}/visits/stations`, {
+        name: name.trim(),
+        ...(roomId === '' ? {} : { locationId: roomId }),
+      });
       setCode({ ...r, name: name.trim() });
       setName('');
+      setRoomId('');
       await queryClient.invalidateQueries({ queryKey: ['visits', 'stations'] });
     } catch (e) {
       setProblem(e);
@@ -416,6 +436,7 @@ export function StationsScreen() {
 
   const columns: MasterColumn<StationView>[] = [
     { id: 'name', header: t('visits.stations.col.name'), cell: (s) => s.name },
+    { id: 'room', header: t('visits.stations.col.room'), cell: (s) => roomName(s.locationId) },
     {
       id: 'state',
       header: t('visits.stations.col.state'),
@@ -452,6 +473,20 @@ export function StationsScreen() {
         <Field label={t('visits.stations.name')} className="min-w-64 flex-1">
           {(c) => <Input {...c} maxLength={191} value={name} onChange={(e) => setName(e.target.value)} />}
         </Field>
+        {rooms.length > 0 && (
+          <Field label={t('visits.stations.room')} className="min-w-48">
+            {(c) => (
+              <select {...c} className={SELECT_CLASS} value={roomId} onChange={(e) => setRoomId(e.target.value)}>
+                <option value="">{t('visits.stations.room_none')}</option>
+                {rooms.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {`${l.name} (${l.code})`}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+        )}
         <Button type="submit">{t('visits.stations.create')}</Button>
       </form>
       <ProblemAlert error={problem} />

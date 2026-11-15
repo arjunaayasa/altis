@@ -87,6 +87,15 @@ const HISTORY_LIMIT = 20;
 const isLive = (run: Pick<RunView, 'status' | 'jobStatus'>): boolean =>
   (run.status === 'queued' || run.status === 'running') && (run.jobStatus === undefined || run.jobStatus === 'queued' || run.jobStatus === 'running');
 
+/**
+ * The status a run shows: one still queued or running whose job ended without it (cancelled from the jobs page between
+ * two slices, or dead) shows the end the next start or the daily housekeeping gives it, not "running".
+ */
+function shownStatus(run: Pick<RunView, 'status' | 'jobStatus'>): RunView['status'] {
+  if ((run.status !== 'queued' && run.status !== 'running') || isLive(run) || run.jobStatus === undefined) return run.status;
+  return run.jobStatus === 'cancelled' ? 'cancelled' : 'failed';
+}
+
 /** The run the address names (`?run=`), or null. */
 function runOf(search: Record<string, unknown>): string | null {
   const run = search['run'];
@@ -585,6 +594,7 @@ function RunSection({
   }
 
   const live = isLive(run);
+  const status = shownStatus(run);
   const stage = readReport(run.summary)?.stage ?? null;
   const parsed = DryRunOptions.safeParse(run.options);
   const options = parsed.success ? parsed.data : null;
@@ -599,7 +609,7 @@ function RunSection({
           <h2 id={titleId} className="text-base font-semibold">
             {t(run.dryRun ? 'catalog.migration.kind.dry' : 'catalog.migration.kind.real')}
           </h2>
-          <Badge tone={run.status === 'failed' ? 'danger' : run.status === 'succeeded' ? 'info' : 'neutral'}>{t(`vocab.run_status.${run.status}`)}</Badge>
+          <Badge tone={status === 'failed' ? 'danger' : status === 'succeeded' ? 'info' : 'neutral'}>{t(`vocab.run_status.${status}`)}</Badge>
           <span className="text-sm text-muted-foreground">{t('catalog.migration.run.started_at', { at: dateTime(run.createdAt) })}</span>
         </div>
         {live ? (
@@ -620,7 +630,7 @@ function RunSection({
           <div>{newButton}</div>
         )}
       </section>
-      {!live && <ReportView run={run} />}
+      {!live && <ReportView run={{ ...run, status }} />}
       {offer &&
         (why === null && options !== null ? (
           <RealRunPanel dryRun={run} options={options} draft={draft} libraryName={libraryName} onOpen={onOpen} />
@@ -655,7 +665,7 @@ function History({ runs, onOpen }: { runs: RunView[]; onOpen: OpenRun }) {
           header: () => t('catalog.migration.history.col_kind'),
           cell: (c) => t(c.getValue() ? 'catalog.migration.kind.dry' : 'catalog.migration.kind.real'),
         }),
-        column.accessor('status', { header: () => t('catalog.migration.history.col_status'), cell: (c) => <Badge>{t(`vocab.run_status.${c.getValue()}`)}</Badge> }),
+        column.accessor('status', { header: () => t('catalog.migration.history.col_status'), cell: (c) => <Badge>{t(`vocab.run_status.${shownStatus(c.row.original)}`)}</Badge> }),
         column.display({
           id: 'actions',
           header: () => t('catalog.migration.col_actions'),
