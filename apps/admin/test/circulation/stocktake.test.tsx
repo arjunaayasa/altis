@@ -57,6 +57,7 @@ function session(o: Partial<StocktakeView> = {}): StocktakeView {
     options: null,
     jobId: null,
     pendingUploads: 0,
+    migratedReport: null,
     ...o,
   };
 }
@@ -78,6 +79,30 @@ describe('stocktake', () => {
     expect(within(table).getByText('Inventarisasi 2023')).toBeTruthy();
     expect(within(table).getAllByText('Selesai')).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'Buat sesi' })).toBeNull();
+  });
+
+  // ---- the SLiMS report of a migrated session ----
+  it('the history links the SLiMS report of a migrated session as a download; a session without one shows none', async () => {
+    const migrated = '01JZ0000000000000000000S02';
+    startApp({
+      me: adminMe(),
+      path: '/admin/layanan/inventarisasi',
+      routes: {
+        'GET branches': () => ({ items: [BRANCH_VIEW] }),
+        'GET branches/:branchId/stocktakes': () => ({
+          items: [
+            session({ status: 'finished', finishedAt: 1 }),
+            session({ id: migrated, name: 'Inventarisasi 2019', status: 'finished', source: 'migrated', finishedAt: 1, migratedReport: { name: 'stock_take_report.html', size: 120 } }),
+          ],
+        }),
+      },
+    });
+    const table = await screen.findByRole('table', { name: 'Riwayat sesi' });
+    expect(within(table).getByRole('columnheader', { name: 'Laporan SLiMS' })).toBeTruthy();
+    const links = await within(table).findAllByRole('link', { name: /^Unduh laporan SLiMS/ });
+    expect(links.map((a) => [a.getAttribute('aria-label'), a.getAttribute('href'), a.hasAttribute('download')])).toEqual([
+      ['Unduh laporan SLiMS sesi Inventarisasi 2019', `/api/v1/branches/${BRANCH}/stocktakes/${migrated}/slims-report`, true],
+    ]);
   });
 
   it('a new session names the collection types in the language of the screen', async () => {

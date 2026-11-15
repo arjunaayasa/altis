@@ -2,7 +2,7 @@ import { withTx, type ForeignMysql, type ForeignMysqlConfig } from '@altis/db';
 import { DomainError, newId } from '@altis/shared';
 import { mapLegacy } from '../../src/catalog/data/legacy-map.js';
 import type { SlimsSourceFactory } from '../../src/migration/slims/factory.js';
-import type { SlimsFilesSource, SlimsRow, SlimsSource, SlimsTableInfo, SplitCheckpoint } from '../../src/migration/slims/source/types.js';
+import { SlimsFileTooLargeError, type SlimsFilesSource, type SlimsRow, type SlimsSource, type SlimsTableInfo, type SplitCheckpoint } from '../../src/migration/slims/source/types.js';
 import type { SlimsStage, SlimsStageContext, SlimsStageName } from '../../src/migration/slims/stage.js';
 import type { FixtureCell, FixtureData } from '../support/slims-fixture/generate.js';
 import { FIXTURE_TABLES } from '../support/slims-fixture/schema.js';
@@ -79,9 +79,24 @@ export function fakeSlimsSource(tables: Readonly<Record<string, FakeSlimsTable>>
   return source;
 }
 
-/** A files source with no file at all. */
-export function fakeSlimsFiles(): SlimsFilesSource {
-  return { open: async () => null, size: async () => null, close: async () => {} };
+/**
+ * A files source with no file at all, or (`files`) an in-memory one: each SLiMS-relative path with its bytes, served
+ * whole, or refused past `maxBytes` with SlimsFileTooLargeError as the real sources do.
+ */
+export function fakeSlimsFiles(files: Readonly<Record<string, Uint8Array>> = {}): SlimsFilesSource {
+  const of = (rel: string): Uint8Array | null => (Object.hasOwn(files, rel) ? files[rel]! : null);
+  async function* bytes(rel: string, data: Uint8Array, maxBytes: number | undefined): AsyncGenerator<Uint8Array> {
+    if (maxBytes !== undefined && data.byteLength > maxBytes) throw new SlimsFileTooLargeError(rel, maxBytes);
+    yield data;
+  }
+  return {
+    open: async (rel, o = {}) => {
+      const data = of(rel);
+      return data === null ? null : bytes(rel, data, o.maxBytes);
+    },
+    size: async (rel) => of(rel)?.byteLength ?? null,
+    close: async () => {},
+  };
 }
 
 export interface FakeSlimsFactory extends Partial<SlimsSourceFactory> {
@@ -95,7 +110,14 @@ export interface FakeSlimsFactory extends Partial<SlimsSourceFactory> {
  * path splits in two calls (a checkpoint, then done) unless `splitFails` throws from it.
  */
 export function fakeSlimsFactory(
-  o: { tables?: Record<string, FakeSlimsTable>; version?: '9' | '8' | 'unknown'; unreachable?: string; splitFails?: Error } = {},
+  o: {
+    tables?: Record<string, FakeSlimsTable>;
+    version?: '9' | '8' | 'unknown';
+    unreachable?: string;
+    splitFails?: Error;
+    /** The files the files source serves (by SLiMS-relative path); none by default. */
+    files?: Readonly<Record<string, Uint8Array>>;
+  } = {},
 ): FakeSlimsFactory {
   const tables = o.tables ?? fakeSlimsTables();
   const calls: FakeSlimsFactory['calls'] = { openDb: 0, split: 0, staged: 0, files: 0, passwords: [] };
@@ -129,11 +151,11 @@ export function fakeSlimsFactory(
     },
     async openFilesZip() {
       calls.files += 1;
-      return fakeSlimsFiles();
+      return fakeSlimsFiles(o.files);
     },
     async openFilesDir() {
       calls.files += 1;
-      return fakeSlimsFiles();
+      return fakeSlimsFiles(o.files);
     },
     detectSlimsVersion: () => ({ version: o.version ?? '9', missing: [], unknownColumns: {} }),
   };

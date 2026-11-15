@@ -121,7 +121,17 @@ export interface SlimsFixtureTraps {
    * The stocktake sessions: the last one (the latest start) with its rows by SLiMS item id (found, missing, on loan,
    * and one of an item the catalogue lacks), the older ones (headers only) and the rows of an older session.
    */
-  stocktake: { last: number; older: number[]; found: number[]; missing: number[]; onLoan: number[]; unmapped: number[]; olderRows: number };
+  stocktake: {
+    last: number;
+    older: number[];
+    found: number[];
+    missing: number[];
+    onLoan: number[];
+    unmapped: number[];
+    olderRows: number;
+    /** The report files the sessions name: in the zip (`files/reports/<name>`), or not. */
+    reports: { present: { session: number; rel: string }[]; missing: { session: number; rel: string }[] };
+  };
 }
 
 export interface SlimsFixtureExpected {
@@ -236,7 +246,7 @@ export function buildData(seed: number): FixtureData {
     content: { pages: [], news: [], drafts: [], translations: [], images: { present: [], missing: [] } },
     readCounts: {},
     biblioLogPersonal: ['ip', 'realname'],
-    stocktake: { last: 1, older: [2], found: [], missing: [], onLoan: [], unmapped: [], olderRows: 0 },
+    stocktake: { last: 1, older: [2], found: [], missing: [], onLoan: [], unmapped: [], olderRows: 0, reports: { present: [], missing: [] } },
   };
   const zip: RawEntry[] = [];
   const file = (name: string, data: Buffer): void => {
@@ -861,8 +871,12 @@ export function buildData(seed: number): FixtureData {
     total_item_loan: 0,
     stock_take_users: phpSerialize(['admin']),
     is_active: 0,
-    report_file: null,
+    report_file: 'stock_take_1_report.html',
   });
+  // The last session's report file is in the zip; the older one's is not.
+  file('files/reports/stock_take_1_report.html', Buffer.from('<html><body><h1>Inventarisasi 2022</h1><p>Laporan sintetis untuk uji migrasi.</p></body></html>', 'utf8'));
+  traps.stocktake.reports.present.push({ session: 1, rel: 'files/reports/stock_take_1_report.html' });
+  traps.stocktake.reports.missing.push({ session: 2, rel: 'files/reports/stock_take_2_report.html' });
   // An older session (2019, started before the last one though its id is higher): its header only.
   add('stock_take', {
     stock_take_id: 2,
@@ -876,7 +890,7 @@ export function buildData(seed: number): FixtureData {
     total_item_loan: 8,
     stock_take_users: phpSerialize(['admin']),
     is_active: 0,
-    report_file: null,
+    report_file: 'stock_take_2_report.html',
   });
   // The last session's rows: found, one missing, one on loan, and one of an item the catalogue lacks.
   const takeRow = (session: number, itemId: number, status: string): void =>
