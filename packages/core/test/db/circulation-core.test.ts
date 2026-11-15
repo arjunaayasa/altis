@@ -227,7 +227,10 @@ describe.skipIf(!ctx.available)(`the circulation core [${engineLabel()}]`, () =>
     const calls: string[] = [];
     registerCirculationChargeSeam({
       ...noCharges(),
-      bookOverdue: async (_tx, i) => void calls.push(`overdue:${i.until}`),
+      bookOverdue: async (_tx, i) => {
+        calls.push(`overdue:${i.until}`);
+        return null;
+      },
       bookLost: async (_tx, i) => void calls.push(`lost:${i.replacementMinor}:${i.processingFeeMinor}`),
       cancelLost: async (_tx, i) => void calls.push(`cancel:${i.reason}`),
     });
@@ -254,7 +257,13 @@ describe.skipIf(!ctx.available)(`the circulation core [${engineLabel()}]`, () =>
 
   it('a late return and a late renewal hand the overdue fine to the charges module after their write; an on-time one does not', async () => {
     const calls: string[] = [];
-    registerCirculationChargeSeam({ ...noCharges(), bookOverdue: async (_tx, i) => void calls.push(`${i.loanId}:${i.until}`) });
+    registerCirculationChargeSeam({
+      ...noCharges(),
+      bookOverdue: async (_tx, i) => {
+        calls.push(`${i.loanId}:${i.until}`);
+        return null;
+      },
+    });
     const reader = await member();
     const onTime = await lend(reader, (await item()).barcode);
     const late = await item();
@@ -334,7 +343,7 @@ describe.skipIf(!ctx.available)(`the circulation core [${engineLabel()}]`, () =>
 /** A charges stand-in that books nothing (each test overrides what it watches). */
 function noCharges(): CirculationChargeSeam {
   return {
-    bookOverdue: async () => undefined,
+    bookOverdue: async () => null,
     bookLost: async () => undefined,
     cancelLost: async () => undefined,
     loanHasCharges: async () => false,

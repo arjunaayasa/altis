@@ -244,4 +244,27 @@ describe('Meja Layanan', () => {
     expect(await screen.findByText('Dikembalikan — terlambat 3 hari')).toBeTruthy();
     expect(app.requests.filter((r) => r.method === 'POST').map((r) => r.path)).toEqual([`branches/${BRANCH}/circulation/returns`]);
   });
+
+  it('a late return whose fine left out closed days names both counts, so the fine does not look wrong', async () => {
+    start({
+      'POST branches/:branchId/circulation/returns': (): ReturnResponse => ({
+        id: LOAN.id,
+        version: 2,
+        memberId: MEMBER_ID,
+        memberNo: 'A001',
+        item: LOAN.item,
+        record: LOAN.record,
+        loanedOn: '2026-10-29',
+        dueOn: '2026-11-05',
+        returnedOn: '2026-11-15',
+        daysLate: 10,
+        finedDays: 8,
+      }),
+    });
+    await screen.findByRole('combobox', { name: 'Pindai kartu atau ketik nomor/nama anggota' });
+    fireEvent.keyDown(window, { key: 'F3' });
+    await screen.findByRole('textbox', { name: 'Pindai eksemplar yang dikembalikan' });
+    await scan('B0001');
+    expect(await screen.findByText('Dikembalikan — terlambat 10 hari (8 hari dikenai denda)')).toBeTruthy();
+  });
 });

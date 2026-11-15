@@ -142,7 +142,7 @@ describe('charges at the desk', () => {
 
     expect(await screen.findByText('Tanggungan Rp 1.500')).toBeTruthy();
     fireEvent.mouseDown(await screen.findByRole('tab', { name: /^Dipinjam/ }));
-    expect(await screen.findByText('Denda berjalan Rp 2.500 (5 hari)')).toBeTruthy();
+    expect(await screen.findByText('Denda berjalan Rp 2.500 (5 hari dikenai denda)')).toBeTruthy();
 
     const row = screen.getByRole('row', { name: /Bumi Manusia/ });
     fireEvent.keyDown(row, { key: 'b' });

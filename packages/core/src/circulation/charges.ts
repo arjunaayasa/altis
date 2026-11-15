@@ -146,9 +146,9 @@ async function itemLine(db: Db, itemId: string | null): Promise<{ barcode: strin
 
 /**
  * Books the overdue fine of the loan `loanId` for the days after `dueOn` up to `until` (fines.ts); nothing when the fine
- * is 0 or the loan has no member. Its id, or null.
+ * is 0 or the loan has no member. Its id and the days late it counted, or null.
  */
-export async function bookOverdueFine(tx: TxCtx, i: { loanId: string; dueOn: string; until: string }): Promise<string | null> {
+export async function bookOverdueFine(tx: TxCtx, i: { loanId: string; dueOn: string; until: string }): Promise<{ id: string; days: number } | null> {
   const loan = await tx.trx.selectFrom('loans').selectAll().where('id', '=', i.loanId).executeTakeFirst();
   if (loan === undefined || loan.member_id === null) return null;
   const terms = { finePerDayMinor: ok(loan.fine_per_day_minor), fineCapMinor: loan.fine_cap_minor === null ? null : ok(loan.fine_cap_minor), graceDays: ok(loan.grace_days) };
@@ -158,7 +158,7 @@ export async function bookOverdueFine(tx: TxCtx, i: { loanId: string; dueOn: str
   if (amount <= 0) return null;
   const locale = await libraryLocale(tx.trx);
   const item = await itemLine(tx.trx, loan.item_id);
-  return insertCharge(tx, {
+  const id = await insertCharge(tx, {
     memberId: loan.member_id,
     branchId: loan.branch_id,
     loanId: loan.id,
@@ -170,6 +170,7 @@ export async function bookOverdueFine(tx: TxCtx, i: { loanId: string; dueOn: str
     chargedOn: i.until,
     source: 'system',
   });
+  return { id, days };
 }
 
 /** Books a lost item's replacement and, when > 0, its processing fee (each a `lost` charge); their ids. */
@@ -323,7 +324,7 @@ export async function anonymizeLoanCharges(trx: Transaction<DB>, loanIds: readon
 
 /** What the circulation core calls (seams.ts), plugged in when this module loads. */
 export const CHARGES_SEAM: CirculationChargeSeam = Object.freeze({
-  bookOverdue: async (tx: TxCtx, i: { loanId: string; dueOn: string; until: string }) => void (await bookOverdueFine(tx, i)),
+  bookOverdue: async (tx: TxCtx, i: { loanId: string; dueOn: string; until: string }) => (await bookOverdueFine(tx, i))?.days ?? null,
   bookLost: async (tx: TxCtx, i: Parameters<CirculationChargeSeam['bookLost']>[1]) => void (await bookLostCharges(tx, i)),
   cancelLost: async (tx: TxCtx, i: { loanId: string }) => void (await cancelLostCharges(tx, i)),
   loanHasCharges,

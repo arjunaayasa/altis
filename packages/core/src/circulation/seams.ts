@@ -22,9 +22,10 @@ export interface CirculationChargeSeam {
    * Books the overdue fine of the loan `loanId` for the days late after `dueOn` (the due date the loan had before the
    * action: a renewal has moved it already) up to `until` (its return, a late renewal, or the day it was declared
    * lost), from the terms the loan copied (fine per day, cap, grace days) and the calendar of the loan's branch
-   * (calendars.ts `lateDays`); 0 days or a rule without fines books nothing.
+   * (calendars.ts `lateDays`); 0 days or a rule without fines books nothing. Answers the days late the booked fine
+   * counted (the open days only when the library's closed days are not fined), or null when it booked none.
    */
-  bookOverdue(tx: TxCtx, input: { loanId: string; dueOn: string; until: string }): Promise<void>;
+  bookOverdue(tx: TxCtx, input: { loanId: string; dueOn: string; until: string }): Promise<number | null>;
   /** Books the replacement charge of a loan closed as lost, and the processing fee as a charge of its own when > 0. */
   bookLost(
     tx: TxCtx,
@@ -47,7 +48,7 @@ export interface CirculationHoldSeam {
 }
 
 const NO_CHARGES: CirculationChargeSeam = Object.freeze({
-  bookOverdue: async () => undefined,
+  bookOverdue: async () => null,
   bookLost: async () => undefined,
   cancelLost: async () => undefined,
   loanHasCharges: async () => false,
