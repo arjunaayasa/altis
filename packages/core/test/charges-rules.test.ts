@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildReceiptPdf, chargeStatusOf, overdueFineMinor, receiptLockName, receiptNumber, type ReceiptData } from '../src/index.js';
+import { checkPdf } from './support/pdf-check.js';
 
 // The arithmetic of charges without a database: the overdue fine (grace days, every day late, the cap, minor units
 // only), a charge's status from its sums, the receipt number and lock name, and the receipt PDF on both rolls.
@@ -100,6 +101,27 @@ describe('receipts', () => {
         const pdf = Buffer.from(buildReceiptPdf({ ...data, paper, payment: { ...data.payment, voided } }));
         expect(pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
       }
+    }
+
+    // The roll page is as long as the receipt (a receipt printer feeds no blank paper): a short receipt is far under
+    // the 210 mm of a sheet, and one with many lines grows past it, still on one page, with every line on the paper.
+    const MM = 72 / 25.4;
+    const many = Array.from({ length: 60 }, (_, k) => ({ ...data.payment.allocations[0]!, chargeId: `01JZ00000000000000000001${String(k).padStart(2, '0')}` }));
+    for (const paper of ['58', '80'] as const) {
+      const short = checkPdf(buildReceiptPdf({ ...data, paper })).pages;
+      const long = checkPdf(buildReceiptPdf({ ...data, paper, payment: { ...data.payment, allocations: many } })).pages;
+      expect([short.length, long.length]).toEqual([1, 1]);
+      expect(short[0]!.width).toBeCloseTo(Number(paper) * MM, 2);
+      expect(short[0]!.height).toBeLessThan(120 * MM);
+      expect(long[0]!.height).toBeGreaterThan(210 * MM);
+      for (const page of [short[0]!, long[0]!]) {
+        const ys = page.texts.map((x) => x.y);
+        expect(Math.min(...ys)).toBeGreaterThan(4 * MM);
+        expect(Math.max(...ys)).toBeLessThan(page.height - 4 * MM);
+        expect(page.texts.map((x) => x.text)).toContain('Terima kasih');
+      }
+      // Under the last line come only the empty footer band and the bottom margin.
+      expect(Math.min(...short[0]!.texts.map((x) => x.y))).toBeLessThan(20 * MM);
     }
   });
 });
