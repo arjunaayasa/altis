@@ -126,6 +126,10 @@ export const TABLE_CLASSES: Readonly<Record<TableName, TableClass>> = Object.fre
   payment_allocations: 'data',
   // ---- Komunitas (notices): data ----
   notices: 'data',
+  // ---- Komunitas K4 (stocktake): all data ----
+  stocktakes: 'data',
+  stocktake_items: 'data',
+  stocktake_unknown_codes: 'data',
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping, made by the runner on every run ----
   schema_migrations_edition: 'migrator',
   schema_migrations_edition_lock: 'migrator',
@@ -262,6 +266,8 @@ export const PERSONAL_COLUMNS: Readonly<Partial<Record<TableName, readonly Perso
     { column: 'note', category: 'free_text' },
     { column: 'void_reason', category: 'free_text' },
   ],
+  // ---- Komunitas K4 (stocktake): the officer's name a migrated session carries ----
+  stocktake_items: [{ column: 'scanned_by_name', category: 'identity' }],
 } satisfies PersonalEntries);
 
 /** `value` with every nested object and array frozen. */

@@ -36,6 +36,9 @@ export const UPLOAD_CONTEXT_NAMES = [
   // ---- Komunitas K2 (members extended) ----
   'members.photo',
   'members.card_asset',
+  // ---- Komunitas K4 (stocktake) ----
+  // A list of scanned codes stays staged for the session's code job.
+  'stocktake.codes',
 ] as const;
 
 export type UploadContextName = (typeof UPLOAD_CONTEXT_NAMES)[number];

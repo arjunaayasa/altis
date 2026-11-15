@@ -13,12 +13,14 @@ import { openK1Installation, type K1Browser, type K1Installation } from './k1-su
 // No personal value of the reports and the accreditation workspace reaches a public output, on the engine picked by
 // ALTIS_TEST_DB. Every column registered as personal is filled with a value found nowhere else: the library staff's
 // names and appointment decree numbers, a staff user's name and e-mail, a supplier's contact fields, an answer's note,
-// and the profile's school head, library head, the head's staff number, phone and e-mail. A full flow then runs through
-// the API as the admin SPA drives it (a supplier and a record with a copy bought from it, a period with that profile,
-// the staff register with a training, an answer with its note, the evaluation, the evidence file, the simulation and
-// the staff annex, the freeze). Then the OPAC home, a search and its feed, the news feed, the record page and its
-// citation downloads, the sitemap and OAI-PMH, the payloads of every event the flow published (what the event stream
-// serves) and the server's own JSON log contain none of those values, while the staff API still shows them.
+// the profile's school head, library head, the head's staff number, phone and e-mail, and the officer's name a migrated
+// stocktake session keeps for a copy. A full flow then runs through the API as the admin SPA drives it (a supplier and
+// a record with a copy bought from it, a period with that profile, the staff register with a training, an answer with
+// its note, the evaluation, the evidence file, the simulation and the staff annex, the stocktake officers report and
+// minutes of the migrated session, the freeze). Then the OPAC home, a search and its feed, the news feed, the record
+// page and its citation downloads, the sitemap and OAI-PMH, the payloads of every event the flow published (what the
+// event stream serves) and the server's own JSON log contain none of those values, while the staff API still shows
+// them.
 
 const ctx = testDbContext();
 const API = '/api/v1';
@@ -40,17 +42,18 @@ const PERSONAL = {
   libraryHeadId: '197501012000032009',
   phone: '+62 22 7777 6543',
   email: 'kepala.perpus@sekolah-pribadi.example',
+  officerName: 'Suharti Petugaslama',
 } as const;
 
 /** Pieces of those values that no escaping, encoding or line break could hide. */
-const FRAGMENTS = ['Penandapribadi', 'PRIBADI/7731', 'Namapetugas', 'surelpetugas', 'Kontakpemasok', '5550 9911', 'pemasok-pribadi', 'Pemasok Rahasia', 'jawaban-pribadi', 'Kepalasekolah', 'Kepalaperpus', '197501012000032009', '7777 6543', 'sekolah-pribadi'] as const;
+const FRAGMENTS = ['Penandapribadi', 'PRIBADI/7731', 'Namapetugas', 'surelpetugas', 'Kontakpemasok', '5550 9911', 'pemasok-pribadi', 'Pemasok Rahasia', 'jawaban-pribadi', 'Kepalasekolah', 'Kepalaperpus', '197501012000032009', '7777 6543', 'sekolah-pribadi', 'Petugaslama'] as const;
 
 const NEEDLES: readonly string[] = [...Object.values(PERSONAL), ...FRAGMENTS];
 
 describe.skipIf(!ctx.available)(`no personal value of the workspace in a public output [${engineLabel()}]`, () => {
   let k: K1Installation;
   let admin: K1Browser;
-  const made = { branchId: '', supplierId: '', recordId: '', itemId: '', title: 'Riwayat Pelabuhan Cirebon', periodId: '', staffId: '' };
+  const made = { branchId: '', supplierId: '', recordId: '', itemId: '', title: 'Riwayat Pelabuhan Cirebon', periodId: '', staffId: '', stocktakeId: '' };
   let peer = 0;
 
   /** A visitor or a harvester: no cookie, an address of its own. */
@@ -126,6 +129,18 @@ describe.skipIf(!ctx.available)(`no personal value of the workspace in a public 
       201,
     );
 
+    // A stocktake session migrated from SLiMS: its copy found by an officer known by name only (no staff user). No API
+    // writes that name, so the rows are written straight into the tables, as the staff user's name above.
+    made.stocktakeId = newId(k.clock.now);
+    await k.h.db
+      .insertInto('stocktakes')
+      .values({ id: made.stocktakeId, branch_id: made.branchId, name: 'Stock opname 2024', scope: '{}', status: 'finished', total: 1, found: 1, started_at: k.clock.now, finished_at: k.clock.now, source: 'migrated', created_at: k.clock.now, updated_at: k.clock.now })
+      .execute();
+    await k.h.db
+      .insertInto('stocktake_items')
+      .values({ stocktake_id: made.stocktakeId, item_id: made.itemId, expected: 1, state: 'found', expected_status: 'available', scanned_at: k.clock.now, scanned_by: null, scanned_by_name: PERSONAL.officerName, result: 'none' })
+      .execute();
+
     // The accreditation workspace: a period with the profile, the staff register, an answer with its note.
     tick();
     made.periodId = ok<{ id: string }>(
@@ -176,12 +191,14 @@ describe.skipIf(!ctx.available)(`no personal value of the workspace in a public 
       [`${API}/accreditation/periods/${made.periodId}/dossier`, { format: 'zip' }],
       [`${API}/accreditation/periods/${made.periodId}/self-assessment`, {}],
       [`${API}/reports/runs/personal`, { reportId: 'accreditation.annex.staff', format: 'pdf', params: { periodId: made.periodId } }],
+      [`${API}/reports/runs/personal`, { reportId: 'stocktake.by_officer', format: 'pdf', params: { stocktakeId: made.stocktakeId } }],
       [`${API}/reports/runs`, { reportId: 'collection.item_list', format: 'csv', params: {} }],
     ] as const) {
       const run = ok<{ id: string; jobId: string }>(await admin.send('post', url, body));
       expect(await k.drive(run.jobId)).toBe('succeeded');
       expect((await admin.bytes(`${API}/reports/runs/${run.id}/download`)).status).toBe(200);
     }
+    expect((await admin.bytes(`${API}/branches/${made.branchId}/stocktakes/${made.stocktakeId}/minutes`)).status).toBe(200);
     // The evidence file PDF goes missing before the freeze, so the freeze logs that it cannot keep a copy of it: the
     // flow writes at least one line of its own to the log.
     const dossier = await k.h.db.selectFrom('report_runs').select('id').where('report_id', '=', 'accreditation.dossier').where('format', '=', 'pdf').executeTakeFirstOrThrow();
@@ -199,7 +216,8 @@ describe.skipIf(!ctx.available)(`no personal value of the workspace in a public 
     // which check their own public output.
     const theirs = ['members', 'loans', 'visits', 'member_clearances', 'charges', 'charge_adjustments', 'payments'];
     const tables = Object.keys(PERSONAL_COLUMNS).filter((t) => !theirs.includes(t));
-    expect(tables.sort()).toEqual(['accred_answers', 'accred_periods', 'library_staff', 'staff_users', 'suppliers']);
+    expect(tables.sort()).toEqual(['accred_answers', 'accred_periods', 'library_staff', 'staff_users', 'stocktake_items', 'suppliers']);
+    expect(await k.h.db.selectFrom('stocktake_items').select('scanned_by_name').execute()).toEqual([{ scanned_by_name: PERSONAL.officerName }]);
     expect(await k.h.db.selectFrom('library_staff').select(['name', 'appointment_ref']).execute()).toEqual([{ name: PERSONAL.staffName, appointment_ref: PERSONAL.appointmentRef }]);
     expect((await k.h.db.selectFrom('accred_answers').select('note').where('note', 'is not', null).execute()).map((r) => r.note)).toEqual([PERSONAL.answerNote]);
     const profile = JSON.parse((await k.h.db.selectFrom('accred_periods').select('profile').where('id', '=', made.periodId).executeTakeFirstOrThrow()).profile) as Record<string, unknown>;
@@ -209,6 +227,8 @@ describe.skipIf(!ctx.available)(`no personal value of the workspace in a public 
     for (const v of [PERSONAL.staffName, PERSONAL.appointmentRef]) expect(staffList).toContain(v);
     const suppliers = (await admin.send('get', `${API}/catalog/suppliers`)).text;
     for (const v of [PERSONAL.contactName, PERSONAL.contactPhone, PERSONAL.contactEmail, PERSONAL.contactAddress]) expect(suppliers).toContain(v);
+    expect((await admin.send('get', `${API}/branches/${made.branchId}/stocktakes/${made.stocktakeId}/items`)).text).toContain(PERSONAL.officerName);
+    expect((await admin.send('get', `${API}/branches/${made.branchId}/stocktakes/${made.stocktakeId}/officers`)).text).toContain(PERSONAL.officerName);
   });
 
   it('the OPAC, its feeds, the sitemap and OAI-PMH hold none of them', async () => {

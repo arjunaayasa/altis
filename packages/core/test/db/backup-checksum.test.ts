@@ -20,6 +20,8 @@ import { visitsSampleRows, type VisitsTableName } from '../../../db/test/fixture
 import { chargesSampleRows } from '../../../db/test/fixtures/komunitas-charges-tables.js';
 // ---- Komunitas (notices) ----
 import { noticesSampleRows } from '../../../db/test/fixtures/komunitas-notices-tables.js';
+// ---- Komunitas K4 (stocktake) ----
+import { stocktakeSampleRows } from '../../../db/test/fixtures/komunitas-stocktake-tables.js';
 import { backupTables, tableChecksumFromDb } from '../../src/backup/canonical.js';
 import { createExporter, type ExportCheckpoint } from '../../src/backup/exporter.js';
 import { readManifest, type BackupManifest } from '../../src/backup/manifest.js';
@@ -258,6 +260,12 @@ async function seed(db: Kysely<DB>): Promise<void> {
   // ---- Komunitas (notices): no foreign key, fixed ids ----
   let nn = 0;
   await db.insertInto('notices').values(noticesSampleRows({ newId: () => `01JX${String((nn += 1)).padStart(22, '0')}` }).notices).execute();
+  // ---- Komunitas K4 (stocktake): sessions first ----
+  let st = 0;
+  const stocktake = stocktakeSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JY${String((st += 1)).padStart(22, '0')}` });
+  for (const t of ['stocktakes', 'stocktake_items', 'stocktake_unknown_codes'] as const) {
+    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(stocktake[t]).execute();
+  }
 }
 
 /** The circulation core sample rows with ids numbered from another fixed prefix. */

@@ -196,7 +196,7 @@ export async function bookLostCharges(
  * Cancels what is left of the open `lost` charges of the loan `loanId` (its item came back): an adjustment `cancel`
  * each, what was paid stays. The caller holds the member's lock. The number of charges changed.
  */
-export async function cancelLostCharges(tx: TxCtx, i: { loanId: string }): Promise<number> {
+export async function cancelLostCharges(tx: TxCtx, i: { loanId: string; reason?: 'item_returned' | 'stocktake_found' }): Promise<number> {
   const open = await tx.trx.selectFrom('charges').select('id').where('loan_id', '=', i.loanId).where('kind', '=', 'lost').where('status', '=', 'open').execute();
   if (open.length === 0) return 0;
   const locale = await libraryLocale(tx.trx);
@@ -213,7 +213,7 @@ export async function cancelLostCharges(tx: TxCtx, i: { loanId: string }): Promi
     await writeChargeSums(tx, row, { paid, waived, status: chargeStatusOf(ok(row.amount_minor), paid, waived, true) });
     await tx.trx
       .insertInto('charge_adjustments')
-      .values({ id: newId(tx.now), charge_id: row.id, kind: 'cancel', amount_minor: left, reason_text: t(locale, 'charge.text.item_returned'), at: tx.now, by: tx.actor.id })
+      .values({ id: newId(tx.now), charge_id: row.id, kind: 'cancel', amount_minor: left, reason_text: t(locale, i.reason === 'stocktake_found' ? 'charge.text.stocktake_found' : 'charge.text.item_returned'), at: tx.now, by: tx.actor.id })
       .execute();
     changed += 1;
   }

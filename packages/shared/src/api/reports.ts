@@ -61,7 +61,9 @@ export type ReportParamKind =
   | 'text'
   | 'bool'
   | 'int'
-  | 'language';
+  | 'language'
+  // ---- Komunitas K4 (stocktake): a stocktake session ----
+  | 'stocktake';
 
 /**
  * One parameter of a definition. `options` lists the values of a `status` parameter; their labels are
@@ -108,7 +110,7 @@ export type ReportCell = string | number | null;
  */
 export interface ReportCatalogEntry {
   id: string;
-  module: 'collection' | 'accreditation' | 'members' | 'visits' | 'circulation';
+  module: 'collection' | 'accreditation' | 'members' | 'visits' | 'circulation' | 'stocktake';
   kind: 'table' | 'document';
   titleKey: string;
   personal: boolean;

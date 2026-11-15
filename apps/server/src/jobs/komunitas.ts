@@ -7,6 +7,9 @@ import {
   privacyAnonymizeJob,
   reportsExportJob,
   reportsHousekeepingJob,
+  stocktakeCodesJob,
+  stocktakeFinishJob,
+  stocktakePrepareJob,
   type JobHandler,
   type ReportJobDeps,
 } from '@altis/core';
@@ -31,6 +34,10 @@ export function komunitasJobHandlers(deps: () => ReportJobDeps): JobHandler<any>
     noticesBuildJob(),
     // ---- Komunitas K2 (privacy) ----
     privacyAnonymizeJob(() => ({ storage: localStorageDriver(deps().dataDir) })),
+    // ---- Komunitas K4 (stocktake) ----
+    stocktakePrepareJob(),
+    stocktakeCodesJob(() => ({ dataDir: deps().dataDir })),
+    stocktakeFinishJob(),
   ];
 }
 

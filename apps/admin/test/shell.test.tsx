@@ -255,6 +255,7 @@ describe('navigation and language', () => {
       ['Kalender', '/admin/layanan/kalender'],
       ['Kunjungan', '/admin/layanan/kunjungan'],
       ['Perangkat Buku Tamu', '/admin/layanan/buku-tamu'],
+      ['Inventarisasi', '/admin/layanan/inventarisasi'],
       ['Daftar Anggota', '/admin/anggota'],
       ['Tipe Anggota', '/admin/anggota/tipe'],
       ['Impor Anggota', '/admin/anggota/impor'],
@@ -325,6 +326,7 @@ describe('navigation and language', () => {
       'Kalender',
       'Kunjungan',
       'Perangkat Buku Tamu',
+      'Inventarisasi',
     ]);
     expect(within(groups[2]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Daftar Anggota', 'Tipe Anggota', 'Impor Anggota', 'Surat Bebas Pustaka', 'Cetak Kartu']);
     expect(within(groups[3]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Laporan', 'Akreditasi']);

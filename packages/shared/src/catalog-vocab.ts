@@ -12,6 +12,7 @@
 
 import { ACCREDITATION_VOCAB_LISTS } from './accreditation-vocab.js';
 import { CIRCULATION_VOCAB_LISTS } from './circulation-vocab.js';
+import { STOCKTAKE_VOCAB_LISTS } from './stocktake-vocab.js';
 import { VISITS_VOCAB_LISTS } from './visits-vocab.js';
 
 const hasOwn = (o: object, key: string): boolean => Object.prototype.hasOwnProperty.call(o, key);
@@ -425,6 +426,8 @@ export const VOCAB_LISTS = Object.freeze({
   ...CIRCULATION_VOCAB_LISTS,
   // ---- Komunitas K2 (members extended and visits) ----
   ...VISITS_VOCAB_LISTS,
+  // ---- Komunitas K4 (stocktake) ----
+  ...STOCKTAKE_VOCAB_LISTS,
 });
 
 export type VocabList = keyof typeof VOCAB_LISTS;

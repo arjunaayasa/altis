@@ -23,7 +23,8 @@ export interface ItemEventInput {
   // ---- Komunitas K1 (catalogue re-sync) ----
   /** What wrote the change besides the actor: `sync`, a SLiMS catalogue re-sync (stored in `meta.via`). */
   // ---- Komunitas (circulation core): `loan`, a loan declared lost; `return`, a lost item that came back ----
-  via?: 'sync' | 'loan' | 'return';
+  // ---- Komunitas K4 (stocktake): `stocktake`, the finish of a stocktake session ----
+  via?: 'sync' | 'loan' | 'return' | 'stocktake';
 }
 
 /** Rows per INSERT (12 columns: far below every engine's parameter limit). */

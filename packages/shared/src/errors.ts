@@ -380,6 +380,11 @@ export const ERROR_CODES = Object.freeze({
   // ---- Komunitas (SLiMS members and circulation) ----
   /** A `replace` migration of circulation while ALTIS already lends, takes holds or charges of its own; `meta {count}`. */
   MIGRATION_CIRCULATION_LIVE: Object.freeze({ status: 409 }),
+  // ---- Komunitas K4 (stocktake) ----
+  /** The branch already has a preparing, active or finishing stocktake session; `meta {stocktakeId}`. */
+  STOCKTAKE_ACTIVE: Object.freeze({ status: 409 }),
+  /** The session's status does not allow the action, or a code list it was given is still being applied; `meta {reason}`. */
+  STOCKTAKE_STATE: Object.freeze({ status: 409 }),
 });
 
 export type ErrorCode = keyof typeof ERROR_CODES;
