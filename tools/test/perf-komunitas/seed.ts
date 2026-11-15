@@ -1,8 +1,17 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { withTx, type DB, type DbHandle } from '@altis/db';
 import type { Insertable, Transaction } from 'kysely';
-import { instrumentById, localStorageDriver, writeSettings, type AccredInstrument } from '../../../packages/core/src/index.js';
-import { ACTIVITY_KINDS, LOCAL_WORK_KINDS, REFERENCE_KINDS, addDays, newId, type ActivityKind, type DocumentKind } from '../../../packages/shared/src/index.js';
+import { instrumentById, localStorageDriver, memberNameKey, normalizeMemberNo, writeSettings, type AccredInstrument } from '../../../packages/core/src/index.js';
+import {
+  ACTIVITY_KINDS,
+  LOCAL_WORK_KINDS,
+  REFERENCE_KINDS,
+  STOCKTAKE_ITEM_STATUSES,
+  addDays,
+  newId,
+  type ActivityKind,
+  type DocumentKind,
+} from '../../../packages/shared/src/index.js';
 import { perfCounts, prng, seedPhase2, type PerfCounts } from '../perf-phase2/seed.js';
 
 // The seed `perf-komunitas` (the community roadmap's performance budgets of the reports and the accreditation
@@ -27,7 +36,8 @@ import { perfCounts, prng, seedPhase2, type PerfCounts } from '../perf-phase2/se
 //   (unless `unclassified` is false; seedUnclassified adds them later).
 //
 // The registers do not scale (a school library keeps about as many whatever its catalogue); the catalogue and the
-// evidence do. seedExtraItems adds copies to the catalogue up to a total (the report export of a million rows).
+// evidence do. seedExtraItems adds copies to the catalogue up to a total (the report export of a million rows; the
+// copies a stocktake of the first branch takes in), seedOpenLoans lends some of them (a stocktake meets copies on loan).
 // Everything is written straight into the tables in multi-row batches, the way seedPhase2 writes the catalogue.
 
 /** The counts of the seed at scale 1, beside the catalogue's (PERF_PHASE2_SEED). */
@@ -592,17 +602,19 @@ export function extraBarcode(j: number): string {
 }
 
 /**
- * Adds available copies (with their `imported` history row) to the live records, one record after another in id
- * order and round again, until the live copies number `total`. Answers how many it added (0 when there are as many
- * already).
+ * Adds available copies (with their `imported` history row) of the first branch to the live records, one record after
+ * another in id order and round again, until the live copies number `total` (with `firstBranchOnly`: the live copies
+ * of the first branch whose status a stocktake takes in). Answers how many it added (0 when there are as many already).
  */
-export async function seedExtraItems(h: DbHandle, o: { total: number; now?: number; say?: (line: string) => void }): Promise<number> {
+export async function seedExtraItems(h: DbHandle, o: { total: number; firstBranchOnly?: boolean; now?: number; say?: (line: string) => void }): Promise<number> {
   const now = o.now ?? Date.now();
   const say = o.say ?? (() => undefined);
-  const live = Number((await h.db.selectFrom('items').select((eb) => eb.fn.countAll().as('n')).where('archived_at', 'is', null).executeTakeFirstOrThrow()).n);
+  const branch = await h.db.selectFrom('branches').select('id').where('archived_at', 'is', null).orderBy('created_at').orderBy('id').limit(1).executeTakeFirstOrThrow();
+  let counted = h.db.selectFrom('items').select((eb) => eb.fn.countAll().as('n')).where('archived_at', 'is', null);
+  if (o.firstBranchOnly === true) counted = counted.where('branch_id', '=', branch.id).where('status', 'in', [...STOCKTAKE_ITEM_STATUSES]);
+  const live = Number((await counted.executeTakeFirstOrThrow()).n);
   const wanted = o.total - live;
   if (wanted <= 0) return 0;
-  const branch = await h.db.selectFrom('branches').select('id').where('archived_at', 'is', null).orderBy('created_at').orderBy('id').limit(1).executeTakeFirstOrThrow();
   const shelf = await h.db.selectFrom('locations').select('id').where('branch_id', '=', branch.id).where('kind', '=', 'shelf').orderBy('id').limit(1).executeTakeFirstOrThrow();
   const type = await h.db.selectFrom('collection_types').select('id').where('code_key', '=', 'UMUM').executeTakeFirstOrThrow();
   let added = 0;
@@ -662,4 +674,102 @@ export async function seedExtraItems(h: DbHandle, o: { total: number; now?: numb
     if (added % 100_000 < EXTRA_BATCH || added === wanted) say(`seed: ${added} of ${wanted} extra copies`);
   }
   return added;
+}
+
+// ---- Komunitas K4 (stocktake) ----
+/** Copies lent per transaction by seedOpenLoans. */
+const LOAN_BATCH = 1_000;
+
+/**
+ * Lends one in `every` available live copies of the first branch (in id order) to one member of the seed, as open desk
+ * loans made a week before `now` and due a week after it: the copies a stocktake finds on loan. Answers how many it
+ * lent.
+ */
+export async function seedOpenLoans(h: DbHandle, o: { every: number; now?: number; say?: (line: string) => void }): Promise<number> {
+  const now = o.now ?? Date.now();
+  const branch = await h.db.selectFrom('branches').select('id').where('archived_at', 'is', null).orderBy('created_at').orderBy('id').limit(1).executeTakeFirstOrThrow();
+  const type = await h.db.selectFrom('member_types').select('id').where('archived_at', 'is', null).orderBy('code_key').limit(1).executeTakeFirstOrThrow();
+  const memberId = newId(now);
+  const today = jakartaDate(now);
+  const memberNo = 'PERF-0001';
+  await h.db
+    .insertInto('members')
+    .values({
+      id: memberId,
+      member_no_display: memberNo,
+      member_no_key: normalizeMemberNo(memberNo),
+      member_type_id: type.id,
+      home_branch_id: branch.id,
+      status: 'active',
+      name: 'Anggota Perf',
+      name_key: memberNameKey('Anggota Perf'),
+      joined_on: addDays(today, -365),
+      valid_from: addDays(today, -365),
+      expires_on: addDays(today, 365),
+      source: 'manual',
+      archived_at: null,
+      created_at: now,
+      updated_at: now,
+    })
+    .execute();
+  const loanedAt = now - 7 * 86_400_000;
+  let lent = 0;
+  let position = 0;
+  let after = '';
+  for (;;) {
+    const copies = await h.db
+      .selectFrom('items')
+      .select(['id', 'record_id', 'collection_type_id', 'location_id'])
+      .where('branch_id', '=', branch.id)
+      .where('archived_at', 'is', null)
+      .where('status', '=', 'available')
+      .where('id', '>', after)
+      .orderBy('id')
+      .limit(LOAN_BATCH * o.every)
+      .execute();
+    if (copies.length === 0) break;
+    const loans: Insertable<DB['loans']>[] = [];
+    copies.forEach((c, i) => {
+      if ((position + i) % o.every !== o.every - 1) return;
+      loans.push({
+        id: newId(loanedAt),
+        item_id: c.id,
+        open_item_id: c.id,
+        record_id: c.record_id,
+        member_id: memberId,
+        branch_id: branch.id,
+        policy_id: null,
+        loaned_on: jakartaDate(loanedAt),
+        loaned_at: loanedAt,
+        due_on: addDays(today, 7),
+        returned_on: null,
+        returned_at: null,
+        return_branch_id: null,
+        outcome: null,
+        loan_days: 14,
+        renew_limit: 1,
+        grace_days: 0,
+        fine_per_day_minor: 0,
+        fine_cap_minor: null,
+        currency: 'IDR',
+        loaned_by: null,
+        source: 'desk',
+        stat_ddc: null,
+        stat_material_type_id: null,
+        stat_collection_type_id: c.collection_type_id,
+        stat_location_id: c.location_id,
+        stat_member_type_id: type.id,
+        stat_accred_group: null,
+        stat_class_name: null,
+        created_at: loanedAt,
+        updated_at: loanedAt,
+      });
+    });
+    await withTx(h, (trx) => insertRows(trx, 'loans', loans));
+    lent += loans.length;
+    position += copies.length;
+    after = copies[copies.length - 1]!.id;
+  }
+  o.say?.(`seed: ${lent} open loans`);
+  return lent;
 }

@@ -5,7 +5,7 @@
   // It imports packages/core, packages/platform and packages/shared by relative path, the Phase 2 perf seed and the
   // release tooling (tools/release/smoke, tools/release/perf); tools/test itself is referenced by packages/core, so
   // tools/test cannot reference core (a cycle).
-  "include": ["*.ts", "../../../globals.d.ts"],
+  "include": ["*.ts", "test", "../../../globals.d.ts"],
   "references": [
     { "path": "../../../packages/shared" },
     { "path": "../../../packages/platform" },
