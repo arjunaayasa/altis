@@ -17,7 +17,7 @@ import {
 import { connect, withTx } from '@altis/db';
 import { copyOperatorFile, dataPath, isEnvSet, realPathOf, removeTree, type Env } from '@altis/platform';
 import { DomainError, newId, normalizeKey } from '@altis/shared';
-import { SlimsDbSource } from '@altis/shared/api/catalog/migration';
+import { SlimsDbSource, type SlimsPeopleOptions } from '@altis/shared/api/catalog/migration';
 import type { AppState } from '../app.js';
 import { loadConfig } from '../config.js';
 import type { BootContext } from '../index.js';
@@ -36,6 +36,10 @@ import { notInstalled } from './migrate.js';
 // and the dry run a run follows, checked by cli/index.ts and taken over by the run's options. With `--from-run` the run
 // takes over a dry run this command started (its work folder; a dump is not given again, a database is), and with
 // `--skip-catalog` the start refuses it unless that dry run was a sync one that found no catalogue change.
+//
+// ---- Komunitas (SLiMS members and circulation) ----
+// `[--members-mode append|update] [--visits-before <YYYY-MM-DD>|auto] [--circulation-mode append|replace]
+// [--fine-mode major|minor|skip] [--migrate-gender] [--no-staff-users]`: the member, visit and circulation options.
 //
 // 1. Before anything is written: the database password from `ALTIS_SLIMS_DB_PASSWORD`, else a prompt without echo at
 //    the terminal (never an argument: cli/index.ts refuses `--password`); with `--allow-non-empty` the library's name
@@ -84,6 +88,12 @@ export interface SlimsImportOptions {
   skipCatalog?: boolean;
   /** `--from-run <id>`: the dry run this run follows. */
   fromRunId?: string;
+  // ---- Komunitas (SLiMS members and circulation) ----
+  /**
+   * `--members-mode`, `--visits-before`, `--circulation-mode`, `--fine-mode`, `--migrate-gender`, `--no-staff-users`:
+   * the member, visit and circulation options (each one's default when absent).
+   */
+  people?: SlimsPeopleOptions;
   /** Asks the operator for the database password without echoing it; null without a terminal. */
   promptSecret: (question: string) => Promise<string | null>;
   /** Asks the operator a question (the library's name for `--allow-non-empty`); null without a terminal. */
@@ -266,6 +276,7 @@ export async function slimsImport(ctx: BootContext, env: Env, o: SlimsImportOpti
             fromRunId: o.fromRunId ?? null,
             ...(o.catalogMode === undefined ? {} : { catalogMode: o.catalogMode }),
             ...(o.skipCatalog === undefined ? {} : { skipCatalog: o.skipCatalog }),
+            ...(o.people === undefined ? {} : { people: o.people }),
           },
           { keyring: config.keyring },
         );

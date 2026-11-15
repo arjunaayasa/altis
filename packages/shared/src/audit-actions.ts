@@ -223,6 +223,9 @@ export const AUDIT_ACTIONS = Object.freeze([
   // one entry per run of the daily notices job (`meta`: counts)
   'circulation.notice.send',
   'circulation.notices.run',
+  // ---- Komunitas (SLiMS members and circulation) ----
+  // an item of the SLiMS cut-over checklist marked done (the reprint list opened; serving started in ALTIS)
+  'catalog.migration.cutover',
 ] as const);
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

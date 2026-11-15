@@ -6,9 +6,10 @@
  * No Node built-ins here: the browser bundles this module. Import it as `@altis/shared/api/catalog/migration`.
  */
 import { z } from 'zod';
+import { ACCRED_GROUPS } from '../../accreditation-vocab.js';
 import type { ErrorCode } from '../../errors.js';
 import { ulidField } from '../common.js';
-import { shortText } from './common.js';
+import { dateField, shortText } from './common.js';
 
 /** A SLiMS database reached directly (MySQL/MariaDB, `SELECT` only). */
 export const SlimsDbSource = z.strictObject({
@@ -78,6 +79,46 @@ export type PriceMode = (typeof PRICE_MODES)[number];
  */
 export const sourceNameField = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,39}$/);
 
+// ---- Komunitas (SLiMS members and circulation) ----
+
+/** `append`: new members only; `update`: also re-sync mapped members field by field (fields edited in ALTIS kept). */
+export const MEMBERS_MODES = Object.freeze(['append', 'update'] as const);
+export type MembersMode = (typeof MEMBERS_MODES)[number];
+
+/** `append`: new loans, holds and charges only; `replace`: the migrated ones are removed and imported again (cut-over). */
+export const CIRCULATION_MODES = Object.freeze(['append', 'replace'] as const);
+export type CirculationMode = (typeof CIRCULATION_MODES)[number];
+
+/** How SLiMS fines are read: whole rupiah (×100), already minor units, or not migrated. */
+export const FINE_MODES = Object.freeze(['major', 'minor', 'skip'] as const);
+export type FineMode = (typeof FINE_MODES)[number];
+
+/** A SLiMS member type id as the wizard's group map keys it (digits). */
+const slimsTypeKey = z.string().regex(/^[0-9]{1,11}$/);
+
+/**
+ * The options of the member and circulation stages, all optional so that an older run's options still parse:
+ * `visitsBefore` a date or `auto` (the first visit ALTIS recorded itself in the target branch); `memberTypeGroups`
+ * maps a SLiMS member type id to its accreditation group (the wizard guesses from the name and lets the admin edit);
+ * `unknownMemberGroup` is the group of visits and loans of SLiMS members who are gone; `typeLimitAsTotal` also takes
+ * a SLiMS type's loan limit as the ALTIS type's total limit (otherwise it only limits the type's fallback rule).
+ */
+export const SlimsPeopleOptions = z.strictObject({
+  membersMode: z.enum(MEMBERS_MODES).optional(),
+  visitsBefore: z.union([z.literal('auto'), dateField]).optional(),
+  unknownMemberGroup: z.enum(ACCRED_GROUPS).nullable().optional(),
+  circulationMode: z.enum(CIRCULATION_MODES).optional(),
+  fineMode: z.enum(FINE_MODES).optional(),
+  fineOutlierMajor: z.int().min(1).max(1_000_000_000).optional(),
+  migrateGender: z.boolean().optional(),
+  defaultMemberTypeId: ulidField.nullable().optional(),
+  memberTypeGroups: z.record(slimsTypeKey, z.enum(ACCRED_GROUPS)).optional(),
+  staffUsers: z.boolean().optional(),
+  typeLimitAsTotal: z.boolean().optional(),
+});
+
+export type SlimsPeopleOptions = z.infer<typeof SlimsPeopleOptions>;
+
 /**
  * `POST catalog/migrations/slims` (§11.2):
  * - Without `fromRunId`: `source` is required (`{path: 'source', code: 'required'}`), `filesUploadId` (a `slims.files`
@@ -105,6 +146,9 @@ export const SlimsStartBody = z
     catalogMode: z.enum(['append', 'sync']).optional(),
     /** Skip the catalogue stages; accepted only after a sync dry run (`fromRunId`) found nothing to change. */
     skipCatalog: z.boolean().optional(),
+    // ---- Komunitas (SLiMS members and circulation) ----
+    /** The member, visit and circulation options (each one's default when absent). */
+    people: SlimsPeopleOptions.optional(),
   })
   .check((ctx) => {
     const { source, filesUploadId, fromRunId } = ctx.value;
@@ -198,4 +242,76 @@ export interface MigrationSummary {
   // ---- Komunitas K1 (catalogue re-sync) ----
   /** A sync dry run: the source records and copies that are new, changed or gone (absent in other runs). */
   catalogChanges?: number;
+  // ---- Komunitas (SLiMS members and circulation) ----
+  /** SLiMS member numbers that collide once normalised (`b 001` and `B001`): a real run is refused while any is left. */
+  memberNoCollisions?: number;
+  /** The SLiMS member types with the accreditation group the run used (or guessed), for the wizard's group step. */
+  memberTypes?: MigrationMemberType[];
+  /** "Cocokkan dengan SLiMS": each number of the source against ALTIS after the run. */
+  matches?: MigrationMatchRow[];
 }
+
+/** A SLiMS member type as a run saw it. */
+export interface MigrationMemberType {
+  id: string;
+  name: string;
+  members: number;
+  group: (typeof ACCRED_GROUPS)[number];
+}
+
+/** The numbers the cut-over checks compare (the source's against ALTIS's). */
+export const MIGRATION_MATCH_KEYS = Object.freeze([
+  'open_loans',
+  'items_on_loan',
+  'open_loans_item_missing',
+  'overdue_loans',
+  'unpaid_fines_minor',
+  'active_members',
+  'expired_members',
+  'holds',
+  'visits_month',
+] as const);
+export type MigrationMatchKey = (typeof MIGRATION_MATCH_KEYS)[number];
+
+/**
+ * One row of "Cocokkan dengan SLiMS": `scope` narrows it (a member type id, a month `YYYY-MM`, or '' for the whole);
+ * `explained` counts the difference a report row of the run explains (skipped rows the report lists); `ok` when the
+ * rest is 0 (for `open_loans_item_missing`, when ALTIS's number is 0).
+ */
+export interface MigrationMatchRow {
+  key: MigrationMatchKey;
+  scope: string;
+  source: number;
+  altis: number;
+  explained: number;
+  ok: boolean;
+}
+
+/** The cut-over checklist of the Migrasi SLiMS screen (`GET catalog/migrations/slims/cutover`). */
+export interface SlimsCutoverView {
+  /** The last real run that read the circulation tables, or null: nothing to check yet. */
+  runId: string | null;
+  finishedAt: number | null;
+  /** Active staff with a password of their own and a role that may lend at the desk (migrated accounts start disabled). */
+  deskStaff: number;
+  /** The rooms SLiMS recorded visits in, and how many of them have an activated guestbook station. */
+  rooms: number;
+  roomsWithStation: number;
+  /** When the reprint list of cards and labels was opened from the checklist (epoch ms), or null. */
+  reprintOpenedAt: number | null;
+  /** The run's matches all hold (0 unexplained differences, no open loan whose item ALTIS lacks). */
+  reconciled: boolean;
+  /** Stocktaking is not part of this release: finish a scheduled one in SLiMS before moving. */
+  stocktakeAvailable: boolean;
+  /** Every required item holds: "Mulai melayani" may be pressed. */
+  ready: boolean;
+  /** When the library started to serve in ALTIS (epoch ms), or null. */
+  servingSince: number | null;
+  /** ALTIS already has circulation of its own: a `replace` run is refused (MIGRATION_CIRCULATION_LIVE). */
+  circulationLive: boolean;
+}
+
+/** `POST catalog/migrations/slims/cutover/steps`: an item of the checklist the admin marks done. */
+export const SlimsCutoverStepBody = z.strictObject({ step: z.enum(['reprint_opened', 'serve']) });
+
+export type SlimsCutoverStepBody = z.infer<typeof SlimsCutoverStepBody>;

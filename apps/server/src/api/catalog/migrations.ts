@@ -2,6 +2,8 @@ import {
   SLIMS_STAGES,
   createJobRegistry,
   liveSlimsMigration,
+  markSlimsCutoverStep,
+  slimsCutover,
   placeSlimsWork,
   releaseEndedRunWork,
   slimsSources,
@@ -12,7 +14,7 @@ import {
 } from '@altis/core';
 import { runWorkDir, statOrNull } from '@altis/platform';
 import { DomainError, isDomainError } from '@altis/shared';
-import { SlimsStartBody, SlimsTestBody, type SlimsTestResponse } from '@altis/shared/api/catalog/migration';
+import { SlimsCutoverStepBody, SlimsStartBody, SlimsTestBody, type SlimsCutoverView, type SlimsTestResponse } from '@altis/shared/api/catalog/migration';
 import type { RunStarted } from '@altis/shared/api/catalog/runs';
 import { route, type RouteDecl } from '../../http/route.js';
 import { jobHandlers } from '../../jobs/runtime.js';
@@ -169,6 +171,10 @@ const start = route({
         // sync dry run (`skipCatalog` `dry_run_required`, or MIGRATION_PRECHECK_FAILED `catalog_changed`).
         ...(b.catalogMode === undefined ? {} : { catalogMode: b.catalogMode }),
         ...(b.skipCatalog === undefined ? {} : { skipCatalog: b.skipCatalog }),
+        // ---- Komunitas (SLiMS members and circulation): a real run is refused while the dry run it takes over found
+        // member numbers that collide (MIGRATION_PRECHECK_FAILED `member_no_collision`), and a `replace` of circulation
+        // once ALTIS lends on its own (MIGRATION_CIRCULATION_LIVE).
+        ...(b.people === undefined ? {} : { people: b.people }),
       },
       { keyring: rc.config.keyring },
     );
@@ -187,4 +193,37 @@ const start = route({
   },
 });
 
-export const MIGRATION_ROUTES: RouteDecl[] = [testConnection, start];
+// ---- Komunitas (SLiMS members and circulation) ----
+// The cut-over checklist of the move from SLiMS (core migration/slims/cutover.ts): what holds "Mulai melayani" back, and
+// an item marked done (`reprint_opened`: the reprint list was opened; `serve`: the library serves in ALTIS from now
+// on, refused 422 MIGRATION_PRECHECK_FAILED `cutover_incomplete` while a required item does not hold).
+
+const cutoverView = route({
+  id: 'catalog.migrations.slims.cutover',
+  method: 'GET',
+  path: `${API}/cutover`,
+  permission: 'catalog.migration.run',
+  idempotency: 'none',
+  audit: null,
+  handler: async (rc) => {
+    const body: SlimsCutoverView = await slimsCutover(rc.db.db);
+    return { body };
+  },
+});
+
+const cutoverStep = route({
+  id: 'catalog.migrations.slims.cutover_step',
+  method: 'POST',
+  path: `${API}/cutover/steps`,
+  permission: 'catalog.migration.run',
+  reauth: true,
+  idempotency: 'none',
+  audit: 'catalog.migration.cutover',
+  body: SlimsCutoverStepBody,
+  handler: async (rc) => {
+    const body: SlimsCutoverView = await markSlimsCutoverStep(rc.tx(), rc.body.step);
+    return { body };
+  },
+});
+
+export const MIGRATION_ROUTES: RouteDecl[] = [testConnection, start, cutoverView, cutoverStep];

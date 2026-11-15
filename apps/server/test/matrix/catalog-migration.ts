@@ -30,10 +30,17 @@ export const MATRIX: AreaMatrix = {
       'POST /api/v1/catalog/migrations/slims/test-connection | P:catalog.migration.run | - | reauth | read | deny | none | null | self | -',
     'catalog.migrations.slims.start':
       'POST /api/v1/catalog/migrations/slims | P:catalog.migration.run | - | reauth | write | deny | none | catalog.migration.start | handler | -',
+    // ---- Komunitas (SLiMS members and circulation): the cut-over checklist ----
+    'catalog.migrations.slims.cutover': 'GET /api/v1/catalog/migrations/slims/cutover | P:catalog.migration.run | - | - | read | deny | none | null | - | -',
+    'catalog.migrations.slims.cutover_step':
+      'POST /api/v1/catalog/migrations/slims/cutover/steps | P:catalog.migration.run | - | reauth | write | deny | none | catalog.migration.cutover | handler | -',
   },
   fixtures: {
     'catalog.migrations.slims.test': async () => ({ body: { source: DB_SOURCE } }),
     'catalog.migrations.slims.start': async (s) => ({ body: { source: DB_SOURCE, branchId: await seedMigrationBranch(s), allowNonEmpty: false, dryRun: true } }),
+    'catalog.migrations.slims.cutover': async () => ({}),
+    // Marking the reprint list opened is allowed at any time (serving is the step the checklist holds back).
+    'catalog.migrations.slims.cutover_step': async () => ({ body: { step: 'reprint_opened' } }),
   },
   maintenance: {},
 };

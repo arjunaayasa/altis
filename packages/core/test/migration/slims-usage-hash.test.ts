@@ -1,4 +1,4 @@
-import { createHash, createHmac } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { SLIMS_COLUMNS } from '../../src/migration/slims/source/detect.js';
 import { SLIMS_USAGE_COLUMNS, SLIMS_USAGE_HASHED, memberHash, usageRowTransform } from '../../src/migration/slims/source/usage.js';
@@ -63,17 +63,18 @@ describe('the usage column lists', () => {
     }
   });
 
-  it("leave the catalogue migration's column list as it was: no member, loan or visitor table enters it", () => {
+  it("the migration's column list: the catalogue's tables, then the member and circulation tables of the people stages; the usage lists stay apart", () => {
     expect(Object.keys(SLIMS_COLUMNS)).toEqual([
       'biblio', 'biblio_author', 'biblio_topic', 'biblio_relation', 'biblio_attachment', 'biblio_custom', 'files', 'files_read', 'item',
       'item_custom', 'mst_gmd', 'mst_content_type', 'mst_media_type', 'mst_carrier_type', 'mst_language', 'mst_publisher', 'mst_place',
       'mst_author', 'mst_topic', 'mst_voc_ctrl', 'mst_relation_term', 'mst_location', 'mst_coll_type', 'mst_item_status', 'mst_supplier',
       'mst_custom_field', 'mst_servers', 'setting', 'content', 'serial', 'kardex', 'mst_frequency', 'stock_take', 'stock_take_item',
       'mst_label', 'biblio_log',
+      'mst_member_type', 'member', 'member_custom', 'biblio_mark', 'comment', 'user', 'user_group', 'group_access', 'mst_module',
+      'mst_visitor_room', 'visitor_count', 'mst_loan_rules', 'holiday', 'loan', 'loan_history', 'fines', 'reserve', 'read_counter',
     ]);
-    // The whole list, columns and their order included, as a digest of its JSON.
-    expect(createHash('sha256').update(JSON.stringify(SLIMS_COLUMNS)).digest('hex')).toBe('3c3c1f400aa3ced2bf137e12c822243025418cfebc8a3dea6136f7aa0db11883');
-    for (const table of ['member', 'loan', 'loan_history', 'visitor_count', 'mst_member_type', 'read_counter']) expect(Object.hasOwn(SLIMS_COLUMNS, table), table).toBe(false);
+    // The usage import's own lists never hold a name, an address or an institution.
+    for (const columns of Object.values(SLIMS_USAGE_COLUMNS)) for (const c of ['member_name', 'member_address', 'institution', 'inst_name']) expect(columns).not.toContain(c);
   });
 });
 

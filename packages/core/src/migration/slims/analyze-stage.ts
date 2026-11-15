@@ -5,6 +5,9 @@ import { SLIMS_CURSOR_MAX, SLIMS_TARGET_TABLES, SlimsRunFailure, cutText, pipeli
 import { slimsUnreadKind } from './report.js';
 import type { SlimsRow, SlimsTableInfo } from './source/types.js';
 import type { SlimsStage, SlimsStageContext } from './stage.js';
+// ---- Komunitas (SLiMS members and circulation) ----
+import { memberFacts, sourceMemberTypes, typeGroup } from './stages/members.js';
+import { keyOf, oneLine } from './stages/stage-b-kit.js';
 
 // `analyze`, the first stage after the split (Phase 2 spec §11.3 step 1, §11.4, §11.6; plan Task 23, preflight M13):
 //
@@ -142,6 +145,34 @@ async function begin(c: SlimsStageContext, tables: readonly SlimsTableInfo[]): P
   const counts = await slimsTargetCounts(p.db);
   p.state.targets = SLIMS_TARGET_TABLES.map((table) => ({ table, before: counts[table], after: counts[table] }));
   p.state.charset = [];
+  if (p.readTables().has('member') && present.has('member')) await memberPrecheck(c);
+}
+
+/**
+ * The member precheck: SLiMS member numbers that collide once normalised (`b 001` and `B001`) are listed (the source
+ * numbers only) and counted; a real run is refused while any is left (`member_no_collision`): an old card would open
+ * the wrong member at the desk, the guestbook and the OPAC once one of them got a suffix. The SLiMS member types with
+ * their groups (the wizard's, or guessed from the name) go to the summary for the wizard's group step.
+ */
+async function memberPrecheck(c: SlimsStageContext): Promise<void> {
+  const p = pipelineOf(c);
+  const facts = await memberFacts(c);
+  let colliding = 0;
+  for (const ids of facts.collisions.values()) {
+    colliding += ids.length;
+    c.report({ table: 'member', legacyKey: ids[0] ?? null, code: 'member_no_collision', detail: ids.join(' | ') });
+  }
+  p.state.memberNoCollisions = colliding;
+  p.state.memberTypes = [...(await sourceMemberTypes(c))].slice(0, 200).map(([id, row]) => {
+    const name = cutText(oneLine(keyOf(row['member_type_name'])), 120) || id;
+    return { id, name, members: facts.perType.get(id) ?? 0, group: typeGroup(c, id, name) };
+  });
+  if (colliding > 0 && !p.dryRun) {
+    throw new SlimsRunFailure(
+      'member_no_collision',
+      `${colliding} nomor anggota SLiMS bertabrakan setelah dinormalkan; ubah di SLiMS lalu jalankan uji kering lagi / ${colliding} SLiMS member numbers collide once normalised; change them in SLiMS, then dry-run again`,
+    );
+  }
 }
 
 async function analyze(c: SlimsStageContext, cursor: string | null): Promise<{ done: boolean; cursor: string | null }> {

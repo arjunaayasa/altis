@@ -35,6 +35,8 @@ import { CHARGES_ID } from './charges.js';
 import { CIRC_REPORTS_ID } from './circ-reports.js';
 // ---- Komunitas (notices) ----
 import { NOTICES_ID } from './notices.js';
+// ---- Komunitas (SLiMS members and circulation) ----
+import { SLIMS_PEOPLE_ID } from './slims-people.js';
 
 /**
  * The keys that exist only in the test profile (spec §12.5, ruling S28), next to `permissionCatalog`'s test entry and the
@@ -1602,6 +1604,8 @@ const BASE = {
   // ---- Komunitas (notices) ----
   // Audit actions, vocabularies, the member e-mails and the staff notifications of notices (i18n/notices.ts).
   ...NOTICES_ID,
+  // ---- Komunitas (SLiMS members and circulation) ----
+  ...SLIMS_PEOPLE_ID,
 } satisfies Record<string, string>;
 
 /**
