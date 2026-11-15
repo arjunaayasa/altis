@@ -7,15 +7,16 @@ import { MEMBERS_VISITS_EN, MEMBERS_VISITS_ID } from '../src/i18n/members-visits
 import { permissionCatalog } from '../src/permissions.js';
 import { VISITS_VOCAB_LISTS } from '../src/visits-vocab.js';
 
-// The member tools and visits: their lists are joined into VOCAB_LISTS last, every value and every new permission,
-// module, audit action and error code has its message in both languages.
+// The member tools and visits: their lists are joined into VOCAB_LISTS side by side and in their order, every value
+// and every new permission, module, audit action and error code has its message in both languages.
 
 const table = (locale: 'id' | 'en'): Readonly<Record<string, string>> => MESSAGES[locale] as Readonly<Record<string, string>>;
 
 describe('the member tools and visits vocabularies and texts', () => {
-  it('are joined into VOCAB_LISTS last, frozen and without duplicates', () => {
+  it('are joined into VOCAB_LISTS side by side and in their order, frozen and without duplicates', () => {
     const names = Object.keys(VOCAB_LISTS);
-    expect(names.slice(-Object.keys(VISITS_VOCAB_LISTS).length)).toEqual(Object.keys(VISITS_VOCAB_LISTS));
+    const first = names.indexOf(Object.keys(VISITS_VOCAB_LISTS)[0]!);
+    expect(names.slice(first, first + Object.keys(VISITS_VOCAB_LISTS).length)).toEqual(Object.keys(VISITS_VOCAB_LISTS));
     for (const [list, values] of Object.entries(VISITS_VOCAB_LISTS)) {
       expect(Object.isFrozen(values), list).toBe(true);
       expect(new Set(values).size, list).toBe(values.length);

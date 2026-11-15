@@ -89,14 +89,15 @@ describe('the barrels of @altis/core (M14)', () => {
   });
 
   // ---- Komunitas K1 (reports and accreditation) ----
-  it('src/index.ts joins the reports and accreditation barrels, then members and circulation, then visits and the member tools, with export *, at its end', () => {
-    expect(barrels.slice(-6)).toEqual([
+  it('src/index.ts joins the reports and accreditation barrels, then members and circulation, then visits and the member tools, then stocktake, with export *, at its end', () => {
+    expect(barrels.slice(-7)).toEqual([
       './reports/index.js',
       './accreditation/index.js',
       './members/index.js',
       './circulation/index.js',
       './visits/index.js',
       './members/ext/index.js',
+      './stocktake/index.js',
     ]);
   });
 
