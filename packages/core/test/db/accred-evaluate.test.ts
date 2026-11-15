@@ -85,7 +85,7 @@ describe.skipIf(!ctx.available)(`accreditation evaluation [${engineLabel()}]`, (
     const registersCalls = calls.filter((c) => c.provider === 'registers');
     expect(registersCalls.map((c) => c.cursor)).toEqual([null, '1', '2']);
     expect(registersCalls.every((c) => c.ids.every((id) => id.startsWith('registers.')))).toBe(true);
-    expect(calls.map((c) => c.provider)).toEqual(['collection', 'registers', 'registers', 'registers', 'period', 'system', 'usage']);
+    expect(calls.map((c) => c.provider)).toEqual(['collection', 'registers', 'registers', 'registers', 'period', 'system', 'usage', 'stocktake']);
 
     const rows = await rowsOf(db, periodId);
     const indicatorCodes = SMA.components.flatMap((c) => c.indicators.map((i) => `SCH-${i.code}`));

@@ -1,7 +1,7 @@
 /**
  * The shared texts of stocktake (inventarisasi): the permission and module labels, the audit actions, the error codes,
  * the vocabularies of `stocktake-vocab.ts`, the reason of a lost charge cancelled because its copy was found, the
- * stocktake reports and the minutes (berita acara) PDF. `STOCKTAKE_ID` is the source of the keys and `STOCKTAKE_EN` is
+ * stocktake reports, the minutes (berita acara) PDF and the minutes as accreditation evidence. `STOCKTAKE_ID` is the source of the keys and `STOCKTAKE_EN` is
  * typed against it, so a key without its English text fails `tsc`; both are spread once into the shared catalogs.
  *
  * No Node built-ins here: the browser bundles this module.
@@ -104,6 +104,9 @@ export const STOCKTAKE_ID = {
   'stocktake.minutes.sign_officer': 'Petugas Inventarisasi',
   'stocktake.minutes.non_latin': 'Teks di luar huruf Latin tidak tercetak di PDF ini.',
   'stocktake.minutes.page': 'Halaman {page} dari {pages}',
+  // ---- accred.evidence.<IK>.<item>: the minutes as evidence of the organisation and preservation of the collection ----
+  'accred.evidence.K7.stocktake_minutes': 'Berita acara inventarisasi terakhir yang ditandatangani (unduh dari sesinya di Layanan › Inventarisasi)',
+  'accred.evidence.K8.stocktake_minutes': 'Berita acara inventarisasi yang ditandatangani (unduh dari sesinya di Layanan › Inventarisasi)',
 } satisfies Record<string, string>;
 
 export const STOCKTAKE_EN: Record<keyof typeof STOCKTAKE_ID, string> = {
@@ -196,4 +199,6 @@ export const STOCKTAKE_EN: Record<keyof typeof STOCKTAKE_ID, string> = {
   'stocktake.minutes.sign_officer': 'Stocktake Officer',
   'stocktake.minutes.non_latin': 'Text outside the Latin script is not printed in this PDF.',
   'stocktake.minutes.page': 'Page {page} of {pages}',
+  'accred.evidence.K7.stocktake_minutes': 'The signed minutes of the last stocktake (downloaded from its session under Circulation › Stocktake)',
+  'accred.evidence.K8.stocktake_minutes': 'The signed stocktake minutes (downloaded from their session under Circulation › Stocktake)',
 };
