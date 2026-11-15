@@ -31,6 +31,8 @@ export const HOME_CSS: string = [
   '.hero-band{position:relative;isolation:isolate;display:flex;flex-direction:column;overflow:hidden;background:var(--hero-bg);' +
     'color:#fff;border:0;--focus:#fff}',
   '.hero-photo{min-height:24rem}',
+  // A column flexbox would shrink the centred bars to their content: they keep the page width.
+  '.hero-band>.bar{width:100%}',
   '.hero-img{position:absolute;inset:0;z-index:-2;width:100%;height:100%;max-width:none;object-fit:cover;object-position:50% 50%}',
   POSITIONS.map((p) => `.hero-pos-${p}{object-position:50% ${p}%}`).join(''),
   '.hero-photo::before{content:"";position:absolute;inset:0;z-index:-1;background:rgb(8 12 20/.64)}',
