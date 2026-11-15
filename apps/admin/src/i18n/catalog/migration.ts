@@ -7,7 +7,7 @@
 
 export const MIGRATION_ID = {
   'catalog.migration.description':
-    'Pindahkan katalog SLiMS 9 (SLiMS 8 sebisanya) ke ALTIS: data induk, otoritas, cantuman, eksemplar, lampiran, sampul, serta halaman dan berita. Mulailah dengan uji kering: semuanya dibaca, tetapi tidak ada yang ditulis ke katalog.',
+    'Pindahkan data SLiMS 9 (SLiMS 8 sebisanya) ke ALTIS: katalog (data induk, otoritas, cantuman, eksemplar, lampiran, sampul, halaman dan berita), anggota, petugas, kunjungan, sirkulasi, dan riwayat inventarisasi. Mulailah dengan uji kering: semuanya dibaca, tetapi tidak ada yang ditulis.',
   'catalog.migration.loading': 'Memuat migrasi…',
 
   // The wizard's steps.
@@ -48,7 +48,7 @@ export const MIGRATION_ID = {
   'catalog.migration.dump.required': 'Pilih berkas dump SLiMS.',
   'catalog.migration.files.file': 'Arsip berkas lampiran dan sampul (.zip, tidak wajib)',
   'catalog.migration.files.hint':
-    'Zip berisi folder repository/ dan images/docs/ (dan images/content/ bila ada) dari folder SLiMS. Tanpa arsip ini, lampiran dicatat sebagai berkas hilang yang bisa diganti kemudian. Arsip hanya dapat dipilih sebelum uji kering; migrasinya memakai arsip yang sama.',
+    'Zip berisi folder repository/ dan images/docs/ (serta images/content/ dan images/persons/, foto anggota, bila ada) dari folder SLiMS. Tanpa arsip ini, lampiran dicatat sebagai berkas hilang yang bisa diganti kemudian. Arsip hanya dapat dipilih sebelum uji kering; migrasinya memakai arsip yang sama.',
   'catalog.migration.file.chosen': 'Dipilih: {name} ({size})',
 
   // Step 2: the options.
@@ -318,7 +318,7 @@ export const MIGRATION_ID = {
 
 export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.description':
-    'Move a SLiMS 9 catalogue (SLiMS 8 as far as possible) into ALTIS: master data, authorities, records, items, attachments, covers, and pages and news. Start with a dry run: everything is read, but nothing is written to the catalogue.',
+    'Move SLiMS 9 data (SLiMS 8 as far as possible) into ALTIS: the catalogue (master data, authorities, records, items, attachments, covers, pages and news), members, staff, visits, circulation and the stocktake history. Start with a dry run: everything is read, but nothing is written.',
   'catalog.migration.loading': 'Loading the migration…',
 
   'catalog.migration.step': 'Step {n} of 2',
@@ -357,7 +357,7 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.dump.required': 'Choose the SLiMS dump file.',
   'catalog.migration.files.file': 'Archive of attachment and cover files (.zip, optional)',
   'catalog.migration.files.hint':
-    'A zip holding the repository/ and images/docs/ folders (and images/content/ if there is one) of the SLiMS folder. Without it, attachments are recorded as missing files that can be replaced later. The archive can only be chosen before the dry run; the migration uses the same one.',
+    'A zip holding the repository/ and images/docs/ folders (and images/content/ and images/persons/, the member photos, where there are) of the SLiMS folder. Without it, attachments are recorded as missing files that can be replaced later. The archive can only be chosen before the dry run; the migration uses the same one.',
   'catalog.migration.file.chosen': 'Chosen: {name} ({size})',
 
   'catalog.migration.options.title': 'Options',
