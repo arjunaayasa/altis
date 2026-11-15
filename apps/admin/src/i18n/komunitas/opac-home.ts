@@ -102,6 +102,9 @@ export const OPAC_HOME_ADMIN_ID = {
   'opacHome.preview.title': 'Pratinjau bagian atas',
   'opacHome.preview.hint': 'Pratinjau memakai isian yang belum disimpan. Halaman publik berubah setelah Anda menekan Simpan perubahan.',
   'opacHome.preview.search': 'Kotak pencarian',
+  'opacHome.preview.wide': 'Layar lebar',
+  'opacHome.preview.phone': 'Ponsel',
+  'opacHome.preview.crop': 'Seperti di situs, foto terpotong: di layar lebar bagian atas dan bawahnya (Posisi foto memilih bagian yang terlihat), di ponsel kedua sisinya.',
 };
 
 export const OPAC_HOME_ADMIN_EN: Record<keyof typeof OPAC_HOME_ADMIN_ID, string> = {
@@ -196,4 +199,7 @@ export const OPAC_HOME_ADMIN_EN: Record<keyof typeof OPAC_HOME_ADMIN_ID, string>
   'opacHome.preview.title': 'Preview of the top',
   'opacHome.preview.hint': 'The preview uses what you typed, saved or not. The public page changes once you press Save changes.',
   'opacHome.preview.search': 'Search box',
+  'opacHome.preview.wide': 'Wide screen',
+  'opacHome.preview.phone': 'Phone',
+  'opacHome.preview.crop': 'As on the site, the photo is cut: on a wide screen at its top and bottom (Photo position picks the part shown), on a phone at both sides.',
 };

@@ -115,6 +115,25 @@ describe('OPAC › Halaman awal', () => {
     expect(puts(requests)).toEqual([]);
   });
 
+  it('the preview has the hero band\'s proportions, not the photo\'s 16:9: on a wide screen "Posisi foto" moves the photo, on a phone its sides are cut', async () => {
+    startApp({ me: adminMe(), path: '/admin/opac/beranda', routes: { 'GET opac/home': () => view({ hero: { fileId: PHOTO, alt: 'Gedung', position: 50 } }) } });
+    const wide = await screen.findByRole('figure', { name: t('opacHome.preview.wide') }, FIRST);
+    const phone = screen.getByRole('figure', { name: t('opacHome.preview.phone') });
+    const photo = (frame: HTMLElement): HTMLImageElement => frame.querySelector('img')!;
+    const ratio = (frame: HTMLElement): number => {
+      const [w, h] = photo(frame).parentElement!.style.aspectRatio.split('/').map(Number) as [number, number];
+      return w / h;
+    };
+    // Wider than the photo: its top and bottom are cut, so the position decides what shows; narrower: its sides.
+    expect(ratio(wide)).toBeGreaterThan((16 / 9) * 1.5);
+    expect(ratio(phone)).toBeLessThan(1);
+    expect(photo(wide).style.objectPosition).toBe('50% 50%');
+    fireEvent.change(screen.getByLabelText(t('opacHome.hero.position')), { target: { value: '20' } });
+    expect(photo(wide).style.objectPosition).toBe('50% 20%');
+    expect(photo(phone).style.objectPosition).toBe('50% 20%');
+    expect(within(wide).getByText('Perpustakaan SMA 1')).toBeTruthy();
+  });
+
   it("a save another admin made first: the 409 says so and offers to reload, keeping the draft until then", async () => {
     startApp({
       me: adminMe(),
