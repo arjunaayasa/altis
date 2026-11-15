@@ -17,6 +17,8 @@ import { useCalendarDate, useMemberTypes, useTypeName } from './common';
 import { useMoney } from './charges';
 // ---- Komunitas (member, visit and circulation reports) ----
 import { ReportLinks } from '@/screens/reports/report-links';
+// ---- Komunitas (notices) ----
+import { SendRemindersButton } from './notices';
 
 /**
  * Terlambat & Jatuh Tempo (`/admin/layanan/terlambat`): the open loans past their due date, the longest-overdue first
@@ -140,9 +142,13 @@ export function OverdueScreen() {
             header: t('table.actions'),
             cell: (row: LoanListItem) =>
               row.member === null ? null : (
-                <Button asChild size="sm" variant="outline">
-                  <Link to={`/admin/layanan?member=${encodeURIComponent(row.member.id)}`}>{t('circulation.overdue.serve')}</Link>
-                </Button>
+                <div className="flex flex-wrap items-start gap-2">
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={`/admin/layanan?member=${encodeURIComponent(row.member.id)}`}>{t('circulation.overdue.serve')}</Link>
+                  </Button>
+                  {/* ---- Komunitas (notices) ---- */}
+                  <SendRemindersButton loans={[{ branchId: row.branchId, memberId: row.member.id }]} label="notices.send.overdue" />
+                </div>
               ),
           },
         ]
@@ -213,6 +219,8 @@ export function OverdueScreen() {
               {t(list.hasNextPage ? 'circulation.overdue.summary_loaded' : 'circulation.overdue.summary', { loans: rows.length, members, days: longest })}
             </p>
           )}
+          {/* ---- Komunitas (notices): an overdue reminder for every member shown ---- */}
+          {rows.length > 0 && <SendRemindersButton loans={rows.map((r) => ({ branchId: r.branchId, memberId: r.member?.id ?? null }))} label="notices.send.overdue_all" />}
           <MasterTable
             caption={t('circulation.overdue.caption')}
             columns={columns}

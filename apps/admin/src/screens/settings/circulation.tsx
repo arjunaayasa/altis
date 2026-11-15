@@ -16,6 +16,8 @@ import { useDirtyGuard } from '@/lib/dirty-forms';
 import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, saveSettings, type SaveOutcome } from './library';
 // ---- Komunitas (charges and payments) ----
 import { FinesSettingsForm, HoldsSettingsForm } from './charges';
+// ---- Komunitas (notices) ----
+import { NoticesSettingsForm } from './notices';
 
 /**
  * Pengaturan › Sirkulasi (`/admin/settings/circulation`): two groups on one page.
@@ -205,6 +207,8 @@ export function CirculationSettingsScreen() {
       {/* ---- Komunitas (charges and payments) ---- */}
       <SettingsLoader group="circulation">{(view, canManage) => <FinesSettingsForm initial={view} canManage={canManage} />}</SettingsLoader>
       <SettingsLoader group="circulation">{(view, canManage) => <HoldsSettingsForm initial={view} canManage={canManage} />}</SettingsLoader>
+      {/* ---- Komunitas (notices) ---- */}
+      <SettingsLoader group="circulation">{(view, canManage) => <NoticesSettingsForm initial={view} canManage={canManage} />}</SettingsLoader>
       <SettingsLoader group="members">{(view, canManage) => <ClearanceForm initial={view} canManage={canManage} />}</SettingsLoader>
     </SettingsPage>
   );

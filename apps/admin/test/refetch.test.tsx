@@ -36,7 +36,7 @@ const REFETCH_FAILED = 'Data terbaru gagal dimuat; yang tampil masih data yang d
 
 const SETTINGS: SettingsView = {
   library: { name: 'Perpustakaan Arsya', type: 'sekolah', address: null, timezone: 'Asia/Jakarta', locale: 'id' },
-  email: { senderName: 'Pustaka Arsya', templates: { passwordReset: { id: { subject: null, body: null }, en: { subject: null, body: null } } } },
+  email: { senderName: 'Pustaka Arsya', templates: { passwordReset: { id: { subject: null, body: null }, en: { subject: null, body: null } }, circulationDueSoon: { id: { subject: null, body: null }, en: { subject: null, body: null } }, circulationOverdue: { id: { subject: null, body: null }, en: { subject: null, body: null } }, circulationHoldReady: { id: { subject: null, body: null }, en: { subject: null, body: null } } } },
   security: { passwordMinLength: 10, sessionIdleMinutes: 30 },
   opac: {
     welcome: { id: 'Halo, pengunjung.', en: null },
@@ -86,6 +86,7 @@ const SETTINGS: SettingsView = {
       block: { unpaidOverMinor: null, overdue: false },
       fines: { skipClosedDays: true },
       receipt: { paperMm: 80, footer: { id: null, en: null } },
+      notices: { dueSoonDays: 2, overdueEveryDays: 7, overdueMax: 3, holdReady: true },
     },
   // ---- Komunitas K2: members (clearance and card), visits and privacy (their screens have their own tests) ----
   members: {

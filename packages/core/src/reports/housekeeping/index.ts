@@ -9,6 +9,8 @@ import { expiredRunsStep } from './expired-runs.js';
 import { orphanUploadsReportsStep } from './orphan-uploads.js';
 import { reportFilesStep } from './report-files.js';
 import { workDirsStep } from './work-dirs.js';
+// ---- Komunitas (notices) ----
+import { noticesRetentionStep } from '../../circulation/notices-retention.js';
 
 // `reports.housekeeping` (spec §4.15, §5.6): the reports' daily upkeep, scheduled at 03:50 (scheduler/registry.ts). It
 // sweeps only `exports/reports/` and `tmp/reports/` (the catalogue's housekeeping never looks there, and this one never
@@ -62,6 +64,8 @@ export const REPORTS_HOUSEKEEPING_STEPS: readonly ReportsHousekeepingStep[] = Ob
   reportFilesStep,
   workDirsStep,
   orphanUploadsReportsStep,
+  // ---- Komunitas (notices): member notices kept 400 days ----
+  noticesRetentionStep,
 ]);
 
 /** No step of this job queues a job. */

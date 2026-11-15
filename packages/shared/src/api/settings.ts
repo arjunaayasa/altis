@@ -91,12 +91,29 @@ const EmailTemplateBody = z.strictObject({
   body: passwordResetBodyField.optional(),
 });
 
+// ---- Komunitas (notices) ----
+/** A member notice body (`email.template.circulation_<kind>.<locale>.body`): null or blank is the catalog text. */
+export const noticeTemplateBodyField = z.string().max(4000).nullable();
+
+/** One member notice template: null (or blank) is the catalog text. */
+const NoticeTemplateBody = z.strictObject({
+  subject: textOrNull(200).optional(),
+  body: noticeTemplateBodyField.optional(),
+});
+
+/** A notice template in both languages. */
+const NoticeTemplatePair = z.strictObject({ id: NoticeTemplateBody.optional(), en: NoticeTemplateBody.optional() }).optional();
+
 /** `PUT settings/email`: the sender's display name and the password-reset mail per language. */
 export const EmailSettingsBody = z.strictObject({
   senderName: textOrNull(100).optional(),
   templates: z
     .strictObject({
       passwordReset: z.strictObject({ id: EmailTemplateBody.optional(), en: EmailTemplateBody.optional() }).optional(),
+      // ---- Komunitas (notices) ----
+      circulationDueSoon: NoticeTemplatePair,
+      circulationOverdue: NoticeTemplatePair,
+      circulationHoldReady: NoticeTemplatePair,
     })
     .optional(),
 });
@@ -160,7 +177,13 @@ export interface EmailTemplate {
 export interface EmailSettings {
   /** null: the library's name. */
   senderName: string | null;
-  templates: { passwordReset: { id: EmailTemplate; en: EmailTemplate } };
+  templates: {
+    passwordReset: { id: EmailTemplate; en: EmailTemplate };
+    // ---- Komunitas (notices) ----
+    circulationDueSoon: { id: EmailTemplate; en: EmailTemplate };
+    circulationOverdue: { id: EmailTemplate; en: EmailTemplate };
+    circulationHoldReady: { id: EmailTemplate; en: EmailTemplate };
+  };
 }
 
 /** `GET settings/security`. */
@@ -682,6 +705,15 @@ export const CirculationSettingsBody = z.strictObject({
       footer: z.strictObject({ id: receiptFooterField.optional(), en: receiptFooterField.optional() }).optional(),
     })
     .optional(),
+  // ---- Komunitas (notices) ----
+  notices: z
+    .strictObject({
+      dueSoonDays: z.int().min(0).max(14).optional(),
+      overdueEveryDays: z.int().min(1).max(60).optional(),
+      overdueMax: z.int().min(0).max(10).optional(),
+      holdReady: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 export type CirculationSettingsBody = z.infer<typeof CirculationSettingsBody>;
@@ -696,6 +728,9 @@ export interface CirculationSettingsView {
   block: { unpaidOverMinor: number | null; overdue: boolean };
   fines: { skipClosedDays: boolean };
   receipt: { paperMm: 58 | 80; footer: { id: string | null; en: string | null } };
+  // ---- Komunitas (notices) ----
+  /** `dueSoonDays` 0 and `overdueMax` 0 switch that reminder off. */
+  notices: { dueSoonDays: number; overdueEveryDays: number; overdueMax: number; holdReady: boolean };
 }
 
 /** `PUT settings/members`: each key is its setting's name without `members.`, nested at its dots. */

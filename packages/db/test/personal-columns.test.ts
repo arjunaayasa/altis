@@ -10,6 +10,8 @@ import { VISITS_TABLES_BY_MIGRATION } from './fixtures/komunitas-visits-tables.j
 // ---- Komunitas (member area) ----
 import { MEMBER_AREA_TABLES_BY_MIGRATION } from './fixtures/komunitas-member-area-tables.js';
 import { CHARGES_TABLES_BY_MIGRATION } from './fixtures/komunitas-charges-tables.js';
+// ---- Komunitas (notices) ----
+import { NOTICES_TABLES_BY_MIGRATION } from './fixtures/komunitas-notices-tables.js';
 
 // The personal-data dictionary (PERSONAL_COLUMNS): which columns hold personal data, so that public output, events,
 // logs and exports can leave them out or ask for re-authentication. Every registered column must exist; every column of
@@ -176,6 +178,16 @@ const CHARGES_CODE_COLUMNS: Record<string, string> = {
 /** Free-text columns of the charges and payments tables that are not personal data, each with the reason. */
 const CHARGES_NON_PERSONAL: Record<string, string> = {
   'payments.receipt_no': 'the receipt number the library assigns',
+};
+
+// ---- Komunitas (notices) ----
+/** Text columns of the notices table: codes from fixed lists and a list of ids; the mail's text is never kept. */
+const NOTICES_CODE_COLUMNS: Record<string, string> = {
+  'notices.kind': 'a notice kind (due soon, overdue, hold ready)',
+  'notices.channel': 'the channel code (email)',
+  'notices.status': 'a notice status',
+  'notices.reason': 'a skip or failure reason code',
+  'notices.loan_ids': 'a JSON list of loan ids',
 };
 
 /** The columns of `table` in a primary key, a unique index or a foreign key. */
@@ -381,6 +393,16 @@ describe('PERSONAL_COLUMNS', () => {
       expect({ column, isText: text.includes(column) }).toEqual({ column, isText: true });
       expect(reason.length).toBeGreaterThan(5);
     }
+  });
+
+  // ---- Komunitas (notices) ----
+  it('the notices table has no personal column: its text columns that are not keys are codes and ids', () => {
+    const tables = Object.values(NOTICES_TABLES_BY_MIGRATION).flat() as TableName[];
+    expect(tables).toEqual(['notices']);
+    const personal = new Set(registered());
+    const text = textColumnsOf(tables);
+    expect(text.filter((c) => personal.has(c))).toEqual([]);
+    expect([...text].sort()).toEqual(Object.keys(NOTICES_CODE_COLUMNS).sort());
   });
 
   it('a member: every column a person could be recognised by is registered; the number, type and dates are not', () => {

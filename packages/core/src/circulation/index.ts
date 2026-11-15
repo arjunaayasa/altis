@@ -129,3 +129,42 @@ export { buildSlipPdf, slipData } from './slips.js';
 export type { SlipData } from './slips.js';
 // ---- Komunitas (member, visit and circulation reports) ----
 export { circulationDaySummary } from './day-summary.js';
+// ---- Komunitas (notices) ----
+// E-mail notices to members (due soon, overdue, hold ready): the rows, the manual send, the log, the mail and the two
+// jobs. Loading this module plugs the hold-ready hook and the member data/erasure steps in.
+export {
+  NOTICES_BUILD_JOB,
+  NOTICES_SEND_JOB,
+  NOTICES_SEND_KEY,
+  NOTICE_MAX_ATTEMPTS,
+  enqueueNoticeSender,
+  listNotices,
+  mailDate,
+  mailMoney,
+  noticeContent,
+  noticeLibrary,
+  noticeMailKind,
+  noticeMember,
+  noticeSettings,
+  noticeStatus,
+  noticesSendPayload,
+  noticesToday,
+  overdueReminderDays,
+  queueNotice,
+  renderNotice,
+  sampleNoticeContent,
+  sendManualNotices,
+} from './notices.js';
+export type { NewNotice, NoticeContent, NoticeLibrary, NoticeLoanLine, NoticeMailKind, NoticeMember, NoticeSettings, NoticesSendCounts, NoticesSendPayload } from './notices.js';
+export {
+  NOTICE_CLAIM_BATCH,
+  claimNotices,
+  noticesBuildJob,
+  noticesBuildPayload,
+  noticesSendJob,
+  releaseStaleNotices,
+  runNoticesBuild,
+  runNoticesSend,
+} from './notices-jobs.js';
+export type { NoticesBuildCounts, NoticesBuildPayload } from './notices-jobs.js';
+export { NOTICE_RETENTION_DAYS, noticesRetentionStep } from './notices-retention.js';

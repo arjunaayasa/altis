@@ -89,6 +89,18 @@ export const SCHEDULES: readonly ScheduleDef[] = Object.freeze([
   // Every 15 minutes: holds not picked up by their deadline (or waiting past their end) expire, and the kept copy goes
   // to the next in the queue (circulation/holds-job.ts). Skipped while the clock looks wrong.
   def({ name: 'circulation.holds', expr: '*/15 * * * *', jobType: 'circulation.holds', permission: 'system.jobs.manage', enabledByDefault: true }),
+  // ---- Komunitas (notices) ----
+  // Daily at 07:00: the e-mail reminders of loans due soon and overdue are queued, then sent by the sender job
+  // (circulation/notices-jobs.ts); the hold shelf's staff notification. Skipped while the clock looks wrong. The library
+  // may move the hour (a school that opens later).
+  def({
+    name: 'circulation.notices',
+    expr: '0 7 * * *',
+    jobType: 'circulation.notices',
+    permission: 'system.jobs.manage',
+    exprEditable: true,
+    enabledByDefault: true,
+  }),
   // ---- Komunitas K2 (privacy) ----
   // The history loses the person after the library's retention periods, daily at 02:15 (skipped while the clock looks
   // wrong).

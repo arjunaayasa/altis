@@ -187,10 +187,12 @@ describe('SCHEDULES (the schedules this release defines)', () => {
       ['reports.housekeeping', '50 3 * * *', 'reports.housekeeping', 'system.jobs.manage'],
       // ---- Komunitas (holds) ----
       ['circulation.holds', '*/15 * * * *', 'circulation.holds', 'system.jobs.manage'],
+      // ---- Komunitas (notices) ----
+      ['circulation.notices', '0 7 * * *', 'circulation.notices', 'system.jobs.manage'],
       // ---- Komunitas K2 (privacy) ----
       ['privacy.anonymize', '15 2 * * *', 'privacy.anonymize', 'system.jobs.manage'],
     ]);
-    expect(SCHEDULES.filter((d) => d.exprEditable === true).map((d) => d.name)).toEqual(['backup.daily']);
+    expect(SCHEDULES.filter((d) => d.exprEditable === true).map((d) => d.name)).toEqual(['backup.daily', 'circulation.notices']);
     for (const d of SCHEDULES) {
       expect(() => parseCronExpr(d.expr)).not.toThrow();
       expect(isPermission(d.permission)).toBe(true);
