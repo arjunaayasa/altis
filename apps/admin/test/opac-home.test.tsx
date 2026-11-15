@@ -2,12 +2,14 @@ import { OPAC_HOME_DEFAULT, type OpacHomeView } from '@altis/shared/api/opac-hom
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ADMIN_MESSAGES, type AdminKey } from '@/i18n';
+import { uploadFile } from '@/lib/upload';
 import { adminMe, problem, signedIn, startApp, type FakeRequest } from './fake-api';
 
 // OPAC › Halaman awal through the real router and API client against a fake `/api/v1`: the loaded content in the form,
 // the hero preview following the unsaved draft, the unsaved mark and "Batalkan perubahan", the PUT body (the whole
 // content with the revision it was loaded at, blanks as null), the field errors checked before sending, the 409 of a
-// save another admin made first, and the screen without the permission.
+// save another admin made first, the crop dialog's "Pakai foto ini" (which sends no save of the page and puts the photo
+// in the draft), and the screen without the permission.
 
 vi.mock('@/lib/upload', () => ({ uploadFile: vi.fn() }));
 
@@ -31,6 +33,7 @@ const puts = (requests: FakeRequest[]): unknown[] => requests.filter((r) => r.me
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('OPAC › Halaman awal', () => {
@@ -121,6 +124,25 @@ describe('OPAC › Halaman awal', () => {
     expect(await screen.findByText(t('opacHome.conflict'))).toBeTruthy();
     expect(screen.getByRole('button', { name: t('opacHome.reload') })).toBeTruthy();
     expect(heading.value).toBe('Judul saya');
+  });
+
+  it('"Pakai foto ini" in the crop dialog uploads the photo into the draft and does not save the page', async () => {
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 1600, height: 900, close: vi.fn() })));
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({ drawImage: vi.fn(), fillRect: vi.fn() })) as unknown as HTMLCanvasElement['getContext']);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((done: BlobCallback) => done(new Blob(['x'], { type: 'image/jpeg' })));
+    vi.mocked(uploadFile).mockResolvedValue({ uploadId: PHOTO } as never);
+    const { requests } = startApp({
+      me: adminMe(),
+      path: '/admin/opac/beranda',
+      routes: { 'GET opac/home': () => view(), 'PUT opac/home': () => ({ revision: 'fedcba9876543210', changed: ['opac.home'] }) },
+    });
+    const [hero] = await screen.findAllByLabelText(t('opacHome.photo.upload'), undefined, FIRST);
+    fireEvent.change(hero!, { target: { files: [new File([new Uint8Array(10)], 'gedung.jpg', { type: 'image/jpeg' })] } });
+    fireEvent.click(await screen.findByRole('button', { name: t('opacHome.crop.use') }));
+    expect(await screen.findByLabelText(t('opacHome.photo.replace'))).toBeTruthy();
+    expect(vi.mocked(uploadFile)).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(t('opacHome.dirty'))).toBeTruthy();
+    expect(puts(requests)).toEqual([]);
   });
 
   it('without opac.pages.manage the screen says so and reads nothing', async () => {

@@ -96,6 +96,8 @@ export function PhotoCropDialog({
 
   const save = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    // The dialog sits in a portal, but React events still bubble to the page's form around it.
+    event.stopPropagation();
     if (canvas.current === null) return;
     setBusy(true);
     setProblem(null);
