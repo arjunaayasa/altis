@@ -274,6 +274,51 @@ describe.skipIf(!ctx.available)(`SLiMS migration framework [${engineLabel()}]`, 
     expect(wholeSummary.reconciliation?.ok).toBe(true);
   });
 
+  /** Runs slices of job `jobId` (run `runId`) of a 1 ms budget until its checkpoint is inside stage index `stage`. */
+  async function stepInto(runId: string, jobId: string, stage: number): Promise<void> {
+    const resumeOf = async () => ((await summaryOf(runId).catch(() => null))?.['resume'] ?? null) as { stage?: number; cursor?: string | null } | null;
+    for (let slices = 0; !((await resumeOf())?.stage === stage && typeof (await resumeOf())?.cursor === 'string'); slices += 1) {
+      if (slices > 50) throw new Error(`the run never got into stage ${stage}`);
+      const job = await claimById(h, registry, jobId, { worker: 'test', now: NOW });
+      if (job === null) throw new Error(`job ${jobId} cannot be claimed`);
+      expect((await runSlice(h, registry, job, { mode: 'worker', budgetMs: 1, keyring, log: silent, clock: () => NOW, env: {} })).outcome).toBe('continued');
+    }
+  }
+
+  it('a checkpoint names its stage: under a build with one more stage before it, the run goes on in that stage at its cursor', async () => {
+    const log: string[] = [];
+    const masters = fakeCountingStage('masters', 'mst_author', { log });
+    const items = fakeCountingStage('items', 'item', { log });
+    __setSlimsStages([masters, items]);
+    const { runId, jobId } = await start();
+    await stepInto(runId, jobId, 2);
+    expect(log).toEqual(['masters:-']);
+    // The update put a stage before it: the index the checkpoint holds is that stage's now.
+    __setSlimsStages([fakeCountingStage('records', 'biblio', { log }), masters, items]);
+    expect(await runToEnd(jobId)).toMatchObject({ outcome: 'succeeded' });
+    expect(log).toEqual(['masters:-', 'masters:2', 'items:-', 'items:2', 'items:4', 'items:6']);
+  });
+
+  it('a checkpoint that holds its stage index only, at or past the stocktake stage added since, fails the run instead of running another stage', async () => {
+    const log: string[] = [];
+    __setSlimsStages([fakeCountingStage('masters', 'mst_author', { log }), fakeCountingStage('stocktake', 'biblio', { log }), fakeCountingStage('items', 'item', { log })]);
+    const { runId, jobId } = await start();
+    await stepInto(runId, jobId, 2);
+    // As a build that kept the index only left it: past the masters stage, at the index the stocktake stage has now.
+    const summary = await summaryOf(runId);
+    const resume = summary['resume'] as Record<string, unknown>;
+    await h.db
+      .updateTable('catalog_runs')
+      .set({ summary: JSON.stringify({ ...summary, resume: { stage: 3, cursor: null, reportBytes: resume['reportBytes'] } }) })
+      .where('id', '=', runId)
+      .execute();
+    await h.db.updateTable('jobs').set({ payload: JSON.stringify({ runId, stage: 3, cursor: null }) }).where('id', '=', jobId).execute();
+    expect(await runToEnd(jobId)).toMatchObject({ outcome: 'succeeded' });
+    expect((await runRow(runId)).status).toBe('failed');
+    expect((await summaryOf(runId)).warnings).toContain('resume_mismatch');
+    expect(log).toEqual(['masters:-']);
+  });
+
   it('reconcile: source = migrated + merged + skipped + archived for every table read; a diff of 1 → ok false; unread tables never fail', () => {
     const ok = reconcile({
       tables: {
