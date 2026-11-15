@@ -18,6 +18,8 @@ import { circCoreSampleRows, type CircCoreTable } from '../../../db/test/fixture
 import { visitsSampleRows, type VisitsTableName } from '../../../db/test/fixtures/komunitas-visits-tables.js';
 // ---- Komunitas (charges and payments) ----
 import { chargesSampleRows } from '../../../db/test/fixtures/komunitas-charges-tables.js';
+// ---- Komunitas (notices) ----
+import { noticesSampleRows } from '../../../db/test/fixtures/komunitas-notices-tables.js';
 import { backupTables, tableChecksumFromDb } from '../../src/backup/canonical.js';
 import { createExporter, type ExportCheckpoint } from '../../src/backup/exporter.js';
 import { readManifest, type BackupManifest } from '../../src/backup/manifest.js';
@@ -253,6 +255,9 @@ async function seed(db: Kysely<DB>): Promise<void> {
   for (const t of ['charges', 'charge_adjustments', 'payments', 'payment_allocations'] as const) {
     await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(charges[t]).execute();
   }
+  // ---- Komunitas (notices): no foreign key, fixed ids ----
+  let nn = 0;
+  await db.insertInto('notices').values(noticesSampleRows({ newId: () => `01JX${String((nn += 1)).padStart(22, '0')}` }).notices).execute();
 }
 
 /** The circulation core sample rows with ids numbered from another fixed prefix. */
