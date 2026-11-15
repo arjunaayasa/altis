@@ -21,7 +21,7 @@ import {
 } from './people-kit.js';
 import { cachedForRun, cutChars, keyOf, mappedRows, oneLine, scanAll, sourceKeys, stateOf, tableOf, textOf, type BatchIo, type Ledger } from './stage-b-kit.js';
 
-// Stocktake (spec K4: the SLiMS tables `stock_take` and `stock_take_item`). SLiMS 9 table/column names
+// Stocktake (the SLiMS tables `stock_take` and `stock_take_item`). SLiMS 9 table/column names
 // (interoperability facts, no SLiMS code).
 //
 // 1. `stock_take` → stocktake sessions of the run's branch (entity `stock_take`, `source = migrated`), with their name
