@@ -323,7 +323,11 @@ describe.skipIf(!ctx.available)(`SLiMS stages A on the fixture [${engineLabel()}
     expect(tableCounts(s, 'mst_location')).toMatchObject({ migrated: 3 });
     expect(tableCounts(s, 'mst_coll_type')).toMatchObject({ migrated: 3 });
     expect(tableCounts(s, 'mst_supplier')).toMatchObject({ migrated: 3 });
-    expect(tableCounts(s, 'mst_custom_field')).toMatchObject({ migrated: 7, skipped: { phase3: 1 } });
+    // The member's field too (never public nor searchable: what it holds is personal data; the members stage moves its values).
+    expect(tableCounts(s, 'mst_custom_field')).toMatchObject({ migrated: 8, skipped: {} });
+    expect(await h.db.selectFrom('custom_field_defs').select(['code_display', 'is_public', 'is_searchable']).where('entity', '=', 'members').execute()).toEqual([
+      { code_display: 'cf_m0001', is_public: 0, is_searchable: 0 },
+    ]);
     expect(tableCounts(s, 'mst_servers')).toMatchObject({ migrated: 1, skipped: { server_type: 2 } });
     expect(tableCounts(s, 'setting')).toMatchObject({ migrated: 1, skipped: { print_settings: 1, not_mapped: 2 } });
     expect(tableCounts(s, 'biblio_author').skipped).toEqual({ orphan: 1 });

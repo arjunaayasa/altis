@@ -439,7 +439,7 @@ export function buildData(seed: number): FixtureData {
     [5, 'biblio', 'cf_bad01', 'Prioritas', 'dropdown', brokenOptions],
     [6, 'item', 'cf_9c8d7', 'Kondisi', 'dropdown', conditionOptions],
     [7, 'item', 'cf_5e6f7', 'Catatan Fisik', 'longtext', null],
-    [8, 'member', 'cf_m0001', 'Pekerjaan', 'text', null], // a member field: not migrated in Phase 2
+    [8, 'member', 'cf_m0001', 'Pekerjaan', 'text', null], // a member field (public in SLiMS, never in ALTIS)
   ];
   customDefs.forEach(([id, table, dbfield, label, type, data]) =>
     add('mst_custom_field', { field_id: id, primary_table: table, dbfield, label, type, default: null, max: null, data, indexed: 0, class: '', is_public: id % 2, width: 100, note: null }),
