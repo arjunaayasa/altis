@@ -1,6 +1,6 @@
-import { isUlid } from '@altis/shared';
+import { ACCRED_GROUPS, isUlid } from '@altis/shared';
 import type { BranchListResponse } from '@altis/shared/api/branches';
-import { PRICE_MODES, SlimsDbSource, type SlimsStartBody } from '@altis/shared/api/catalog/migration';
+import { PRICE_MODES, SlimsDbSource, SlimsPeopleOptions, type SlimsStartBody } from '@altis/shared/api/catalog/migration';
 import type { RunListResponse, RunStarted, RunView } from '@altis/shared/api/catalog/runs';
 import type { UploadContextName } from '@altis/shared/api/files';
 import { useQueryClient } from '@tanstack/react-query';
@@ -37,6 +37,7 @@ import {
   type OptionsDraft,
   type OptionsErrors,
 } from './options-step';
+import { CutoverChecklist, PeopleFields, peopleBody, peopleDraftOf } from './people';
 import { ReportView, readReport, stageText } from './report-view';
 import { EMPTY_SOURCE, SourceStep, checkDb, checkSource, hasSourceErrors, type SourceDraft, type SourceErrors } from './source-step';
 
@@ -218,6 +219,7 @@ function Wizard({
         ...(options.allowNonEmpty ? { confirmLibraryName: options.confirmLibraryName } : {}),
         dryRun: true,
         ...(options.catalogMode === 'sync' ? { catalogMode: 'sync' as const } : {}),
+        ...peopleBody(options.people),
       };
       const started = await api<StartAnswer>('POST', 'catalog/migrations/slims', body, { signal });
       // A new run took the uploads; a joined one took nothing, and they stay usable for a later start.
@@ -302,6 +304,14 @@ function Wizard({
 
 // ---- the real run (S3) ---------------------------------------------------------------------------------------------
 
+/** The SLiMS member types a dry run listed (its summary's `memberTypes`), for the group step of the real run. */
+const MemberTypesOfRun = z.array(z.object({ id: z.string(), name: z.string(), members: z.number(), group: z.enum(ACCRED_GROUPS) }));
+
+function readMemberTypes(summary: Record<string, unknown> | null): z.infer<typeof MemberTypesOfRun> | undefined {
+  const parsed = MemberTypesOfRun.safeParse(summary?.['memberTypes']);
+  return parsed.success ? parsed.data : undefined;
+}
+
 /** What the real run reads of a dry run's options (Task 23's `catalog_runs.options`; never a password). */
 const DryRunOptions = z.object({
   sourceKind: z.enum(['db', 'dump']),
@@ -316,6 +326,8 @@ const DryRunOptions = z.object({
   // Absent in the runs of an earlier release: `append`, without a skip.
   catalogMode: z.enum(['append', 'sync']).optional().catch(undefined),
   skipCatalog: z.boolean().optional().catch(undefined),
+  // ---- Komunitas (SLiMS members and circulation) ----
+  people: SlimsPeopleOptions.optional().catch(undefined),
 });
 
 type DryRunOptions = z.infer<typeof DryRunOptions>;
@@ -359,6 +371,9 @@ function RealRunPanel({
   const catalogMode = options.catalogMode ?? 'append';
   const skipAllowed = canSkipCatalog(options, report?.catalogChanges);
   const [skipCatalog, setSkipCatalog] = useState(false);
+  // ---- Komunitas (SLiMS members and circulation): the dry run's options, its member types' groups editable ----
+  const [people, setPeople] = useState(() => peopleDraftOf(options.people));
+  const memberTypes = readMemberTypes(dryRun.summary);
 
   const submit = async (): Promise<void> => {
     if (sending.current) return;
@@ -386,6 +401,7 @@ function RealRunPanel({
       dryRun: false,
       ...(catalogMode === 'sync' ? { catalogMode: 'sync' as const } : {}),
       ...(skipAllowed && skipCatalog ? { skipCatalog: true } : {}),
+      ...peopleBody(people),
     };
     sending.current = true;
     setBusy(true);
@@ -407,6 +423,10 @@ function RealRunPanel({
         setFailure(t('catalog.migration.real.catalog_changed'));
       } else if (fieldError(e, 'skipCatalog') !== null) {
         setFailure(t('catalog.migration.real.skip_needs_sync'));
+      } else if (e instanceof ApiError && e.code === 'MIGRATION_PRECHECK_FAILED' && e.reason === 'member_no_collision') {
+        setFailure(t('catalog.migration.people.collision_refused'));
+      } else if (e instanceof ApiError && e.code === 'MIGRATION_CIRCULATION_LIVE') {
+        setFailure(t('catalog.migration.people.circulation_live'));
       } else {
         setFailure(problemText(t, e));
       }
@@ -443,6 +463,7 @@ function RealRunPanel({
         <dd>{t(catalogModeLabel(catalogMode))}</dd>
       </dl>
       <SkipCatalogField allowed={skipAllowed} checked={skipCatalog} disabled={busy} onChange={setSkipCatalog} />
+      <PeopleFields value={people} onChange={setPeople} memberTypes={memberTypes} />
       {db !== null && (
         <div className="grid gap-3 md:max-w-md">
           <Field label={t('catalog.migration.db.password')} hint={t('catalog.migration.db.password_hint')} error={errors.password}>
@@ -709,6 +730,7 @@ function Migration({ libraryName }: { libraryName: string }) {
   return (
     <>
       <Wizard source={source} options={options} libraryName={libraryName} onSource={setSource} onOptions={setOptions} onOpen={open} />
+      <CutoverChecklist />
       <History runs={history.data.items} onOpen={open} />
     </>
   );

@@ -126,7 +126,7 @@ export interface Args {
   withoutFiles: boolean;
   yesExternal?: string;
   /** Phase 2 Task 3: the flags of `slims:import` (spec §12.6) that take a value. */
-  slims: Pick<SlimsImportOptions, 'db' | 'user' | 'dump' | 'filesZip' | 'filesDir' | 'branch' | 'priceMode' | 'catalogMode' | 'skipCatalog' | 'fromRunId'>;
+  slims: Pick<SlimsImportOptions, 'db' | 'user' | 'dump' | 'filesZip' | 'filesDir' | 'branch' | 'priceMode' | 'catalogMode' | 'skipCatalog' | 'fromRunId' | 'people'>;
   /** `slims:import --dry-run` and `--allow-non-empty`. */
   dryRun: boolean;
   allowNonEmpty: boolean;
@@ -147,6 +147,13 @@ const PRICE_MODES = ['major', 'minor', 'skip'] as const;
 // ---- Komunitas K1 (catalogue re-sync) ----
 /** `slims:import --catalog-mode`: new rows only, or also rewrite the mapped rows no one edited in ALTIS. */
 const CATALOG_MODES = ['append', 'sync'] as const;
+// ---- Komunitas (SLiMS members and circulation) ----
+/** `slims:import --members-mode`, `--circulation-mode`, `--fine-mode`. */
+const MEMBERS_MODES = ['append', 'update'] as const;
+const CIRCULATION_MODES = ['append', 'replace'] as const;
+const FINE_MODES = ['major', 'minor', 'skip'] as const;
+/** `slims:import --visits-before`: a date, or `auto`. */
+const VISITS_BEFORE = /^(auto|\d{4}-\d{2}-\d{2})$/;
 /** The `slims:import` flags that take a value, and the field each fills. */
 const SLIMS_VALUE_FLAGS: Readonly<Record<string, 'db' | 'user' | 'dump' | 'filesZip' | 'filesDir' | 'branch'>> = {
   '--db': 'db',
@@ -207,6 +214,10 @@ export const USAGE = [
   '                            re-sync the catalogue rows not edited in ALTIS; --skip-catalog --from-run <id>: lewati',
   '                            tahap katalog setelah uji coba sinkron tanpa perubahan / skip the catalogue stages after',
   '                            a sync dry run that found no change',
+  '               [--members-mode append|update] [--visits-before <YYYY-MM-DD>|auto] [--circulation-mode append|replace]',
+  '               [--fine-mode major|minor|skip] [--migrate-gender] [--no-staff-users]',
+  '                            anggota, kunjungan, dan sirkulasi; replace = pindah (cut-over) / members, visits and',
+  '                            circulation; replace = the cut-over',
 ].join('\n');
 
 /** Options each command accepts (besides --json). */
@@ -245,6 +256,13 @@ const OPTIONS: Readonly<Record<Command, readonly string[]>> = {
     '--catalog-mode',
     '--skip-catalog',
     '--from-run',
+    // ---- Komunitas (SLiMS members and circulation) ----
+    '--members-mode',
+    '--visits-before',
+    '--circulation-mode',
+    '--fine-mode',
+    '--migrate-gender',
+    '--no-staff-users',
   ],
 };
 
@@ -390,6 +408,23 @@ export function parseArgs(argv: readonly string[]): Args {
       args.slims.catalogMode = mode;
     } else if (name === '--skip-catalog' && inline === undefined) {
       args.slims.skipCatalog = true;
+    } else if (name === '--members-mode' || name === '--circulation-mode' || name === '--fine-mode') {
+      // ---- Komunitas (SLiMS members and circulation) ----
+      const value = inline ?? rest[(i += 1)];
+      const list: readonly string[] = name === '--members-mode' ? MEMBERS_MODES : name === '--circulation-mode' ? CIRCULATION_MODES : FINE_MODES;
+      if (value === undefined || !list.includes(value)) throw usage(`Nilai ${name} tidak dikenal / Unknown ${name} value (${list.join(', ')})`);
+      const people = (args.slims.people ??= {});
+      if (name === '--members-mode') people.membersMode = value as (typeof MEMBERS_MODES)[number];
+      else if (name === '--circulation-mode') people.circulationMode = value as (typeof CIRCULATION_MODES)[number];
+      else people.fineMode = value as (typeof FINE_MODES)[number];
+    } else if (name === '--visits-before') {
+      const value = inline ?? rest[(i += 1)];
+      if (value === undefined || !VISITS_BEFORE.test(value)) throw usage('--visits-before memerlukan YYYY-MM-DD atau auto / --visits-before needs YYYY-MM-DD or auto');
+      (args.slims.people ??= {}).visitsBefore = value;
+    } else if (name === '--migrate-gender' && inline === undefined) {
+      (args.slims.people ??= {}).migrateGender = true;
+    } else if (name === '--no-staff-users' && inline === undefined) {
+      (args.slims.people ??= {}).staffUsers = false;
     } else if (name === '--from-run') {
       const value = inline ?? rest[(i += 1)];
       if (value === undefined || !isUlid(value)) throw usage('--from-run memerlukan id run (ULID) / --from-run needs a run id (ULID)');

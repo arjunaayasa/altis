@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { useT, type TKey } from '@/i18n';
 import { isWritableBranch } from '@/lib/branches';
 import { useApiQuery } from '@/lib/me';
+import { EMPTY_PEOPLE, PeopleFields, type PeopleDraft } from './people';
 
 /**
  * Step 2 of the Migrasi SLiMS wizard (Phase 2 spec §11.2, §11.4, §13; plan Task 30; preflight S13): how the run writes.
@@ -24,6 +25,7 @@ import { useApiQuery } from '@/lib/me';
  *   with the sentence of the mode chosen. The start sends `catalogMode` only for `sync`.
  * - **Lewati tahap katalog** (`skipCatalog`, {@link SkipCatalogField}) belongs to the real run under a dry run
  *   (index.tsx): it can be ticked only when that dry run was a sync that found no catalogue change.
+ * - **Anggota, kunjungan, dan sirkulasi** (`people`, people.tsx): the member, visit and circulation options.
  */
 
 /** How a run treats the catalogue rows it mapped before: `append` (new rows only) or `sync`. */
@@ -40,9 +42,19 @@ export interface OptionsDraft {
   confirmLibraryName: string;
   // ---- Komunitas K1 (catalogue re-sync) ----
   catalogMode: CatalogMode;
+  // ---- Komunitas (SLiMS members and circulation) ----
+  people: PeopleDraft;
 }
 
-export const EMPTY_OPTIONS: OptionsDraft = { branchId: '', priceMode: 'major', sourceName: 'slims', allowNonEmpty: false, confirmLibraryName: '', catalogMode: 'append' };
+export const EMPTY_OPTIONS: OptionsDraft = {
+  branchId: '',
+  priceMode: 'major',
+  sourceName: 'slims',
+  allowNonEmpty: false,
+  confirmLibraryName: '',
+  catalogMode: 'append',
+  people: EMPTY_PEOPLE,
+};
 
 export type OptionsErrors = Partial<Record<'branchId' | 'sourceName' | 'confirmLibraryName', TKey>>;
 
@@ -267,6 +279,7 @@ export function OptionsStep({
         error={errors.confirmLibraryName}
         onChange={(next) => onChange({ ...value, ...next })}
       />
+      <PeopleFields value={value.people} onChange={(people) => onChange({ ...value, people })} />
       {children}
     </section>
   );
