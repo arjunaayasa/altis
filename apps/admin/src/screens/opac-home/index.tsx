@@ -9,8 +9,9 @@ import {
 } from '@altis/shared/api/opac-home';
 import type { OpacAccent } from '@altis/shared/api/settings';
 import { useQueryClient } from '@tanstack/react-query';
-import { useId, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
-import { Badge, CheckField, Field, Notice, ProblemAlert, TEXTAREA_CLASS } from '@/components/form-field';
+import { CircleCheckIcon } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
+import { Badge, CheckField, Field, Notice, TEXTAREA_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,7 +19,7 @@ import { useT, type TKey } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
 import { useDirtyGuard } from '@/lib/dirty-forms';
-import { fieldErrorKey } from '@/lib/form-errors';
+import { fieldErrorKey, problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { uploadFile } from '@/lib/upload';
 import { PHOTO_SOURCE_MAX_BYTES, PHOTO_SOURCE_TYPES, PhotoCropDialog, photoSourceOf, type PhotoSource } from './crop';
@@ -33,7 +34,7 @@ import { bodyOf, comparable, draftOf, newRowKey, type HomeDraft, type PhotoDraft
  * the hero beside the form follows the unsaved draft. The save bar sticks to the bottom with a mark while something
  * is unsaved, "Batalkan perubahan" goes back to what was loaded, and `PUT opac/home` saves it all; a save another admin
  * made first is a 409 CONFLICT_STALE, which offers to reload. The draft is checked with the server's schema before it is
- * sent, and the server's field errors land on the same fields.
+ * sent, and the server's field errors land on the same fields. Every outcome of a save is said in the save bar.
  */
 
 const OPAC_HOME_KEY = ['opac', 'home'] as const;
@@ -108,6 +109,7 @@ export function OpacHomeScreen() {
       <HomeEditor
         key={`${query.data.revision}:${generation}`}
         view={query.data}
+        notice={notice}
         onEdited={() => setNotice(null)}
         onSaved={async () => {
           await reload();
@@ -131,7 +133,6 @@ export function OpacHomeScreen() {
           </a>
         </Button>
       </header>
-      {notice !== null && <Notice kind="success">{notice}</Notice>}
       {body}
     </div>
   );
@@ -243,8 +244,25 @@ function HeroPreview({ draft, view }: { draft: HomeDraft; view: OpacHomeView }) 
   );
 }
 
-/** The editor of one loaded revision (see the top of this file). */
-function HomeEditor({ view, onEdited, onSaved, onReload }: { view: OpacHomeView; onEdited(): void; onSaved(): Promise<void>; onReload(): Promise<void> }) {
+/**
+ * The editor of one loaded revision (see the top of this file). The outcome of a save is said in the save bar, beside
+ * the button that asked for it, since the bar stays in sight wherever the admin is in the form: refused fields (and
+ * the first of them takes the focus), a save another admin made first, a failure, or `notice` once saved (the save
+ * button, which the editor of the new revision draws again, takes the focus back).
+ */
+function HomeEditor({
+  view,
+  notice,
+  onEdited,
+  onSaved,
+  onReload,
+}: {
+  view: OpacHomeView;
+  notice: string | null;
+  onEdited(): void;
+  onSaved(): Promise<void>;
+  onReload(): Promise<void>;
+}) {
   const t = useT();
   const baseline = useMemo(() => draftOf(view), [view]);
   const [draft, setDraft] = useState<HomeDraft>(baseline);
@@ -252,8 +270,19 @@ function HomeEditor({ view, onEdited, onSaved, onReload }: { view: OpacHomeView;
   const [problem, setProblem] = useState<unknown>(null);
   const [conflict, setConflict] = useState(false);
   const [saving, setSaving] = useState(false);
+  /** Bumped when a check refuses fields: the first refused field then takes the focus. */
+  const [refusals, setRefusals] = useState(0);
+  const form = useRef<HTMLFormElement>(null);
+  const saveButton = useRef<HTMLButtonElement>(null);
   const dirty = comparable(draft) !== comparable(baseline);
   useDirtyGuard(dirty);
+
+  useEffect(() => {
+    if (refusals > 0) form.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+  }, [refusals]);
+  useEffect(() => {
+    if (notice !== null) saveButton.current?.focus();
+  }, [notice]);
 
   const edit = (change: (d: HomeDraft) => HomeDraft): void => {
     setDraft(change);
@@ -269,6 +298,7 @@ function HomeEditor({ view, onEdited, onSaved, onReload }: { view: OpacHomeView;
     const built = bodyOf(draft, view.revision);
     if ('errors' in built) {
       setErrors(built.errors);
+      setRefusals((n) => n + 1);
       return;
     }
     setErrors({});
@@ -280,6 +310,7 @@ function HomeEditor({ view, onEdited, onSaved, onReload }: { view: OpacHomeView;
       if (e instanceof ApiError && e.code === 'CONFLICT_STALE') setConflict(true);
       else if (e instanceof ApiError && e.code === 'VALIDATION_FAILED' && e.errors !== undefined && e.errors.length > 0) {
         setErrors(Object.fromEntries(e.errors.map((x) => [x.path, x.code])));
+        setRefusals((n) => n + 1);
       } else setProblem(e);
       setSaving(false);
     }
@@ -307,26 +338,7 @@ function HomeEditor({ view, onEdited, onSaved, onReload }: { view: OpacHomeView;
         <HeroPreview draft={draft} view={view} />
         <p className="text-xs text-muted-foreground">{t('opacHome.preview.hint')}</p>
       </aside>
-      <form noValidate className="grid gap-6 xl:order-1" onSubmit={(e) => void save(e)}>
-        {conflict && (
-          <Notice
-            kind="error"
-            action={
-              <Button type="button" size="sm" variant="outline" onClick={() => void onReload()}>
-                {t('opacHome.reload')}
-              </Button>
-            }
-          >
-            {t('opacHome.conflict')}
-          </Notice>
-        )}
-        {hasErrors && (
-          <p role="alert" className="text-sm text-destructive">
-            {t('opacHome.fix_fields')}
-          </p>
-        )}
-        <ProblemAlert error={problem} />
-
+      <form ref={form} noValidate className="grid gap-6 xl:order-1" onSubmit={(e) => void save(e)}>
         <Section title={t('opacHome.hero.title')} description={t('opacHome.hero.description')}>
           {draft.hero === null ? (
             <div className="grid aspect-video max-w-md place-items-center rounded-md border border-dashed bg-muted text-sm text-muted-foreground">{t('opacHome.photo.none')}</div>
@@ -632,7 +644,7 @@ function HomeEditor({ view, onEdited, onSaved, onReload }: { view: OpacHomeView;
         </Section>
 
         <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-t bg-background/95 px-4 py-3 md:-mx-6 md:px-6">
-          <Button type="submit" disabled={saving}>
+          <Button ref={saveButton} type="submit" disabled={saving}>
             {t('opacHome.save')}
           </Button>
           <Button
@@ -647,6 +659,29 @@ function HomeEditor({ view, onEdited, onSaved, onReload }: { view: OpacHomeView;
             {t('opacHome.discard')}
           </Button>
           {dirty && <Badge tone="warning">{t('opacHome.dirty')}</Badge>}
+          {conflict ? (
+            <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-destructive">
+              <span>{t('opacHome.conflict')}</span>
+              <Button type="button" size="sm" variant="outline" onClick={() => void onReload()}>
+                {t('opacHome.reload')}
+              </Button>
+            </div>
+          ) : hasErrors ? (
+            <p role="alert" className="text-sm text-destructive">
+              {t('opacHome.fix_fields')}
+            </p>
+          ) : problem !== null ? (
+            <p role="alert" className="text-sm text-destructive">
+              {problemText(t, problem)}
+            </p>
+          ) : (
+            notice !== null && (
+              <p role="status" className="flex items-center gap-2 text-sm">
+                <CircleCheckIcon className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                {notice}
+              </p>
+            )
+          )}
         </div>
       </form>
     </div>
