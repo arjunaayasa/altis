@@ -1,4 +1,4 @@
-import { code128Modules, type MemberBookmarkRow, type MemberLoanPage, type MemberSelf } from '@altis/core';
+import { code128Modules, mailMoney, type MemberBookmarkRow, type MemberLoanPage, type MemberLoanRow, type MemberSelf } from '@altis/core';
 import { t, type HoldRefusal, type LoanOutcome, type Locale } from '@altis/shared';
 import type { HoldView } from '@altis/shared/api/holds';
 import type { Child } from 'hono/jsx';
@@ -284,6 +284,13 @@ export function MemberSummary(props: { locale: Locale; self: MemberSelf; typeNam
   );
 }
 
+/** How late a loan is, as the desk says it: the days late, with the days its fine counts when they differ. */
+function lateText(locale: Locale, l: Pick<MemberLoanRow, 'daysLate' | 'finedDays'>): string {
+  return l.finedDays !== null && l.finedDays !== l.daysLate
+    ? opacText(locale, 'akun.loans.overdue_fined', { days: l.daysLate, fined: l.finedDays })
+    : opacText(locale, 'akun.loans.overdue', { days: l.daysLate });
+}
+
 /** The open loans, with the online renewal when it is open to the member. */
 export function OpenLoans(props: { locale: Locale; keep: Keep; csrf: string; loans: MemberLoanPage; canRenew: boolean }) {
   const { locale, keep, loans } = props;
@@ -321,7 +328,13 @@ export function OpenLoans(props: { locale: Locale; keep: Keep; csrf: string; loa
                       {l.daysLate > 0 ? (
                         <>
                           {' '}
-                          <span class="status status-warn">{opacText(locale, 'akun.loans.overdue', { days: l.daysLate })}</span>
+                          <span class="status status-warn">{lateText(locale, l)}</span>
+                          {l.fineMinor > 0 ? (
+                            <>
+                              {' '}
+                              <span>{opacText(locale, 'akun.loans.fine', { amount: mailMoney(locale, l.fineMinor, l.currency) })}</span>
+                            </>
+                          ) : null}
                         </>
                       ) : null}
                     </td>
@@ -379,7 +392,7 @@ export function HistoryView(props: { locale: Locale; keep: Keep; loans: MemberLo
                 <td data-label={returned}>{l.returnedOn === null ? '—' : day(locale, l.returnedOn)}</td>
                 <td data-label={outcome}>
                   {l.outcome === null ? '' : t(locale, `vocab.loan_outcome.${l.outcome as LoanOutcome}`)}
-                  {l.daysLate > 0 ? ` · ${opacText(locale, 'akun.loans.overdue', { days: l.daysLate })}` : ''}
+                  {l.daysLate > 0 ? ` · ${lateText(locale, l)}` : ''}
                 </td>
               </tr>
             ))}

@@ -306,6 +306,12 @@ export const MIGRATION_ID = {
   'catalog.migration.people.serving': 'Perpustakaan melayani di ALTIS sejak {since}.',
   'catalog.migration.people.serve': 'Mulai melayani',
   'catalog.migration.people.serve_held': 'Selesaikan butir wajib di atas lebih dulu.',
+  'catalog.migration.people.dry_lists': 'Periksa sebelum run nyata',
+  'catalog.migration.people.dry_lists_hint': 'Daftar dari uji kering, masing-masing dengan jumlah dan paling banyak 20 contoh (nomor anggota, kode eksemplar, atau nomor aturan/tipe SLiMS). Daftar lengkapnya ada di laporan.',
+  'catalog.migration.people.col_list': 'Daftar',
+  'catalog.migration.people.col_count': 'Jumlah',
+  'catalog.migration.people.col_samples': 'Contoh',
+  'catalog.migration.people.item_missing_hint': 'Ada pinjaman terbuka yang eksemplarnya tidak akan ada di ALTIS: jalankan dengan mode katalog Selaraskan.',
 } as const;
 
 export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
@@ -598,4 +604,10 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.people.serving': 'The library serves in ALTIS since {since}.',
   'catalog.migration.people.serve': 'Start serving',
   'catalog.migration.people.serve_held': 'Finish the required items above first.',
+  'catalog.migration.people.dry_lists': 'Check before the real run',
+  'catalog.migration.people.dry_lists_hint': 'Lists from the dry run, each with its count and at most 20 samples (member numbers, item codes, or SLiMS rule or type numbers). The report holds the whole lists.',
+  'catalog.migration.people.col_list': 'List',
+  'catalog.migration.people.col_count': 'Count',
+  'catalog.migration.people.col_samples': 'Samples',
+  'catalog.migration.people.item_missing_hint': 'Some open loans are of items that will not be in ALTIS: run with the catalogue mode Re-sync.',
 };

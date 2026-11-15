@@ -3,6 +3,7 @@ import {
   CIRCULATION_MODES,
   FINE_MODES,
   MEMBERS_MODES,
+  type MigrationDryList,
   type MigrationMatchRow,
   type MigrationMemberType,
   type SlimsCutoverView,
@@ -256,6 +257,45 @@ export function MatchesReport({ matches, collisions }: { matches: readonly Migra
         </section>
       )}
     </>
+  );
+}
+
+/** The lists a dry run gives to check before the real run: each with its count and a few samples (a dry run's summary). */
+export function DryListsReport({ lists }: { lists: readonly MigrationDryList[] | undefined }) {
+  const t = useT();
+  const locale = useLocale();
+  const number = new Intl.NumberFormat(locale === 'en' ? 'en' : 'id');
+  const titleId = useId();
+  if (lists === undefined || lists.length === 0) return null;
+  const missing = lists.find((x) => x.key === 'open_loan_item_missing');
+  return (
+    <section aria-labelledby={titleId} className="flex flex-col gap-2">
+      <h3 id={titleId} className="text-sm font-semibold">
+        {t('catalog.migration.people.dry_lists')}
+      </h3>
+      <p className="text-xs text-muted-foreground">{t('catalog.migration.people.dry_lists_hint')}</p>
+      {missing !== undefined && missing.count > 0 && <Notice kind="error">{t('catalog.migration.people.item_missing_hint')}</Notice>}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-muted-foreground">
+              <th className="py-1 pr-3 font-medium">{t('catalog.migration.people.col_list')}</th>
+              <th className="py-1 pr-3 text-right font-medium">{t('catalog.migration.people.col_count')}</th>
+              <th className="py-1 font-medium">{t('catalog.migration.people.col_samples')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lists.map((x) => (
+              <tr key={x.key} className="border-t align-top" data-dry-list={x.key}>
+                <td className="py-1 pr-3">{t(`migration.dry.${x.key}`)}</td>
+                <td className="py-1 pr-3 text-right tabular-nums">{number.format(x.count)}</td>
+                <td className="py-1 font-mono text-xs break-words">{x.samples.length === 0 ? '—' : x.samples.join(', ')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 

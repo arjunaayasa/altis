@@ -1,5 +1,5 @@
-// The admin copy of holds: Rak Tunggu & Reservasi, the desk's Reservasi tab and "Tambah reservasi", the hold-shelf
-// slip of a return, and the label of the hold expiry job. Keys start with `holds.` (the shared catalog's hold texts are
+// The admin copy of holds: Rak Tunggu & Reservasi, the desk's Reservasi tab and "Tambah reservasi", the links to the
+// hold shelf slip (a PDF; its own texts are the shared catalog's `hold_slip.*`), and the label of the hold expiry job. Keys start with `holds.` (the shared catalog's hold texts are
 // `audit.circulation.hold.*`, `error.CIRC_*` and `vocab.hold_*`), plus the navigation item and the job labels.
 
 export const HOLDS_ID = {
@@ -57,10 +57,8 @@ export const HOLDS_ID = {
   'holds.desk.keep_for': 'Simpan di rak tunggu untuk {no}',
   'holds.desk.keep_detail': '{name}, ambil paling lambat {date}. {title}',
   'holds.problem.item_on_hold': 'Eksemplar ini ditahan di rak tunggu untuk anggota lain.',
-  'holds.slip.heading': 'RAK TUNGGU',
-  'holds.slip.for': 'Untuk',
-  'holds.slip.until': 'Ambil paling lambat',
-  'holds.slip.item': 'Eksemplar',
+  'holds.action.slip': 'Cetak slip',
+  'holds.action.slip_named': 'Cetak slip rak tunggu {title}',
   'holds.returns.kept': 'Rak tunggu: {no}',
   'holds.item.on_hold': 'Di rak tunggu s.d. {date}',
 } as const;
@@ -120,10 +118,8 @@ export const HOLDS_EN: Record<keyof typeof HOLDS_ID, string> = {
   'holds.desk.keep_for': 'Keep on the hold shelf for {no}',
   'holds.desk.keep_detail': '{name}, pick up by {date}. {title}',
   'holds.problem.item_on_hold': 'This item is kept on the hold shelf for another member.',
-  'holds.slip.heading': 'HOLD SHELF',
-  'holds.slip.for': 'For',
-  'holds.slip.until': 'Pick up by',
-  'holds.slip.item': 'Copy',
+  'holds.action.slip': 'Print slip',
+  'holds.action.slip_named': 'Print the hold shelf slip of {title}',
   'holds.returns.kept': 'Hold shelf: {no}',
   'holds.item.on_hold': 'On the hold shelf until {date}',
 };

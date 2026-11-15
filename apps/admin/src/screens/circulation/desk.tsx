@@ -60,7 +60,7 @@ import {
   writeStored,
 } from './common';
 // ---- Komunitas (holds) ----
-import { HoldSlipPrint, MemberHoldsPanel, type HoldSlip } from './holds';
+import { MemberHoldsPanel, holdSlipHref } from './holds';
 // ---- Komunitas (charges and payments) ----
 import { MemberChargesPanel, printSlip, receiptHref, useMoney } from './charges';
 
@@ -353,8 +353,8 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
   const [sound, setSound] = useState(() => readStored(DESK_SOUND_KEY) !== '0');
   const [extendOpen, setExtendOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [slip, setSlip] = useState<HoldSlip | null>(null);
-  const [printing, setPrinting] = useState(0);
+  /** The hold shelf slip (a roll PDF) of the copy the last return kept for a hold. */
+  const [slip, setSlip] = useState<string | null>(null);
   // ---- Komunitas (circulation core) ----
   const [reads, setReads] = useState<ReadRow[]>([]);
   const [forcing, setForcing] = useState<{ barcode: string; reasons: ForceableReason[] } | null>(null);
@@ -623,7 +623,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
       const detail = `${done.record.title} · ${done.item.barcode}`;
       if (done.hold !== undefined) {
         // The copy is kept for a hold: that is what the desk must do now, whatever else the return says.
-        setSlip({ trap: done.hold, title: done.record.title, barcode: done.item.barcode });
+        setSlip(holdSlipHref(branchId, done.hold.holdId));
         say(
           'warning',
           t('holds.desk.keep_for', { no: done.hold.memberNo }),
@@ -1128,8 +1128,10 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
               {feedback.detail !== undefined && <p className="text-sm">{feedback.detail}</p>}
               {slip !== null && (
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" onClick={() => setPrinting((n) => n + 1)}>
-                    {t('holds.action.print_slip')}
+                  <Button asChild variant="outline">
+                    <a href={slip} target="_blank" rel="noopener">
+                      {t('holds.action.print_slip')}
+                    </a>
                   </Button>
                 </div>
               )}
@@ -1376,7 +1378,6 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
           onDone={() => say('success', t('circulation.feedback.extended'), t('circulation.feedback.scan_items'))}
         />
       )}
-      <HoldSlipPrint slip={slip} printing={printing} onPrinted={() => setPrinting(0)} />
       {branchId !== null && (
         <>
           <LostDialog

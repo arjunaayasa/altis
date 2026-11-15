@@ -1,4 +1,5 @@
-import { cancelHold, clearHoldShelf, holdShelf, listHolds, markHoldReady, placeHold } from '@altis/core';
+import { buildHoldSlipPdf, cancelHold, clearHoldShelf, holdShelf, holdSlipData, listHolds, markHoldReady, placeHold } from '@altis/core';
+import { ReceiptQuery } from '@altis/shared/api/charges';
 import { ulidField } from '@altis/shared/api/common';
 import {
   HoldBody,
@@ -19,6 +20,7 @@ import { route, type RouteDecl } from '../../http/route.js';
 //   POST branches/:branchId/circulation/holds/:id/ready             HoldReadyBody → HoldActionResponse   circulation.hold.ready
 //   GET  branches/:branchId/circulation/hold-shelf                  → HoldShelfResponse
 //   POST branches/:branchId/circulation/hold-shelf/:holdId/clear    (no body) → HoldActionResponse       circulation.hold.shelf_clear
+//   GET  branches/:branchId/circulation/holds/:id/slip              ReceiptQuery → application/pdf       (the hold shelf slip, a roll)
 //
 // and library-wide (`circulation.records.read`):
 //
@@ -129,4 +131,30 @@ const holdsList = route({
   },
 });
 
-export const HOLD_ROUTES: RouteDecl[] = [holdsCreate, holdsCancel, holdsReady, shelfGet, shelfClear, holdsList];
+/** The hold shelf slip of a ready hold: a 58 or 80 mm roll PDF, never cached (holdSlipData: 404 unless ready here). */
+const holdsSlip = route({
+  id: 'circulation.desk.holds.slip',
+  method: 'GET',
+  path: `${API}/holds/:id/slip`,
+  permission: 'circulation.desk.use',
+  branchParam: 'branchId',
+  idempotency: 'none',
+  audit: null,
+  params: HoldParams,
+  query: ReceiptQuery,
+  handler: async (rc) => {
+    const data = await holdSlipData(rc.db.db, { branchId: rc.params.branchId, holdId: rc.params.id, ...(rc.query.paper === undefined ? {} : { paper: rc.query.paper }) });
+    const pdf = buildHoldSlipPdf(data);
+    return new Response(pdf, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': 'inline; filename="slip-rak-tunggu.pdf"',
+        'Content-Length': String(pdf.byteLength),
+        'Cache-Control': 'private, no-store',
+      },
+    });
+  },
+});
+
+export const HOLD_ROUTES: RouteDecl[] = [holdsCreate, holdsCancel, holdsReady, shelfGet, shelfClear, holdsList, holdsSlip];
