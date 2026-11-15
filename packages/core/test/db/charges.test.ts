@@ -29,6 +29,7 @@ import {
   returnItem,
   slipData,
   takePayment,
+  voidLoan,
   voidPayment,
   waiveCharge,
   type PaymentInput,
@@ -345,6 +346,18 @@ describe.skipIf(!ctx.available)(`charges and payments [${engineLabel()}]`, () =>
     // Anonymising the loan: its settled fine loses the loan, the item and the line; the sums stay.
     expect(await withTx(db.h, (trx) => anonymizeLoanCharges(trx, [loanId], NOW))).toBe(1);
     expect((await charges(reader)).map((r) => [r.loan_id, r.item_id, r.description, r.status, Number(r.amount_minor)])).toEqual([[null, null, '', 'settled', 150_000]]);
+  });
+
+  it('the slip of a visit leaves out a loan voided since: it was never lent', async () => {
+    const reader = await member();
+    const kept = await item();
+    const undone = await item();
+    const keptLoan = await lend(reader, kept.barcode);
+    const voided = await lend(reader, undone.barcode);
+    await db.run((tx) => voidLoan(tx, { branchId: db.branchId, loanId: voided.id, mayOverride: true }), NOW + 60_000);
+    const slip = await slipData(db.h.db, { branchId: db.branchId, loanIds: [keptLoan.id, voided.id], returnedLoanIds: [], paymentIds: [], now: NOW + 60_000 });
+    expect(slip.loans.map((l) => l.barcode)).toEqual([kept.barcode]);
+    expect(slip.member?.memberNo).toMatch(/^CH-/);
   });
 });
 

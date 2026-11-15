@@ -11,7 +11,8 @@ import { FinePreviewer } from './fines.js';
 // the days their fine counted when those differ, as the desk says it, and the overdue fine each booked) and the
 // payments taken, on a 58 or 80 mm roll in the library's language. Every loan
 // named must be one of the desk's branch (made there, or returned there), every payment one taken there; anything else
-// is 404, as if it did not exist. Nothing is written: the slip only reads.
+// is 404, as if it did not exist. A loan voided since (Ctrl+Z at the desk) was never lent and is left out. Nothing is
+// written: the slip only reads.
 
 /** A loan or renewal on the slip. */
 interface SlipLoan {
@@ -81,6 +82,7 @@ export async function slipData(
             'l.due_on',
             'l.renewals',
             'l.returned_on',
+            'l.outcome',
             'l.fine_per_day_minor',
             'l.fine_cap_minor',
             'l.grace_days',
@@ -146,10 +148,10 @@ export async function slipData(
     printedOn: `${part('year')}-${part('month')}-${part('day')}`,
     time: `${part('hour')}:${part('minute')}`,
     currency: s['catalog.currency'] as string,
-    loans: i.loanIds.map((id) => {
-      const l = byId.get(id)!;
-      return { barcode: l.barcode_display ?? '', title: cut(l.title ?? ''), dueOn: l.due_on, renewed: Number(l.renewals) > 0 };
-    }),
+    loans: i.loanIds
+      .map((id) => byId.get(id)!)
+      .filter((l) => l.outcome !== 'voided')
+      .map((l) => ({ barcode: l.barcode_display ?? '', title: cut(l.title ?? ''), dueOn: l.due_on, renewed: Number(l.renewals) > 0 })),
     returns,
     payments: payments.map((p) => ({ receiptNo: p.receipt_no, amount: formatPrice(Number(p.amount_minor)), method: p.method, voided: p.voided_at !== null })),
     locale: s['library.locale'] === 'en' ? 'en' : 'id',

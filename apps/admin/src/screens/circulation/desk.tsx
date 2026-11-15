@@ -122,7 +122,7 @@ interface VisitRow {
   title: string;
   barcode: string;
   note: string;
-  /** The loan of a loan, renewal or return (the slip lists it). */
+  /** The loan of a loan, renewal or return (the slip lists it), or of a void (the slip leaves that loan out). */
   refId?: string;
 }
 
@@ -568,7 +568,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
       });
       settle();
       setLastLoan(null);
-      addVisit({ kind: 'voided', title: target.title, barcode: target.barcode, note: t('circulation.void.visit') });
+      addVisit({ kind: 'voided', title: target.title, barcode: target.barcode, note: t('circulation.void.visit'), refId: target.id });
       say('success', t('circulation.void.done', { title: target.title }));
       await refreshPanel();
     } catch (e) {
@@ -730,7 +730,8 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
   /** F9: the slip of this visit (the loans, renewals and returns of the list, and the payments taken). */
   const slipNow = async (): Promise<void> => {
     if (branchId === null) return;
-    const ids = (kinds: VisitRow['kind'][]) => [...new Set(visit.filter((r) => kinds.includes(r.kind) && r.refId !== undefined).map((r) => r.refId!))].slice(0, 50);
+    const voided = new Set(visit.filter((r) => r.kind === 'voided').map((r) => r.refId));
+    const ids = (kinds: VisitRow['kind'][]) => [...new Set(visit.filter((r) => kinds.includes(r.kind) && r.refId !== undefined && !voided.has(r.refId)).map((r) => r.refId!))].slice(0, 50);
     const body = { loanIds: ids(['loan', 'renew']), returnedLoanIds: ids(['return']), paymentIds: visitPayments.slice(0, 10) };
     if (body.loanIds.length + body.returnedLoanIds.length + body.paymentIds.length === 0) {
       say('info', t('charges.slip.empty'));
