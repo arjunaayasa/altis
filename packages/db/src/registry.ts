@@ -130,6 +130,8 @@ export const TABLE_CLASSES: Readonly<Record<TableName, TableClass>> = Object.fre
   stocktakes: 'data',
   stocktake_items: 'data',
   stocktake_unknown_codes: 'data',
+  // ---- Komunitas (OPAC home page): the popular titles, rebuilt from the loans ----
+  opac_popular_titles: 'volatile',
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping, made by the runner on every run ----
   schema_migrations_edition: 'migrator',
   schema_migrations_edition_lock: 'migrator',

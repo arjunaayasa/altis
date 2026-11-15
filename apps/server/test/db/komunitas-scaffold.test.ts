@@ -24,6 +24,8 @@ import { CIRCULATION_ROUTES } from '../../src/api/circulation/index.js';
 import { MEMBERS_ROUTES } from '../../src/api/members/index.js';
 import { REPORTS_ROUTES } from '../../src/api/reports/index.js';
 import { STOCKTAKE_ROUTES } from '../../src/api/stocktake.js';
+// ---- Komunitas (OPAC home page) ----
+import { OPAC_HOME_ROUTES } from '../../src/api/opac-home.js';
 import { VISITS_ROUTES } from '../../src/api/visits/index.js';
 import { defineRoutes } from '../../src/http/route.js';
 import { komunitasJobDeps, komunitasJobHandlers } from '../../src/jobs/komunitas.js';
@@ -49,7 +51,7 @@ const K1_JOB_TYPES = ['reports.export', 'reports.housekeeping', 'accreditation.e
 describe('the community routes in ALL_ROUTES', () => {
   it('ALL_ROUTES still validates and holds every route of the community lists, the reports first', () => {
     expect(() => defineRoutes([...ALL_ROUTES])).not.toThrow();
-    expect(KOMUNITAS_ROUTES).toEqual([...REPORTS_ROUTES, ...ACCREDITATION_ROUTES, ...MEMBERS_ROUTES, ...CIRCULATION_ROUTES, ...VISITS_ROUTES, ...STOCKTAKE_ROUTES]);
+    expect(KOMUNITAS_ROUTES).toEqual([...REPORTS_ROUTES, ...ACCREDITATION_ROUTES, ...MEMBERS_ROUTES, ...CIRCULATION_ROUTES, ...VISITS_ROUTES, ...STOCKTAKE_ROUTES, ...OPAC_HOME_ROUTES]);
     for (const route of KOMUNITAS_ROUTES) expect(ALL_ROUTES).toContain(route);
   });
 

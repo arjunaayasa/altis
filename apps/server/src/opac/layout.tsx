@@ -44,6 +44,27 @@ export interface PageFrame {
   search: { lang: Locale | null } | null;
 }
 
+// ---- Komunitas (OPAC home page) ----
+/**
+ * The home page's hero: the header becomes a band of the library's photo under an even dark overlay (or of the library
+ * colour without one), with the site menu over it and the page's heading and lead sentence below the menu. Its text
+ * is white on at least 4.5:1 whatever the photo (the overlay's floor), and the photo sits absolutely in the band, so
+ * its arrival moves nothing.
+ */
+export interface HeroBand {
+  title: string;
+  /** The lead sentence (line breaks kept), or null. */
+  lead: string | null;
+  /** A local path (`/files/<id>`), its alternative text and its vertical position (0-100, steps of 10); null: none. */
+  photo: { src: string; alt: string; position: number; width: number; height: number } | null;
+}
+
+/** The position class of a photo: its position rounded to a step of 10 within 0-100. */
+function heroPosition(position: number): number {
+  const p = Number.isFinite(position) ? Math.round(position / 10) * 10 : 50;
+  return Math.min(100, Math.max(0, p));
+}
+
 /** What every `render*` function takes besides its own fields. */
 export interface PageOptions {
   locale: Locale;
@@ -86,6 +107,9 @@ export interface LayoutProps extends PageOptions {
   robots?: string | undefined;
   /** Phase 2 Task 3: more of `<head>` after the stylesheet (the canonical link, JSON-LD scripts with the nonce). */
   head?: Child;
+  // ---- Komunitas (OPAC home page) ----
+  /** The home page's hero band (see HeroBand); absent: the plain header. */
+  hero?: HeroBand | undefined;
 }
 
 /**
@@ -119,6 +143,9 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
   const robots = props.robots ?? (props.indexable === false ? 'noindex' : undefined);
   const nav = frame?.nav ?? [];
   const search = frame?.search ?? null;
+  // ---- Komunitas (OPAC home page) ----
+  const hero = props.hero;
+  const headerClass = hero === undefined ? 'site-header' : hero.photo === null ? 'site-header hero-band' : 'site-header hero-band hero-photo';
   return (
     <html lang={locale} data-accent={accent}>
       <head>
@@ -137,7 +164,17 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
         <a class="skip-link" href={`#${MAIN_ID}`}>
           {opacText(locale, 'shell.skip_link')}
         </a>
-        <header class="site-header">
+        <header class={headerClass}>
+          {hero === undefined || hero.photo === null ? null : (
+            <img
+              class={`hero-img hero-pos-${heroPosition(hero.photo.position)}`}
+              src={hero.photo.src}
+              alt={hero.photo.alt}
+              width={hero.photo.width}
+              height={hero.photo.height}
+              decoding="async"
+            />
+          )}
           <div class="bar">
             <a class="brand" href={frame?.homeHref ?? '/'}>
               {libraryName ?? t(locale, 'opac.home.title')}
@@ -170,6 +207,12 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
                 </nav>
               )}
               {search === null ? null : <SearchForm locale={locale} lang={search.lang} id="cari-situs" />}
+            </div>
+          )}
+          {hero === undefined ? null : (
+            <div class="hero-text">
+              <h1>{hero.title}</h1>
+              {hero.lead === null ? null : <p class="hero-lead">{hero.lead}</p>}
             </div>
           )}
         </header>

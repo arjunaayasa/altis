@@ -11,7 +11,7 @@ import type { Config } from '../../config.js';
 import { cspHeader, cspNonce } from '../../http/csp.js';
 import type { AppEnv } from '../../http/request-id.js';
 import type { AppServices } from '../../services.js';
-import { Layout, toDocument, type PageFrame } from '../layout.js';
+import { Layout, toDocument, type HeroBand, type PageFrame } from '../layout.js';
 import { navPages, type OpacNavLink } from './queries.js';
 import { absoluteUrl, isLocalPath, withLang } from './urls.js';
 
@@ -76,6 +76,9 @@ export interface OpacPageOptions {
   openGraph?: { type?: string; image?: string | null } | false;
   /** The search form in the header; default true (the home page shows its own). */
   headerSearch?: boolean;
+  // ---- Komunitas (OPAC home page) ----
+  /** The home page's hero band around the header (layout.tsx HeroBand). */
+  hero?: HeroBand;
 }
 
 /** What `opacContext` reads from a route's context (a RouteContext has all of it). */
@@ -343,6 +346,7 @@ export function opacPage(rc: OpacResponder, ctx: OpacContext, o: OpacPageOptions
       robots={ctx.indexable ? ROBOTS[o.robots] : 'noindex'}
       head={head}
       frame={pageFrame(rc.c, ctx, { search: o.headerSearch !== false })}
+      hero={o.hero}
     >
       {o.body(nonce)}
     </Layout>,
