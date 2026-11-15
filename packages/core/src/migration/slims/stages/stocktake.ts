@@ -1,4 +1,4 @@
-import type { DB } from '@altis/db';
+import { countGrouped, type DB } from '@altis/db';
 import { ddcClassOf, newId } from '@altis/shared';
 import type { Insertable, Kysely, Transaction } from 'kysely';
 import { mapLegacy, type LegacyMapping } from '../../../catalog/data/legacy-map.js';
@@ -277,16 +277,9 @@ async function recountOnce(c: SlimsStageContext, _rows: readonly SlimsRow[], io:
   const last = await lastSession(c);
   const session = last === null ? undefined : (await mappedRows(c, io.trx, TS, [last])).get(last);
   if (session === undefined || stateOf(c, session) === 'done') return;
-  const counts = await io.trx
-    .selectFrom('stocktake_items')
-    .select('state')
-    .select((eb) => eb.fn.countAll<number>().as('n'))
-    .where('stocktake_id', '=', session.targetId)
-    .where('expected', '=', 1)
-    .groupBy('state')
-    .execute();
-  const n = (state: string): number => Number(counts.find((r) => r.state === state)?.n ?? 0);
-  const total = counts.reduce((sum, r) => sum + Number(r.n), 0);
+  const counts = await countGrouped(io.trx.selectFrom('stocktake_items').where('stocktake_id', '=', session.targetId).where('expected', '=', 1), { state: 'state' });
+  const n = (state: string): number => counts.find((r) => r.state === state)?.count ?? 0;
+  const total = counts.reduce((sum, r) => sum + r.count, 0);
   if (total === 0) return;
   await io.trx
     .updateTable('stocktakes')
