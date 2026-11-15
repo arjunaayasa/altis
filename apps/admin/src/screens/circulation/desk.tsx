@@ -357,6 +357,8 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
   const [dueLoan, setDueLoan] = useState<DeskLoanView | null>(null);
   // ---- Komunitas (charges and payments) ----
   const [chargesDialog, setChargesDialog] = useState(false);
+  // ---- Komunitas (holds): the Reservasi tab's dialogs (place a hold, cancel one) ----
+  const [holdsDialog, setHoldsDialog] = useState(false);
   const [payNow, setPayNow] = useState(0);
   const [receipt, setReceipt] = useState<{ href: string; number: string } | null>(null);
   const [visitPayments, setVisitPayments] = useState<string[]>([]);
@@ -371,7 +373,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
   const canReadMembers = holds(me, 'members.records.read');
   const canReadLoans = holds(me, 'circulation.records.read');
   const canOverride = branchId !== null && holdsAt(me, 'circulation.desk.override', branchId);
-  const dialogOpen = extendOpen || helpOpen || lostLoan !== null || dueLoan !== null || chargesDialog;
+  const dialogOpen = extendOpen || helpOpen || lostLoan !== null || dueLoan !== null || chargesDialog || holdsDialog;
 
   // A member opened from another page (`?member=`): its panel, once the branch is known.
   useEffect(() => {
@@ -1310,6 +1312,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
                           focusBox();
                         }}
                         onSaid={(tone, text) => say(tone === 'success' ? 'success' : 'error', text)}
+                        onDialog={setHoldsDialog}
                       />
                     </TabsContent>
                   )}

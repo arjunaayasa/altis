@@ -419,15 +419,24 @@ export function MemberHoldsPanel({
   branchId,
   onChanged,
   onSaid,
+  onDialog,
 }: {
   member: DeskMemberView;
   branchId: string;
   onChanged(): Promise<void>;
   onSaid(tone: 'success' | 'error', text: string): void;
+  /** Whether one of the panel's dialogs is open: the desk then takes no scan and no desk key (Esc closes the dialog only). */
+  onDialog(open: boolean): void;
 }) {
   const t = useT();
   const [cancelling, setCancelling] = useState<HoldView | null>(null);
   const [adding, setAdding] = useState(false);
+
+  useEffect(() => {
+    onDialog(adding || cancelling !== null);
+  }, [adding, cancelling]);
+  // The panel leaves (another member, another tab) with a dialog open: the desk must not stay blocked.
+  useEffect(() => () => onDialog(false), []);
   return (
     <div className="flex flex-col gap-2">
       <div className="flex justify-end">
