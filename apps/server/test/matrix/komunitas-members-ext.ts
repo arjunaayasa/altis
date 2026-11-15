@@ -14,6 +14,14 @@ import { seedMember } from './komunitas-members.js';
 
 const unique = (prefix: string): string => `${prefix}${newId().slice(-12)}`;
 
+/**
+ * A station form without a paired device: urlencoded, with the pre-session CSRF token (`member: 'pre'` makes the
+ * `altis_csrf` cookie and its token), so that a call reaches the route's gate rather than stopping at the body.
+ */
+const stationForm =
+  (fields: Record<string, string>): MatrixFixture =>
+  async () => ({ member: 'pre', body: new URLSearchParams(fields).toString(), headers: { 'content-type': 'application/x-www-form-urlencoded' } });
+
 /** A live branch of its own; its id. */
 async function seedBranch(s: MatrixSeed): Promise<string> {
   const id = newId();
@@ -161,9 +169,9 @@ const fixtures: Record<string, MatrixFixture> = {
   'settings.visits.put': async () => ({ body: {} }),
   'settings.privacy.put': async () => ({ body: {} }),
   'opac.visits.activate.page': async () => ({}),
-  'opac.visits.activate': async () => ({}),
+  'opac.visits.activate': stationForm({ code: 'BUKAN-KODE-1' }),
   'opac.visits.page': async () => ({}),
-  'opac.visits.checkin': async () => ({}),
+  'opac.visits.checkin': stationForm({ memberNo: 'BUKAN-ANGGOTA-1' }),
 };
 
 export const MATRIX: AreaMatrix = {
