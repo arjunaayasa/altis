@@ -9,6 +9,7 @@ import { pickPolicy, policyScopeKey } from '../../../circulation/policies.js';
 import { indexRecords } from '../../../search/index-records.js';
 import { readSettings, writeSettings } from '../../../settings/service.js';
 import type { SettingKey } from '../../../settings/registry.js';
+import { cutoverMarkAt } from '../cutover-marks.js';
 import { SlimsRunFailure, pipelineOf } from '../pipeline.js';
 import type { SlimsRow } from '../source/types.js';
 import type { SlimsStage, SlimsStageContext } from '../stage.js';
@@ -39,8 +40,9 @@ import { visitsCutoff } from './visits.js';
 //
 // 0. `circulationMode = replace` (the cut-over, a real run): the migrated loans, holds, charges, payments and reads in
 //    place, and their legacy map and archive rows, are removed first, then imported again from the source. Refused
-//    when ALTIS lends, takes holds or charges on its own (MIGRATION_CIRCULATION_LIVE at the start, `circulation_live`
-//    here should it begin meanwhile).
+//    when ALTIS lends, takes holds or charges on its own, returns or renews a migrated loan, takes a payment or waives
+//    a migrated charge, or once the library serves in ALTIS (MIGRATION_CIRCULATION_LIVE at the start,
+//    `circulation_live` here should it begin meanwhile).
 // 1. one fallback rule per member type (`<type>/*/*/*`, entity `mst_member_type_rule`): the type's loan days, renewals,
 //    fine per day and grace days (read the ALTIS way: "within N days is free"), and the SLiMS type's loan limit as the
 //    rule's limit (0 stays 0: SLiMS applies a type's limit only when no rule matches).
@@ -105,7 +107,13 @@ async function today(c: SlimsStageContext): Promise<string> {
 
 const clamp = (n: number | null, lo: number, hi: number, fallback: number): number => (n === null ? fallback : Math.max(lo, Math.min(hi, n)));
 
-/** The ALTIS rows ALTIS records itself (not migrated): a `replace` run is refused while any is there. */
+/**
+ * How much circulation ALTIS recorded on its own, which a `replace` run would undo (it is refused while this is above 0):
+ * the rows ALTIS made (loans, holds, charges, payments, reads in place not migrated), the migrated rows ALTIS changed
+ * since (a migrated row is written once, at version 0: a return or renewal of a migrated loan, a payment, waiver or
+ * cancellation of a migrated charge, a migrated hold made ready, fulfilled or cancelled each moves it on), and the
+ * library serving in ALTIS (the cut-over checklist's "serve" mark, counted as one).
+ */
 export async function liveCirculationCount(db: Db): Promise<number> {
   let n = 0;
   for (const table of ['loans', 'holds', 'charges', 'payments', 'item_uses'] as const) {
@@ -116,6 +124,16 @@ export async function liveCirculationCount(db: Db): Promise<number> {
       .executeTakeFirstOrThrow();
     n += Number(row.n);
   }
+  for (const table of ['loans', 'holds', 'charges', 'payments'] as const) {
+    const row = await db
+      .selectFrom(table as 'loans')
+      .select((eb) => eb.fn.countAll<number | string>().as('n'))
+      .where('source', '=', 'migrated')
+      .where('version', '>', 0)
+      .executeTakeFirstOrThrow();
+    n += Number(row.n);
+  }
+  if ((await cutoverMarkAt(db, 'serve')) !== null) n += 1;
   return n;
 }
 

@@ -173,7 +173,7 @@ const start = route({
         ...(b.skipCatalog === undefined ? {} : { skipCatalog: b.skipCatalog }),
         // ---- Komunitas (SLiMS members and circulation): a real run is refused while the dry run it takes over found
         // member numbers that collide (MIGRATION_PRECHECK_FAILED `member_no_collision`), and a `replace` of circulation
-        // once ALTIS lends on its own (MIGRATION_CIRCULATION_LIVE).
+        // once ALTIS records circulation of its own or serves (MIGRATION_CIRCULATION_LIVE).
         ...(b.people === undefined ? {} : { people: b.people }),
       },
       { keyring: rc.config.keyring },

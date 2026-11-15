@@ -293,7 +293,8 @@ function countOf(summary: string, name: string): number | null {
 /**
  * The prechecks of the member and circulation stages on a real run: a dry run taken over that found member numbers
  * colliding once normalised refuses it (they must be changed in SLiMS first: an old card would open the wrong member);
- * a `replace` of circulation is refused while ALTIS lends, takes holds or charges on its own.
+ * a `replace` of circulation is refused once ALTIS recorded circulation of its own, on its rows or on migrated ones, or
+ * the library serves in ALTIS (stages/circulation.ts `liveCirculationCount`).
  *
  * @throws DomainError 422 `MIGRATION_PRECHECK_FAILED {reason: 'member_no_collision', count}`, 409
  *   `MIGRATION_CIRCULATION_LIVE {count}`
