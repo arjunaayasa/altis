@@ -511,6 +511,25 @@ describe.skipIf(!ctx.available)(`SLiMS migration framework [${engineLabel()}]`, 
     expect(await h.db.selectFrom('search_state').select(['status', 'job_id']).execute()).toEqual([{ status: 'building', job_id: rebuild }]);
   });
 
+  it('a real run whose job was cancelled between two slices is ended by the next start with its rows in the ALTIS tables counted again', async () => {
+    __setSlimsStages([fakeCountingStage('masters', 'mst_author', { write: true, batch: 1 })]);
+    const stopped = await start();
+    const mapRows = async (): Promise<number> => Number((await h.db.selectFrom('migration_map').select((eb) => eb.fn.countAll().as('n')).executeTakeFirstOrThrow()).n);
+    const before = await mapRows();
+    for (let slices = 0; (await mapRows()) === before; slices += 1) {
+      if (slices > 50) throw new Error('the run never wrote');
+      const job = await claimById(h, registry, stopped.jobId, { worker: 'test', now: NOW });
+      expect((await runSlice(h, registry, job!, { mode: 'worker', budgetMs: 1, keyring, log: silent, clock: () => NOW, env: {} })).outcome).toBe('continued');
+    }
+    // The jobs page's cancel, seen after the slice: the job ends, the run is left running until the next start.
+    await h.db.updateTable('jobs').set({ status: 'cancelled', unique_key: null, finished_at: NOW }).where('id', '=', stopped.jobId).execute();
+    await start({ dryRun: true });
+    expect((await runRow(stopped.runId)).status).toBe('cancelled');
+    const map = ((await summaryOf(stopped.runId)).targets as { table: string; before: number; after: number }[]).find((t) => t.table === 'migration_map');
+    expect(map).toEqual({ table: 'migration_map', before, after: await mapRows() });
+    expect(map!.after).toBeGreaterThan(before);
+  });
+
   it('X2-1: a real run never creates the missing search_state over records (a restore): the rebuild the boot and the housekeeping queue builds it', async () => {
     const buku = (await h.db.selectFrom('material_types').select('id').where('code_key', '=', 'BUKU').executeTakeFirstOrThrow()).id;
     // An archived record: the target is empty (§11.2), but a rebuild would index it.
