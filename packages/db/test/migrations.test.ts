@@ -53,6 +53,8 @@ const SLIMS_PEOPLE_MIGRATIONS = ['0047_migration_subject'];
 const STOCKTAKE_MIGRATIONS = ['0048_stocktakes'];
 // ---- Komunitas (OPAC home page) ----
 const OPAC_HOME_MIGRATIONS = ['0049_opac_popular'];
+// ---- Komunitas (OPAC home page: loans per class) ----
+const OPAC_CLASS_MIGRATIONS = ['0050_opac_class_activity'];
 
 describe('the Phase 2 migrations in the migration map (P2-06)', () => {
   it('appends 0020–0029 in order to the same frozen map; 0029_search_token_version is the last key', () => {
@@ -68,7 +70,7 @@ describe('the Phase 2 migrations in the migration map (P2-06)', () => {
     for (const name of K1_MIGRATIONS) expect(typeof PHASE1_MIGRATIONS[name]?.up).toBe('function');
   });
 
-  it('members and circulation append 0040, holds 0041, the circulation core 0042, visits 0043, the member area 0044, charges 0045, notices 0046, the migration subject 0047, stocktake 0048, then the popular titles 0049; 0049_opac_popular is the last key', () => {
+  it('members and circulation append 0040, holds 0041, the circulation core 0042, visits 0043, the member area 0044, charges 0045, notices 0046, the migration subject 0047, stocktake 0048, then the popular titles 0049', () => {
     const names = Object.keys(PHASE1_MIGRATIONS).sort();
     const all = [
       ...CIRCULATION_MIGRATIONS,
@@ -83,9 +85,15 @@ describe('the Phase 2 migrations in the migration map (P2-06)', () => {
       ...OPAC_HOME_MIGRATIONS,
     ];
     expect(names.filter((n) => n >= '0040' && n < '0050')).toEqual(all);
-    // The newest range on this branch (every earlier range sorts before it).
-    expect(names.at(-1)).toBe('0049_opac_popular');
     for (const name of all) expect(typeof PHASE1_MIGRATIONS[name]?.up).toBe('function');
+  });
+
+  it('the loans per class of the OPAC home page open 0050; 0050_opac_class_activity is the last key', () => {
+    const names = Object.keys(PHASE1_MIGRATIONS).sort();
+    expect(names.filter((n) => n >= '0050' && n < '0060')).toEqual(OPAC_CLASS_MIGRATIONS);
+    // The newest range on this branch (every earlier range sorts before it).
+    expect(names.at(-1)).toBe('0050_opac_class_activity');
+    for (const name of OPAC_CLASS_MIGRATIONS) expect(typeof PHASE1_MIGRATIONS[name]?.up).toBe('function');
   });
 });
 
@@ -124,15 +132,15 @@ describe.skipIf(!ctx.available)(`the Phase 2 migrations [${engineLabel()}]`, () 
     return rows.map((r) => String(r.col));
   }
 
-  it('migrates an empty database to 0049, and a second run reports it up to date', async () => {
+  it('migrates an empty database to 0050, and a second run reports it up to date', async () => {
     const first = await runMigrations(h, { appVersion: '0.1.0', dataDir, migrations: PHASE1_MIGRATIONS });
     expect(first.mode).toBe('migrated');
-    const newest = [...CATALOG_MIGRATIONS, ...K1_MIGRATIONS, ...CIRCULATION_MIGRATIONS, ...HOLDS_MIGRATIONS, ...CIRC_CORE_MIGRATIONS, ...VISITS_MIGRATIONS, ...MEMBER_AREA_MIGRATIONS, ...CHARGES_MIGRATIONS, ...NOTICES_MIGRATIONS, ...SLIMS_PEOPLE_MIGRATIONS, ...STOCKTAKE_MIGRATIONS, ...OPAC_HOME_MIGRATIONS];
+    const newest = [...CATALOG_MIGRATIONS, ...K1_MIGRATIONS, ...CIRCULATION_MIGRATIONS, ...HOLDS_MIGRATIONS, ...CIRC_CORE_MIGRATIONS, ...VISITS_MIGRATIONS, ...MEMBER_AREA_MIGRATIONS, ...CHARGES_MIGRATIONS, ...NOTICES_MIGRATIONS, ...SLIMS_PEOPLE_MIGRATIONS, ...STOCKTAKE_MIGRATIONS, ...OPAC_HOME_MIGRATIONS, ...OPAC_CLASS_MIGRATIONS];
     expect(first.applied.slice(-newest.length)).toEqual(newest);
-    expect(first.schemaVersion).toBe('0049');
+    expect(first.schemaVersion).toBe('0050');
     const second = await runMigrations(h, { appVersion: '0.1.0', dataDir, migrations: PHASE1_MIGRATIONS });
-    expect(second).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0049', minCodeVersion: '0.0.0', edition: { mode: 'empty', applied: [] } });
-    expect(await h.db.selectFrom('schema_meta').select('schema_version').execute()).toEqual([{ schema_version: '0049' }]);
+    expect(second).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0050', minCodeVersion: '0.0.0', edition: { mode: 'empty', applied: [] } });
+    expect(await h.db.selectFrom('schema_meta').select('schema_version').execute()).toEqual([{ schema_version: '0050' }]);
   });
 
   it('S14: search_doc has the newest-first indexes (is_public, created_at) and (created_at)', async () => {

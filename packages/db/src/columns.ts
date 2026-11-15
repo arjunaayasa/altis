@@ -137,6 +137,8 @@ const M0047 = '0047_migration_subject';
 const M0048 = '0048_stocktakes';
 // ---- Komunitas (OPAC home page) ----
 const M0049 = '0049_opac_popular';
+// ---- Komunitas (OPAC home page: loans per class) ----
+const M0050 = '0050_opac_class_activity';
 
 /** `archived_at` + `version`, then the trail columns (Phase 2 spec §2.2 "arsip+ver, jejak"). */
 function archivedTrail(since: string): ColumnSpec[] {
@@ -1382,6 +1384,8 @@ export const TABLE_COLUMNS: Readonly<Record<TableName, readonly ColumnSpec[]>> =
   ),
   // ---- Komunitas (OPAC home page) ----
   opac_popular_titles: frozen(added(M0049, t.ulid('record_id'), t.ulid('branch_id'), t.int('loans'), t.timestamp('refreshed_at'))),
+  // ---- Komunitas (OPAC home page: loans per class) ----
+  opac_class_activity: frozen(added(M0050, t.int('place'), t.varchar('class_name', 64), t.int('loans'), t.int('titles'), t.timestamp('refreshed_at'))),
   // ---- Komunitas K1 (edition lane): the other migration lane's bookkeeping (made by the runner, like the two above) ----
   schema_migrations_edition: frozen(added(RUNNER_TABLES_SINCE, t.key191('name'), t.varchar('timestamp', 64))),
   schema_migrations_edition_lock: frozen(added(RUNNER_TABLES_SINCE, t.key191('id'), t.int('is_locked'))),
@@ -1536,6 +1540,8 @@ export const TABLE_KEYS: Readonly<Record<TableName, TableKeySpec>> = Object.free
   stocktake_unknown_codes: keys(['stocktake_id', 'code_key'], { fks: [{ column: 'stocktake_id', table: 'stocktakes', refColumn: 'id' }] }),
   // ---- Komunitas (OPAC home page) ----
   opac_popular_titles: keys(['record_id', 'branch_id']),
+  // ---- Komunitas (OPAC home page: loans per class) ----
+  opac_class_activity: keys(['place']),
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: keys(['name']),
   schema_migrations_edition_lock: keys(['id']),

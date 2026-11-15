@@ -1,11 +1,15 @@
 // The `home` module of @altis/opac-theme (S16), the OPAC home page as the library's profile site: the hero band around
-// the header, the search card floating at its lower edge, the popular titles, the "about" block with its facts, the
-// services and facility photos, and the visit block. Mobile first, every colour from base.ts's tokens or the hero's own
+// the header, the search card floating at its lower edge, the subject pills and availability of the title lists, the
+// popular titles, the "about" block with its facts, the services and facility photos, the loans per class, and the
+// visit block with today's opening hours marked. Mobile first, every colour from base.ts's tokens or the hero's own
 // (always dark, white text), no url() and no @import.
 //
-// Contrast on the hero: its text is white. Over a photo an even overlay of rgb(8 12 20 / .64) keeps it at least 5.9:1
-// even where the photo is pure white; without a photo the band is the accent's light-scheme colour, at least 5:1
-// against white for every accent, in both schemes. Focus rings on the band are white.
+// Contrast on the hero: its text is white. Over a photo an even overlay of rgb(8 12 20) keeps it at least 4.5:1 even
+// where the photo is pure white: the overlay is 60 % dark (5.2:1) unless the library chose a darker step (`hero-ov-<n>`,
+// up to 80 %); 55 % would fall under 4.5:1, so no lighter step exists. Without a photo the band is the accent's
+// light-scheme colour, at least 5:1 against white for every accent, in both schemes, or the library's own colour, which
+// the setting only takes when white text keeps 4.5:1 on it (the page sets it as `--hero-bg` in a style element with the
+// response's nonce). Focus rings on the band are white.
 
 import { ACCENTS, type AccentName } from './base.js';
 
@@ -22,6 +26,9 @@ const HERO_COLORS: Readonly<Record<AccentName, string>> = Object.freeze({
 /** The photo's vertical positions, in steps of 10 (the `opac.home` setting's). */
 const POSITIONS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100] as const;
 
+/** The overlay's darkness over the photo, in percent: 60 (the floor, the default) to 80 in steps of 5 (the setting's). */
+const HERO_OVERLAYS = Object.freeze([60, 65, 70, 75, 80] as const);
+
 /** The CSS of the home page. */
 export const HOME_CSS: string = [
   ':root{--hero-bg:#0f766e}',
@@ -35,7 +42,8 @@ export const HOME_CSS: string = [
   '.hero-band>.bar{width:100%}',
   '.hero-img{position:absolute;inset:0;z-index:-2;width:100%;height:100%;max-width:none;object-fit:cover;object-position:50% 50%}',
   POSITIONS.map((p) => `.hero-pos-${p}{object-position:50% ${p}%}`).join(''),
-  '.hero-photo::before{content:"";position:absolute;inset:0;z-index:-1;background:rgb(8 12 20/.64)}',
+  '.hero-photo::before{content:"";position:absolute;inset:0;z-index:-1;background:rgb(8 12 20/.6)}',
+  HERO_OVERLAYS.map((p) => `.hero-ov-${p}::before{background:rgb(8 12 20/.${p})}`).join(''),
   '.hero-band .brand,.hero-band .akun-link,.hero-band .menu a{color:#fff}',
   '.hero-band .lang a{border-color:#fff;color:#fff}',
   '.hero-band .lang a[aria-current]{background:#fff;color:#0f172a}',
@@ -50,6 +58,16 @@ export const HOME_CSS: string = [
   '.home-search .search-hero{max-width:none;margin:0}',
   '.home-search-meta{margin:.5rem 0 0;color:var(--muted);font-size:.9375rem}',
 
+  // The subject pills above a list of titles: each subject with its number of titles, wrapping.
+  '.subject-pills{display:flex;flex-wrap:wrap;gap:.5rem;margin:0 0 1rem;padding:0;list-style:none}',
+  '.subject-pills a{display:inline-flex;align-items:center;gap:.375rem;min-height:2.25rem;padding:.25rem .875rem;' +
+    'border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);text-decoration:none;font-size:.9375rem}',
+  '.subject-pills a:hover{border-color:var(--accent)}',
+  '.pill-count{color:var(--muted);font-variant-numeric:tabular-nums}',
+  // Availability on a title: a word, in a status colour with its outline (never colour alone).
+  '.card-status{align-self:flex-start;margin-top:.25rem}',
+  '.status-muted{color:var(--muted)}',
+
   // The popular titles: a numbered list.
   '.section-note{margin:-.5rem 0 1rem;color:var(--muted);font-size:.9375rem;max-width:var(--measure)}',
   '.popular-list{margin:0;padding:0 0 0 2rem;max-width:var(--measure)}',
@@ -57,6 +75,7 @@ export const HOME_CSS: string = [
   '.popular-list li::marker{color:var(--muted);font-weight:700}',
   '.popular-list a{font-weight:600;overflow-wrap:anywhere}',
   '.popular-list .card-meta{display:block}',
+  '.popular-list .card-status{display:inline-block;margin-top:.375rem}',
 
   // About: a photo beside the text and the facts.
   '.about-grid{display:grid;gap:1.5rem;align-items:center}',
@@ -79,6 +98,13 @@ export const HOME_CSS: string = [
   '.service-list p{margin:.125rem 0 0;color:var(--muted)}',
   '.facility-photos{display:grid;gap:1rem}',
 
+  // The loans per class: one card per class, its place, name and counts.
+  '.class-ranking{display:grid;gap:1rem;margin:0;padding:0;list-style:none}',
+  '.class-ranking li{display:grid;gap:.25rem;padding:1rem 1.125rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}',
+  '.class-place{color:var(--muted);font-size:.875rem;font-weight:600}',
+  '.class-label{font-size:1.25rem;font-weight:700;overflow-wrap:anywhere}',
+  '.class-counts{color:var(--muted);font-variant-numeric:tabular-nums}',
+
   // The visit block: location and opening hours.
   '.visit-grid{display:grid;gap:1.5rem}',
   '.visit-block h3{margin:0 0 .5rem;font-size:1rem}',
@@ -86,6 +112,8 @@ export const HOME_CSS: string = [
   '.hours{width:100%;max-width:28rem;border-collapse:collapse}',
   '.hours th,.hours td{padding:.375rem 0;border-bottom:1px solid var(--border);text-align:left;font-weight:400;vertical-align:top}',
   '.hours td{padding-left:1rem;text-align:right;font-variant-numeric:tabular-nums}',
+  '.hours .today th,.hours .today td{font-weight:700}',
+  '.home-search-meta span+span::before{content:" · "}',
 
   // Wider screens: two columns, a taller band.
   '@media (min-width:30rem){.facility-n2,.facility-n3,.facility-n4{grid-template-columns:1fr 1fr}}',
@@ -93,5 +121,6 @@ export const HOME_CSS: string = [
     '.home-search{margin-top:-5rem;padding:1.25rem 1.5rem}' +
     '.about-grid{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:2.5rem}.about-nophoto{grid-template-columns:1fr}' +
     '.services-grid{grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:2.5rem}.services-single{grid-template-columns:1fr}' +
-    '.visit-grid{grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:2.5rem}}',
+    '.visit-grid{grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:2.5rem}' +
+    '.class-ranking{grid-template-columns:repeat(auto-fill,minmax(14rem,1fr))}}',
 ].join('\n');
