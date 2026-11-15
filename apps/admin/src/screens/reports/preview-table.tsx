@@ -22,6 +22,8 @@ import { useMe } from '@/lib/me';
 import { cn } from '@/lib/utils';
 import { reportTitle } from './catalog';
 import { serverParamErrors, useDescribeParams, useParamOptions } from './param-form';
+// ---- Komunitas K5 (reports) ----
+import { PreviewChart } from './preview-chart';
 import './print.css';
 
 /**
@@ -302,6 +304,7 @@ export function PreviewSection({ entry, query, params }: { entry: ReportCatalogE
     body = (
       <div className="flex flex-col gap-3">
         <I18nProvider locale={output}>
+          <PreviewChart entry={entry} columns={columns} rows={rows} totals={totals} />
           <ScreenTable entry={entry} columns={columns} rows={rows} totals={totals} />
         </I18nProvider>
         {query.isFetchNextPageError && (isExportOnly(query.error) ? <NoticeAlert>{t('report.export_only')}</NoticeAlert> : <ProblemAlert error={query.error} />)}

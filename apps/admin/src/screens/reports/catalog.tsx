@@ -28,7 +28,17 @@ export function useReportCatalog() {
 export const reportHref = (id: string): string => `/admin/reports/${encodeURIComponent(id)}`;
 
 /** The modules, in the order of their cards. */
-const MODULES = ['collection', 'accreditation', 'members', 'visits', 'circulation', 'stocktake'] as const satisfies readonly ReportCatalogEntry['module'][];
+const MODULES = [
+  'collection',
+  'accreditation',
+  'members',
+  'visits',
+  'circulation',
+  'stocktake',
+  // ---- Komunitas K5 (reports) ----
+  'library',
+  'system',
+] as const satisfies readonly ReportCatalogEntry['module'][];
 
 /** A report's title: its shared text, or its id when this build has none. */
 export function reportTitle(t: Translate, entry: Pick<ReportCatalogEntry, 'id' | 'titleKey'>): string {
