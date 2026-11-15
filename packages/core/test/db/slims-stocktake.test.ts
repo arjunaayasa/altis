@@ -48,9 +48,17 @@ const SESSION_COLUMNS = [
 ];
 const ROW_COLUMNS = ['stock_take_id', 'item_id', 'item_code', 'title', 'gmd_name', 'classification', 'coll_type_name', 'call_number', 'location', 'status', 'checked_by', 'last_update'];
 
-/** The synthetic SLiMS source; `active`: the last session is still active in SLiMS. */
-function slimsTables(o: { active?: boolean; withoutStocktake?: boolean } = {}): Record<string, FakeSlimsTable> {
-  const session = (id: number, name: string, start: string, end: string | null, totals: [number, number, number, number], active = 0) => ({
+/** The synthetic SLiMS source; `active`: the last session is still active in SLiMS; `report`: its report file. */
+function slimsTables(o: { active?: boolean; withoutStocktake?: boolean; report?: string } = {}): Record<string, FakeSlimsTable> {
+  const session = (
+    id: number,
+    name: string,
+    start: string,
+    end: string | null,
+    totals: [number, number, number, number],
+    active = 0,
+    report: string | null = null,
+  ) => ({
     stock_take_id: id,
     stock_take_name: name,
     start_date: start,
@@ -62,7 +70,7 @@ function slimsTables(o: { active?: boolean; withoutStocktake?: boolean } = {}): 
     total_item_loan: totals[3],
     stock_take_users: null,
     is_active: active,
-    report_file: null,
+    report_file: report,
   });
   const row = (session: number, item: number, code: string, status: string, checkedBy = 'Petugas Satu') => ({
     stock_take_id: session,
@@ -84,7 +92,7 @@ function slimsTables(o: { active?: boolean; withoutStocktake?: boolean } = {}): 
   if (o.withoutStocktake === true) return tables;
   tables['stock_take'] = t(SESSION_COLUMNS, [
     session(1, 'Inventarisasi 2019', '2019-07-01 08:00:00', '2019-07-03 15:00:00', [50, 2, 45, 3]),
-    session(2, 'Inventarisasi 2023', '2023-06-05 08:00:00', o.active === true ? null : '2023-06-07 16:00:00', [5, 1, 3, 1], o.active === true ? 1 : 0),
+    session(2, 'Inventarisasi 2023', '2023-06-05 08:00:00', o.active === true ? null : '2023-06-07 16:00:00', [5, 1, 3, 1], o.active === true ? 1 : 0, o.report ?? null),
     session(3, 'Tanpa tanggal', '0000-00-00 00:00:00', null, [0, 0, 0, 0]),
   ]);
   tables['stock_take_item'] = t(
@@ -362,6 +370,22 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
     expect(await runToEnd(third.jobId)).toBe('succeeded');
     expect(await snapshot()).toEqual(snap);
     expect((await summaryOf(third.runId)).tables['stock_take']?.skipped).toEqual({ already_migrated: 2, invalid_date: 1 });
+  });
+
+  it('a session whose SLiMS report file is not brought over: the report names the file, in the dry run and the real run', async () => {
+    await wipe();
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ report: 'stock_take_2023_report.html' }) }));
+    const dry = await start({ dryRun: true });
+    expect(await runToEnd(dry.jobId)).toBe('succeeded');
+    const line = '"stock_take","2","stocktake_report_not_migrated","stock_take_2023_report.html"';
+    expect(await reportText(dry.runId)).toContain(line);
+    const real = await start();
+    expect(await runToEnd(real.jobId)).toBe('succeeded');
+    expect(await reportText(real.runId)).toContain(line);
+    const session = await db.h.db.selectFrom('stocktakes').select('report_file_id').where('name', '=', 'Inventarisasi 2023').executeTakeFirstOrThrow();
+    expect(session.report_file_id).toBeNull();
+    // A session without a report file names none.
+    expect((await reportText(real.runId)).match(/stocktake_report_not_migrated/g)).toHaveLength(1);
   });
 
   it('a dry run writes nothing and counts as the real run does', async () => {

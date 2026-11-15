@@ -27,8 +27,10 @@ import { cachedForRun, cutChars, keyOf, mappedRows, oneLine, scanAll, sourceKeys
 // 1. `stock_take` → stocktake sessions of the run's branch (entity `stock_take`, `source = migrated`), with their name
 //    and their start and end in the library's time zone. A session SLiMS has finished comes in `finished`; one still
 //    active (`is_active`) comes in `cancelled`, since ALTIS does not go on with it, and the report names it
-//    (`stocktake_active_cancelled`). A session without a valid start date is skipped `invalid_date`. A session keeps
-//    the totals SLiMS kept for it (in the scope, found, on loan; the rest not found), except as step 3 says. A session
+//    (`stocktake_active_cancelled`). The report file SLiMS names for a session (`report_file`) is not brought over:
+//    the report names it (`stocktake_report_not_migrated`). A session without a valid start date is skipped
+//    `invalid_date`. A session keeps the totals SLiMS kept for it (in the scope, found, on loan; the rest not found),
+//    except as step 3 says. A session
 //    an earlier run brought in `cancelled` (still active in SLiMS then, untouched in ALTIS since) that SLiMS has
 //    finished meanwhile comes in again, `finished` with its end and totals, and the report names it
 //    (`stocktake_finished_since`): when it is the last session its rows are brought again from the source (the
@@ -159,6 +161,9 @@ async function sessionsBatch(c: SlimsStageContext, rows: readonly SlimsRow[], io
     l.migrated(TS);
     if (active) l.report(TS, key, 'stocktake_active_cancelled', name);
     if (reopen) l.report(TS, key, 'stocktake_finished_since', name);
+    // SLiMS's own report file of the session is not brought over (it stays in the files source): the report names it.
+    const reportFile = oneLine(keyOf(row['report_file']));
+    if (reportFile !== '') l.report(TS, key, 'stocktake_report_not_migrated', cutChars(reportFile, 200));
     if (state === 'replay' || io.trx === null) continue;
     const endDate = dateCell(row['end_date'], { placeholder: true });
     const end = endDate === null ? null : localEpoch(tz, endDate, timeCell(row['end_date']));
