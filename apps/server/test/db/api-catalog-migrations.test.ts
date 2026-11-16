@@ -336,6 +336,32 @@ describe.skipIf(!ctx.available)(`SLiMS migration API [${engineLabel()}]`, () => 
     await expect(fsp.stat(secondWork)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('a real run cancelled from the jobs page between two slices ends cancelled at once, its rows in ALTIS counted again', async () => {
+    __setSlimsStages([fakeCountingStage('records', 'biblio', { write: true, batch: 1 })]);
+    const res = await owner.post(API, startBody({ dryRun: false }));
+    expect(res.status, res.text).toBe(201);
+    const started = res.json as { runId: string; jobId: string };
+    const mapRows = async (): Promise<number> => Number((await h.db.selectFrom('migration_map').select((eb) => eb.fn.countAll().as('n')).executeTakeFirstOrThrow()).n);
+    const before = await mapRows();
+    for (let slices = 0; (await mapRows()) === before; slices += 1) {
+      if (slices > 50) throw new Error('the run never wrote');
+      const job = await claimById(h, registry, started.jobId, { worker: 'test', now: NOW });
+      expect((await runSlice(h, registry, job!, { mode: 'worker', budgetMs: 1, keyring: CONFIG.keyring, log: silent, clock: () => NOW, env: {} })).outcome).toBe('continued');
+    }
+    await fsp.mkdir(path.join(dataDir, 'tmp', started.runId), { recursive: true });
+    const cancel = await owner.post(`/api/v1/jobs/${started.jobId}/cancel`);
+    expect(cancel.status, cancel.text).toBe(200);
+    expect((cancel.json as { status: string }).status).toBe('cancelled');
+    // Ended now, not at the next start: its report counts what the run wrote, and its work folder is gone.
+    const ended = await run(started.runId);
+    expect([ended.status, Number(ended.finished_at)]).toEqual(['cancelled', NOW]);
+    const map = ((JSON.parse(ended.summary ?? '{}') as { targets?: { table: string; before: number; after: number }[] }).targets ?? []).find((t) => t.table === 'migration_map');
+    expect(map).toEqual({ table: 'migration_map', before, after: await mapRows() });
+    await expect(fsp.stat(path.join(dataDir, 'tmp', started.runId))).rejects.toMatchObject({ code: 'ENOENT' });
+    const finish = await h.db.selectFrom('audit_log').select('meta').where('action', '=', 'catalog.migration.finish').where('entity_id', '=', started.runId).execute();
+    expect(finish.map((r) => (JSON.parse(r.meta ?? 'null') as { status: string }).status)).toEqual(['cancelled']);
+  });
+
   it('S3: a dump dry run, then the real run with fromRunId: no upload, no split, the folder adopted; every other adoption → not_found', async () => {
     const upload = await stagedUpload(owner.userId, 'slims.dump', new TextEncoder().encode('-- MySQL dump\nCREATE TABLE biblio (biblio_id int);\n'));
     const files = await stagedUpload(owner.userId, 'slims.files', new Uint8Array([0x50, 0x4b, 0x05, 0x06, ...new Array<number>(18).fill(0)]));

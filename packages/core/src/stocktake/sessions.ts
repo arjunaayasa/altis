@@ -16,6 +16,7 @@ import { takeStagedUpload, uploadOwner } from '../files/uploads.js';
 import { enqueue } from '../jobs/enqueue.js';
 import type { JobRegistry } from '../jobs/types.js';
 import { activeSession, codesKeyPrefix, countsOf, finishKey, lockSession, parseScope, prepareKey, sessionNotFound, wrongState, type Db } from './common.js';
+import { STOCKTAKE_SLIMS_REPORT_CONTEXT, STOCKTAKE_SLIMS_REPORT_OWNER } from './slims-report.js';
 
 // Stocktake sessions of a branch (inventarisasi): create one (its copies are listed by the job `stocktake.prepare`),
 // read them, cancel one, ask for its finish (the job `stocktake.finish`), and hand it a list of scanned codes (the job
@@ -143,6 +144,12 @@ async function namesOf(db: Db, table: 'locations' | 'collection_types' | 'materi
   return rows.map((r) => r.name_id);
 }
 
+/** The SLiMS report a session's view names: its stored file, when it is the session's own. */
+function reportOf(reports: ReadonlyMap<string, { owner: string | null; name: string; size: number }>, r: StocktakeRow): StocktakeView['migratedReport'] {
+  const f = r.report_file_id === null ? undefined : reports.get(r.report_file_id);
+  return f === undefined || f.owner !== r.id ? null : { name: f.name, size: f.size };
+}
+
 /** The views of `rows`, in their order. */
 async function viewsOf(db: Db, rows: readonly StocktakeRow[]): Promise<StocktakeView[]> {
   if (rows.length === 0) return [];
@@ -157,6 +164,22 @@ async function viewsOf(db: Db, rows: readonly StocktakeRow[]): Promise<Stocktake
   const { job, uploads } = await liveJobs(
     db,
     rows.filter((r) => r.status === 'preparing' || r.status === 'active' || r.status === 'finishing').map((r) => r.id),
+  );
+  // ---- the SLiMS report of a migrated session ----
+  const reportIds = rows.map((r) => r.report_file_id).filter((f): f is string => f !== null);
+  const reports = new Map(
+    reportIds.length === 0
+      ? []
+      : (
+          await db
+            .selectFrom('files')
+            .select(['id', 'owner_id', 'original_name', 'size'])
+            .where('id', 'in', reportIds)
+            .where('owner_type', '=', STOCKTAKE_SLIMS_REPORT_OWNER)
+            .where('context', '=', STOCKTAKE_SLIMS_REPORT_CONTEXT)
+            .where('status', '=', 'ok')
+            .execute()
+        ).map((f) => [f.id, { owner: f.owner_id, name: f.original_name, size: Number(f.size) }]),
   );
   const out: StocktakeView[] = [];
   for (const r of rows) {
@@ -191,6 +214,7 @@ async function viewsOf(db: Db, rows: readonly StocktakeRow[]): Promise<Stocktake
       options,
       jobId: job.get(r.id) ?? null,
       pendingUploads: uploads.get(r.id) ?? 0,
+      migratedReport: reportOf(reports, r),
     });
   }
   return out;

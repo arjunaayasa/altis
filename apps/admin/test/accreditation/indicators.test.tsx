@@ -3,7 +3,7 @@ import type { EvidenceView, ResultsView } from '@altis/shared/api/accreditation'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { adminMe, signedIn, startApp, type FakeHandler } from '../fake-api';
-import { PERIOD_ID, T0, indicatorResult, instrumentsAnswer, periodView, periodsAnswer, resultsView } from './workspace-fixtures';
+import { PERIOD_ID, T0, evidenceItem, indicator, indicatorResult, instrumentsAnswer, periodView, periodsAnswer, resultsView } from './workspace-fixtures';
 
 // Indikator (spec §6, §10.3, §10.6): every indicator under its component with the decree's own number written as
 // "Pelayanan butir 7" (a primary school instrument has no plagiarism item, so the concept `SCH-L8` is its service item
@@ -194,6 +194,49 @@ describe('Indikator', () => {
     await waitFor(() => expect(app.writes()).toEqual([`DELETE accreditation/evidence/${EVIDENCE_ID}`]));
     await waitFor(() => expect(within(item).queryByRole('link', { name: 'salah-unggah.pdf' })).toBeNull());
     expect(within(item).getByText('belum')).toBeTruthy();
+  });
+
+  // ---- the stocktake minutes as evidence ----
+  it('an item that takes the stocktake minutes links the stored minutes of a chosen finished session', async () => {
+    const SESSION = '01JZ0000000000000000STK001';
+    // The upper secondary instrument with its K7 and the minutes item.
+    const instruments = instrumentsAnswer();
+    const sma = instruments.instruments.find((i) => i.id === 'sch-sma-2025')!;
+    sma.components[0]!.indicators.push(indicator('K7', 'K7', { window: 'current', evidence: [evidenceItem('stocktake_minutes', 'K7', { kind: 'signed_document' })] }));
+    const app = open({
+      results: resultsView({ indicators: [indicatorResult('SCH-K7', 'K7', 'K', { evidence: [{ code: 'stocktake_minutes', present: false, files: [] }] })] }),
+      extra: {
+        'GET accreditation/instruments': () => instruments,
+        'GET accreditation/evidence': () => ({ evidence: [], componentBytes: { K: 0, SP: 0, L: 0, T: 0, F: 0, G: 0, profil: 0 } }),
+        'GET accreditation/evidence/stocktake-minutes': () => ({
+          items: [
+            {
+              stocktakeId: SESSION,
+              name: 'Inventarisasi 2026',
+              branch: { id: '01JZ0000000000000000000B01', code: 'PUSAT', name: 'Perpustakaan Pusat' },
+              finishedAt: T0,
+              fileId: FILE_ID,
+              fileName: 'berita-acara-inventarisasi.pdf',
+              size: 80_000,
+            },
+          ],
+        }),
+        'POST accreditation/evidence/stocktake-minutes': () => ({ id: EVIDENCE_ID, version: 0 }),
+      },
+    });
+    const item = await screen.findByRole('region', { name: 'K7 · Koleksi butir 7' }, FIRST);
+    fireEvent.click(within(item).getByRole('button', { name: 'Lampirkan berita acara inventarisasi' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Lampirkan berita acara inventarisasi' });
+    const select = (await within(dialog).findByLabelText('Sesi inventarisasi')) as HTMLSelectElement;
+    await waitFor(() => expect(select.disabled).toBe(false));
+    // Nothing chosen: nothing is sent.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Lampirkan' }));
+    expect(await within(dialog).findByText('Pilih sesi inventarisasi.')).toBeTruthy();
+    fireEvent.change(select, { target: { value: SESSION } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Lampirkan' }));
+    await waitFor(() => expect(app.writes()).toEqual(['POST accreditation/evidence/stocktake-minutes']));
+    expect(app.requests.find((r) => r.method === 'POST')?.body).toEqual({ stocktakeId: SESSION, periodId: PERIOD_ID, indicatorCode: 'SCH-K7' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Lampirkan berita acara inventarisasi' })).toBeNull());
   });
 
   it('a reader sees the files of an item but cannot remove them', async () => {

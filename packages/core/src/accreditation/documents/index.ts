@@ -1,5 +1,5 @@
 import type { DB } from '@altis/db';
-import { localDate } from '@altis/shared';
+import { localDate, type Permission } from '@altis/shared';
 import { DossierBody, type SelfAssessmentBody, type Statement1000Body } from '@altis/shared/api/accreditation';
 import { issueCode } from '@altis/shared/api/common';
 import { REPORT_ZIP_MAX_BYTES, REPORT_ZIP_MAX_ENTRIES, type ReportRunStarted } from '@altis/shared/api/reports';
@@ -17,7 +17,7 @@ import type { DocPeriod } from './data.js';
 import { dossierReport } from './dossier.js';
 import { selfAssessmentReport } from './self-assessment.js';
 import { statement1000Report } from './statement.js';
-import { zipEstimate, zipTooLarge, zipUnits } from './zip.js';
+import { withheldDrafts, zipEstimate, zipTooLarge, zipUnits } from './zip.js';
 
 // The accreditation documents (spec §10.9): the start of a run of the evidence file, the internal simulation or the
 // statement of 1 000 titles for a live period. Every run is stored in Indonesian (the documents are never in another
@@ -27,6 +27,10 @@ import { zipEstimate, zipTooLarge, zipUnits } from './zip.js';
 // (stored as a `zip` run with `zipMode: 'components'`). A ZIP whose estimate already passes 5 000 entries or 2 GiB (the
 // evidence files' sizes plus one mebibyte per generated PDF) is refused before anything is written. The statistics
 // mode has no submission form and no components: its request letter and its per-component ZIP are refused.
+//
+// A ZIP renders the reports its evidence items draft (the annual library report); given what its caller holds
+// (`holds`), the drafted reports the caller may not export are named in the run's `withheld` and left out (the run's
+// warnings then say so). Without `holds` (the command line, a measurement), nothing is left out.
 
 export { dossierReport, DOSSIER_PARTS, DOSSIER_ZIP_MODES } from './dossier.js';
 export { selfAssessmentReport } from './self-assessment.js';
@@ -54,7 +58,7 @@ export async function startDocumentRun(
   reportId: AccredDocumentId,
   periodId: string,
   body: DossierBody | SelfAssessmentBody | Statement1000Body,
-  o: { createdBy: string; now: number; registry: JobRegistry; keyring: readonly KeyringEntry[] },
+  o: { createdBy: string; now: number; registry: JobRegistry; keyring: readonly KeyringEntry[]; holds?: (permission: Permission) => boolean },
 ): Promise<ReportRunStarted> {
   const def = DOCUMENTS[reportId];
   const row = await trx.selectFrom('accred_periods').selectAll().where('id', '=', periodId).where('archived_at', 'is', null).executeTakeFirst();
@@ -86,7 +90,9 @@ export async function startDocumentRun(
         libraryName: '',
         schoolLibrary: settings.libraryType === 'sekolah',
       };
-      const estimate = zipEstimate(await zipUnits(trx, p, zipMode));
+      const withheld = o.holds === undefined ? [] : withheldDrafts(instrument, { periodId, D: p.D }, o.holds);
+      if (withheld.length > 0) params = { ...params, withheld };
+      const estimate = zipEstimate(await zipUnits(trx, p, zipMode, { withheld }));
       if (estimate.entries > REPORT_ZIP_MAX_ENTRIES) throw zipTooLarge('entries', estimate.entries);
       if (estimate.bytes > REPORT_ZIP_MAX_BYTES) throw zipTooLarge('bytes', estimate.bytes);
     }

@@ -460,9 +460,16 @@ describe('Migrasi SLiMS', () => {
     expect(await screen.findByLabelText('Berkas dump SQL', undefined, FIRST)).toBeTruthy();
     expect(screen.queryByText(/Migrasi sedang berjalan/)).toBeNull();
     // Opened from the history: no live progress, the button for a new migration instead.
+    expect(screen.getByRole('row', { name: /Migrasi/ }).textContent).toContain('Dibatalkan');
     fireEvent.click(await screen.findByRole('button', { name: 'Lihat' }));
     expect(await screen.findByRole('button', { name: 'Mulai migrasi baru' })).toBeTruthy();
     expect(screen.queryByText(/Migrasi sedang berjalan/)).toBeNull();
+    // It shows the end its job gave it, not "Berjalan".
+    expect(screen.getByText('Proses ini dibatalkan.')).toBeTruthy();
+    expect(screen.queryByText('Berjalan')).toBeNull();
+    // Its counts of the ALTIS tables are its first stage's until the run is closed: they are not shown as its result.
+    expect(screen.queryByRole('table', { name: 'Baris di tabel ALTIS' })).toBeNull();
+    expect(screen.getByText(/dihitung ulang saat proses ini ditutup/)).toBeTruthy();
   });
 
   it('an admin without catalog.migration.run is told so, and nothing is asked', async () => {

@@ -4,7 +4,7 @@ import { PRECHECK_FAILURE_VIEWS, type UpdateStatusView } from '@altis/shared/api
 import { raw } from 'hono/html';
 import type { PropsWithChildren } from 'hono/jsx';
 import type { HtmlEscapedString } from 'hono/utils/html';
-import { toDocument } from '../opac/layout.js';
+import { NO_ICON, toDocument } from '../opac/layout.js';
 import { UPDATE_PAGE_SCRIPT } from './update-script.js';
 
 // The operations page `/admin/_update` (spec §9.4, §7.4; plan Task 19): a self-contained server page (hono/jsx) that
@@ -162,6 +162,7 @@ function Frame(props: PropsWithChildren<{ locale: Locale; nonce: string; title: 
         <meta name="color-scheme" content="light dark" />
         <meta name="robots" content="noindex" />
         <title>{props.title}</title>
+        <link rel="icon" href={NO_ICON} />
         <style nonce={props.nonce}>{inlineText(PAGE_CSS)}</style>
       </head>
       <body>

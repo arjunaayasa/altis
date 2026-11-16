@@ -881,9 +881,13 @@ describe('the table-class registry and the Phase 1 migration list (spec §6.5)',
       // Komunitas K4, stocktake: 0048 after them.
       ...Object.keys(STOCKTAKE_TABLES_BY_MIGRATION),
       // Komunitas, OPAC home page: 0049 after them.
-      ...Object.keys(OPAC_HOME_TABLES_BY_MIGRATION),
+      ...Object.keys(OPAC_HOME_TABLES_BY_MIGRATION).filter((name) => name < '0050'),
     ]);
     expect(circulation.at(-1)).toBe('0049_opac_popular');
+    // Komunitas, OPAC home page: the loans per class open the range 0050–0059.
+    const fifties = MIGRATION_NAMES.filter((name) => name >= '0050' && name < '0060');
+    expect(fifties).toEqual(Object.keys(OPAC_HOME_TABLES_BY_MIGRATION).filter((name) => name >= '0050'));
+    expect(fifties.at(-1)).toBe('0050_opac_class_activity');
     for (const [name, m] of Object.entries(PHASE1_MIGRATIONS)) {
       expect(name).toMatch(MIGRATION_NAME);
       expect(typeof m.up).toBe('function');

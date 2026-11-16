@@ -74,6 +74,9 @@ export const ACCREDITATION_PRINT_ID = {
   'accreditation.print.warning.file_missing_unknown':
     'Satu berkas bukti tidak ditemukan di penyimpanan sehingga tidak dimuat di ZIP, dan berkas itu sudah tidak ada di daftar bukti periode ini. Periksa bukti periode ini, lalu buat ZIP lagi.',
   'accreditation.print.warning.other': 'Peringatan: {code}',
+  // ---- Komunitas K5 (reports) ----
+  'accreditation.print.warning.report_withheld':
+    'Draf laporan untuk {code} tidak dimasukkan ke ZIP karena Anda tidak memegang izin laporan itu. Minta admin menambahkan izinnya, lalu buat ZIP lagi.',
 } as const;
 
 export const ACCREDITATION_PRINT_EN: Readonly<Record<keyof typeof ACCREDITATION_PRINT_ID, string>> = {
@@ -139,4 +142,7 @@ export const ACCREDITATION_PRINT_EN: Readonly<Record<keyof typeof ACCREDITATION_
   'accreditation.print.warning.file_missing_unknown':
     "An evidence file was not found in the storage, so it is not in the ZIP, and it is no longer in this period's evidence list. Check this period's evidence, then make the ZIP again.",
   'accreditation.print.warning.other': 'Warning: {code}',
+  // ---- Komunitas K5 (reports) ----
+  'accreditation.print.warning.report_withheld':
+    "The report draft for {code} was left out of the ZIP because you do not hold that report's permission. Ask an administrator to add it, then make the ZIP again.",
 };

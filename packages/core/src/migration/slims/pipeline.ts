@@ -28,6 +28,7 @@ import type { JobContext, JobOutcome } from '../../jobs/types.js';
 import { SEARCH_TOKEN_VERSION } from '../../search/tokenize.js';
 import { createCounters } from './counters.js';
 import { releaseSlimsSearchIndex } from './ending.js';
+import { SLIMS_TARGET_TABLES, slimsTargetCounts } from './targets.js';
 import { slimsSources } from './factory.js';
 import { stageOptions, type SlimsRunSettings } from './options.js';
 import { reconcile } from './reconcile.js';
@@ -87,21 +88,8 @@ const BUFFER_MAX_BYTES = 1024 * 1024;
 const SPLIT_CHECKPOINT_MAX_BYTES = 16_384;
 /** `tables.json` is read back whole, up to this size. */
 const TABLES_FILE_MAX_BYTES = 8 * 1024 * 1024;
-/** The rows per target table counted before and after the run (M13). */
-export const SLIMS_TARGET_TABLES = Object.freeze([
-  'records',
-  'items',
-  'agents',
-  'subjects',
-  'publishers',
-  'attachments',
-  'pages',
-  'migration_map',
-  'migration_archive',
-] as const);
-
-type TargetTable = (typeof SLIMS_TARGET_TABLES)[number];
-type Db = Kysely<DB> | Transaction<DB>;
+// The target tables counted before and after the run live in targets.ts; here for the stages that import them.
+export { SLIMS_TARGET_TABLES, slimsTargetCounts };
 
 const SYSTEM: Actor = { type: 'system', id: null, ip: null };
 
@@ -249,22 +237,6 @@ export function pipelineOf(c: SlimsStageContext): SlimsPipeline {
 export function cutText(s: string, max: number): string {
   const points = Array.from(s);
   return points.length <= max ? s : points.slice(0, max).join('');
-}
-
-/** The rows of `table` (a fixed name). */
-async function rowCount(db: Db, table: TargetTable): Promise<number> {
-  const row = await db
-    .selectFrom(table as 'records')
-    .select((eb) => eb.fn.countAll<number | string | bigint>().as('n'))
-    .executeTakeFirstOrThrow();
-  return Number(row.n);
-}
-
-/** The rows of every target table (M13). */
-export async function slimsTargetCounts(db: Db): Promise<Record<TargetTable, number>> {
-  const out = {} as Record<TargetTable, number>;
-  for (const t of SLIMS_TARGET_TABLES) out[t] = await rowCount(db, t);
-  return out;
 }
 
 /** The documents of the search index. */
@@ -921,7 +893,8 @@ export async function runSlimsMigrationSlice(
       counters,
       report: addRow,
       budgetLeftMs: budgetLeft,
-      heartbeat: (value, message) => ctx.heartbeat({ progress: value, message }),
+      // The run's progress is where its stages are: a stage's heartbeat never takes the bar back below it.
+      heartbeat: (value, message) => ctx.heartbeat({ progress: Math.max(value, progress()), message }),
       pipeline,
     };
   }

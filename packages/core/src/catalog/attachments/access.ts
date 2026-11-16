@@ -10,6 +10,10 @@ import type { Kysely, Transaction } from 'kysely';
 //                and hides migration runs from whoever lacks `catalog.migration.run` (P2-27).
 //                The stored minutes of a stocktake session (`owner_type 'stocktakes'`) too: they are branch data,
 //                served only by the session's minutes route, which checks the permission at the session's branch.
+//                So is the SLiMS report of a migrated session (context `stocktake.slims_report`, the same owner):
+//                another system's HTML page, served only by its session's route, as a download.
+//                (`/files/:id` itself serves stored minutes that a period links as evidence to the accreditation
+//                workspace's readers; never a SLiMS report.)
 //   staff        `files.access` is not `public`: staff only.
 //   unpublished  a public cover (`owner_type 'records'`) or attachment file whose record is hidden from the OPAC,
 //                archived or merged, or whose attachment is archived or `staff` (or gone): served as a staff file;
@@ -33,7 +37,7 @@ export async function catalogFileAccess(
   db: Db,
   f: { context: string; owner_type: string | null; owner_id: string | null; access: string },
 ): Promise<CatalogFileAccess> {
-  if (f.owner_type === 'catalog_runs' || f.context === 'catalog.report' || f.owner_type === 'stocktakes') return 'never';
+  if (f.owner_type === 'catalog_runs' || f.context === 'catalog.report' || f.owner_type === 'stocktakes' || f.context.startsWith('stocktake.')) return 'never';
   if (f.access !== 'public') return 'staff';
   if (f.owner_type === 'records') return (await recordPublished(db, f.owner_id)) ? 'public' : 'unpublished';
   if (f.owner_type === 'attachments') {

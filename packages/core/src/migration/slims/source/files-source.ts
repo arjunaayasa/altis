@@ -9,16 +9,18 @@ import { SlimsFileTooLargeError, type SlimsFilesSource } from './types.js';
 // The attachment, cover and content files of a SLiMS install (spec §11.1): the uploaded zip (`slims.files`, read with
 // yauzl) or, from the CLI only, the SLiMS folder itself (`--files-dir`, every file bounded by the folder's real path,
 // @altis/platform openUnderRoot). Paths are SLiMS-relative and `/`-separated: `repository/<dir>/<name>`,
-// `images/docs/<image>`, `images/content/<image>`. They come from SLiMS data, so they are untrusted.
+// `images/docs/<image>`, `images/content/<image>`, and the stocktake reports `files/reports/<name>`. They come from
+// SLiMS data, so they are untrusted.
 //
 // Zip: the central directory is read once; an entry is served only when its name is a plain relative path (no empty,
 // `.` or `..` segment, no leading `/`, drive letter, backslash or NUL), it is a regular file (not a link, folder or
 // device by its attributes, not a name ending in `/`), it is not encrypted, it is stored or deflated, and no other
 // entry has its name. Every other entry is never served (a SLiMS zip made by hand often holds folder entries, so the
 // archive itself is not refused for them). A zip whose SLiMS folder sits inside a top folder (`slims9/repository/...`)
-// is read from that folder: the shallowest one holding `repository/`, `images/docs/` or `images/content/` (a zip of a
-// whole SLiMS install holds other `images/` folders too), and a zip with two such folders side by side is refused. A name not found as written is looked up again ignoring letter case, when exactly one
-// entry matches (files copied from a Windows install).
+// is read from that folder: the shallowest one holding `repository/`, `images/docs/`, `images/content/` or
+// `files/reports/` (a zip of a whole SLiMS install holds other `images/` and `files/` folders too), and a zip with two
+// such folders side by side is refused. A name not found as written is looked up again ignoring letter case, when
+// exactly one entry matches (files copied from a Windows install).
 //
 // Sizes (S10): entries are opened only on request; `open(rel, {maxBytes})` makes the iterator throw
 // SlimsFileTooLargeError when the declared size, or the bytes actually produced, pass `maxBytes`; yauzl's
@@ -114,8 +116,11 @@ function openStream(zip: ZipFile, entry: Entry): Promise<Readable> {
   });
 }
 
-/** A name inside a SLiMS data folder: the folders before the first `repository/`, `images/docs/` or `images/content/`. */
-const SLIMS_DATA_FOLDER = /^((?:[^/]+\/)*?)(?:repository|images\/(?:docs|content))\//i;
+/**
+ * A name inside a SLiMS data folder: the folders before the first `repository/`, `images/docs/`, `images/content/` or
+ * `files/reports/`.
+ */
+const SLIMS_DATA_FOLDER = /^((?:[^/]+\/)*?)(?:repository|images\/(?:docs|content)|files\/reports)\//i;
 
 /** The characters of a folder name the ambiguity's detail shows at most. */
 const SHOWN_FOLDER_MAX = 64;
@@ -129,7 +134,8 @@ function shownFolder(prefix: string): string {
 
 /**
  * The prefix (`<top>/`) under which the zip holds the SLiMS folder, '' when it holds it at its root (or holds none): the
- * shallowest folder that holds a SLiMS data folder (`repository/`, `images/docs/`, `images/content/`). Any other
+ * shallowest folder that holds a SLiMS data folder (`repository/`, `images/docs/`, `images/content/`,
+ * `files/reports/`). Any other
  * `images/` (a theme's, a JS library's) and macOS's `__MACOSX/` never count, wherever the zip lists them.
  *
  * @throws DomainError `MIGRATION_SOURCE_UNSUPPORTED` (`files_zip_ambiguous`) when two folders of that depth both hold one;

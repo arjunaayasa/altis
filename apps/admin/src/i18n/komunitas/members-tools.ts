@@ -189,6 +189,10 @@ export const MEMBERS_TOOLS_ID = {
   'visits.settings.save': 'Simpan',
   'visits.settings.saved': 'Pengaturan disimpan.',
   'visits.settings.invalid': 'Periksa isian yang ditandai.',
+  // The room of a guestbook station (the visits it records count in it).
+  'visits.stations.room': 'Ruang',
+  'visits.stations.room_none': 'Tanpa ruang',
+  'visits.stations.col.room': 'Ruang',
 } as const;
 
 export const MEMBERS_TOOLS_EN: Record<keyof typeof MEMBERS_TOOLS_ID, string> = {
@@ -372,4 +376,7 @@ export const MEMBERS_TOOLS_EN: Record<keyof typeof MEMBERS_TOOLS_ID, string> = {
   'visits.settings.save': 'Save',
   'visits.settings.saved': 'Settings saved.',
   'visits.settings.invalid': 'Check the marked fields.',
+  'visits.stations.room': 'Room',
+  'visits.stations.room_none': 'No room',
+  'visits.stations.col.room': 'Room',
 };

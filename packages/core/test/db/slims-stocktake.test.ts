@@ -1,4 +1,6 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import * as fsp from 'node:fs/promises';
+import * as path from 'node:path';
 import { withTx } from '@altis/db';
 import { newId } from '@altis/shared';
 import type { MigrationSummary } from '@altis/shared/api/catalog/migration';
@@ -7,7 +9,7 @@ import { engineLabel, testDbContext } from '../../../../tools/test/test-db.js';
 import type { CatalogJobDeps } from '../../src/catalog/jobs-deps.js';
 import { txCtx, type CoreLogger } from '../../src/context.js';
 import type { KeyringEntry } from '../../src/crypto/secret-box.js';
-import { localStorageDriver } from '../../src/files/serve.js';
+import { localStorageDriver, type StorageDriver } from '../../src/files/serve.js';
 import { claimById } from '../../src/jobs/claim.js';
 import { createJobRegistry } from '../../src/jobs/registry.js';
 import { runSlice } from '../../src/jobs/slice.js';
@@ -18,6 +20,8 @@ import { archiveStage } from '../../src/migration/slims/stages/archive.js';
 import { __setSlimsStageBBatch } from '../../src/migration/slims/stages/stage-b-kit.js';
 import { stocktakeStage } from '../../src/migration/slims/stages/stocktake.js';
 import { readSettings } from '../../src/settings/service.js';
+import { getStocktake } from '../../src/stocktake/sessions.js';
+import { stocktakeReportFileId, stocktakeSlimsReport } from '../../src/stocktake/slims-report.js';
 import { fakeSlimsFactory, type FakeSlimsTable } from '../fixtures/slims-fake.js';
 import { ACTOR, NOW, openItemsDb, seedItem, seedRecord, type ItemsDb } from './catalog-items-support.js';
 
@@ -33,6 +37,11 @@ import { ACTOR, NOW, openItemsDb, seedItem, seedRecord, type ItemsDb } from './c
 // that ended within the rows brings the rest; a dry run writes nothing and counts alike; a run stopped after every batch, with its
 // counts lost after every other commit, ends as one that never stopped; a source without the tables reads the rows an
 // earlier run archived, outside the reconciliation.
+//
+// The report files SLiMS names for its sessions, through an in-memory files source: stored as the session's staff-only
+// file (counted as `stock_take.report_file`), reported only when the source lacks the file or refuses it (too large,
+// empty, a name that leaves the reports folder), counted alike by a dry run, kept once by a re-run, and stored again
+// under the same key by a run after one that died between storing and committing: every blob has its row.
 
 const ctx = testDbContext();
 const keyring: KeyringEntry[] = [{ kid: 'k1', key: randomBytes(32).toString('base64url'), active: true }];
@@ -48,8 +57,11 @@ const SESSION_COLUMNS = [
 ];
 const ROW_COLUMNS = ['stock_take_id', 'item_id', 'item_code', 'title', 'gmd_name', 'classification', 'coll_type_name', 'call_number', 'location', 'status', 'checked_by', 'last_update'];
 
-/** The synthetic SLiMS source; `active`: the last session is still active in SLiMS; `report`: its report file. */
-function slimsTables(o: { active?: boolean; withoutStocktake?: boolean; report?: string } = {}): Record<string, FakeSlimsTable> {
+/**
+ * The synthetic SLiMS source; `active`: the last session is still active in SLiMS; `report`: its report file;
+ * `reports`: the report file of each session by id.
+ */
+function slimsTables(o: { active?: boolean; withoutStocktake?: boolean; report?: string; reports?: Record<number, string> } = {}): Record<string, FakeSlimsTable> {
   const session = (
     id: number,
     name: string,
@@ -90,10 +102,11 @@ function slimsTables(o: { active?: boolean; withoutStocktake?: boolean; report?:
     item: t(['item_id', 'biblio_id', 'item_code'], [1, 2, 3, 4, 5].map((n) => ({ item_id: 100 + n, biblio_id: n, item_code: `B00${n}` }))),
   };
   if (o.withoutStocktake === true) return tables;
+  const r = o.reports ?? {};
   tables['stock_take'] = t(SESSION_COLUMNS, [
-    session(1, 'Inventarisasi 2019', '2019-07-01 08:00:00', '2019-07-03 15:00:00', [50, 2, 45, 3]),
-    session(2, 'Inventarisasi 2023', '2023-06-05 08:00:00', o.active === true ? null : '2023-06-07 16:00:00', [5, 1, 3, 1], o.active === true ? 1 : 0, o.report ?? null),
-    session(3, 'Tanpa tanggal', '0000-00-00 00:00:00', null, [0, 0, 0, 0]),
+    session(1, 'Inventarisasi 2019', '2019-07-01 08:00:00', '2019-07-03 15:00:00', [50, 2, 45, 3], 0, r[1] ?? null),
+    session(2, 'Inventarisasi 2023', '2023-06-05 08:00:00', o.active === true ? null : '2023-06-07 16:00:00', [5, 1, 3, 1], o.active === true ? 1 : 0, o.report ?? r[2] ?? null),
+    session(3, 'Tanpa tanggal', '0000-00-00 00:00:00', null, [0, 0, 0, 0], 0, r[3] ?? null),
   ]);
   tables['stock_take_item'] = t(
     ROW_COLUMNS,
@@ -116,7 +129,21 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
   let db: ItemsDb;
   let library: string;
   const items = new Map<number, string>();
-  const deps = (): CatalogJobDeps => ({ dataDir: db.dataDir, baseUrl: 'https://perpus.example.sch.id/', keyring, storage: localStorageDriver(db.dataDir), log: silent });
+  /** Called once, right after the next blob is stored (then cleared): what happens meanwhile elsewhere. */
+  let afterPut: ((key: string) => Promise<void>) | null = null;
+  const storageOf = (dataDir: string): StorageDriver => {
+    const base = localStorageDriver(dataDir);
+    return {
+      ...base,
+      async put(key, data, meta) {
+        await base.put(key, data, meta);
+        const then = afterPut;
+        afterPut = null;
+        if (then !== null) await then(key);
+      },
+    };
+  };
+  const deps = (): CatalogJobDeps => ({ dataDir: db.dataDir, baseUrl: 'https://perpus.example.sch.id/', keyring, storage: storageOf(db.dataDir), log: silent });
   const registry = createJobRegistry(slimsJobs(deps));
 
   async function mapRow(entity: string, legacyKey: string, targetId: string, runId = EARLIER_RUN): Promise<void> {
@@ -179,6 +206,11 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
       const claimed = await claimById(db.h, registry, id, { worker: 'test', now: NOW });
       if (claimed === null) throw new Error(`job ${id} cannot be claimed`);
       const r = await runSlice(db.h, registry, claimed, { mode: 'worker', budgetMs: o.budgetMs ?? 20_000, keyring, log: silent, clock: () => NOW, env: {} });
+      if (r.outcome === 'retry') {
+        // A slice the queue retries is retried at once.
+        await db.h.db.updateTable('jobs').set({ run_at: NOW }).where('id', '=', id).execute();
+        continue;
+      }
       if (r.outcome !== 'continued') return r.outcome;
       if (o.lose === true && slices % 2 === 0 && run !== undefined) {
         await db.h.db.updateTable('catalog_runs').set({ summary: run.summary }).where('id', '=', run.id).execute();
@@ -212,6 +244,8 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
         .execute();
       const rest: Record<string, unknown> = { ...s };
       for (const k of ['id', 'created_at', 'updated_at']) delete rest[k];
+      // The report's id is derived from the session's: whether it is the session's own is what compares.
+      rest['report_file_id'] = s.report_file_id === null ? null : s.report_file_id === stocktakeReportFileId(s.id);
       out.push({ ...rest, rows: rows.map((r) => ({ ...r, expected: Number(r.expected) })) });
     }
     return out;
@@ -220,7 +254,33 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
   async function wipe(): Promise<void> {
     for (const table of ['stocktakes', 'jobs', 'catalog_runs', 'migration_archive'] as const) await db.h.db.deleteFrom(table).execute();
     await db.h.db.deleteFrom('migration_map').where('run_id', '<>', EARLIER_RUN).execute();
+    await db.h.db.deleteFrom('files').execute();
+    await fsp.rm(path.join(db.dataDir, 'uploads'), { recursive: true, force: true });
   }
+
+  /** The names of every stored blob (`uploads/<yyyy>/<mm>/<id>`). */
+  async function blobs(): Promise<string[]> {
+    const root = path.join(db.dataDir, 'uploads');
+    const out: string[] = [];
+    const walk = async (dir: string): Promise<void> => {
+      for (const e of await fsp.readdir(dir, { withFileTypes: true }).catch(() => [])) {
+        if (e.isDirectory()) await walk(path.join(dir, e.name));
+        else if (!e.name.startsWith('.')) out.push(e.name);
+      }
+    };
+    await walk(root);
+    return out.sort();
+  }
+
+  /** Every blob has its `files` row and every row its blob: nothing left behind. */
+  async function noOrphan(): Promise<void> {
+    const rows = (await db.h.db.selectFrom('files').select('id').execute()).map((r) => r.id).sort();
+    expect(await blobs()).toEqual(rows);
+  }
+
+  const REPORT = 'files/reports/stock_take_2023_report.html';
+  const html = (title: string): Uint8Array => new TextEncoder().encode(`<html><body><h1>${title}</h1><p>Laporan uji, ditulis untuk tes ini.</p></body></html>`);
+  const sessionOf = (name: string) => db.h.db.selectFrom('stocktakes').selectAll().where('name', '=', name).executeTakeFirstOrThrow();
 
   it('the real run: every session, the last one with its rows; both tables archived; the reconciliation balances', async () => {
     __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables() }));
@@ -372,20 +432,193 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
     expect((await summaryOf(third.runId)).tables['stock_take']?.skipped).toEqual({ already_migrated: 2, invalid_date: 1 });
   });
 
-  it('a session whose SLiMS report file is not brought over: the report names the file, in the dry run and the real run', async () => {
+  it('a session whose SLiMS report file the run has no files for: the report names the file, in the dry run and the real run', async () => {
     await wipe();
     __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ report: 'stock_take_2023_report.html' }) }));
     const dry = await start({ dryRun: true });
     expect(await runToEnd(dry.jobId)).toBe('succeeded');
-    const line = '"stock_take","2","stocktake_report_not_migrated","stock_take_2023_report.html"';
+    const line = `"stock_take","2","stocktake_report_not_migrated","${REPORT}"`;
     expect(await reportText(dry.runId)).toContain(line);
     const real = await start();
     expect(await runToEnd(real.jobId)).toBe('succeeded');
     expect(await reportText(real.runId)).toContain(line);
-    const session = await db.h.db.selectFrom('stocktakes').select('report_file_id').where('name', '=', 'Inventarisasi 2023').executeTakeFirstOrThrow();
-    expect(session.report_file_id).toBeNull();
+    expect((await sessionOf('Inventarisasi 2023')).report_file_id).toBeNull();
     // A session without a report file names none.
     expect((await reportText(real.runId)).match(/stocktake_report_not_migrated/g)).toHaveLength(1);
+    for (const runId of [dry.runId, real.runId]) {
+      const s = await summaryOf(runId);
+      expect(s.tables['stock_take.report_file']).toEqual({ source: 1, migrated: 0, merged: 0, skipped: { missing_file: 1 }, archived: 0 });
+      expect(s.reconciliation?.ok).toBe(true);
+    }
+  });
+
+  it('the SLiMS report file of a session: stored as its staff-only file; the dry run counts it; a re-run keeps the one', async () => {
+    await wipe();
+    const bytes = html('Inventarisasi 2023');
+    const files = { [REPORT]: bytes };
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ report: 'stock_take_2023_report.html' }), files }));
+    const dry = await start({ dryRun: true, files: 'dir', filesDir: '/slims' });
+    expect(await runToEnd(dry.jobId)).toBe('succeeded');
+    const counted = { source: 1, migrated: 1, merged: 0, skipped: {}, archived: 0 };
+    expect((await summaryOf(dry.runId)).tables['stock_take.report_file']).toEqual(counted);
+    expect(await db.h.db.selectFrom('files').select('id').where('context', '=', 'stocktake.slims_report').execute()).toEqual([]);
+
+    const real = await start({ files: 'dir', filesDir: '/slims' });
+    expect(await runToEnd(real.jobId)).toBe('succeeded');
+    const s = await summaryOf(real.runId);
+    expect(s.tables['stock_take.report_file']).toEqual(counted);
+    expect(s.reconciliation?.ok).toBe(true);
+    expect(await reportText(real.runId)).not.toContain('stocktake_report_not_migrated');
+    const session = await sessionOf('Inventarisasi 2023');
+    expect(session.report_file_id).toBe(stocktakeReportFileId(session.id));
+    const file = await db.h.db.selectFrom('files').selectAll().where('id', '=', session.report_file_id!).executeTakeFirstOrThrow();
+    expect(file).toMatchObject({
+      original_name: 'stock_take_2023_report.html',
+      mime: 'application/octet-stream',
+      context: 'stocktake.slims_report',
+      owner_type: 'stocktakes',
+      owner_id: session.id,
+      access: 'staff',
+      status: 'ok',
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    });
+    expect(Number(file.size)).toBe(bytes.byteLength);
+    // The session's view says it has one, and its route serves those bytes; the older session has none.
+    expect((await getStocktake(db.h.db, db.branchId, session.id)).migratedReport).toEqual({ name: 'stock_take_2023_report.html', size: bytes.byteLength });
+    expect((await getStocktake(db.h.db, db.branchId, (await sessionOf('Inventarisasi 2019')).id)).migratedReport).toBeNull();
+    const served = await stocktakeSlimsReport(db.h.db, localStorageDriver(db.dataDir), db.branchId, session.id);
+    const parts: Uint8Array[] = [];
+    for await (const part of served.content) parts.push(part);
+    expect(Buffer.concat(parts).equals(Buffer.from(bytes))).toBe(true);
+    await expect(stocktakeSlimsReport(db.h.db, localStorageDriver(db.dataDir), db.otherBranchId, session.id)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await noOrphan();
+
+    // A second run over the same source keeps the one file.
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ report: 'stock_take_2023_report.html' }), files }));
+    const again = await start({ files: 'dir', filesDir: '/slims' });
+    expect(await runToEnd(again.jobId)).toBe('succeeded');
+    expect((await summaryOf(again.runId)).tables['stock_take.report_file']).toEqual({ source: 1, migrated: 0, merged: 0, skipped: { already_migrated: 1 }, archived: 0 });
+    expect(await db.h.db.selectFrom('files').select('id').where('context', '=', 'stocktake.slims_report').execute()).toEqual([{ id: session.report_file_id }]);
+    await noOrphan();
+  });
+
+  it('a report file the source lacks or refuses keeps its report row and leaves the session without one', async () => {
+    const cases: { name: string; files: Record<string, Uint8Array>; reason: string; detail: string }[] = [
+      { name: 'hilang_report.html', files: {}, reason: 'missing_file', detail: 'files/reports/hilang_report.html' },
+      {
+        name: 'besar_report.html',
+        files: { 'files/reports/besar_report.html': new Uint8Array(20 * 1024 * 1024 + 1) },
+        reason: 'file_too_large',
+        detail: 'files/reports/besar_report.html > 20 MB',
+      },
+      { name: 'kosong_report.html', files: { 'files/reports/kosong_report.html': new Uint8Array(0) }, reason: 'empty_file', detail: 'files/reports/kosong_report.html: kosong / empty' },
+      // The name comes from another system's database: one that leaves the reports folder is never looked up.
+      { name: '../../config/database.php', files: { 'config/database.php': html('rahasia') }, reason: 'unsafe_name', detail: '../../config/database.php: nama berkas tidak aman / unsafe file name' },
+      { name: 'sub/x_report.html', files: { 'files/reports/sub/x_report.html': html('sub') }, reason: 'unsafe_name', detail: 'sub/x_report.html: nama berkas tidak aman / unsafe file name' },
+    ];
+    for (const k of cases) {
+      await wipe();
+      for (const dryRun of [true, false]) {
+        __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ reports: { 1: k.name, 3: 'tanpa_tanggal_report.html' } }), files: k.files }));
+        const run = await start({ dryRun, files: 'dir', filesDir: '/slims' });
+        expect(await runToEnd(run.jobId), k.name).toBe('succeeded');
+        const s = await summaryOf(run.runId);
+        // The session without a valid start date is no session of the run: its file is skipped without a report row.
+        expect(s.tables['stock_take.report_file'], k.name).toEqual({ source: 2, migrated: 0, merged: 0, skipped: { [k.reason]: 1, session_missing: 1 }, archived: 0 });
+        expect(s.reconciliation?.ok, k.name).toBe(true);
+        const report = await reportText(run.runId);
+        expect(report, k.name).toContain(`"stock_take","1","stocktake_report_not_migrated","${k.detail}"`);
+        expect(report.match(/stocktake_report_not_migrated/g), k.name).toHaveLength(1);
+      }
+      expect((await sessionOf('Inventarisasi 2019')).report_file_id, k.name).toBeNull();
+      expect(await db.h.db.selectFrom('files').select('id').where('context', '=', 'stocktake.slims_report').execute(), k.name).toEqual([]);
+      await noOrphan();
+    }
+  });
+
+  it('a run that died between storing a report and committing it: the next run stores it again under the same key, nothing is left behind', async () => {
+    await wipe();
+    const files = { [REPORT]: html('Inventarisasi 2023') };
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ report: 'stock_take_2023_report.html' }), files }));
+    const first = await start({ files: 'dir', filesDir: '/slims' });
+    expect(await runToEnd(first.jobId)).toBe('succeeded');
+    const session = await sessionOf('Inventarisasi 2023');
+    const fileId = session.report_file_id!;
+    // What a death before the commit leaves: the stored blob, without its row, the session's link or the map row.
+    await db.h.db.updateTable('stocktakes').set({ report_file_id: null }).where('id', '=', session.id).execute();
+    await db.h.db.deleteFrom('files').where('id', '=', fileId).execute();
+    await db.h.db.deleteFrom('migration_map').where('entity', '=', 'stock_take_report').execute();
+    expect(await blobs()).toContain(fileId);
+
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ report: 'stock_take_2023_report.html' }), files }));
+    const next = await start({ files: 'dir', filesDir: '/slims' });
+    expect(await runToEnd(next.jobId)).toBe('succeeded');
+    expect((await sessionOf('Inventarisasi 2023')).report_file_id).toBe(fileId);
+    expect((await summaryOf(next.runId)).tables['stock_take.report_file']).toEqual({ source: 1, migrated: 1, merged: 0, skipped: {}, archived: 0 });
+    await noOrphan();
+  });
+
+  it('a batch whose report another process committed meanwhile (or whose COMMIT answer was lost) fails without removing the stored blob', async () => {
+    await wipe();
+    const bytes = html('Inventarisasi 2023');
+    const files = { [REPORT]: bytes };
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ report: 'stock_take_2023_report.html' }), files }));
+    const run = await start({ files: 'dir', filesDir: '/slims' });
+    // Right after this process stored the report, another one that took the job over commits the same report (blob,
+    // row, the session's link and the map row, all under the key derived from the session).
+    afterPut = async (key) => {
+      const session = (await db.h.db.selectFrom('stocktakes').select('id').execute()).find((x) => stocktakeReportFileId(x.id) === key)!;
+      await db.h.db
+        .insertInto('files')
+        .values({
+          id: key,
+          original_name: 'stock_take_2023_report.html',
+          mime: 'application/octet-stream',
+          size: bytes.byteLength,
+          sha256: createHash('sha256').update(bytes).digest('hex'),
+          context: 'stocktake.slims_report',
+          owner_type: 'stocktakes',
+          owner_id: session.id,
+          access: 'staff',
+          status: 'ok',
+          created_at: NOW,
+          created_by: null,
+        })
+        .execute();
+      await db.h.db.updateTable('stocktakes').set({ report_file_id: key }).where('id', '=', session.id).execute();
+      await mapRow('stock_take_report', '2', key, run.runId);
+    };
+    // This process's batch finds the session linked already and fails (and with it this run).
+    expect(await runToEnd(run.jobId)).toBe('succeeded');
+    expect(afterPut).toBeNull();
+    expect((await db.h.db.selectFrom('catalog_runs').select('status').where('id', '=', run.runId).executeTakeFirstOrThrow()).status).toBe('failed');
+    const session = await sessionOf('Inventarisasi 2023');
+    expect(session.report_file_id).toBe(stocktakeReportFileId(session.id));
+    // The file the other process committed is still there to download.
+    const served = await stocktakeSlimsReport(db.h.db, localStorageDriver(db.dataDir), db.branchId, session.id);
+    const parts: Uint8Array[] = [];
+    for await (const part of served.content) parts.push(part);
+    expect(Buffer.concat(parts).equals(Buffer.from(bytes))).toBe(true);
+    await noOrphan();
+  });
+
+  it('a session whose stored report lost its blob gets it again from the source on the next run', async () => {
+    await wipe();
+    const bytes = html('Inventarisasi 2023');
+    const files = { [REPORT]: bytes };
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ report: 'stock_take_2023_report.html' }), files }));
+    const first = await start({ files: 'dir', filesDir: '/slims' });
+    expect(await runToEnd(first.jobId)).toBe('succeeded');
+    const session = await sessionOf('Inventarisasi 2023');
+    await localStorageDriver(db.dataDir).delete(session.report_file_id!);
+    expect(await blobs()).not.toContain(session.report_file_id);
+
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ report: 'stock_take_2023_report.html' }), files }));
+    const again = await start({ files: 'dir', filesDir: '/slims' });
+    expect(await runToEnd(again.jobId)).toBe('succeeded');
+    expect((await summaryOf(again.runId)).tables['stock_take.report_file']).toEqual({ source: 1, migrated: 0, merged: 0, skipped: { already_migrated: 1 }, archived: 0 });
+    expect((await sessionOf('Inventarisasi 2023')).report_file_id).toBe(session.report_file_id);
+    await noOrphan();
   });
 
   it('a dry run writes nothing and counts as the real run does', async () => {
@@ -403,21 +636,28 @@ describe.skipIf(!ctx.available)(`SLiMS stocktake [${engineLabel()}]`, () => {
 
   it('stopped after every batch, and with its counts lost after every other commit, a run ends as one that never stopped', async () => {
     await wipe();
-    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables() }));
-    const whole = await start();
+    // Both dated sessions name a report file the source has; the undated one names one too.
+    const reports = { 1: 'stock_take_2019_report.html', 2: 'stock_take_2023_report.html', 3: 'tanpa_tanggal_report.html' };
+    const files = { 'files/reports/stock_take_2019_report.html': html('2019'), [REPORT]: html('2023') };
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ reports }), files }));
+    const whole = await start({ files: 'dir', filesDir: '/slims' });
     expect(await runToEnd(whole.jobId)).toBe('succeeded');
     const wholeSummary = await summaryOf(whole.runId);
+    expect(wholeSummary.tables['stock_take.report_file']).toEqual({ source: 3, migrated: 2, merged: 0, skipped: { session_missing: 1 }, archived: 0 });
     const wholeRows = await snapshot();
 
     await wipe();
     __setSlimsStageBBatch(1);
-    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables() }));
-    const stepped = await start();
+    __setSlimsSourceFactory(fakeSlimsFactory({ tables: slimsTables({ reports }), files }));
+    const stepped = await start({ files: 'dir', filesDir: '/slims' });
     expect(await runToEnd(stepped.jobId, { budgetMs: 1, lose: true })).toBe('succeeded');
     const steppedSummary = await summaryOf(stepped.runId);
     expect(steppedSummary.tables).toEqual(wholeSummary.tables);
     expect(steppedSummary.reconciliation).toEqual(wholeSummary.reconciliation);
     expect(await snapshot()).toEqual(wholeRows);
+    // Exactly one report per session, and no blob without its row.
+    expect(await db.h.db.selectFrom('files').select('owner_id').where('context', '=', 'stocktake.slims_report').execute()).toHaveLength(2);
+    await noOrphan();
   });
 
   it('a source without the stocktake tables reads the rows an earlier run archived, outside the reconciliation', async () => {

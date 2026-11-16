@@ -1,5 +1,5 @@
 import { issueCode } from '@altis/shared/api/common';
-import { OpacHomePutBody, type OpacHomeBlocks, type OpacHomeContent, type OpacHomeView } from '@altis/shared/api/opac-home';
+import { OpacHomePutBody, type OpacHomeBlocks, type OpacHomeContent, type OpacHomeText, type OpacHomeView } from '@altis/shared/api/opac-home';
 
 /**
  * The form state of OPAC › Halaman awal and the PUT body it becomes. The form holds texts as typed (numbers too); a
@@ -29,13 +29,23 @@ export interface HoursDraft {
   key: number;
   days: string;
   time: string;
+  /** ISO weekdays (1 Monday to 7 Sunday), in that order. */
+  weekdays: number[];
+}
+
+/** A text of the form in each language, as typed. */
+export interface TextDraft {
+  id: string;
+  en: string;
 }
 
 export interface HomeDraft {
-  title: string;
-  lead: { id: string; en: string };
-  hero: { fileId: string; alt: string; position: number } | null;
-  about: { text: string; photo: PhotoDraft | null; founded: string; librarians: string };
+  title: TextDraft;
+  lead: TextDraft;
+  hero: { fileId: string; alt: string; position: number; overlay: number } | null;
+  /** The library colour as typed (`#rrggbb`); blank: the accent's. */
+  brand: string;
+  about: { text: TextDraft; photo: PhotoDraft | null; founded: string; librarians: string };
   services: ServiceDraft[];
   facilities: FacilityDraft[];
   hours: HoursDraft[];
@@ -52,22 +62,26 @@ export function newRowKey(): number {
 
 const text = (value: string | null): string => value ?? '';
 
+/** The texts of both languages as typed. */
+const texts = (value: OpacHomeText): TextDraft => ({ id: text(value.id), en: text(value.en) });
+
 /** The form state of a loaded home page. */
 export function draftOf(view: Pick<OpacHomeView, 'home' | 'welcome'>): HomeDraft {
   const { home } = view;
   return {
-    title: text(home.title),
-    lead: { id: text(view.welcome.id), en: text(view.welcome.en) },
+    title: texts(home.title),
+    lead: texts(view.welcome),
     hero: home.hero === null ? null : { ...home.hero },
+    brand: text(home.brand),
     about: {
-      text: text(home.about.text),
+      text: texts(home.about.text),
       photo: home.about.photo === null ? null : { fileId: home.about.photo.fileId, alt: home.about.photo.alt, caption: text(home.about.photo.caption) },
       founded: home.about.founded === null ? '' : String(home.about.founded),
       librarians: home.about.librarians === null ? '' : String(home.about.librarians),
     },
     services: home.services.map((s) => ({ key: newRowKey(), title: s.title, text: text(s.text) })),
     facilities: home.facilities.map((f) => ({ key: newRowKey(), fileId: f.fileId, alt: f.alt, caption: text(f.caption) })),
-    hours: home.hours.map((h) => ({ key: newRowKey(), days: h.days, time: h.time })),
+    hours: home.hours.map((h) => ({ key: newRowKey(), days: h.days, time: h.time, weekdays: [...h.weekdays].sort((a, b) => a - b) })),
     blocks: { ...home.blocks },
   };
 }
@@ -78,7 +92,7 @@ export function comparable(draft: HomeDraft): string {
     ...draft,
     services: draft.services.map(({ title, text: t }) => ({ title, text: t })),
     facilities: draft.facilities.map(({ fileId, alt, caption }) => ({ fileId, alt, caption })),
-    hours: draft.hours.map(({ days, time }) => ({ days, time })),
+    hours: draft.hours.map(({ days, time, weekdays }) => ({ days, time, weekdays })),
   });
 }
 
@@ -92,20 +106,24 @@ function wholeNumber(value: string): number | null {
   return /^\d{1,9}$/.test(v) ? Number(v) : Number.NaN;
 }
 
+/** Both languages' texts, a blank one as none. */
+const textsOrNull = (value: TextDraft): OpacHomeText => ({ id: orNull(value.id), en: orNull(value.en) });
+
 /** The home page content of `draft` (not yet checked). */
 function contentOf(draft: HomeDraft): OpacHomeContent {
   return {
-    title: orNull(draft.title),
+    title: textsOrNull(draft.title),
     hero: draft.hero === null ? null : { ...draft.hero },
+    brand: orNull(draft.brand),
     about: {
-      text: orNull(draft.about.text),
+      text: textsOrNull(draft.about.text),
       photo: draft.about.photo === null ? null : { fileId: draft.about.photo.fileId, alt: draft.about.photo.alt, caption: orNull(draft.about.photo.caption) },
       founded: wholeNumber(draft.about.founded),
       librarians: wholeNumber(draft.about.librarians),
     },
     services: draft.services.map((s) => ({ title: s.title, text: orNull(s.text) })),
     facilities: draft.facilities.map((f) => ({ fileId: f.fileId, alt: f.alt, caption: orNull(f.caption) })),
-    hours: draft.hours.map((h) => ({ days: h.days, time: h.time })),
+    hours: draft.hours.map((h) => ({ days: h.days, time: h.time, weekdays: [...h.weekdays] })),
     blocks: { ...draft.blocks },
   };
 }
@@ -115,7 +133,7 @@ export function bodyOf(draft: HomeDraft, revision: string): { body: OpacHomePutB
   const parsed = OpacHomePutBody.safeParse({
     revision,
     home: contentOf(draft),
-    welcome: { id: orNull(draft.lead.id), en: orNull(draft.lead.en) },
+    welcome: textsOrNull(draft.lead),
   });
   if (parsed.success) return { body: parsed.data };
   const errors: Record<string, string> = {};
