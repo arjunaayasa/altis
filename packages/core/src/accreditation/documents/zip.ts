@@ -1,19 +1,20 @@
 import { crc32 } from 'node:zlib';
 import type { DB } from '@altis/db';
 import { openRead, removeFile, reportWorkPath, statOrNull, writeBytesAtomic, type DataPath } from '@altis/platform';
-import { DomainError } from '@altis/shared';
+import { DomainError, type Permission } from '@altis/shared';
 import { REPORT_PDF_MAX_ROWS, REPORT_ZIP_MAX_BYTES, REPORT_ZIP_MAX_ENTRIES } from '@altis/shared/api/reports';
 import type { FileHandle } from 'node:fs/promises';
 import type { Kysely } from 'kysely';
 import { z } from 'zod';
 import { openZipWriter, ZipLimitError, zipWriterCheckpointSchema, type ZipWriter, type ZipWriterCheckpoint } from '../../archive/zip-writer.js';
 import { ExportRunFailure } from '../../reports/export/state.js';
+import { parseDefParams } from '../../reports/runs/service.js';
 import type { DocumentCtx, DocumentStep } from '../../reports/types.js';
 import { evidenceReportParams } from '../instruments/shared.js';
 import { catalogueCode } from '../scoring/score.js';
 import { PREREQUISITES_CODE, PROFILE_CODE, PROFILE_PHOTO_SLOTS } from '../evidence/checklist.js';
 import { annexHeading, annexPlan } from './annex-sections.js';
-import { COLLECT_START, collectRows, columnsOf, documentLayout, msg, printReportTable, readCollected, tableReport, type DocPeriod } from './data.js';
+import { COLLECT_START, collectRows, columnsOf, documentLayout, draftReport, msg, printReportTable, readCollected, tableReport, type DocPeriod } from './data.js';
 import { reportTitle, sheetItems } from './ik-sheets.js';
 import {
   annexEntryName,
@@ -27,6 +28,7 @@ import {
   type ZipFolderCode,
 } from './names.js';
 import type { ComposedResults } from '../evaluate/compose.js';
+import type { AccredInstrument } from '../types.js';
 import { PROFILE } from './texts.js';
 
 // The evidence ZIP of a period (spec §10.9), written across slices through the shared resumable ZIP writer, every
@@ -43,6 +45,11 @@ import { PROFILE } from './texts.js';
 //   folder first, then stored in the outer one.
 // - The statistics mode: `00-berkas-bukti.pdf`, `profil/`, and `lampiran/` with each register list and statistical
 //   annex as a PDF.
+//
+// A report an evidence item drafts (the annual library report beside the routine reports) is rendered as a PDF of the
+// period and stored before the item's uploaded files, named as a generated list is; the run of a caller who may not
+// export that report leaves it out (startDocumentRun decides, the run's parameters keep it) with the warning
+// `report_withheld:<item>`.
 //
 // A generated list longer than a PDF holds (10 000 rows) is left out with the warning `generated_too_large:<item>`;
 // a component whose files pass `accreditation.evidence.componentLimitMb` gets `component_over_limit:<code>:<bytes>`; a
@@ -103,7 +110,8 @@ export function sheetWorkName(index: number): string {
 /** One unit of work. */
 export interface ZipUnit {
   key: string;
-  kind: 'work' | 'file' | 'generated' | 'close';
+  /** `document`: a report an evidence item drafts, rendered as a PDF; `withheld`: one the caller may not export. */
+  kind: 'work' | 'file' | 'generated' | 'close' | 'document' | 'withheld';
   writer: 'outer' | 'inner';
   folder: ZipFolderCode | 'root';
   /** The entry name without its counter for a numbered unit (`{n}` stands for it), else the full name. */
@@ -158,8 +166,11 @@ function numberedName(mode: ZipMode, folder: ZipFolderCode, base: string): strin
 /** Results without values: the sheets' order is all the units read of them. */
 const NO_RESULTS: ComposedResults = Object.freeze({ prerequisites: null, indicators: [], snp: [], score: null, missingEvidence: [] });
 
-/** The units of the evidence ZIP of `p` in `mode`, in order. The statistics mode always writes the combined layout. */
-export async function zipUnits(db: Kysely<DB>, p: DocPeriod, mode: ZipMode): Promise<ZipUnit[]> {
+/**
+ * The units of the evidence ZIP of `p` in `mode`, in order. The statistics mode always writes the combined layout. A
+ * drafted report of `o.withheld` is a `withheld` unit (no entry, a warning).
+ */
+export async function zipUnits(db: Kysely<DB>, p: DocPeriod, mode: ZipMode, o: { withheld?: readonly string[] } = {}): Promise<ZipUnit[]> {
   const files = await evidenceFiles(db, p.id);
   const units: ZipUnit[] = [];
   const components = mode === 'components' && p.school;
@@ -217,6 +228,24 @@ export async function zipUnits(db: Kysely<DB>, p: DocPeriod, mode: ZipMode): Pro
           report: { id: item.reportId, params: evidenceReportParams(item, { periodId: p.id, D: p.D }) },
           title: `${prefix} · ${msg(item.labelKey)}`,
         });
+      } else if (item.reportId !== undefined && draftReport(item.reportId) !== null) {
+        // ---- Komunitas K5 (reports): the report the item drafts, before its signed copies ----
+        const def = draftReport(item.reportId)!;
+        const title = msg(def.titleKey);
+        const withheld = (o.withheld ?? []).includes(def.id);
+        units.push({
+          key: `${itemKey}.`,
+          kind: withheld ? 'withheld' : 'document',
+          writer,
+          folder,
+          name: numberedName(mode, folder, `${prefix}-{n}-${slugOf(title)}.pdf`),
+          group: code,
+          label: `${prefix}.${item.code}`,
+          source: '',
+          estimate: withheld ? 0 : CHUNK,
+          report: { id: def.id, params: evidenceReportParams(item, { periodId: p.id, D: p.D }) },
+          title: `${prefix} · ${title}`,
+        });
       }
       for (const f of own.filter((x) => x.evidence_code === item.code)) units.push(fileUnit(mode, folder, code, prefix, `${itemKey}.${fileKey(f)}`, f, msg(item.labelKey), writer));
     });
@@ -269,14 +298,37 @@ export async function zipUnits(db: Kysely<DB>, p: DocPeriod, mode: ZipMode): Pro
   units.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   // Each generated list gets a PDF work file of its own (the instrument and the annex plan fix their order), so one
   // list's file is never overwritten by the next while it may still be copied after a stopped slice.
+  // The drafted reports take theirs after every list's.
   let pdf = FIRST_LIST_PDF;
-  for (const u of units) {
-    if (u.kind !== 'generated') continue;
-    if (pdf > LAST_LIST_PDF) throw new ExportRunFailure('internal');
-    u.source = `work:entry-${pdf}.pdf`;
-    pdf += 1;
+  for (const kind of ['generated', 'document'] as const) {
+    for (const u of units) {
+      if (u.kind !== kind) continue;
+      if (pdf > LAST_LIST_PDF) throw new ExportRunFailure('internal');
+      u.source = `work:entry-${pdf}.pdf`;
+      pdf += 1;
+    }
   }
   return units;
+}
+
+// ---- Komunitas K5 (reports) ----
+/**
+ * The reports the evidence items of `instrument` draft that a caller holding what `holds` answers may not export (its
+ * export permission, and the further one its parameters for the period `periodId` ask), sorted: the evidence ZIP of
+ * that caller leaves them out.
+ */
+export function withheldDrafts(instrument: AccredInstrument, p: { periodId: string; D: string }, holds: (permission: Permission) => boolean): string[] {
+  const out = new Set<string>();
+  for (const indicator of instrument.components.flatMap((c) => c.indicators)) {
+    for (const item of indicator.evidence) {
+      if (item.kind === 'generated' || item.reportId === undefined) continue;
+      const def = draftReport(item.reportId);
+      if (def === null) continue;
+      const extra = def.extraPermission?.(evidenceReportParams(item, p)) ?? null;
+      if (!holds(def.exportPermission ?? def.permission) || (extra !== null && !holds(extra))) out.add(def.id);
+    }
+  }
+  return [...out].sort();
 }
 
 /** A unit copying an evidence file. */
@@ -303,6 +355,7 @@ export function zipEstimate(units: readonly ZipUnit[]): { entries: number; bytes
   let entries = 0;
   let bytes = 0;
   for (const u of units) {
+    if (u.kind === 'withheld') continue;
     entries += 1;
     bytes += u.estimate;
   }
@@ -327,10 +380,12 @@ export function zipTooLarge(limit: 'entries' | 'bytes', value: number): DomainEr
 
 const count = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 const collectSchema = z.strictObject({ cursor: z.string().max(32_000).nullable(), bytes: count, rows: count });
+/** Where the rendering of a drafted report stopped (its own resume). */
+const docSchema = z.strictObject({ phase: z.string().max(64), cursor: z.string().max(4_000).nullable(), state: z.unknown() });
 
 const unitSchema = z.strictObject({
   key: z.string().max(200),
-  kind: z.enum(['work', 'file', 'generated', 'close']),
+  kind: z.enum(['work', 'file', 'generated', 'close', 'document', 'withheld']),
   writer: z.enum(['outer', 'inner']),
   folder: z.string().max(16),
   name: z.string().max(1_024),
@@ -339,8 +394,10 @@ const unitSchema = z.strictObject({
   source: z.string().max(64),
   report: z.strictObject({ id: z.string().max(64), params: z.record(z.string(), z.unknown()) }).nullable(),
   title: z.string().max(600),
-  step: z.enum(['rows', 'pdf', 'finish', 'crc', 'copy']),
+  step: z.enum(['rows', 'pdf', 'finish', 'crc', 'copy', 'document']),
   collect: collectSchema,
+  /** A drafted report's rendering so far (absent in a state written before drafted reports were rendered). */
+  doc: docSchema.nullable().optional(),
   at: count,
   crc: count,
   size: count,
@@ -439,7 +496,7 @@ function begin(u: ZipUnit, st: ZipState): UnitState {
     }
     name = u.name.replace('{n}', counterText(st.n + 1));
   }
-  const step: UnitState['step'] = u.kind === 'generated' ? 'rows' : u.kind === 'close' ? 'finish' : 'crc';
+  const step: UnitState['step'] = u.kind === 'generated' ? 'rows' : u.kind === 'document' ? 'document' : u.kind === 'close' ? 'finish' : 'crc';
   return {
     key: u.key,
     kind: u.kind,
@@ -453,6 +510,7 @@ function begin(u: ZipUnit, st: ZipState): UnitState {
     title: u.title,
     step,
     collect: { ...COLLECT_START },
+    doc: null,
     at: 0,
     crc: 0,
     size: 0,
@@ -580,6 +638,10 @@ async function runUnit(
   u: UnitState,
   o: { low: () => boolean; slice: { worked: boolean }; listPdf: ListPdf },
 ): Promise<'done' | 'skipped' | 'paused'> {
+  if (u.kind === 'withheld') {
+    warn(st, `report_withheld:${u.label}`);
+    return 'skipped';
+  }
   const rowsFile = reportWorkPath(ctx.dataDir, ctx.runId, 'rows.ndjson');
   if (u.step === 'rows') {
     // `rows.ndjson` is shared by the lists: a list starts gathering only once the state that holds the previous list
@@ -601,6 +663,23 @@ async function runUnit(
     o.slice.worked = true;
     const rows = (await readCollected(rowsFile, u.collect.bytes)).get(0) ?? [];
     await writeBytesAtomic(reportWorkPath(ctx.dataDir, ctx.runId, u.source.slice(5)), o.listPdf(u, rows));
+    u.step = 'crc';
+  }
+  if (u.step === 'document') {
+    // A drafted report renders its PDF into the unit's own work file, in the run's language (always Indonesian),
+    // across slices: its resume is kept in the unit's state.
+    if (o.slice.worked && ctx.budgetLeftMs() < PDF_MIN_MS) return 'paused';
+    const def = draftReport(u.report!.id);
+    if (def === null) throw new ExportRunFailure('internal');
+    const nested: DocumentCtx = { ...ctx, format: 'pdf', params: parseDefParams(def, u.report!.params), outputName: u.source.slice(5) };
+    const step = await def.render(nested, u.doc ?? null);
+    o.slice.worked = true;
+    if (!step.done) {
+      u.doc = step.resume;
+      return 'paused';
+    }
+    for (const w of step.warnings) warn(st, w);
+    u.doc = null;
     u.step = 'crc';
   }
   if (u.step === 'finish') {

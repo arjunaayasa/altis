@@ -1,11 +1,30 @@
-import { recordUrlPath } from '@altis/core';
+import { closedBy, loadClosedDayRules, recordUrlPath, topClasses, type ClassActivity } from '@altis/core';
 import { isLocale, localDate, t, type Locale } from '@altis/shared';
-import { OPAC_HOME_DEFAULT, OPAC_HOME_HERO_SIZE, OPAC_HOME_PHOTO_SIZE, type OpacHomeContent, type OpacHomePhoto } from '@altis/shared/api/opac-home';
+import {
+  OPAC_HOME_DEFAULT,
+  OPAC_HOME_HERO_SIZE,
+  OPAC_HOME_PHOTO_SIZE,
+  opacHomeTextIn,
+  type OpacHomeContent,
+  type OpacHomeHours,
+  type OpacHomePhoto,
+} from '@altis/shared/api/opac-home';
 import { SearchForm, type HeroBand } from '../layout.js';
 import { libraryJsonLd, webSiteJsonLd } from './library-json-ld.js';
 import { opacText, type OpacKey } from './messages.js';
 import { opacContext, opacPage, requestLang, type OpacContextSource } from './page.js';
-import { activeMemberCount, latestNews, newTitles, popularTitles, promotedTitles, publicRecordCount, type NewsTeaser, type TitleCard } from './queries.js';
+import {
+  activeMemberCount,
+  latestNews,
+  newTitles,
+  popularTitles,
+  promotedTitles,
+  publicRecordCount,
+  subjectPills,
+  type NewsTeaser,
+  type SubjectPill,
+  type TitleCard,
+} from './queries.js';
 import { pagePath, withLang } from './urls.js';
 
 // The OPAC home page (Phase 2 Task 21; spec §9.1, §9.4; S14, M4), `GET /`: the library's name and welcome text, a
@@ -21,6 +40,10 @@ export const HOME_NEWS = 3;
 // ---- Komunitas (OPAC home page) ----
 /** The popular titles shown. */
 export const HOME_POPULAR = 10;
+/** At most this many subject pills above a list of titles. */
+export const HOME_PILLS = 6;
+/** The classes shown in the loans per class. */
+export const HOME_CLASSES = 3;
 /** A news summary is cut to this many characters on the home page. */
 const SUMMARY_MAX = 280;
 
@@ -48,8 +71,40 @@ function dateText(ms: number, locale: Locale, timeZone: string): string {
   }
 }
 
-function Card(props: { card: TitleCard; lang: Locale | null }) {
-  const { card, lang } = props;
+/** A title's availability as words (the status colour only repeats them); nothing for a title without copies. */
+function Availability(props: { card: TitleCard; locale: Locale }) {
+  const { card, locale } = props;
+  if (card.availability === null) return null;
+  return card.availability === 'available' ? (
+    <span class="status status-ok card-status">{opacText(locale, 'home.card.available')}</span>
+  ) : (
+    <span class="status status-muted card-status">{opacText(locale, 'home.card.unavailable')}</span>
+  );
+}
+
+/** The subject pills above a list of titles: each links to the search for that subject and says its titles. */
+function SubjectPills(props: { pills: readonly SubjectPill[]; locale: Locale; lang: Locale | null }) {
+  const { pills, locale, lang } = props;
+  if (pills.length === 0) return null;
+  return (
+    <ul class="subject-pills" aria-label={opacText(locale, 'home.pills.label')}>
+      {pills.map((p) => (
+        <li>
+          <a href={keep(`/cari?subjek=${encodeURIComponent(p.id)}`, lang)}>
+            {p.term}
+            <span class="pill-count" aria-hidden="true">
+              {countText(p.titles, locale)}
+            </span>
+            <span class="visually-hidden">{` (${opacText(locale, p.titles === 1 ? 'home.pills.count_one' : 'home.pills.count', { count: countText(p.titles, locale) })})`}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Card(props: { card: TitleCard; locale: Locale; lang: Locale | null }) {
+  const { card, locale, lang } = props;
   return (
     <li class="card">
       {card.coverFileId === null ? (
@@ -64,19 +119,21 @@ function Card(props: { card: TitleCard; lang: Locale | null }) {
         </a>
         {card.mainAgent === null ? null : <span class="card-meta">{card.mainAgent}</span>}
         {card.year === null ? null : <span class="card-meta">{card.year}</span>}
+        <Availability card={card} locale={locale} />
       </span>
     </li>
   );
 }
 
-function Titles(props: { id: string; heading: string; cards: readonly TitleCard[]; lang: Locale | null }) {
+function Titles(props: { id: string; heading: string; cards: readonly TitleCard[]; pills?: readonly SubjectPill[]; locale: Locale; lang: Locale | null }) {
   if (props.cards.length === 0) return null;
   return (
     <section class="home-section" aria-labelledby={props.id}>
       <h2 id={props.id}>{props.heading}</h2>
+      {props.pills === undefined ? null : <SubjectPills pills={props.pills} locale={props.locale} lang={props.lang} />}
       <ul class="card-grid">
         {props.cards.map((card) => (
-          <Card card={card} lang={props.lang} />
+          <Card card={card} locale={props.locale} lang={props.lang} />
         ))}
       </ul>
     </section>
@@ -141,25 +198,39 @@ function countText(n: number, locale: Locale): string {
 /** The local path of a stored photo. */
 const fileSrc = (fileId: string): string => `/files/${encodeURIComponent(fileId)}`;
 
-/** The page's search card, floating at the hero's lower edge: the search form and the number of titles. */
-function SearchCard(props: { locale: Locale; lang: Locale | null; titles: number }) {
-  const { locale, lang, titles } = props;
+/**
+ * The page's search card, floating at the hero's lower edge: the search form, the number of titles and today's hours,
+ * or that the library is closed today (`closed`: a closed day of the library calendar).
+ */
+function SearchCard(props: { locale: Locale; lang: Locale | null; titles: number; today: readonly OpacHomeHours[]; closed: boolean }) {
+  const { locale, lang, titles, today, closed } = props;
+  const facts: string[] = [];
+  if (titles > 0) facts.push(opacText(locale, 'home.search.titles', { count: countText(titles, locale) }));
+  if (closed) facts.push(opacText(locale, 'home.search.closed_today'));
+  else if (today.length > 0) facts.push(opacText(locale, 'home.search.today', { time: today.map((h) => h.time).join(', ') }));
   return (
     <div class="home-search">
       <SearchForm locale={locale} lang={lang} id="cari-beranda" hero />
-      {titles > 0 ? <p class="home-search-meta">{opacText(locale, 'home.search.titles', { count: countText(titles, locale) })}</p> : null}
+      {facts.length === 0 ? null : (
+        <p class="home-search-meta">
+          {facts.map((f) => (
+            <span>{f}</span>
+          ))}
+        </p>
+      )}
     </div>
   );
 }
 
-/** The popular titles: a numbered list, the most lent first; no count and no borrower. */
-function Popular(props: { cards: readonly TitleCard[]; locale: Locale; lang: Locale | null }) {
+/** The popular titles: a numbered list, the most lent first, with their availability; no count and no borrower. */
+function Popular(props: { cards: readonly TitleCard[]; pills: readonly SubjectPill[]; locale: Locale; lang: Locale | null }) {
   const { cards, locale, lang } = props;
   if (cards.length === 0) return null;
   return (
     <section class="home-section" aria-labelledby="judul-populer">
       <h2 id="judul-populer">{opacText(locale, 'home.popular.title')}</h2>
       <p class="section-note">{opacText(locale, 'home.popular.note')}</p>
+      <SubjectPills pills={props.pills} locale={locale} lang={lang} />
       <ol class="popular-list">
         {cards.map((card) => (
           <li>
@@ -168,6 +239,7 @@ function Popular(props: { cards: readonly TitleCard[]; locale: Locale; lang: Loc
               {card.subtitle === null || card.subtitle.trim() === '' ? null : <span class="card-subtitle">: {card.subtitle}</span>}
             </a>
             {card.mainAgent === null ? null : <span class="card-meta">{card.mainAgent}</span>}
+            <Availability card={card} locale={locale} />
           </li>
         ))}
       </ol>
@@ -189,12 +261,12 @@ function Figure(props: { photo: OpacHomePhoto; contentLang: Locale | undefined }
   );
 }
 
-/** "About the library": its photo, its paragraph and the facts (each fact only when known). */
+/** "About the library": its photo, its paragraph (the page's language, else the other) and the facts (each when known). */
 function About(props: { home: OpacHomeContent; titles: number; members: number; locale: Locale; contentLang: Locale | undefined }) {
   const { home, titles, members, locale, contentLang } = props;
-  const { text, photo, founded, librarians } = home.about;
-  const hasText = text !== null && text !== '';
-  if (!hasText && photo === null && founded === null && librarians === null) return null;
+  const { photo, founded, librarians } = home.about;
+  const text = opacHomeTextIn(home.about.text, locale);
+  if (text === null && photo === null && founded === null && librarians === null) return null;
   const facts: [label: string, value: string][] = [];
   if (founded !== null) facts.push([opacText(locale, 'home.fact.founded'), String(founded)]);
   if (titles > 0) facts.push([opacText(locale, 'home.fact.titles'), opacText(locale, 'home.fact.titles_value', { count: countText(titles, locale) })]);
@@ -208,11 +280,11 @@ function About(props: { home: OpacHomeContent; titles: number; members: number; 
         {photo === null ? null : <Figure photo={photo} contentLang={contentLang} />}
         <div class="about-body">
           <h2 id="tentang-judul">{opacText(locale, 'home.about.title')}</h2>
-          {hasText ? (
-            <p class="about-text" lang={contentLang}>
-              {text}
+          {text === null ? null : (
+            <p class="about-text" lang={text.lang === locale ? undefined : text.lang}>
+              {text.text}
             </p>
-          ) : null}
+          )}
           {facts.length === 0 ? null : (
             <dl class="facts" aria-label={opacText(locale, 'home.about.facts')}>
               {facts.map(([label, value]) => (
@@ -260,9 +332,12 @@ function Services(props: { home: OpacHomeContent; locale: Locale; contentLang: L
   );
 }
 
-/** The visit block: the library's address and its opening hours. */
-function Visit(props: { address: string | null; home: OpacHomeContent; locale: Locale; contentLang: Locale | undefined }) {
-  const { home, locale, contentLang } = props;
+/**
+ * The visit block: the library's address and its opening hours, today's row (by its weekdays) in bold and named so; on
+ * a day the library calendar closes (`weekday` null), no row is today's and the block says the library is closed.
+ */
+function Visit(props: { address: string | null; home: OpacHomeContent; weekday: number | null; locale: Locale; contentLang: Locale | undefined }) {
+  const { home, weekday, locale, contentLang } = props;
   const address = props.address === null || props.address.trim() === '' ? null : props.address;
   if (address === null && home.hours.length === 0) return null;
   return (
@@ -280,6 +355,7 @@ function Visit(props: { address: string | null; home: OpacHomeContent; locale: L
         {home.hours.length === 0 ? null : (
           <div class="visit-block">
             <h3 id="jam-buka">{opacText(locale, 'home.visit.hours')}</h3>
+            {weekday === null ? <p class="section-note">{opacText(locale, 'home.visit.closed_today')}</p> : null}
             <table class="hours" aria-labelledby="jam-buka">
               <thead class="visually-hidden">
                 <tr>
@@ -288,12 +364,21 @@ function Visit(props: { address: string | null; home: OpacHomeContent; locale: L
                 </tr>
               </thead>
               <tbody lang={contentLang}>
-                {home.hours.map((h) => (
-                  <tr>
-                    <th scope="row">{h.days}</th>
-                    <td>{h.time}</td>
-                  </tr>
-                ))}
+                {home.hours.map((h) =>
+                  weekday !== null && h.weekdays.includes(weekday) ? (
+                    <tr class="today">
+                      <th scope="row">
+                        {h.days} <span lang={locale}>({opacText(locale, 'home.visit.today')})</span>
+                      </th>
+                      <td>{h.time}</td>
+                    </tr>
+                  ) : (
+                    <tr>
+                      <th scope="row">{h.days}</th>
+                      <td>{h.time}</td>
+                    </tr>
+                  ),
+                )}
               </tbody>
             </table>
           </div>
@@ -303,16 +388,60 @@ function Visit(props: { address: string | null; home: OpacHomeContent; locale: L
   );
 }
 
-/** The hero band of `home`: its photo (if any), its heading (else the library's name) and the welcome text. */
-function heroOf(home: OpacHomeContent, libraryName: string, welcome: string | null): HeroBand {
-  const title = home.title === null || home.title.trim() === '' ? libraryName : home.title;
+/** The loans per class: the first classes of the aggregate, each with its place and counts; no member. */
+function ReadingClasses(props: { classes: readonly ClassActivity[]; locale: Locale }) {
+  const { classes, locale } = props;
+  if (classes.length === 0) return null;
+  return (
+    <section class="home-section" aria-labelledby="kelas-rajin">
+      <h2 id="kelas-rajin">{opacText(locale, 'home.classes.title')}</h2>
+      <p class="section-note">{opacText(locale, 'home.classes.note')}</p>
+      <ol class="class-ranking">
+        {classes.map((c) => (
+          <li>
+            <span class="class-place">{opacText(locale, 'home.classes.place', { n: countText(c.place, locale) })}</span>
+            <span class="class-label">{c.className}</span>
+            <span class="class-counts">
+              {opacText(locale, c.titles === 1 ? 'home.classes.counts_one' : 'home.classes.counts', { loans: countText(c.loans, locale), titles: countText(c.titles, locale) })}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/** The ISO weekday (1 Monday to 7 Sunday) of a calendar date `YYYY-MM-DD`. */
+function isoWeekday(date: string): number {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return day === 0 ? 7 : day;
+}
+
+/**
+ * The hero band of `home` in `locale`: its photo (if any) under its overlay, the library colour, its heading (the
+ * page's language, else the other, else the library's name) and the welcome text (likewise).
+ */
+function heroOf(home: OpacHomeContent, libraryName: string, welcome: { id: string | null; en: string | null }, locale: Locale): HeroBand {
+  const title = opacHomeTextIn(home.title, locale);
+  const lead = opacHomeTextIn(welcome, locale);
   return {
-    title,
-    lead: welcome === null || welcome.trim() === '' ? null : welcome,
+    title: title === null ? libraryName : title.text,
+    titleLang: title === null || title.lang === locale ? undefined : title.lang,
+    lead: lead === null ? null : lead.text,
+    leadLang: lead === null || lead.lang === locale ? undefined : lead.lang,
     photo:
       home.hero === null
         ? null
-        : { src: fileSrc(home.hero.fileId), alt: home.hero.alt, position: home.hero.position, width: OPAC_HOME_HERO_SIZE.width, height: OPAC_HOME_HERO_SIZE.height },
+        : {
+            src: fileSrc(home.hero.fileId),
+            alt: home.hero.alt,
+            position: home.hero.position,
+            overlay: home.hero.overlay,
+            width: OPAC_HOME_HERO_SIZE.width,
+            height: OPAC_HOME_HERO_SIZE.height,
+          },
+    brand: home.brand,
   };
 }
 
@@ -322,8 +451,9 @@ export async function homeResponse(rc: HomeSource): Promise<Response> {
   const { locale } = ctx;
   const handle = rc.db.db;
   const settings = rc.services.settings;
-  const [welcome, address, newCount, timeZone, stored, libraryLocale] = await Promise.all([
-    settings.get<string | null>(handle, locale === 'id' ? 'opac.welcome.id' : 'opac.welcome.en'),
+  const [welcomeId, welcomeEn, address, newCount, timeZone, stored, libraryLocale] = await Promise.all([
+    settings.get<string | null>(handle, 'opac.welcome.id'),
+    settings.get<string | null>(handle, 'opac.welcome.en'),
     settings.get<string | null>(handle, 'library.address'),
     settings.get<number>(handle, 'opac.newTitlesCount'),
     settings.get<string>(handle, 'library.timezone'),
@@ -338,36 +468,48 @@ export async function homeResponse(rc: HomeSource): Promise<Response> {
   } catch {
     today = localDate('UTC', rc.now);
   }
-  const [fresh, promoted, news, popular, titles, members] = await Promise.all([
+  const [fresh, promoted, news, popular, titles, members, classes, closedDays] = await Promise.all([
     blocks.newTitles ? newTitles(handle, newCount) : [],
     blocks.promoted ? promotedTitles(handle, PROMOTED_MAX) : [],
     blocks.news ? latestNews(handle, rc.now, locale, HOME_NEWS) : [],
     blocks.popular ? popularTitles(handle, HOME_POPULAR) : [],
     publicRecordCount(handle),
     blocks.about ? activeMemberCount(handle, today) : 0,
+    blocks.readingClasses ? topClasses(handle, HOME_CLASSES) : [],
+    blocks.visit ? loadClosedDayRules(handle, null) : [],
   ]);
+  const [popularPills, freshPills] = await subjectPills(
+    handle,
+    [popular.map((c) => c.id), fresh.map((c) => c.id)],
+    HOME_PILLS,
+  );
   const lang = requestLang(rc.c);
   const contentLang = isLocale(libraryLocale) && libraryLocale !== locale ? libraryLocale : undefined;
+  // A day the library calendar closes (a holiday, a break) is nobody's opening day, whatever the hours say.
+  const closedToday = closedBy(closedDays)(today);
+  const weekday = closedToday ? null : isoWeekday(today);
+  const todayHours = weekday === null ? [] : home.hours.filter((h) => h.weekdays.includes(weekday));
   return opacPage(rc, ctx, {
     title: `${ctx.libraryName} · ${t(locale, 'opac.home.title')}`,
     description: opacText(locale, 'shell.home.description', { library: ctx.libraryName }),
     canonicalPath: '/',
     robots: 'index',
     headerSearch: false,
-    hero: heroOf(home, ctx.libraryName, welcome),
+    hero: heroOf(home, ctx.libraryName, { id: welcomeId, en: welcomeEn }, locale),
     openGraph: home.hero === null ? {} : { image: fileSrc(home.hero.fileId) },
     jsonLd: [libraryJsonLd({ name: ctx.libraryName, address, baseUrl: ctx.baseUrl }), webSiteJsonLd({ name: ctx.libraryName, baseUrl: ctx.baseUrl, locale })],
     body: () => (
       <>
-        <SearchCard locale={locale} lang={lang} titles={titles} />
+        <SearchCard locale={locale} lang={lang} titles={titles} today={blocks.visit ? todayHours : []} closed={blocks.visit && closedToday} />
         {blocks.classes ? <Classes locale={locale} lang={lang} /> : null}
-        {blocks.popular ? <Popular cards={popular} locale={locale} lang={lang} /> : null}
-        <Titles id="judul-baru" heading={opacText(locale, 'shell.home.new_titles')} cards={fresh} lang={lang} />
-        <Titles id="judul-unggulan" heading={opacText(locale, 'shell.home.promoted')} cards={promoted} lang={lang} />
+        {blocks.popular ? <Popular cards={popular} pills={popularPills ?? []} locale={locale} lang={lang} /> : null}
+        <Titles id="judul-baru" heading={opacText(locale, 'shell.home.new_titles')} cards={fresh} pills={freshPills ?? []} locale={locale} lang={lang} />
+        <Titles id="judul-unggulan" heading={opacText(locale, 'shell.home.promoted')} cards={promoted} locale={locale} lang={lang} />
         {blocks.about ? <About home={home} titles={titles} members={members} locale={locale} contentLang={contentLang} /> : null}
         {blocks.services ? <Services home={home} locale={locale} contentLang={contentLang} /> : null}
+        {blocks.readingClasses ? <ReadingClasses classes={classes} locale={locale} /> : null}
         <News news={news} locale={locale} lang={lang} timeZone={timeZone} />
-        {blocks.visit ? <Visit address={address} home={home} locale={locale} contentLang={contentLang} /> : null}
+        {blocks.visit ? <Visit address={address} home={home} weekday={weekday} locale={locale} contentLang={contentLang} /> : null}
       </>
     ),
   });

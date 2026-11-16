@@ -1,4 +1,4 @@
-import { isUlid } from '@altis/shared';
+import { ACCRED_GROUPS, isUlid } from '@altis/shared';
 import { MIGRATION_DRY_LIST_KEYS, MIGRATION_MATCH_KEYS, type MigrationSummary } from '@altis/shared/api/catalog/migration';
 import type { RunView } from '@altis/shared/api/catalog/runs';
 import { Link } from '@tanstack/react-router';
@@ -86,6 +86,11 @@ const ReportSummary = z.object({
     .catch(undefined),
   dryLists: z
     .array(z.object({ key: z.enum(MIGRATION_DRY_LIST_KEYS), count, samples: z.array(z.string()).max(20).catch([]) }))
+    .optional()
+    .catch(undefined),
+  // The SLiMS member types the run saw: their names label the member rows of "Cocokkan dengan SLiMS".
+  memberTypes: z
+    .array(z.object({ id: z.string(), name: z.string(), members: count, group: z.enum(ACCRED_GROUPS) }))
     .optional()
     .catch(undefined),
 });
@@ -180,7 +185,11 @@ function UnreadLabel({ kind }: { kind: 'phase3' | 'derived' | undefined }) {
   return <Badge>{t(kind === 'derived' ? 'catalog.migration.report.unread_derived' : 'catalog.migration.report.unread')}</Badge>;
 }
 
-export function ReportView({ run }: { run: RunView }) {
+/**
+ * `unclosed`: the run ended outside its slices (its job cancelled while queued, or dead) and nothing closed it yet: its
+ * counts of the ALTIS tables are still its first stage's, so they are not shown as its result.
+ */
+export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?: boolean }) {
   const t = useT();
   const locale = useLocale();
   const number = new Intl.NumberFormat(locale === 'en' ? 'en' : 'id');
@@ -226,7 +235,7 @@ export function ReportView({ run }: { run: RunView }) {
             </div>
           )}
 
-          <MatchesReport matches={report.matches} collisions={report.memberNoCollisions} />
+          <MatchesReport matches={report.matches} collisions={report.memberNoCollisions} memberTypes={report.memberTypes} />
           <DryListsReport lists={report.dryLists} />
           {report.reconciliation === null ? (
             <NoticeAlert>{t('catalog.migration.report.reconcile_none')}</NoticeAlert>
@@ -287,7 +296,13 @@ export function ReportView({ run }: { run: RunView }) {
             {report.catalogChanges !== undefined && <li>{t('catalog.migration.report.catalog_changes', { count: n(report.catalogChanges) })}</li>}
           </ul>
 
-          {report.targets.length > 0 && (
+          {report.targets.length > 0 && unclosed && !run.dryRun && (
+            <section className="flex flex-col gap-1">
+              <h3 className="text-sm font-semibold">{t('catalog.migration.report.targets')}</h3>
+              <p className="text-sm text-muted-foreground">{t('catalog.migration.report.targets_unclosed')}</p>
+            </section>
+          )}
+          {report.targets.length > 0 && !(unclosed && !run.dryRun) && (
             <ReportTable
               title={t('catalog.migration.report.targets')}
               {...(run.dryRun ? { hint: t('catalog.migration.report.targets_dry') } : {})}

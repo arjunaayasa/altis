@@ -1745,6 +1745,20 @@ export interface OpacPopularTitlesTable {
   refreshed_at: EpochMs;
 }
 
+/**
+ * Class volatile. PK `place` (1 the most loans): the classes whose members borrowed most over the last year, with their
+ * number of loans and of different titles, kept only when enough different members of the class borrowed (rebuilt
+ * daily; no member is stored).
+ */
+export interface OpacClassActivityTable {
+  place: number;
+  /** The class as the loans' snapshot names it (`loans.stat_class_name`). */
+  class_name: string;
+  loans: number;
+  titles: number;
+  refreshed_at: EpochMs;
+}
+
 // ---- Komunitas (member area) ----
 
 /** A title a member marked on the OPAC (0044); PK (`member_id`, `record_id`). */
@@ -1870,6 +1884,8 @@ export interface DB {
   stocktake_unknown_codes: StocktakeUnknownCodesTable;
   // ---- Komunitas (OPAC home page) ----
   opac_popular_titles: OpacPopularTitlesTable;
+  // ---- Komunitas (OPAC home page: loans per class) ----
+  opac_class_activity: OpacClassActivityTable;
   // ---- Komunitas K1 (edition lane) ----
   schema_migrations_edition: SchemaMigrationsEditionTable;
   schema_migrations_edition_lock: SchemaMigrationsEditionLockTable;

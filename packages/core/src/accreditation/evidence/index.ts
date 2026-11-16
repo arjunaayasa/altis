@@ -13,3 +13,5 @@ export {
   evidenceItemsOf,
 } from './checklist.js';
 export type { EvidenceChecklistItem } from './checklist.js';
+// ---- the stocktake minutes as evidence ----
+export { attachMinutesEvidence, listMinutesForEvidence, minutesLinkedAsEvidence, stocktakeBranchOf } from './minutes.js';

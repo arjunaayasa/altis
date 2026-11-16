@@ -7,7 +7,7 @@
 
 export const MIGRATION_ID = {
   'catalog.migration.description':
-    'Pindahkan katalog SLiMS 9 (SLiMS 8 sebisanya) ke ALTIS: data induk, otoritas, cantuman, eksemplar, lampiran, sampul, serta halaman dan berita. Mulailah dengan uji kering: semuanya dibaca, tetapi tidak ada yang ditulis ke katalog.',
+    'Pindahkan data SLiMS 9 (SLiMS 8 sebisanya) ke ALTIS: katalog (data induk, otoritas, cantuman, eksemplar, lampiran, sampul, halaman dan berita), anggota, petugas, kunjungan, sirkulasi, dan riwayat inventarisasi. Mulailah dengan uji kering: semuanya dibaca, tetapi tidak ada yang ditulis.',
   'catalog.migration.loading': 'Memuat migrasi…',
 
   // The wizard's steps.
@@ -48,7 +48,7 @@ export const MIGRATION_ID = {
   'catalog.migration.dump.required': 'Pilih berkas dump SLiMS.',
   'catalog.migration.files.file': 'Arsip berkas lampiran dan sampul (.zip, tidak wajib)',
   'catalog.migration.files.hint':
-    'Zip berisi folder repository/ dan images/docs/ (dan images/content/ bila ada) dari folder SLiMS. Tanpa arsip ini, lampiran dicatat sebagai berkas hilang yang bisa diganti kemudian. Arsip hanya dapat dipilih sebelum uji kering; migrasinya memakai arsip yang sama.',
+    'Zip berisi folder repository/ dan images/docs/ (serta images/content/, images/persons/ berisi foto anggota, dan files/reports/ berisi laporan inventarisasi, bila ada) dari folder SLiMS. Tanpa arsip ini, lampiran dicatat sebagai berkas hilang yang bisa diganti kemudian. Arsip hanya dapat dipilih sebelum uji kering; migrasinya memakai arsip yang sama.',
   'catalog.migration.file.chosen': 'Dipilih: {name} ({size})',
 
   // Step 2: the options.
@@ -148,6 +148,8 @@ export const MIGRATION_ID = {
   'catalog.migration.report.unread': 'Tidak dibaca (belum didukung)',
   'catalog.migration.report.targets': 'Baris di tabel ALTIS',
   'catalog.migration.report.targets_dry': 'Uji kering tidak menulis apa pun ke katalog, jadi jumlahnya tetap.',
+  'catalog.migration.report.targets_unclosed':
+    'Baris yang sudah ditulis proses ini dihitung ulang saat proses ini ditutup (ketika migrasi berikutnya dimulai, atau oleh pemeliharaan harian).',
   'catalog.migration.report.col_target': 'Tabel ALTIS',
   'catalog.migration.report.col_before': 'Sebelum',
   'catalog.migration.report.col_after': 'Sesudah',
@@ -286,9 +288,10 @@ export const MIGRATION_ID = {
   'catalog.migration.people.group_of': 'Kelompok tipe {name}',
   'catalog.migration.people.collisions': '{count} nomor anggota SLiMS bertabrakan setelah dinormalkan (mis. "b 001" dan "B001"). Ubah nomornya di SLiMS lalu jalankan uji kering lagi.',
   'catalog.migration.people.collision_refused': 'Migrasi ditolak: uji kering menemukan nomor anggota yang bertabrakan. Ubah nomornya di SLiMS lalu jalankan uji kering lagi.',
-  'catalog.migration.people.circulation_live': 'ALTIS sudah mencatat sirkulasi sendiri, jadi mode ganti tidak dapat dipakai lagi.',
+  'catalog.migration.people.circulation_live': 'Perpustakaan sudah melayani di ALTIS atau ALTIS sudah mencatat sirkulasi sendiri, jadi mode Ganti tidak dapat dipakai lagi.',
   'catalog.migration.people.matches': 'Cocokkan dengan SLiMS',
-  'catalog.migration.people.matches_hint': 'Setiap angka SLiMS dibandingkan dengan ALTIS. Kolom "terjelaskan" menghitung baris yang dilewati dan dicatat di laporan.',
+  'catalog.migration.people.matches_hint':
+    'Setiap angka SLiMS dibandingkan dengan ALTIS. Kolom "terjelaskan" menghitung baris yang dilewati dan dicatat di laporan, serta yang diubah di ALTIS sendiri sesudah migrasi: pinjaman yang dikembalikan, diperpanjang, atau diubah tanggal kembalinya, denda yang dibayar atau dihapuskan, reservasi yang selesai, dan anggota yang diperpanjang atau diarsipkan. Angka negatif berarti ALTIS sendiri menambah baris ke angka itu.',
   'catalog.migration.people.col_number': 'Angka',
   'catalog.migration.people.col_explained': 'Terjelaskan',
   'catalog.migration.people.col_status': 'Hasil',
@@ -313,11 +316,15 @@ export const MIGRATION_ID = {
   'catalog.migration.people.col_count': 'Jumlah',
   'catalog.migration.people.col_samples': 'Contoh',
   'catalog.migration.people.item_missing_hint': 'Ada pinjaman terbuka yang eksemplarnya tidak akan ada di ALTIS: jalankan dengan mode katalog Selaraskan.',
+  'catalog.migration.people.scope_no_type': 'tanpa tipe SLiMS',
+  'catalog.migration.people.serve_confirm_title': 'Mulai melayani di ALTIS?',
+  'catalog.migration.people.serve_confirm':
+    'Mulai sekarang layanan perpustakaan berjalan di ALTIS: hentikan transaksi di SLiMS. Migrasi ulang masih bisa menambah dan menyelaraskan data, tetapi mode sirkulasi Ganti tidak dapat dipakai lagi. Langkah ini tidak dapat dibatalkan.',
 } as const;
 
 export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.description':
-    'Move a SLiMS 9 catalogue (SLiMS 8 as far as possible) into ALTIS: master data, authorities, records, items, attachments, covers, and pages and news. Start with a dry run: everything is read, but nothing is written to the catalogue.',
+    'Move SLiMS 9 data (SLiMS 8 as far as possible) into ALTIS: the catalogue (master data, authorities, records, items, attachments, covers, pages and news), members, staff, visits, circulation and the stocktake history. Start with a dry run: everything is read, but nothing is written.',
   'catalog.migration.loading': 'Loading the migration…',
 
   'catalog.migration.step': 'Step {n} of 2',
@@ -356,7 +363,7 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.dump.required': 'Choose the SLiMS dump file.',
   'catalog.migration.files.file': 'Archive of attachment and cover files (.zip, optional)',
   'catalog.migration.files.hint':
-    'A zip holding the repository/ and images/docs/ folders (and images/content/ if there is one) of the SLiMS folder. Without it, attachments are recorded as missing files that can be replaced later. The archive can only be chosen before the dry run; the migration uses the same one.',
+    'A zip holding the repository/ and images/docs/ folders (and images/content/, images/persons/ with the member photos and files/reports/ with the stocktake reports, where there are) of the SLiMS folder. Without it, attachments are recorded as missing files that can be replaced later. The archive can only be chosen before the dry run; the migration uses the same one.',
   'catalog.migration.file.chosen': 'Chosen: {name} ({size})',
 
   'catalog.migration.options.title': 'Options',
@@ -450,6 +457,8 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.report.unread': 'Not read (not supported yet)',
   'catalog.migration.report.targets': 'Rows in the ALTIS tables',
   'catalog.migration.report.targets_dry': 'A dry run writes nothing to the catalogue, so the counts stay the same.',
+  'catalog.migration.report.targets_unclosed':
+    'The rows this run has written are counted again once the run is closed (when the next migration starts, or by the daily housekeeping).',
   'catalog.migration.report.col_target': 'ALTIS table',
   'catalog.migration.report.col_before': 'Before',
   'catalog.migration.report.col_after': 'After',
@@ -585,9 +594,10 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.people.group_of': 'Group of type {name}',
   'catalog.migration.people.collisions': '{count} SLiMS member numbers collide once normalised (e.g. "b 001" and "B001"). Change them in SLiMS, then run the dry run again.',
   'catalog.migration.people.collision_refused': 'The migration was refused: the dry run found member numbers that collide. Change them in SLiMS, then run the dry run again.',
-  'catalog.migration.people.circulation_live': 'ALTIS already records circulation of its own, so replace mode can no longer be used.',
+  'catalog.migration.people.circulation_live': 'The library serves in ALTIS, or ALTIS already records circulation of its own, so the Replace mode can no longer be used.',
   'catalog.migration.people.matches': 'Match with SLiMS',
-  'catalog.migration.people.matches_hint': 'Each SLiMS number against ALTIS. The "explained" column counts the rows skipped and listed in the report.',
+  'catalog.migration.people.matches_hint':
+    'Each SLiMS number against ALTIS. The "explained" column counts the rows skipped and listed in the report, and what ALTIS itself changed after the migration: loans returned, renewed or given another due date, fines paid or waived, holds ended, and members extended or archived. A negative number means ALTIS itself added rows to that number.',
   'catalog.migration.people.col_number': 'Number',
   'catalog.migration.people.col_explained': 'Explained',
   'catalog.migration.people.col_status': 'Result',
@@ -603,7 +613,7 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.people.cutover_title': 'Moving from SLiMS',
   'catalog.migration.people.cutover_hint': 'On moving day: stop transactions in SLiMS, take the latest data, run again with the catalogue mode Re-sync, members Re-sync and circulation Replace. "Start serving" turns on once every required item is done.',
   'catalog.migration.people.stocktake_warning': 'Stocktaking is not in this release yet. Finish any stocktake scheduled in SLiMS before moving.',
-  'catalog.migration.people.serving': 'The library serves in ALTIS since {since}.',
+  'catalog.migration.people.serving': 'The library has been serving in ALTIS since {since}.',
   'catalog.migration.people.serve': 'Start serving',
   'catalog.migration.people.serve_held': 'Finish the required items above first.',
   'catalog.migration.people.dry_lists': 'Check before the real run',
@@ -612,4 +622,8 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.people.col_count': 'Count',
   'catalog.migration.people.col_samples': 'Samples',
   'catalog.migration.people.item_missing_hint': 'Some open loans are of items that will not be in ALTIS: run with the catalogue mode Re-sync.',
+  'catalog.migration.people.scope_no_type': 'no SLiMS type',
+  'catalog.migration.people.serve_confirm_title': 'Start serving in ALTIS?',
+  'catalog.migration.people.serve_confirm':
+    'From now on the library serves in ALTIS: stop transactions in SLiMS. A migration run can still add and re-sync data, but the circulation mode Replace can no longer be used. This cannot be undone.',
 };

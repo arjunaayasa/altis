@@ -50,6 +50,15 @@ async function memberRows(ctx: ReportCtx): Promise<ReportRow[]> {
     .map((m) => [m.from, m.member_no_display, m.name]);
 }
 
+/**
+ * The SLiMS code a replaced copy's `status_note` keeps: the migration writes it last, as `SLiMS: <code>`, after the note
+ * of an unknown SLiMS status if there is one (`; ` between them). '' when the note keeps none (an empty SLiMS code).
+ */
+export function slimsCodeOfNote(note: string | null): string {
+  const last = (note ?? '').split('; ').at(-1) ?? '';
+  return last.startsWith('SLiMS: ') ? last.slice('SLiMS: '.length) : '';
+}
+
 /** The migrated copies whose barcode is not their SLiMS code: a `-n` suffix over a code another copy holds, or `MIG<id>`. */
 async function itemRows(ctx: ReportCtx): Promise<ReportRow[]> {
   let q = ctx.db
@@ -75,7 +84,7 @@ async function itemRows(ctx: ReportCtx): Promise<ReportRow[]> {
   const out = found
     .filter((i) => replaced.includes(i) || (suffixed.includes(i) && held.has(normalizeBarcode(SUFFIX.exec(i.barcode_display)![1]!))))
     .map((i): ReportRow => {
-      const from = replaced.includes(i) ? i.status_note : SUFFIX.exec(i.barcode_display)![1]!;
+      const from = replaced.includes(i) ? slimsCodeOfNote(i.status_note) : SUFFIX.exec(i.barcode_display)![1]!;
       return [from, i.barcode_display, i.title];
     });
   return out;

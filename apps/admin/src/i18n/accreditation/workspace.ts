@@ -216,6 +216,20 @@ export const ACCREDITATION_WORKSPACE_ID = {
   'accreditation.workspace.history.range': 'rentang {low}–{high}',
   'accreditation.workspace.history.dossier.download': 'Unduh',
   'accreditation.workspace.history.dossier.none': 'Tidak ada',
+  // ---- the stocktake minutes as evidence ----
+  'accreditation.workspace.evidence.minutes.open': 'Lampirkan berita acara inventarisasi',
+  'accreditation.workspace.evidence.minutes.title': 'Lampirkan berita acara inventarisasi',
+  'accreditation.workspace.evidence.minutes.hint':
+    'Pilih sesi inventarisasi yang sudah selesai. Berita acara yang disimpan ALTIS saat sesi selesai dipakai langsung sebagai bukti, tanpa diunduh dan diunggah ulang.',
+  'accreditation.workspace.evidence.minutes.session': 'Sesi inventarisasi',
+  'accreditation.workspace.evidence.minutes.choose': 'Pilih sesi…',
+  'accreditation.workspace.evidence.minutes.loading': 'Memuat sesi…',
+  'accreditation.workspace.evidence.minutes.option': '{name} · {branch} · selesai {date}',
+  'accreditation.workspace.evidence.minutes.none': 'Belum ada sesi inventarisasi selesai dengan berita acara tersimpan di cabang yang boleh Anda lihat.',
+  'accreditation.workspace.evidence.minutes.caption_hint': 'Kosongkan untuk memakai nama sesi.',
+  'accreditation.workspace.evidence.minutes.required': 'Pilih sesi inventarisasi.',
+  'accreditation.workspace.evidence.minutes.duplicate': 'Berita acara sesi ini sudah dilampirkan di butir ini.',
+  'accreditation.workspace.evidence.minutes.submit': 'Lampirkan',
 } as const;
 
 export const ACCREDITATION_WORKSPACE_EN: Readonly<Record<keyof typeof ACCREDITATION_WORKSPACE_ID, string>> = {
@@ -419,4 +433,18 @@ export const ACCREDITATION_WORKSPACE_EN: Readonly<Record<keyof typeof ACCREDITAT
   'accreditation.workspace.history.range': 'range {low}–{high}',
   'accreditation.workspace.history.dossier.download': 'Download',
   'accreditation.workspace.history.dossier.none': 'None',
+  // ---- the stocktake minutes as evidence ----
+  'accreditation.workspace.evidence.minutes.open': 'Attach stocktake minutes',
+  'accreditation.workspace.evidence.minutes.title': 'Attach stocktake minutes',
+  'accreditation.workspace.evidence.minutes.hint':
+    'Choose a finished stocktake session. The minutes ALTIS stored when the session finished are used as evidence directly, without downloading and uploading them again.',
+  'accreditation.workspace.evidence.minutes.session': 'Stocktake session',
+  'accreditation.workspace.evidence.minutes.choose': 'Choose a session…',
+  'accreditation.workspace.evidence.minutes.loading': 'Loading sessions…',
+  'accreditation.workspace.evidence.minutes.option': '{name} · {branch} · finished {date}',
+  'accreditation.workspace.evidence.minutes.none': 'No finished stocktake session with stored minutes yet at the branches you may see.',
+  'accreditation.workspace.evidence.minutes.caption_hint': 'Leave empty to use the session’s name.',
+  'accreditation.workspace.evidence.minutes.required': 'Choose a stocktake session.',
+  'accreditation.workspace.evidence.minutes.duplicate': 'This session’s minutes are attached to this item already.',
+  'accreditation.workspace.evidence.minutes.submit': 'Attach',
 };

@@ -216,7 +216,7 @@ describe('the exports of a report', { timeout: 20_000 }, () => {
       reportId: DOSSIER.id,
       format: 'zip',
       personal: true,
-      warnings: ['component_over_limit:K:12582912', 'generated_too_large:title_list'],
+      warnings: ['component_over_limit:K:12582912', 'generated_too_large:title_list', 'report_withheld:G4.report_documents'],
     });
     const { writes } = await open(DOSSIER.id, 'Berkas bukti akreditasi', {}, [dossier]);
     expect(screen.getByRole('link', { name: 'Buka ruang Akreditasi' }).getAttribute('href')).toBe('/admin/accreditation');
@@ -226,6 +226,7 @@ describe('the exports of a report', { timeout: 20_000 }, () => {
     const list = runList();
     expect(await within(list).findByText('Komponen K berukuran 12 MB, melebihi batas ukuran per komponen.')).toBeTruthy();
     expect(within(list).getByText('Daftar title_list terlalu panjang untuk dimuat di ZIP; ekspor daftar itu tersendiri.')).toBeTruthy();
+    expect(within(list).getByText('Draf laporan untuk G4.report_documents tidak dimuat di ZIP karena Anda tidak memegang izin laporan itu.')).toBeTruthy();
     expect(writes()).toEqual([]);
   });
 

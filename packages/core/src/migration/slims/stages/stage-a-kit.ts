@@ -5,7 +5,7 @@ import { lookupLegacy, type LegacyMapping } from '../../../catalog/data/legacy-m
 import { cleanText } from '../source/clean-text.js';
 import type { SlimsRow, SlimsTableInfo } from '../source/types.js';
 import type { SlimsFixKind, SlimsReportRow, SlimsStageContext } from '../stage.js';
-import { mappedRows, stateOf } from './stage-b-kit.js';
+import { mappedRows, sourceKeys, stateOf } from './stage-b-kit.js';
 
 // What the stages A of the SLiMS migration share (Phase 2 Task 37: masters, records, relations; spec §11.2–§11.6).
 //
@@ -289,14 +289,27 @@ export async function inBatch(
   });
 }
 
+/** The source table and key column of the entities a dry run checks a key against (a row the source holds). */
+const DRY_SOURCE_KEYS: Readonly<Record<string, readonly [table: string, column: string]>> = Object.freeze({
+  biblio: ['biblio', 'biblio_id'],
+  mst_author: ['mst_author', 'author_id'],
+  mst_topic: ['mst_topic', 'topic_id'],
+});
+
 /**
  * The ids of the legacy rows `keys` of `entity` under the run's source name (S13). In a dry run, which maps nothing, a
- * key not mapped yet stands for a row the run would have made: it answers a placeholder that is never written.
+ * key not mapped yet stands for a row the run would have made: it answers a placeholder that is never written. For a
+ * record, author or topic, only a key the source's own table holds does (the rest, a link SLiMS left behind to a row it
+ * deleted, is an orphan in the dry run as in the real run).
  */
 export async function refsOf(c: SlimsStageContext, io: BatchIo, entity: string, keys: readonly string[]): Promise<Map<string, string>> {
   const wanted = [...new Set(keys.filter(keyFits))];
   const found = wanted.length === 0 ? new Map<string, string>() : await lookupLegacy(io.db, c.options.sourceName, entity, wanted);
-  if (c.dryRun) for (const k of wanted) if (!found.has(k)) found.set(k, `~${entity}:${k}`);
+  if (c.dryRun && wanted.some((k) => !found.has(k))) {
+    const source = DRY_SOURCE_KEYS[entity];
+    const held = source === undefined ? null : await sourceKeys(c, source[0], source[1]);
+    for (const k of wanted) if (!found.has(k) && (held === null || held.has(k))) found.set(k, `~${entity}:${k}`);
+  }
   return found;
 }
 

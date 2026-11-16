@@ -277,8 +277,9 @@ export type MigrationMatchKey = (typeof MIGRATION_MATCH_KEYS)[number];
 
 /**
  * One row of "Cocokkan dengan SLiMS": `scope` narrows it (a member type id, a month `YYYY-MM`, or '' for the whole);
- * `explained` counts the difference a report row of the run explains (skipped rows the report lists); `ok` when the
- * rest is 0 (for `open_loans_item_missing`, when ALTIS's number is 0).
+ * `explained` counts the difference a report row of the run explains (skipped rows the report lists) or ALTIS made
+ * itself since an earlier run (negative when ALTIS added to its number); `ok` when the rest is 0 (for
+ * `open_loans_item_missing`, when ALTIS's number is 0).
  */
 export interface MigrationMatchRow {
   key: MigrationMatchKey;

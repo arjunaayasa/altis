@@ -1138,7 +1138,7 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'jobs.type.catalog.export': 'Export catalogue records',
   'jobs.type.catalog.reindex': 'Rebuild the catalogue search index',
   'jobs.type.catalog.dedupe_scan': 'Scan for duplicate records',
-  'jobs.type.catalog.migrate_slims': 'Migrate a SLiMS catalogue',
+  'jobs.type.catalog.migrate_slims': 'Migrate SLiMS data',
   'jobs.type.catalog.housekeeping': 'Maintain the catalogue',
   'jobs.schedule.catalog.housekeeping': 'Daily catalogue upkeep',
   ...CATALOG_EN,

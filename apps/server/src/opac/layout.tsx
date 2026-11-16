@@ -1,6 +1,7 @@
 import { sha256hex } from '@altis/core';
 import { DEFAULT_ACCENT, OPAC_CSS, isAccent } from '@altis/opac-theme';
 import { COMMUNITY_SOURCE_URL, LOCALES, t, type Locale } from '@altis/shared';
+import { OPAC_HOME_OVERLAY, brandRgb } from '@altis/shared/api/opac-home';
 import type { Child, PropsWithChildren } from 'hono/jsx';
 import { opacText } from './catalog/messages.js';
 
@@ -8,9 +9,10 @@ import { opacText } from './catalog/messages.js';
 // head, a skip link to the content, a header with the library name, the language switch and (for the catalogue's
 // pages) the menu and a search form, a footer with the staff sign-in and the link to the source code (AGPL-3.0
 // section 13: the users of a network service are offered its source). Text goes through JSX, which escapes it, and
-// there is no inline script, style or event handler: the stylesheet is the one @altis/opac-theme file under a content
-// hash, so the CSP needs no `unsafe-inline`; a JSON-LD script carries the response's nonce (catalog/page.tsx), which
-// is also in `<meta name="csp-nonce">` like the admin's index.html.
+// there is no inline script, style attribute or event handler: the stylesheet is the one @altis/opac-theme file under
+// a content hash, so the CSP needs no `unsafe-inline`; a JSON-LD script carries the response's nonce (catalog/page.tsx),
+// which is also in `<meta name="csp-nonce">` like the admin's index.html. The one style element, the home page's
+// library colour, carries that nonce too and holds a colour rebuilt from its six hex digits, nothing else.
 
 /** The first 10 hex digits of the SHA-256 of OPAC_CSS, computed once at module load (M30). */
 export const OPAC_CSS_HASH: string = sha256hex(OPAC_CSS).slice(0, 10);
@@ -20,6 +22,12 @@ export const OPAC_CSS_FILE = `opac-${OPAC_CSS_HASH}.css`;
 
 /** The id of `<main>`, the skip link's target. */
 export const MAIN_ID = 'isi';
+
+/**
+ * The page icon: an empty `data:` URL (the CSP's `img-src` allows `data:`). Without an icon link a browser asks for
+ * `/favicon.ico`, which ALTIS does not serve, and logs the 404 as an error on every first page load.
+ */
+export const NO_ICON = 'data:,';
 
 /** One link of the menu: a local path and its label (`lang` when the label is not in the page's language). */
 export interface FrameLink {
@@ -53,16 +61,38 @@ export interface PageFrame {
  */
 export interface HeroBand {
   title: string;
+  /** The heading's language when it is not the page's (the other language's text shown in its place). */
+  titleLang?: Locale | undefined;
   /** The lead sentence (line breaks kept), or null. */
   lead: string | null;
-  /** A local path (`/files/<id>`), its alternative text and its vertical position (0-100, steps of 10); null: none. */
-  photo: { src: string; alt: string; position: number; width: number; height: number } | null;
+  /** The lead's language when it is not the page's. */
+  leadLang?: Locale | undefined;
+  /**
+   * A local path (`/files/<id>`), its alternative text, its vertical position (0-100, steps of 10) and the darkness of
+   * its overlay (percent, 60-80 in steps of 5); null: none.
+   */
+  photo: { src: string; alt: string; position: number; overlay: number; width: number; height: number } | null;
+  /** The band's colour without a photo (`#rrggbb`); null: the accent's. */
+  brand?: string | null | undefined;
 }
 
 /** The position class of a photo: its position rounded to a step of 10 within 0-100. */
 function heroPosition(position: number): number {
   const p = Number.isFinite(position) ? Math.round(position / 10) * 10 : 50;
   return Math.min(100, Math.max(0, p));
+}
+
+/** The overlay class of a photo: its darkness rounded to a step within the setting's range (never under its floor). */
+function heroOverlay(overlay: number): number {
+  const { min, max, step } = OPAC_HOME_OVERLAY;
+  const o = Number.isFinite(overlay) ? Math.round(overlay / step) * step : OPAC_HOME_OVERLAY.default;
+  return Math.min(max, Math.max(min, o));
+}
+
+/** The library colour as the style element writes it: rebuilt from its channels; null when it is not a `#rrggbb`. */
+function brandColor(value: string | null | undefined): string | null {
+  const rgb = brandRgb(value);
+  return rgb === null ? null : `#${rgb.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
 }
 
 /** What every `render*` function takes besides its own fields. */
@@ -145,7 +175,9 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
   const search = frame?.search ?? null;
   // ---- Komunitas (OPAC home page) ----
   const hero = props.hero;
-  const headerClass = hero === undefined ? 'site-header' : hero.photo === null ? 'site-header hero-band' : 'site-header hero-band hero-photo';
+  const headerClass =
+    hero === undefined ? 'site-header' : hero.photo === null ? 'site-header hero-band' : `site-header hero-band hero-photo hero-ov-${heroOverlay(hero.photo.overlay)}`;
+  const brand = hero === undefined ? null : brandColor(hero.brand);
   return (
     <html lang={locale} data-accent={accent}>
       <head>
@@ -157,7 +189,9 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
         {robots === undefined ? null : <meta name="robots" content={robots} />}
         {refresh === undefined ? null : <meta http-equiv="refresh" content={String(refresh)} />}
         <title>{title}</title>
+        <link rel="icon" href={NO_ICON} />
         <link rel="stylesheet" href={`/assets/${OPAC_CSS_FILE}`} />
+        {brand === null ? null : <style nonce={nonce}>{`.hero-band{--hero-bg:${brand}}`}</style>}
         {props.head ?? null}
       </head>
       <body>
@@ -211,8 +245,12 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
           )}
           {hero === undefined ? null : (
             <div class="hero-text">
-              <h1>{hero.title}</h1>
-              {hero.lead === null ? null : <p class="hero-lead">{hero.lead}</p>}
+              <h1 lang={hero.titleLang}>{hero.title}</h1>
+              {hero.lead === null ? null : (
+                <p class="hero-lead" lang={hero.leadLang}>
+                  {hero.lead}
+                </p>
+              )}
             </div>
           )}
         </header>

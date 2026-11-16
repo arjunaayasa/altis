@@ -3,6 +3,7 @@ import {
   cancelStocktake,
   createJobRegistry,
   createStocktake,
+  fileResponseHeaders,
   finishStocktake,
   getStocktake,
   listStocktakeItems,
@@ -12,6 +13,8 @@ import {
   scanStocktake,
   stocktakeMinutes,
   stocktakeOfficers,
+  stocktakeSlimsReport,
+  STOCKTAKE_SLIMS_REPORT_MIME,
   assertStocktakeOfBranch,
   undoStocktakeScan,
   uploadStocktakeCodes,
@@ -59,6 +62,11 @@ import { jobHandlers } from '../jobs/runtime.js';
 //   POST   branches/:branchId/stocktakes/:id/cancel                   → StocktakeActionResponse        sessions.manage   stocktake.session.cancel
 //   GET    branches/:branchId/stocktakes/:id/minutes                  → application/pdf (mode system: a download): the
 //                                                                       file stored at the finish, else built now
+//   GET    branches/:branchId/stocktakes/:id/slims-report             → the report file SLiMS wrote for a migrated
+//                                                                       session (mode system: a download), 404 without
+//                                                                       one; an HTML page of another system, so always
+//                                                                       an attachment of an opaque type, sandboxed,
+//                                                                       never sniffed
 //
 // A session named by id must be of the branch in the path; any other is 404, as one that does not exist.
 
@@ -299,4 +307,25 @@ const minutes = route({
   },
 });
 
-export const STOCKTAKE_ROUTES: RouteDecl[] = [list, create, get, items, unknownCodes, officers, scan, undo, upload, finish, cancel, minutes];
+// ---- the SLiMS report of a migrated session ----
+const slimsReport = route({
+  id: 'stocktake.sessions.slims_report',
+  method: 'GET',
+  path: `${API}/:id/slims-report`,
+  permission: 'stocktake.scan.use',
+  branchParam: 'branchId',
+  mode: 'system',
+  idempotency: 'none',
+  audit: null,
+  params: IdParams,
+  handler: async (rc) => {
+    const report = await stocktakeSlimsReport(rc.db.db, localStorageDriver(rc.services.dataDir), rc.params.branchId, rc.params.id);
+    // Never `text/html`: the bytes are served as an opaque attachment (fileResponseHeaders: sandboxed, nosniff).
+    const headers = fileResponseHeaders({ originalName: report.name, mime: STOCKTAKE_SLIMS_REPORT_MIME, size: report.size });
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of report.content) chunks.push(chunk);
+    return new Response(Buffer.concat(chunks), { status: 200, headers });
+  },
+});
+
+export const STOCKTAKE_ROUTES: RouteDecl[] = [list, create, get, items, unknownCodes, officers, scan, undo, upload, finish, cancel, minutes, slimsReport];

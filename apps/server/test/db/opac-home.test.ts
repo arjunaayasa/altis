@@ -1,7 +1,7 @@
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createSettingsCache, indexRecords, refreshPopularTitles, writeSettings } from '@altis/core';
+import { createSettingsCache, indexRecords, refreshClassActivity, refreshPopularTitles, writeSettings } from '@altis/core';
 import { PHASE1_MIGRATIONS, runMigrations, withTx } from '@altis/db';
 import { newId, normalizeKey } from '@altis/shared';
 import { OPAC_HOME_DEFAULT, type OpacHomeContent } from '@altis/shared/api/opac-home';
@@ -13,10 +13,12 @@ import { createAgent, type AgentReply } from '../agent.js';
 import { recordingLogger, sampleConfig } from '../support.js';
 
 // The OPAC home page as the library's profile site, through the app on the engine picked by ALTIS_TEST_DB: the hero
-// band (the photo under its overlay, or the library colour), the floating search card, the profile blocks shown only
-// with content and while switched on, the library's texts escaped and marked with its language, and the popular titles
-// from their aggregate. No borrower datum reaches the page or the "most borrowed" search: not a member's name, number
-// or id, and no loan count.
+// band (the photo under its overlay of the chosen darkness, or the library colour), the floating search card with
+// today's hours, the profile blocks shown only with content and while switched on, the texts per language with the
+// other language as fallback, escaped and marked with their language, the subject pills and availability of the title
+// lists, today's row of the opening hours, the popular titles from their aggregate, and the loans per class (off by
+// default, a class only with five borrowers). No borrower datum reaches the page or the "most borrowed" search: not a
+// member's name, number or id, and no loan count of a title.
 
 const ctx = testDbContext();
 const NOW = Date.UTC(2026, 10, 15, 5, 0, 0);
@@ -43,6 +45,11 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
   const borrowers: { id: string; no: string; name: string }[] = [];
   let photoId = '';
   let aboutPhotoId = '';
+  let subjectId = '';
+  const records: string[] = [];
+  const itemIds: string[] = [];
+  let branchId = '';
+  let siswa = '';
 
   async function setSettings(patch: Record<string, unknown>): Promise<void> {
     await withTx(h, (trx) => writeSettings(trx, patch, { keyring: CONFIG.keyring, now: NOW, actorId: null }).then(() => undefined));
@@ -58,8 +65,8 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     const db = h.db;
     const buku = (await db.selectFrom('material_types').select('id').where('code_key', '=', 'BUKU').executeTakeFirstOrThrow()).id;
     const umum = (await db.selectFrom('collection_types').select('id').where('code_key', '=', 'UMUM').executeTakeFirstOrThrow()).id;
-    const siswa = (await db.selectFrom('member_types').select('id').where('code_key', '=', 'SISWA').executeTakeFirstOrThrow()).id;
-    const branchId = newId(NOW);
+    siswa = (await db.selectFrom('member_types').select('id').where('code_key', '=', 'SISWA').executeTakeFirstOrThrow()).id;
+    branchId = newId(NOW);
     await db.insertInto('branches').values({ id: branchId, code_key: 'POP', code_display: 'POP', name: 'Cabang', timezone: 'Asia/Jakarta', created_at: NOW, updated_at: NOW }).execute();
     for (let i = 0; i < 3; i += 1) {
       const id = newId(NOW);
@@ -84,7 +91,11 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
         .execute();
       borrowers.push({ id, no, name });
     }
-    const records: string[] = [];
+    subjectId = newId(NOW);
+    await db
+      .insertInto('subjects')
+      .values({ id: subjectId, type: 'topic', term_display: 'Novel <Indonesia>', term_key: 'novel indonesia', classification: null, scope_note: null, authority_source: null, merged_into: null, archived_at: null, created_at: NOW, created_by: null, updated_at: NOW, updated_by: null })
+      .execute();
     for (const title of ['Laskar Pelangi', 'Bumi Manusia']) {
       const id = newId(NOW);
       await db.insertInto('records').values({ id, material_type_id: buku, title, title_key: title.toLowerCase(), source: 'manual', changed_at: NOW, created_at: NOW, updated_at: NOW }).execute();
@@ -93,7 +104,9 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
         .insertInto('items')
         .values({ id: itemId, record_id: id, branch_id: branchId, barcode_display: `B-${title.length}`, barcode_key: `B-${title.length}`, collection_type_id: umum, status: 'available', currency: 'IDR', created_at: NOW, updated_at: NOW })
         .execute();
+      await db.insertInto('record_subjects').values({ record_id: id, subject_id: subjectId }).execute();
       records.push(id);
+      itemIds.push(itemId);
       if (title !== 'Bumi Manusia') continue;
       // Bumi Manusia: three borrowers, four loans in the last month.
       for (const [k, b] of [0, 1, 2, 0].entries()) {
@@ -184,15 +197,24 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
   it('with a profile: the photo under the overlay with its alt text and position, the heading, about with its facts, the services and photos, the hours; texts escaped', async () => {
     await setHome({
       ...OPAC_HOME_DEFAULT,
-      title: 'Ruang baca <untuk> semua',
-      hero: { fileId: photoId, alt: 'Gedung "B" perpustakaan', position: 40 },
-      about: { text: 'Berdiri sejak 1987.\nMelayani siswa & guru.', photo: { fileId: aboutPhotoId, alt: 'Ruang baca', caption: 'Lantai 1' }, founded: 1987, librarians: 3 },
+      title: { id: 'Ruang baca <untuk> semua', en: null },
+      hero: { fileId: photoId, alt: 'Gedung "B" perpustakaan', position: 40, overlay: 70 },
+      about: {
+        text: { id: 'Berdiri sejak 1987.\nMelayani siswa & guru.', en: 'Founded in 1987.' },
+        photo: { fileId: aboutPhotoId, alt: 'Ruang baca', caption: 'Lantai 1' },
+        founded: 1987,
+        librarians: 3,
+      },
       services: [{ title: 'Peminjaman <buku>', text: 'Bawa kartu anggota.' }],
       facilities: [],
-      hours: [{ days: 'Senin–Jumat', time: '07.00–15.00' }],
+      // NOW is Sunday 15 November 2026 in the library's time zone.
+      hours: [
+        { days: 'Senin–Jumat', time: '07.00–15.00', weekdays: [1, 2, 3, 4, 5] },
+        { days: 'Minggu', time: 'Tutup', weekdays: [7] },
+      ],
     });
     const html = (await get('/')).text;
-    expect(html).toContain('<header class="site-header hero-band hero-photo">');
+    expect(html).toContain('<header class="site-header hero-band hero-photo hero-ov-70">');
     expect(html).toContain(`<img class="hero-img hero-pos-40" src="/files/${photoId}" alt="Gedung &quot;B&quot; perpustakaan" width="1600" height="900" decoding="async"/>`);
     expect(html).toContain('<h1>Ruang baca &lt;untuk&gt; semua</h1>');
     expect(html).toContain('<meta property="og:image" content="');
@@ -204,15 +226,115 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     expect(about).toContain(`<dt>${opacText('id', 'home.fact.members')}</dt><dd>3</dd>`);
     expect(about).toContain(`<dd>${opacText('id', 'home.fact.librarians_value', { count: '3' })}</dd>`);
     expect(section(html, 'layanan-judul')).toContain('<h3>Peminjaman &lt;buku&gt;</h3>');
-    expect(section(html, 'kunjungi-judul')).toContain('<th scope="row">Senin–Jumat</th><td>07.00–15.00</td>');
+    const visit = section(html, 'kunjungi-judul')!;
+    expect(visit).toContain('<tr><th scope="row">Senin–Jumat</th><td>07.00–15.00</td></tr>');
+    // Today's row in bold (its class) and named so in words.
+    expect(visit).toContain(`<tr class="today"><th scope="row">Minggu <span lang="id">(${opacText('id', 'home.visit.today')})</span></th><td>Tutup</td></tr>`);
+    expect(html).toContain(`<span>${esc(opacText('id', 'home.search.today', { time: 'Tutup' }))}</span>`);
     expect(html).not.toContain('<untuk>');
     expect(html).not.toContain('<buku>');
     expect(html).not.toContain('style=');
+    expect(html).not.toContain('<style');
 
-    // In English, the library's own texts carry their language.
+    // In English: the English paragraph; the heading and lead have none, so the Indonesian ones show, marked so; the
+    // library's own texts carry their language.
     const en = (await get('/?lang=en')).text;
-    expect(en).toContain('<p class="about-text" lang="id">');
+    expect(en).toContain('<h1 lang="id">Ruang baca &lt;untuk&gt; semua</h1>');
+    expect(en).toContain('<p class="hero-lead" lang="id">Cari buku &lt;di&gt; katalog.</p>');
+    expect(en).toContain('<p class="about-text">Founded in 1987.</p>');
     expect(en).toContain('<ul class="service-list" lang="id">');
+    expect(en).toContain(`<span lang="en">(${opacText('en', 'home.visit.today')})</span>`);
+  });
+
+  it('a day the library calendar closes: no row of the hours is today\'s and no time is given for today; the page says it is closed', async () => {
+    const before = (await h.db.selectFrom('settings').select('value').where('key', '=', 'opac.home').executeTakeFirst())?.value ?? null;
+    await setHome({
+      ...OPAC_HOME_DEFAULT,
+      hours: [
+        { days: 'Senin–Sabtu', time: '07.00–15.00', weekdays: [1, 2, 3, 4, 5, 6] },
+        { days: 'Minggu', time: '08.00–12.00', weekdays: [7] },
+      ],
+    });
+    const open = (await get('/')).text;
+    expect(open).toContain(esc(opacText('id', 'home.search.today', { time: '08.00–12.00' })));
+    expect(open).not.toContain(esc(opacText('id', 'home.search.closed_today')));
+    // A holiday covering NOW (Sunday 15 November 2026 in the library's time zone).
+    const holiday = newId(NOW);
+    await h.db
+      .insertInto('calendars')
+      .values({ id: holiday, branch_id: null, kind: 'dates', weekday: null, date_from: '2026-11-14', date_to: '2026-11-16', month_day_from: null, month_day_to: null, name: 'Libur semester', archived_at: null, created_at: NOW, created_by: null, updated_at: NOW, updated_by: null })
+      .execute();
+    try {
+      for (const locale of ['id', 'en'] as const) {
+        const html = (await get(locale === 'id' ? '/' : '/?lang=en')).text;
+        expect(html, locale).not.toContain(esc(opacText(locale, 'home.search.today', { time: '08.00–12.00' })));
+        expect(html, locale).toContain(`<span>${esc(opacText(locale, 'home.search.closed_today'))}</span>`);
+        const visit = section(html, 'kunjungi-judul')!;
+        expect(visit, locale).not.toContain('class="today"');
+        expect(visit, locale).toContain(esc(opacText(locale, 'home.visit.closed_today')));
+        expect(visit, locale).toContain('<tr><th scope="row">Minggu</th><td>08.00–12.00</td></tr>');
+      }
+    } finally {
+      await h.db.deleteFrom('calendars').where('id', '=', holiday).execute();
+      if (before !== null) await setSettings({ 'opac.home': JSON.parse(before) as unknown });
+    }
+  });
+
+  it('the overlay never lighter than its floor; the library colour without a photo as a nonce style of six hex digits, nothing else', async () => {
+    const stored = (await h.db.selectFrom('settings').select('value').where('key', '=', 'opac.home').executeTakeFirstOrThrow()).value!;
+    const home = JSON.parse(stored) as OpacHomeContent;
+    try {
+      // A row edited by hand to a lighter overlay is refused as a whole (the page falls back to the default content).
+      await h.db.updateTable('settings').set({ value: JSON.stringify({ ...home, hero: { ...home.hero, overlay: 40 } }) }).where('key', '=', 'opac.home').execute();
+      let html = (await get('/')).text;
+      expect(html).not.toContain('hero-ov-40');
+      expect(html).toContain('<header class="site-header hero-band">');
+
+      await setHome({ ...home, hero: null, brand: '#1E3A8A' });
+      const reply = await get('/');
+      html = reply.text;
+      const nonce = /<meta name="csp-nonce" content="([^"]+)"/.exec(html)?.[1];
+      expect(nonce).toBeDefined();
+      expect(html).toContain(`<style nonce="${nonce}">.hero-band{--hero-bg:#1e3a8a}</style>`);
+      expect(reply.headers.get('content-security-policy')).toContain(`style-src 'self' 'nonce-${nonce}'`);
+      expect(html).not.toContain('style=');
+
+      // Anything else in the row is no colour: the whole content falls back, and no style element is written.
+      await h.db
+        .updateTable('settings')
+        .set({ value: JSON.stringify({ ...home, hero: null, brand: '#000;}body{display:none' }) })
+        .where('key', '=', 'opac.home')
+        .execute();
+      html = (await get('/')).text;
+      expect(html).not.toContain('<style');
+      expect(html).not.toContain('display:none');
+    } finally {
+      await setHome(home);
+    }
+  });
+
+  it('the subject pills above the new titles with their number of titles, and each card says its availability in words', async () => {
+    const html = (await get('/')).text;
+    const fresh = section(html, 'judul-baru')!;
+    expect(fresh).toContain(`<ul class="subject-pills" aria-label="${esc(opacText('id', 'home.pills.label'))}">`);
+    expect(fresh).toContain(`<a href="/cari?subjek=${subjectId}">Novel &lt;Indonesia&gt;<span class="pill-count" aria-hidden="true">2</span>`);
+    expect(fresh.split(opacText('id', 'home.card.available')).length - 1).toBe(2);
+    // The popular list carries the same pills and words.
+    const popular = section(html, 'judul-populer')!;
+    expect(popular).toContain('class="subject-pills"');
+    expect(popular).toContain(`<span class="status status-ok card-status">${esc(opacText('id', 'home.card.available'))}</span>`);
+
+    // A copy under repair: the title has a copy, but none on the shelf.
+    await h.db.updateTable('items').set({ status: 'repair' }).where('id', '=', itemIds[0]!).execute();
+    await withTx(h, (trx) => indexRecords(trx, records, NOW));
+    try {
+      const after = section((await get('/?lang=en')).text, 'judul-baru')!;
+      expect(after).toContain(`<span class="status status-muted card-status">${esc(opacText('en', 'home.card.unavailable'))}</span>`);
+      expect(after).toContain(`<span class="status status-ok card-status">${esc(opacText('en', 'home.card.available'))}</span>`);
+    } finally {
+      await h.db.updateTable('items').set({ status: 'available' }).where('id', '=', itemIds[0]!).execute();
+      await withTx(h, (trx) => indexRecords(trx, records, NOW));
+    }
   });
 
   it('a block switched off is left out, whatever it holds', async () => {
@@ -220,7 +342,7 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     const home = JSON.parse(stored) as OpacHomeContent;
     await setHome({ ...home, blocks: { ...home.blocks, about: false, services: false, visit: false, popular: false, classes: false } });
     const html = (await get('/')).text;
-    for (const id of ['tentang-judul', 'layanan-judul', 'kunjungi-judul', 'judul-populer', 'jelajah-kelas']) expect(section(html, id), id).toBeUndefined();
+    for (const id of ['tentang-judul', 'layanan-judul', 'kunjungi-judul', 'judul-populer', 'jelajah-kelas', 'kelas-rajin']) expect(section(html, id), id).toBeUndefined();
     await setHome(home);
   });
 
@@ -244,6 +366,94 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
       }
       // The four loans are never shown as a number of loans.
       expect(page).not.toMatch(/4\s*(?:kali|pinjaman|loans)/i);
+    }
+  });
+
+  it('the loans per class: off by default; on, a class shows only with five different borrowers, by its counts and never a member', async () => {
+    const stored = (await h.db.selectFrom('settings').select('value').where('key', '=', 'opac.home').executeTakeFirstOrThrow()).value!;
+    const home = JSON.parse(stored) as OpacHomeContent;
+    expect(home.blocks.readingClasses).toBe(false);
+    await refreshClassActivity(h, NOW);
+    expect(section((await get('/')).text, 'kelas-rajin')).toBeUndefined();
+
+    // On, with three borrowers in X-1: still nothing.
+    await setHome({ ...home, blocks: { ...home.blocks, readingClasses: true } });
+    expect(section((await get('/')).text, 'kelas-rajin')).toBeUndefined();
+
+    // Two more borrowers of X-1 lend the other title: five borrowers, six loans, two titles.
+    for (let i = 3; i < 5; i += 1) {
+      const id = newId(NOW);
+      const no = `ANG-77${i}`;
+      const name = `Rahasia Peminjam ${i}`;
+      await h.db
+        .insertInto('members')
+        .values({
+          id,
+          member_no_display: no,
+          member_no_key: normalizeKey(no),
+          member_type_id: siswa,
+          status: 'active',
+          name,
+          name_key: name.toLowerCase(),
+          class_name: 'X-1',
+          joined_on: '2026-01-01',
+          valid_from: '2026-01-01',
+          expires_on: '2099-01-01',
+          created_at: NOW,
+          updated_at: NOW,
+        })
+        .execute();
+      borrowers.push({ id, no, name });
+      const at = NOW - (10 + i) * DAY;
+      const on = new Date(at).toISOString().slice(0, 10);
+      await h.db
+        .insertInto('loans')
+        .values({
+          id: newId(at),
+          item_id: itemIds[0]!,
+          open_item_id: null,
+          record_id: records[0]!,
+          member_id: id,
+          branch_id: branchId,
+          loaned_on: on,
+          loaned_at: at,
+          due_on: on,
+          returned_on: on,
+          returned_at: at + 3_600_000,
+          return_branch_id: branchId,
+          outcome: 'returned',
+          loan_days: 7,
+          renew_limit: 1,
+          grace_days: 0,
+          fine_per_day_minor: 0,
+          currency: 'IDR',
+          source: 'desk',
+          stat_class_name: 'X-1',
+          created_at: at,
+          updated_at: at,
+        })
+        .execute();
+    }
+    await refreshClassActivity(h, NOW);
+    try {
+      for (const [locale, path] of [
+        ['id', '/'],
+        ['en', '/?lang=en'],
+      ] as const) {
+        const page = (await get(path)).text;
+        const block = section(page, 'kelas-rajin')!;
+        expect(block).toContain(`<h2 id="kelas-rajin">${esc(opacText(locale, 'home.classes.title'))}</h2>`);
+        expect(block).toContain(`<span class="class-place">${esc(opacText(locale, 'home.classes.place', { n: '1' }))}</span>`);
+        expect(block).toContain('<span class="class-label">X-1</span>');
+        expect(block).toContain(`<span class="class-counts">${esc(opacText(locale, 'home.classes.counts', { loans: '6', titles: '2' }))}</span>`);
+        for (const b of borrowers) {
+          expect(page).not.toContain(b.name);
+          expect(page).not.toContain(b.no);
+          expect(page).not.toContain(b.id);
+        }
+      }
+    } finally {
+      await setHome(home);
     }
   });
 });

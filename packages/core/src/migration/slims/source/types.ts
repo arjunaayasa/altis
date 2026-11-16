@@ -60,8 +60,8 @@ export interface SplitCheckpoint {
 }
 
 /**
- * The attachment, cover and content files of a SLiMS install: `repository/…`, `images/docs/…`, `images/content/…`
- * (paths relative to the SLiMS root, `/`-separated).
+ * The attachment, cover and content files of a SLiMS install: `repository/…`, `images/docs/…`, `images/content/…`, and
+ * the stocktake reports `files/reports/…` (paths relative to the SLiMS root, `/`-separated).
  */
 export interface SlimsFilesSource {
   /**

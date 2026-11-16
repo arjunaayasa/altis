@@ -13,6 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { CheckCircle2Icon, CircleIcon } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Badge, CheckField, Field, Notice, NoticeAlert, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -163,7 +164,7 @@ export function PeopleFields({ value, onChange, memberTypes }: { value: PeopleDr
             </select>
           )}
         </Field>
-        <div className="grid gap-2">
+        <div className="grid content-start gap-2">
           <CheckField label={t('catalog.migration.people.visits_auto')} hint={t('catalog.migration.people.visits_auto_hint')} checked={auto} onChange={(e) => set('visitsBefore', e.target.checked ? 'auto' : '')} />
           {!auto && (
             <Field label={t('catalog.migration.people.visits_before')} error={DATE.test(value.visitsBefore) ? undefined : 'catalog.migration.people.visits_before_required'}>
@@ -171,7 +172,7 @@ export function PeopleFields({ value, onChange, memberTypes }: { value: PeopleDr
             </Field>
           )}
         </div>
-        <div className="grid gap-2">
+        <div className="grid content-start gap-2">
           <CheckField label={t('catalog.migration.people.staff_users')} hint={t('catalog.migration.people.staff_users_hint')} checked={value.staffUsers} onChange={(e) => set('staffUsers', e.target.checked)} />
           <CheckField label={t('catalog.migration.people.migrate_gender')} hint={t('catalog.migration.people.migrate_gender_hint')} checked={value.migrateGender} onChange={(e) => set('migrateGender', e.target.checked)} />
           <CheckField label={t('catalog.migration.people.type_limit')} hint={t('catalog.migration.people.type_limit_hint')} checked={value.typeLimitAsTotal} onChange={(e) => set('typeLimitAsTotal', e.target.checked)} />
@@ -211,12 +212,37 @@ export function PeopleFields({ value, onChange, memberTypes }: { value: PeopleDr
   );
 }
 
-/** "Cocokkan dengan SLiMS": each number of the source against ALTIS (a real run's summary). */
-export function MatchesReport({ matches, collisions }: { matches: readonly MigrationMatchRow[] | undefined; collisions: number | undefined }) {
+/** The member type rows of "Cocokkan dengan SLiMS": their scope is a SLiMS member type id ('' for members without one). */
+const TYPE_SCOPED: readonly MigrationMatchRow['key'][] = ['active_members', 'expired_members'];
+
+/**
+ * "Cocokkan dengan SLiMS": each number of the source against ALTIS (a real run's summary). The unpaid fines are money
+ * (minor units, shown in rupiah, as SLiMS keeps fines); a member type row names the SLiMS type by its name when the run
+ * listed it (`memberTypes`), and the members without a SLiMS type as such.
+ */
+export function MatchesReport({
+  matches,
+  collisions,
+  memberTypes,
+}: {
+  matches: readonly MigrationMatchRow[] | undefined;
+  collisions: number | undefined;
+  memberTypes?: readonly MigrationMemberType[] | undefined;
+}) {
   const t = useT();
   const locale = useLocale();
   const number = new Intl.NumberFormat(locale === 'en' ? 'en' : 'id');
   const n = (v: number): string => number.format(v);
+  // Rupiah as the desk shows it (Rp 12.500, cents only when there are some).
+  const rupiah = (minor: number): string =>
+    `Rp ${new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'id-ID', { minimumFractionDigits: minor % 100 === 0 ? 0 : 2, maximumFractionDigits: 2 }).format(minor / 100)}`;
+  const value = (m: MigrationMatchRow, v: number): string => (m.key === 'unpaid_fines_minor' ? rupiah(v) : n(v));
+  const scopeText = (m: MigrationMatchRow): string => {
+    if (!TYPE_SCOPED.includes(m.key)) return m.scope;
+    if (m.scope === '') return t('catalog.migration.people.scope_no_type');
+    const type = memberTypes?.find((x) => x.id === m.scope);
+    return type === undefined ? m.scope : `${type.name} (${type.id})`;
+  };
   const titleId = useId();
   return (
     <>
@@ -243,11 +269,11 @@ export function MatchesReport({ matches, collisions }: { matches: readonly Migra
                   <tr key={`${m.key}:${m.scope}`} className="border-t" data-match={m.ok ? 'ok' : 'diff'}>
                     <td className="py-1 pr-3">
                       {t(`migration.match.${m.key}`)}
-                      {m.scope !== '' && <span className="text-muted-foreground">{` · ${m.scope}`}</span>}
+                      {scopeText(m) !== '' && <span className="text-muted-foreground">{` · ${scopeText(m)}`}</span>}
                     </td>
-                    <td className="py-1 pr-3 text-right tabular-nums">{n(m.source)}</td>
-                    <td className="py-1 pr-3 text-right tabular-nums">{n(m.altis)}</td>
-                    <td className="py-1 pr-3 text-right tabular-nums">{n(m.explained)}</td>
+                    <td className="py-1 pr-3 text-right tabular-nums">{value(m, m.source)}</td>
+                    <td className="py-1 pr-3 text-right tabular-nums">{value(m, m.altis)}</td>
+                    <td className="py-1 pr-3 text-right tabular-nums">{value(m, m.explained)}</td>
                     <td className="py-1">{m.ok ? <Badge tone="info">{t('catalog.migration.people.match_ok')}</Badge> : <Badge tone="danger">{t('catalog.migration.people.match_diff')}</Badge>}</td>
                   </tr>
                 ))}
@@ -314,26 +340,31 @@ function Item({ done, required, children }: { done: boolean; required: boolean; 
   );
 }
 
-/** The cut-over checklist and "Mulai melayani" (see the top of this file). */
+/**
+ * The cut-over checklist and "Mulai melayani" (see the top of this file). Serving cannot be taken back (a "Ganti" run is
+ * refused from then on), so the button asks first.
+ */
 export function CutoverChecklist() {
   const t = useT();
+  const locale = useLocale();
   const titleId = useId();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const view = useApiQuery<SlimsCutoverView>({ queryKey: CUTOVER_KEY, path: 'catalog/migrations/slims/cutover' });
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const v = view.data;
   if (view.isError) return <ProblemAlert error={view.error} />;
   if (v === undefined || v.runId === null) return null;
 
-  const step = async (s: 'reprint_opened' | 'serve'): Promise<void> => {
+  const openReprint = async (): Promise<void> => {
     setBusy(true);
     setFailure(null);
     try {
-      const next = await api<SlimsCutoverView>('POST', 'catalog/migrations/slims/cutover/steps', { step: s });
+      const next = await api<SlimsCutoverView>('POST', 'catalog/migrations/slims/cutover/steps', { step: 'reprint_opened' });
       queryClient.setQueryData(CUTOVER_KEY, next);
-      if (s === 'reprint_opened') void navigate({ to: '/admin/reports/$reportId', params: { reportId: 'members.reprint_list' } });
+      void navigate({ to: '/admin/reports/$reportId', params: { reportId: 'members.reprint_list' } });
     } catch (e) {
       setFailure(problemText(t, e));
     } finally {
@@ -349,7 +380,7 @@ export function CutoverChecklist() {
       required: true,
       text: 'catalog.migration.people.check_reprint',
       extra: (
-        <Button type="button" variant="link" size="sm" className="h-auto px-1" disabled={busy} onClick={() => void step('reprint_opened')}>
+        <Button type="button" variant="link" size="sm" className="h-auto px-1" disabled={busy} onClick={() => void openReprint()}>
           {t('catalog.migration.people.open_reprint')}
         </Button>
       ),
@@ -376,15 +407,27 @@ export function CutoverChecklist() {
       </ul>
       {failure !== null && <Notice kind="error">{failure}</Notice>}
       {v.servingSince !== null ? (
-        <NoticeAlert tone="success">{t('catalog.migration.people.serving', { since: new Date(v.servingSince).toLocaleDateString() })}</NoticeAlert>
+        <NoticeAlert tone="success">
+          {t('catalog.migration.people.serving', { since: new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'id-ID', { dateStyle: 'long' }).format(v.servingSince) })}
+        </NoticeAlert>
       ) : (
         <div>
-          <Button type="button" disabled={!v.ready || busy} onClick={() => void step('serve')}>
+          <Button type="button" disabled={!v.ready || busy} onClick={() => setConfirming(true)}>
             {t('catalog.migration.people.serve')}
           </Button>
           {!v.ready && <p className="mt-1 text-xs text-muted-foreground">{t('catalog.migration.people.serve_held')}</p>}
         </div>
       )}
+      <ConfirmDialog
+        open={confirming}
+        title={t('catalog.migration.people.serve_confirm_title')}
+        description={t('catalog.migration.people.serve_confirm')}
+        confirmLabel={t('catalog.migration.people.serve')}
+        onConfirm={async () => {
+          queryClient.setQueryData(CUTOVER_KEY, await api<SlimsCutoverView>('POST', 'catalog/migrations/slims/cutover/steps', { step: 'serve' }));
+        }}
+        onClose={() => setConfirming(false)}
+      />
     </section>
   );
 }
