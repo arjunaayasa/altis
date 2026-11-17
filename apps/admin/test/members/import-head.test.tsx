@@ -73,18 +73,25 @@ describe('Impor Anggota: four numbered steps', () => {
     expect(within(steps).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['1Unggah berkas', '2Pemetaan & pratinjau', '3Uji kering', '4Hasil']);
     expect(within(steps).getByText('Unggah berkas').closest('li')?.getAttribute('aria-current')).toBe('step');
 
-    const good = new File(['member_no;name;member_type;expires_on\nS-1;Rina;SISWA;2027-07-01\nS-2;Doni;GURU;kemarin\n'], 'anggota.csv', { type: 'text/csv' });
+    const good = new File(['member_no;name;member_type;expires_on;gender\nS-1;Rina;SISWA;2027-07-01;P\nS-2;Doni;GURU;kemarin;X\n'], 'anggota.csv', { type: 'text/csv' });
     fireEvent.change(screen.getByLabelText(/Pilih berkas CSV/), { target: { files: [good] } });
     expect(await screen.findByRole('heading', { name: 'Pemetaan & pratinjau' })).toBeTruthy();
-    expect(screen.getByText('anggota.csv: pemisah titik koma, UTF-8, 2 baris, 4 kolom')).toBeTruthy();
+    expect(screen.getByText('anggota.csv: pemisah titik koma, UTF-8, 2 baris, 5 kolom')).toBeTruthy();
     const mapping = screen.getByRole('table', { name: 'Pemetaan kolom' });
     expect(within(mapping).getByText('Tipe anggota')).toBeTruthy();
-    // An unknown type code and an unreadable date are marked in the preview (in words and colour).
+    // An unknown type code and an unreadable date (the row refused) and an unreadable gender (only warned of) are
+    // marked in the preview in colour and in words, with a count of each under the table.
     const preview = screen.getByRole('table', { name: 'Pratinjau 2 baris pertama' });
     expect(within(preview).getByText('GURU').className).toContain('text-bad');
     expect(within(preview).getByText('kemarin').className).toContain('text-bad');
+    expect(within(preview).getByText('X').className).toContain('text-warn');
+    expect(within(preview).getByText('GURU').closest('td')?.textContent).toBe('GURUtipe tidak dikenal');
+    expect(within(preview).getByText('kemarin').closest('td')?.textContent).toBe('kemarintanggal tidak terbaca');
+    expect(within(preview).getByText('X').closest('td')?.textContent).toBe('Xakan dikosongkan');
     expect(within(preview).getByText('2027-07-01').className).not.toContain('text-bad');
     expect(within(preview).getByText('SISWA').className).not.toContain('text-bad');
+    expect(within(preview).getByText('P').closest('td')?.textContent).toBe('P');
+    expect(screen.getByText('Sel bertanda di pratinjau: 2 membuat barisnya ditolak, 1 hanya diperingatkan. Uji kering memeriksa semua baris.')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Uji kering' }) as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.click(screen.getByRole('button', { name: 'Kembali' }));
