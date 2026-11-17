@@ -3,9 +3,7 @@ import type { MemberView } from '@altis/shared/api/members';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { CheckField, Field, ProblemAlert } from '@/components/form-field';
 import { InlinePanel } from '@/components/layout';
-import { useReturnFocus } from '@/components/return-focus';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useT, type TKey } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
@@ -17,8 +15,7 @@ import { passwordWeaknessKey } from '@/lib/form-errors';
  * the staff user's own password first: the API client opens the re-authentication dialog on 401 and sends again).
  * Every session of the member ends. The password is never shown again; a refusal of the policy says why.
  *
- * Two ways to show the same form: {@link MemberPasswordPanel}, a panel in the member page (the layout guide's way: no
- * dialog for a form), and {@link MemberPasswordDialog}, a dialog for a page that has no place for the panel yet.
+ * The form is a panel in the member page ({@link MemberPasswordPanel}; the layout guide's way: no dialog for a form).
  */
 
 interface PasswordForm {
@@ -114,38 +111,5 @@ export function MemberPasswordPanel({ member, onClose, onDone }: { member: Membe
         </Button>
       </div>
     </InlinePanel>
-  );
-}
-
-/** The password form as a dialog (`open` shows it). */
-export function MemberPasswordDialog({ member, open, onClose, onDone }: { member: MemberView; open: boolean; onClose(): void; onDone(text: string): void }) {
-  const t = useT();
-  const focus = useReturnFocus();
-  const form = usePasswordForm(member, onClose, onDone);
-  return (
-    <Dialog open={open} onOpenChange={(next) => (next ? undefined : form.close())}>
-      {open && (
-        <DialogContent closeLabel={t('form.cancel')} onOpenAutoFocus={focus.onOpenAutoFocus} onCloseAutoFocus={focus.onCloseAutoFocus} className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{t('members.password.title')}</DialogTitle>
-            <DialogDescription>{t('members.password.intro')}</DialogDescription>
-          </DialogHeader>
-          <form noValidate className="grid gap-4" onSubmit={form.submit}>
-            <PasswordFields form={form} />
-            <DialogFooter className="flex-wrap">
-              <Button type="button" variant="outline" disabled={form.busy} onClick={form.clear}>
-                {t('members.password.clear')}
-              </Button>
-              <Button type="button" variant="outline" disabled={form.busy} onClick={form.close}>
-                {t('form.cancel')}
-              </Button>
-              <Button type="submit" disabled={form.busy}>
-                {t(form.busy ? 'form.saving' : 'members.password.save')}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      )}
-    </Dialog>
   );
 }

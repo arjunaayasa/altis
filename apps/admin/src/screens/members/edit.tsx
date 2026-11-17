@@ -25,7 +25,7 @@ import { DueBadge, MemberStatusBadge, limitText, todayLocal, useCalendarDate, us
 import { ExtendPanel, ReactivatePanel, SuspendPanel, refreshMembers, useMember } from './common';
 import { MemberCustomPanel, MemberPhotoPanel, MemberPrivacyPanel, RestoreButton } from './member-extras';
 // ---- Komunitas (member area) ----
-import { MemberPasswordDialog } from './password';
+import { MemberPasswordPanel } from './password';
 // ---- Komunitas (charges and payments) ----
 import { MemberChargesTab } from '@/screens/circulation/charges';
 
@@ -42,8 +42,9 @@ import { MemberChargesTab } from '@/screens/circulation/charges';
  *   status) and its actions, then a strip of figures (on loan, valid until, joined, valid from, source), then the tabs:
  *   Data anggota (the form, one section per part), Pinjaman aktif, Riwayat pinjaman (both need
  *   `circulation.records.read`), Denda and Riwayat keanggotaan (the member's events).
- * - **Actions** for `members.records.manage`: extend the membership, suspend (a note is required) or reactivate, each
- *   opened in place under the head (already open when a row of the member list asked for it); archive asks first (a
+ * - **Actions** for `members.records.manage`: extend the membership, suspend (a note is required) or reactivate, and set
+ *   the member's OPAC password, each opened in place under the head (the first three already open when a row of the
+ *   member list asked for it); archive asks first (a
  *   dialog: it removes the member from the lists) and a refusal while loans are open (MEMBER_IN_USE) is said on the
  *   page, with the way to the desk. "Layani di Meja Layanan" opens the member at the desk.
  */
@@ -180,6 +181,14 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
     form.reset(base.current.values, { keepDirtyValues: true, keepDirty: true, keepErrors: true });
   }, [member, form]);
   useDirtyGuard(isDirty);
+  // A list that arrives after the form put its value in the select leaves the select on its first option: once the
+  // list is in, the select takes the form's value again (the form stays unchanged).
+  useEffect(() => {
+    if (types.data !== undefined) form.setValue('memberTypeId', form.getValues('memberTypeId'));
+  }, [types.data, form]);
+  useEffect(() => {
+    if (branches.data !== undefined) form.setValue('homeBranchId', form.getValues('homeBranchId'));
+  }, [branches.data, form]);
   const typeId = form.watch('memberTypeId');
   const type = types.data?.items.find((x) => x.id === typeId);
 
@@ -372,7 +381,7 @@ export function MemberCreateScreen() {
 type DetailTab = 'data' | 'loans' | 'history' | 'charges' | 'events';
 
 /** The panel open under the member's head (one at a time). */
-type HeadPanel = 'extend' | 'suspend' | 'reactivate' | 'photo';
+type HeadPanel = 'extend' | 'suspend' | 'reactivate' | 'photo' | 'password';
 
 export function MemberDetailScreen() {
   const t = useT();
@@ -387,7 +396,7 @@ export function MemberDetailScreen() {
   const [tab, setTab] = useState<DetailTab>('data');
   // Opened from a row of the member list to extend, suspend or reactivate: that panel is open at once.
   const [panel, setPanel] = useState<HeadPanel | null>(location.state.memberPanel ?? null);
-  const [dialog, setDialog] = useState<'archive' | 'password' | null>(null);
+  const [dialog, setDialog] = useState<'archive' | null>(null);
   const [notice, setNotice] = useState<string | null>(location.state.created === true ? t('members.created') : null);
   const [archiveRefused, setArchiveRefused] = useState(false);
   const canManage = holds(me, 'members.records.manage');
@@ -508,7 +517,7 @@ export function MemberDetailScreen() {
                 <MoreMenuItem onSelect={() => setPanel('suspend')}>{t('members.action.suspend_ellipsis')}</MoreMenuItem>
               )}
               {/* Komunitas (member area) */}
-              <MoreMenuItem onSelect={() => setDialog('password')}>{t('members.password.open')}</MoreMenuItem>
+              <MoreMenuItem onSelect={() => setPanel('password')}>{t('members.password.open')}</MoreMenuItem>
               <MoreMenuRule />
               <MoreMenuItem danger onSelect={() => setDialog('archive')}>
                 {t('members.action.archive')}
@@ -530,6 +539,7 @@ export function MemberDetailScreen() {
         />
       )}
       {statusPanel === 'suspend' && canManage && live && <SuspendPanel member={m} onClose={() => setPanel(null)} onDone={() => setNotice(t('members.suspended'))} />}
+      {panel === 'password' && canManage && live && <MemberPasswordPanel member={m} onClose={() => setPanel(null)} onDone={setNotice} />}
       {statusPanel === 'reactivate' && canManage && live && <ReactivatePanel member={m} onClose={() => setPanel(null)} onDone={() => setNotice(t('members.reactivated'))} />}
       {panel === 'photo' && canManage && live && (
         <InlinePanel title={t('members.tools.photo.title')} onCancel={() => setPanel(null)} focusOnOpen>
@@ -618,7 +628,6 @@ export function MemberDetailScreen() {
           <MemberEvents memberId={m.id} />
         </TabsContent>
       </Tabs>
-      <MemberPasswordDialog member={m} open={dialog === 'password'} onClose={() => setDialog(null)} onDone={setNotice} />
       {dialog === 'archive' && (
         <ConfirmDialog
           open

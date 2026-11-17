@@ -3,12 +3,11 @@ import type { CustomFieldView, MasterListResponse } from '@altis/shared/api/cata
 import { MEMBER_PHOTO_HEIGHT, MEMBER_PHOTO_MAX_BYTES, MEMBER_PHOTO_WIDTH } from '@altis/shared/api/member-ops';
 import type { MemberView } from '@altis/shared/api/members';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Field, Notice, ProblemAlert } from '@/components/form-field';
 import { InlinePanel, MemberPhoto, SideSection } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
@@ -183,7 +182,6 @@ function CameraStep({ onCancel, onFrame }: { onCancel(): void; onFrame(source: S
 export function MemberPhotoPanel({ member, canManage, onDone }: { member: MemberView; canManage: boolean; onDone(text: string): void }) {
   const t = useT();
   const queryClient = useQueryClient();
-  const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
   const [source, setSource] = useState<Source | null>(null);
   const [camera, setCamera] = useState(false);
@@ -234,13 +232,12 @@ export function MemberPhotoPanel({ member, canManage, onDone }: { member: Member
         <MemberPhoto name={member.name} fileId={member.photoFileId} size="lg" alt={member.photoFileId === null ? t('members.tools.photo.none') : t('members.tools.photo.alt', { name: member.name })} />
         {canManage && (
           <div className="grid min-w-0 flex-[1_1_14rem] grid-cols-[minmax(0,1fr)] content-start gap-3">
-            <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5">
-              <Label htmlFor={inputId} className="text-meta leading-snug">
-                {t('members.tools.photo.choose')}
-              </Label>
-              <input ref={input} id={inputId} type="file" accept="image/jpeg,image/png,image/webp" className="w-full max-w-full text-sm file:mr-3 file:h-8 file:rounded-md file:border file:border-input file:bg-background file:px-3 file:text-meta file:font-semibold" onChange={(e) => void choose(e)} />
-            </div>
+            {/* The browser's own file control would speak the browser's language: a button of ours opens it. */}
+            <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(e) => void choose(e)} />
             <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" data-autofocus onClick={() => input.current?.click()}>
+                {t('members.tools.photo.choose')}
+              </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => (cameraAvailable ? setCamera(true) : setError(t('members.tools.photo.camera_unavailable')))}>
                 {t('members.tools.photo.camera')}
               </Button>
