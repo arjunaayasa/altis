@@ -4,11 +4,13 @@ import { z } from 'zod';
 import { decodeCursor, encodeCursor, textParam } from '../collection/common.js';
 import { reportColumn, reportIdField, reportParam } from '../params.js';
 import type { ReportCtx, ReportRow, TableReport } from '../types.js';
-import { intParam, typeName } from '../circulation/common.js';
+import { boolParam, intParam, typeName } from '../circulation/common.js';
 
 // The members whose membership has ended or ends within N days of today (30 by default), for a reminder or a mass
 // extension: live members (neither archived nor anonymised) with a valid-until date up to today + N, the days left
-// (negative once it has passed) and their contact. Filtered by member type and class. By that date, then name.
+// (negative once it has passed) and their contact. Filtered by member type and class, and, with `activeOnly`, to the
+// active members whose membership has not ended yet (valid until today or later: the ones Beranda counts as ending
+// soon). By that date, then name.
 
 function filtered(ctx: ReportCtx) {
   const until = addDays(ctx.today, intParam(ctx, 'days', 30));
@@ -22,6 +24,7 @@ function filtered(ctx: ReportCtx) {
   if (memberTypeId !== null) q = q.where('m.member_type_id', '=', memberTypeId);
   const className = textParam(ctx, 'className');
   if (className !== null) q = q.where('m.class_name', '=', className);
+  if (boolParam(ctx, 'activeOnly')) q = q.where('m.status', '=', 'active').where('m.expires_on', '>=', ctx.today);
   return q;
 }
 
@@ -38,11 +41,17 @@ export const membersExpiringReport: TableReport = Object.freeze<TableReport>({
   personal: true,
   formats: ['csv', 'xlsx', 'pdf'],
   orientation: 'landscape',
-  params: [reportParam('days', 'int', { min: 0, max: 366 }), reportParam('memberTypeId', 'memberType'), reportParam('className', 'className')],
+  params: [
+    reportParam('days', 'int', { min: 0, max: 366 }),
+    reportParam('memberTypeId', 'memberType'),
+    reportParam('className', 'className'),
+    reportParam('activeOnly', 'bool'),
+  ],
   paramsSchema: z.strictObject({
     days: z.int().min(0).max(366).optional(),
     memberTypeId: reportIdField.optional(),
     className: z.string().trim().min(1).max(64).optional(),
+    activeOnly: z.boolean().optional(),
   }),
   columns: [
     reportColumn('member_no', 'text', { widthChars: 16 }),

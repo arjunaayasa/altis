@@ -85,7 +85,7 @@ function duration(t: Translate, ms: number): string {
 }
 
 /** A link to an admin page: the operations page is loaded (a server page), any other one routed. */
-export function PageLink({ to, search, children, className }: { to: string; search?: Record<string, string | number>; children: ReactNode; className?: string }) {
+export function PageLink({ to, search, children, className }: { to: string; search?: Record<string, string | number | boolean>; children: ReactNode; className?: string }) {
   if (isServerPage(to)) {
     return (
       <a href={to} className={className}>

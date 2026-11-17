@@ -7,6 +7,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
 import type { Grants } from '../../src/authz/grants.js';
 import { deskDashboard, libraryDashboard } from '../../src/dashboard/home.js';
+import { reportById } from '../../src/reports/registry.js';
+import { previewReport } from '../../src/reports/runs/preview.js';
+import { loadAccredSettings } from '../../src/settings/accreditation.js';
 import { masterId, seedBranch, seedCopy, seedHold, seedLoan, seedMember } from '../support/circulation-seed.js';
 
 // Beranda's library figures on a small library seen at noon of 15 March 2026 in Asia/Jakarta (05:00 UTC), worked out
@@ -34,8 +37,8 @@ describe.skipIf(!ctx.available)(`Beranda's library figures [${engineLabel()}]`, 
     const db = h.db;
     ut = await seedBranch(db, 'UT');
     cb = await seedBranch(db, 'CB');
-    // Members: two borrowers; one ending within 14 days, one ending in 20 days, one expired, one suspended, one archived;
-    // two of them joined this month.
+    // Members: two borrowers; one ending within 14 days, one ending in 20 days, one expired, one suspended, one archived,
+    // one suspended and ending within 14 days; two of them joined this month.
     const ana = await seedMember(db, { no: 'S-001', name: 'Ana', joinedOn: '2026-03-02' });
     const budi = await seedMember(db, { no: 'S-002', name: 'Budi', joinedOn: '2026-03-15', expiresOn: '2026-03-29' });
     await seedMember(db, { no: 'S-003', name: 'Cici', expiresOn: '2026-04-04' });
@@ -43,6 +46,7 @@ describe.skipIf(!ctx.available)(`Beranda's library figures [${engineLabel()}]`, 
     await seedMember(db, { no: 'S-005', name: 'Eka', status: 'suspended' });
     await seedMember(db, { no: 'S-006', name: 'Fajar', archived: true, joinedOn: '2026-03-03' });
     await seedMember(db, { no: 'S-007', name: 'Gita', expiresOn: '2026-03-15' });
+    await seedMember(db, { no: 'S-008', name: 'Hadi', status: 'suspended', expiresOn: '2026-03-20' });
     const copy = async (key: string, title: string, classification: string, branchId = ut) => {
       const c = await seedCopy(db, { branchId, title, barcode: `B-${key}`, classification });
       records[key] = c.recordId;
@@ -152,7 +156,8 @@ describe.skipIf(!ctx.available)(`Beranda's library figures [${engineLabel()}]`, 
   it('the library sections, each only for its readers', async () => {
     expect(await libraryDashboard(h.db, grantsOf([]), NOW)).toEqual({ today: '2026-03-15', members: null, loans: null, usage: null });
     const all = await libraryDashboard(h.db, grantsOf(['members.records.read', 'circulation.records.read', 'reports.statistics.read']), NOW);
-    // Valid today: Ana, Budi, Cici, Gita (Dodi expired, Eka suspended, Fajar archived); ending by 29 March: Budi, Gita.
+    // Valid today: Ana, Budi, Cici, Gita (Dodi expired, Eka and Hadi suspended, Fajar archived); ending by 29 March:
+    // Budi, Gita.
     expect(all.members).toEqual({ active: 4, joinedThisMonth: 2, expiringSoon: 2 });
     // More than 14 days late: due 27 Feb (UT, 16 days) and 23 Feb (CB); not 1 March (14 days) nor 14 March.
     expect(all.loans).toEqual({ longOverdue: 2 });
@@ -178,6 +183,18 @@ describe.skipIf(!ctx.available)(`Beranda's library figures [${engineLabel()}]`, 
         { recordId: records['other'], title: 'Kamus Besar', loans: 1 },
       ],
     });
+  });
+
+  it('the expiring members report, set as the Beranda line links it, lists the members that line counts', async () => {
+    const def = reportById('members.expiring')!;
+    const o = { locale: 'id' as const, tz: 'Asia/Jakarta', now: NOW, settings: await loadAccredSettings(h.db) };
+    const numbers = async (params: Record<string, unknown>) => (await previewReport(h.db, def, { params, limit: 50 }, o)).rows.map((r) => r[0]);
+    const { members } = await libraryDashboard(h.db, grantsOf(['members.records.read']), NOW);
+    const linked = await numbers({ days: 14, activeOnly: true });
+    expect(linked).toEqual(['S-007', 'S-002']);
+    expect(linked).toHaveLength(members!.expiringSoon);
+    // Without it, the report also lists the membership that has ended (Dodi) and the suspended member (Hadi).
+    expect(await numbers({ days: 14 })).toEqual(['S-004', 'S-007', 'S-008', 'S-002']);
   });
 
   it('a super admin’s grants (every permission) read every section', async () => {

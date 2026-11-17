@@ -729,7 +729,7 @@ const REPORT_PARAMS = [
   // ---- Komunitas (member, visit and circulation reports) ----
   ...['range', 'mainClass', 'year', 'month', 'search', 'minLoans', 'top', 'member', 'titleWords', 'barcode', 'loaned', 'loanState'],
   ...['overdueOnly', 'groupBy', 'minDaysLate', 'due', 'days', 'holdStatus', 'placed', 'chargeStatus', 'charged', 'method'],
-  ...['view', 'kind', 'guestsOnly', 'institution', 'visited', 'source', 'rowsBy'],
+  ...['view', 'kind', 'guestsOnly', 'institution', 'visited', 'source', 'rowsBy', 'activeOnly'],
   // ---- Komunitas K4 (stocktake) ----
   ...['stocktakeId'],
 ];
