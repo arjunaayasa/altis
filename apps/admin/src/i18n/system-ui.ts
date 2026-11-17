@@ -33,6 +33,7 @@ export const SYSTEM_UI_ID = {
   'backups.more_named': 'Tindakan untuk cadangan {time}',
   'diagnostics.network.suggest_change_one': 'Uji peramban menyarankan {hops} hop. Ubah pengaturannya di Konfigurasi Sistem.',
   'diagnostics.release.keyset_value_one': '{docs} dokumen, seq tertinggi {seq}',
+  'form.retry_after_seconds_one': 'Sisa waktu tunggu: {seconds} detik.',
 } as const;
 
 export const SYSTEM_UI_EN: Record<keyof typeof SYSTEM_UI_ID, string> = {
@@ -66,4 +67,5 @@ export const SYSTEM_UI_EN: Record<keyof typeof SYSTEM_UI_ID, string> = {
   'backups.more_named': 'Actions for the backup of {time}',
   'diagnostics.network.suggest_change_one': 'The browser test suggests {hops} hop. Change the setting in System configuration.',
   'diagnostics.release.keyset_value_one': '{docs} document, highest seq {seq}',
+  'form.retry_after_seconds_one': 'Time left to wait: {seconds} second.',
 };

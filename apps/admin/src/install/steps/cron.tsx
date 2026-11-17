@@ -49,14 +49,14 @@ function CommandLine({ id, label, text, note }: { id: string; label: string; tex
         {label}
       </p>
       <div className="flex items-start gap-2">
-        <code id={id} aria-labelledby={`${id}-label`} className="block min-w-0 flex-1 rounded-md bg-muted px-3 py-2 font-mono text-xs break-all select-all">
+        <code id={id} aria-labelledby={`${id}-label`} className="block min-w-0 flex-1 rounded-md border bg-layer px-3 py-2 font-mono text-xs break-all select-all">
           {text}
         </code>
         <Button type="button" size="sm" variant="outline" aria-describedby={id} onClick={() => void copyText()}>
           {copy === 'copied' ? t('cron.copied') : t('cron.copy')}
         </Button>
       </div>
-      {copy === 'failed' ? <p className="text-xs text-destructive">{t('cron.copy_failed')}</p> : null}
+      {copy === 'failed' ? <p className="text-xs font-semibold text-bad">{t('cron.copy_failed')}</p> : null}
       {note === undefined ? null : <p className="text-xs text-muted-foreground">{note}</p>}
     </div>
   );

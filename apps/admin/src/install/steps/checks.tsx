@@ -210,12 +210,12 @@ export function ChecksStep({ checks, onRerun, onContinue }: { checks: InstallChe
           ) : (
             <p className="text-sm">
               {results.ipAtSuggested
-                ? t('checks.network.suggestion', { hops: results.suggestedHops, ip: results.ipAtSuggested })
-                : t('checks.network.suggestion_no_ip', { hops: results.suggestedHops })}
+                ? t(results.suggestedHops === 1 ? 'checks.network.suggestion_one' : 'checks.network.suggestion', { hops: results.suggestedHops, ip: results.ipAtSuggested })
+                : t(results.suggestedHops === 1 ? 'checks.network.suggestion_no_ip_one' : 'checks.network.suggestion_no_ip', { hops: results.suggestedHops })}
             </p>
           )}
           {spoofable ? (
-            <p id="install-hops-spoofable" className="text-sm text-destructive">
+            <p id="install-hops-spoofable" className="text-sm font-semibold text-bad">
               {t('checks.network.spoofable')}
             </p>
           ) : null}
@@ -238,7 +238,7 @@ export function ChecksStep({ checks, onRerun, onContinue }: { checks: InstallChe
           {ip === null ? (
             <p className="text-sm">{t('checks.network.ip_unknown')}</p>
           ) : hops === results.suggestedHops ? null : (
-            <p className="text-sm">{t('checks.network.ip_for_hops', { hops, ip })}</p>
+            <p className="text-sm">{t(hops === 1 ? 'checks.network.ip_for_hops_one' : 'checks.network.ip_for_hops', { hops, ip })}</p>
           )}
           <div className="flex items-start gap-2">
             <input
