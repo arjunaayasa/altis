@@ -268,7 +268,8 @@ export function AuditLogScreen() {
           if (entity === null) return <span className="text-muted-foreground">—</span>;
           return (
             <span className="flex flex-col">
-              <span>{entityLabel(t, entity)}</span>
+              {/* A kind without a name of its own is written as the code it is, like a job's type. */}
+              {(ENTITIES as readonly string[]).includes(entity) ? <span>{entityLabel(t, entity)}</span> : <span className="font-mono text-xs">{entity}</span>}
               {entityId !== null && <span className="font-mono text-xs break-all text-muted-foreground">{entityId}</span>}
             </span>
           );
