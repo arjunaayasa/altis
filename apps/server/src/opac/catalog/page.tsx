@@ -88,6 +88,24 @@ export function siteInfo(home: OpacHomeContent, address: string | null, news: bo
   };
 }
 
+/**
+ * The library's site as the menu and the footer show it (SiteInfo, without its content language): `library.address`
+ * and `opac.home` through the settings cache, and whether a news post is published at `now`.
+ */
+export async function readSiteInfo(settings: AppServices['settings'], handle: DbHandle['db'], now: number): Promise<SiteInfo> {
+  const [address, home, news] = await Promise.all([
+    settings.get<string | null>(handle, 'library.address'),
+    settings.get<OpacHomeContent>(handle, 'opac.home'),
+    hasPublishedNews(handle, now),
+  ]);
+  return siteInfo(home ?? OPAC_HOME_DEFAULT, address ?? null, news);
+}
+
+/** The language of the library's own texts (`library.locale`) on a page in `locale`, when it is another one. */
+export function siteContentLang(libraryLocale: string, locale: Locale): Locale | undefined {
+  return isLocale(libraryLocale) && libraryLocale !== locale ? libraryLocale : undefined;
+}
+
 /** One OPAC page. */
 export interface OpacPageOptions {
   /** Default 200. */
@@ -152,14 +170,12 @@ export async function opacContext(rc: OpacContextSource): Promise<OpacContext> {
   const handle = rc.db.db;
   const settings = rc.services.settings;
   const now = requestNow(rc.c);
-  const [libraryName, libraryLocale, accent, indexable, address, home, news] = await Promise.all([
+  const [libraryName, libraryLocale, accent, indexable, site] = await Promise.all([
     settings.get<string>(handle, 'library.name'),
     settings.get<string>(handle, 'library.locale'),
     settings.get<string>(handle, 'opac.accent'),
     settings.get<boolean>(handle, 'opac.indexable'),
-    settings.get<string | null>(handle, 'library.address'),
-    settings.get<OpacHomeContent>(handle, 'opac.home'),
-    hasPublishedNews(handle, now),
+    readSiteInfo(settings, handle, now),
   ]);
   const locale = resolveLocale(rc.c.req.query('lang'), libraryLocale);
   return {
@@ -169,7 +185,7 @@ export async function opacContext(rc: OpacContextSource): Promise<OpacContext> {
     baseUrl: rc.config.baseUrl,
     indexable: indexable !== false,
     nav: await navPages(handle, now, locale),
-    site: { ...siteInfo(home ?? OPAC_HOME_DEFAULT, address ?? null, news), contentLang: isLocale(libraryLocale) && libraryLocale !== locale ? libraryLocale : undefined },
+    site: { ...site, contentLang: siteContentLang(libraryLocale, locale) },
   };
 }
 

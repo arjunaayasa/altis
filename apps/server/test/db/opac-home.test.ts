@@ -294,7 +294,8 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
   });
 
   it('the dark footer of every public page: the library and its address, the links with content, the search field, the source', async () => {
-    for (const path of ['/', '/cari', `/katalog/${records[0]!}/laskar-pelangi`]) {
+    // An address no route serves too: its 404 page has the same frame.
+    for (const path of ['/', '/cari', `/katalog/${records[0]!}/laskar-pelangi`, '/katalogg']) {
       const html = (await get(path)).text;
       const footer = /<footer class="site-footer">([\s\S]*?)<\/footer>/.exec(html)?.[1];
       expect(footer, path).toBeDefined();
@@ -414,6 +415,11 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
       expect(html).toContain(`<style nonce="${nonce}">.site-header{--hero-bg:#1e3a8a}</style>`);
       expect(reply.headers.get('content-security-policy')).toContain(`style-src 'self' 'nonce-${nonce}'`);
       expect(html).not.toContain('style=');
+      // The 404 page of an address no route serves has the library colour too.
+      const missing = await get('/katalogg');
+      expect(missing.status).toBe(404);
+      const missingNonce = /<meta name="csp-nonce" content="([^"]+)"/.exec(missing.text)?.[1];
+      expect(missing.text).toContain(`<style nonce="${missingNonce}">.site-header{--hero-bg:#1e3a8a}</style>`);
 
       // Anything else in the row is no colour: the whole content falls back, and no style element is written.
       await h.db
