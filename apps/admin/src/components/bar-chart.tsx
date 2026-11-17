@@ -2,8 +2,8 @@ import { useId } from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * A compact bar chart drawn as our own SVG (no chart library): one series, so one hue (the theme's `primary`, which
- * the theme sets for light and for dark) and no legend, the title naming the series. It is a picture of figures a table
+ * A compact bar chart drawn as our own SVG (no chart library): one series, so one hue (the theme's first chart series,
+ * `--series-1`, set for light and for dark) and no legend, the title naming the series. It is a picture of figures a table
  * beside it holds: the SVG is `role="img"` with a `<title>` and a `<desc>` (the number of bars, the highest value, and
  * that the table holds every figure), and each bar's slot carries its label and value as a native tooltip.
  *
@@ -64,7 +64,7 @@ export function BarChart({
   const labelled = (k: number): boolean => shown.length <= ALL_LABELS || k === 0 || k === shown.length - 1;
   return (
     <figure className={cn('flex flex-col gap-1', className)} data-chart="">
-      <figcaption className="text-xs font-medium text-muted-foreground">{title}</figcaption>
+      <figcaption className="text-meta font-semibold text-muted-foreground">{title}</figcaption>
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         role="img"
@@ -89,7 +89,7 @@ export function BarChart({
               <rect x={k * slot} y={0} width={slot} height={HEIGHT} fill="transparent">
                 <title>{`${b.label}: ${format(b.value)}`}</title>
               </rect>
-              {path !== null && <path d={path} className="pointer-events-none fill-primary" />}
+              {path !== null && <path d={path} className="pointer-events-none fill-series-1" />}
               {k === highest && max > 0 && (
                 <text x={x + barWidth / 2} y={y - 4} textAnchor="middle" className="pointer-events-none fill-foreground text-[11px] tabular-nums">
                   {format(b.value)}
@@ -100,7 +100,7 @@ export function BarChart({
                   x={shown.length <= ALL_LABELS ? k * slot + slot / 2 : k === 0 ? 0 : WIDTH}
                   y={HEIGHT - 6}
                   textAnchor={shown.length > ALL_LABELS ? (k === 0 ? 'start' : 'end') : 'middle'}
-                  className="pointer-events-none fill-muted-foreground text-[10px]">
+                  className="pointer-events-none fill-faint text-[11px]">
                   {clip(b.label, shown.length > ALL_LABELS ? LABEL_CHARS * 2 : Math.max(4, Math.floor(slot / 6)))}
                 </text>
               )}

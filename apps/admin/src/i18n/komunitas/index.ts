@@ -29,6 +29,8 @@ import { MEMBERS_TOOLS_EN, MEMBERS_TOOLS_ID } from './members-tools';
 import { KOMUNITAS_SETTINGS_EN, KOMUNITAS_SETTINGS_ID } from './settings';
 // ---- Komunitas (desk and member screens' layout) ----
 import { DESK_MEMBERS_UI_EN, DESK_MEMBERS_UI_ID } from './desk-members-ui';
+// ---- Komunitas (report, accreditation and page screens' layout) ----
+import { REPORTS_UI_EN, REPORTS_UI_ID } from './reports-ui';
 
 // The admin copy of reports and accreditation, members and circulation: one file per area, each owned by the task that builds its screens,
 // joined here and spread once into ADMIN_ID/ADMIN_EN (i18n/id.ts, i18n/en.ts), so that no later task edits those
@@ -112,6 +114,8 @@ export const KOMUNITAS_AREAS_ID = Object.freeze({
   placeholder: PLACEHOLDER_ID,
   // ---- Komunitas (desk and member screens' layout) ----
   deskMembersUi: DESK_MEMBERS_UI_ID,
+  // ---- Komunitas (report, accreditation and page screens' layout) ----
+  reportsUi: REPORTS_UI_ID,
 });
 
 /** Every area's English copy, in the same order. */
@@ -148,6 +152,8 @@ export const KOMUNITAS_AREAS_EN: { readonly [A in keyof typeof KOMUNITAS_AREAS_I
   placeholder: PLACEHOLDER_EN,
   // ---- Komunitas (desk and member screens' layout) ----
   deskMembersUi: DESK_MEMBERS_UI_EN,
+  // ---- Komunitas (report, accreditation and page screens' layout) ----
+  reportsUi: REPORTS_UI_EN,
 });
 
 /** The Indonesian copy of reports and accreditation, spread into ADMIN_ID. */
@@ -174,6 +180,7 @@ export const KOMUNITAS_ID = {
   ...DASHBOARD_HOME_ADMIN_ID,
   ...PLACEHOLDER_ID,
   ...DESK_MEMBERS_UI_ID,
+  ...REPORTS_UI_ID,
 } as const;
 
 /** The English copy of reports and accreditation, spread into ADMIN_EN (typed against {@link KOMUNITAS_ID}). */
@@ -200,4 +207,5 @@ export const KOMUNITAS_EN: Record<keyof typeof KOMUNITAS_ID, string> = {
   ...DASHBOARD_HOME_ADMIN_EN,
   ...PLACEHOLDER_EN,
   ...DESK_MEMBERS_UI_EN,
+  ...REPORTS_UI_EN,
 };
