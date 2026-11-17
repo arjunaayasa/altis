@@ -238,9 +238,11 @@ describe('Rak Tunggu & Reservasi', () => {
     await waitFor(() => expect(screen.getByText('Tidak ada eksemplar yang perlu dikembalikan ke rak.')).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: 'Tandai siap…' }));
-    const dialog = await screen.findByRole('dialog');
-    fireEvent.change(within(dialog).getByLabelText('Barkod eksemplar'), { target: { value: 'B0004' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Tahan eksemplar' }));
+    // The panel opens in the page, above the queues (not a dialog).
+    const panel = await screen.findByRole('form', { name: 'Tandai siap: Rumah Kaca' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.change(within(panel).getByLabelText('Barkod eksemplar'), { target: { value: 'B0004' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Tahan eksemplar' }));
     expect(await screen.findByText(/^Eksemplar ditahan sampai /)).toBeTruthy();
     expect(app.requests.find((r) => r.path.endsWith('/holds/01JZ0000000000000000000H04/ready'))?.body).toEqual({ barcode: 'B0004' });
   });

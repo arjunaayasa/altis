@@ -5,17 +5,16 @@ import type { HoldActionResponse, HoldCreateResponse, HoldShelfResponse, HoldVie
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { Badge, Notice, SELECT_CLASS } from '@/components/form-field';
+import { Field, Notice, SELECT_CLASS } from '@/components/form-field';
+import { DenseTable, ErrorState, FilterField, FilterRow, InlinePanel, PageError, PageHead, Section, SkeletonTable, StatusText, Tag, type DenseColumn, type TagTone } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useT, type Translate } from '@/i18n';
 import { holds as holdsPermission } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
-import { cn } from '@/lib/utils';
 import { newTransactionKey, todayLocal, useCalendarDate, useDeskBranch } from './common';
 
 /**
@@ -45,12 +44,12 @@ export function holdProblemText(t: Translate, e: unknown): string {
   return problemText(t, e);
 }
 
-const STATUS_TONE: Record<HoldView['status'], 'info' | 'neutral' | 'warning' | 'danger'> = {
+const STATUS_TONE: Record<HoldView['status'], TagTone> = {
   waiting: 'neutral',
-  ready: 'info',
+  ready: 'ok',
   fulfilled: 'neutral',
   cancelled: 'neutral',
-  expired: 'danger',
+  expired: 'bad',
 };
 
 /** The hold's status as a badge, with its place in the queue or its pickup deadline. */
@@ -58,15 +57,13 @@ function HoldStatus({ hold }: { hold: HoldView }) {
   const t = useT();
   const day = useCalendarDate();
   return (
-    <div className="flex flex-wrap items-center gap-1">
-      <Badge tone={STATUS_TONE[hold.status]}>{t(`vocab.hold_status.${hold.status}`)}</Badge>
-      {hold.status === 'waiting' && hold.position !== null && <span className="text-xs text-muted-foreground">{t('holds.position', { position: hold.position })}</span>}
-      {hold.status === 'ready' && hold.pickupUntil !== null && <span className="text-xs text-muted-foreground">{t('holds.ready_until', { date: day(hold.pickupUntil) })}</span>}
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <Tag tone={STATUS_TONE[hold.status]}>{t(`vocab.hold_status.${hold.status}`)}</Tag>
+      {hold.status === 'waiting' && hold.position !== null && <span className="text-meta text-muted-foreground">{t('holds.position', { position: hold.position })}</span>}
+      {hold.status === 'ready' && hold.pickupUntil !== null && <span className="text-meta text-muted-foreground">{t('holds.ready_until', { date: day(hold.pickupUntil) })}</span>}
     </div>
   );
 }
-
-const TH = 'px-3 py-2 font-medium text-muted-foreground';
 
 // ---- Rak Tunggu & Reservasi -----------------------------------------------------------------------------------------
 
@@ -104,199 +101,134 @@ export function HoldShelfScreen() {
 
   const data = shelf.data;
   const today = data?.today ?? todayLocal();
+  const titleCell = (h: HoldView) => (
+    <>
+      <p className="font-semibold">{h.record.title}</p>
+      <p className="text-meta tracking-wide text-muted-foreground">{h.item?.barcode ?? '—'}</p>
+    </>
+  );
+  const readyColumns: DenseColumn<HoldView>[] = [
+    { id: 'title', header: t('holds.col.title'), cell: titleCell },
+    {
+      id: 'member',
+      header: t('holds.col.member'),
+      cell: (h) => (
+        <>
+          <p className="font-semibold tracking-wide">{h.member?.memberNo ?? '—'}</p>
+          <p className="text-meta text-muted-foreground">{h.member?.name ?? ''}</p>
+        </>
+      ),
+    },
+    {
+      id: 'until',
+      header: t('holds.col.pickup_until'),
+      className: 'whitespace-nowrap',
+      cell: (h) => (
+        <>
+          <p>{day(h.pickupUntil)}</p>
+          {h.pickupUntil !== null && h.pickupUntil < today && <StatusText tone="bad">{t('holds.overdue_pickup')}</StatusText>}
+        </>
+      ),
+    },
+    {
+      id: 'actions',
+      header: <span className="sr-only">{t('table.actions')}</span>,
+      className: 'w-px py-1.5 text-right whitespace-nowrap',
+      cell: (h) => (
+        <>
+          {branchId !== null && (
+            <Button asChild size="sm" variant="ghost">
+              <a href={holdSlipHref(branchId, h.id)} target="_blank" rel="noopener" aria-label={t('holds.action.slip_named', { title: h.record.title })}>
+                {t('holds.action.slip')}
+              </a>
+            </Button>
+          )}
+          <Button type="button" size="sm" variant="ghost" onClick={() => setCancelling(h)}>
+            {t('holds.action.cancel')}
+          </Button>
+        </>
+      ),
+    },
+  ];
+  const clearColumns: DenseColumn<HoldView>[] = [
+    { id: 'title', header: t('holds.col.title'), cell: titleCell },
+    { id: 'reason', header: t('holds.col.reason'), cell: (h) => (h.closeReason === null ? '—' : t(`vocab.hold_close_reason.${h.closeReason}`)) },
+    {
+      id: 'actions',
+      header: <span className="sr-only">{t('table.actions')}</span>,
+      className: 'w-px py-1.5 text-right whitespace-nowrap',
+      cell: (h) => (
+        <Button type="button" size="sm" variant="ghost" onClick={() => void clear(h)}>
+          {t('holds.action.clear')}
+        </Button>
+      ),
+    },
+  ];
+  const waitingColumns: DenseColumn<WaitingTitleView>[] = [
+    { id: 'title', header: t('holds.col.title'), cell: (w) => <span className="font-semibold">{w.record.title}</span> },
+    { id: 'waiting', header: t('holds.col.waiting'), headClassName: 'text-right', className: 'text-right', cell: (w) => w.waiting },
+    { id: 'since', header: t('holds.col.since'), className: 'whitespace-nowrap', cell: (w) => day(w.firstPlacedOn) },
+    {
+      id: 'actions',
+      header: <span className="sr-only">{t('table.actions')}</span>,
+      className: 'w-px py-1.5 text-right whitespace-nowrap',
+      cell: (w) => (
+        <Button type="button" size="sm" variant="ghost" aria-expanded={marking?.record.id === w.record.id} onClick={() => setMarking(w)}>
+          {t('holds.action.mark_ready')}
+        </Button>
+      ),
+    },
+  ];
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="grid gap-1">
-          <h1 className="text-2xl font-semibold">{t('nav.circulation.hold_shelf')}</h1>
-          <p className="text-sm text-muted-foreground">{t('holds.shelf.intro')}</p>
-        </div>
-        {desk.branches !== undefined && desk.branches.length > 1 && (
-          <div className="grid gap-1">
-            <Label htmlFor={`${ids}-branch`}>{t('circulation.desk.branch')}</Label>
-            <select id={`${ids}-branch`} className={cn(SELECT_CLASS, 'w-56')} value={branchId ?? ''} onChange={(e) => desk.choose(e.target.value)}>
+    <div className="grid gap-6">
+      <PageHead title={t('nav.circulation.hold_shelf')} intro={t('holds.shelf.intro')} />
+      {desk.branches !== undefined && desk.branches.length > 1 && (
+        <FilterRow label={t('circulation.desk.branch')}>
+          <FilterField id={`${ids}-branch`} label={t('circulation.desk.branch')} className="max-w-xs">
+            <select id={`${ids}-branch`} className={SELECT_CLASS} value={branchId ?? ''} onChange={(e) => desk.choose(e.target.value)}>
               {desk.branches.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
                 </option>
               ))}
             </select>
-          </div>
-        )}
-      </div>
+          </FilterField>
+        </FilterRow>
+      )}
       {desk.branches !== undefined && desk.branches.length === 0 && <Notice kind="error">{t('circulation.desk.no_branch')}</Notice>}
       {notice !== null && <Notice kind={notice.kind}>{notice.text}</Notice>}
-      {shelf.isError && <Notice kind="error">{problemText(t, shelf.error)}</Notice>}
-      {branchId !== null && data === undefined && !shelf.isError && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
-      )}
+      {shelf.isError && data === undefined && <ErrorState error={shelf.error} onRetry={() => void shelf.refetch()} retrying={shelf.isFetching} />}
+      {branchId !== null && data === undefined && !shelf.isError && <SkeletonTable label={t('shell.loading')} columns={4} rows={3} />}
       {data !== undefined && (
         <>
-          <section aria-labelledby={`${ids}-ready`} className="flex flex-col gap-2">
-            <h2 id={`${ids}-ready`} className="text-lg font-semibold">
-              {t('holds.shelf.ready', { count: data.ready.length })}
-            </h2>
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-left">
-                  <tr>
-                    <th scope="col" className={TH}>
-                      {t('holds.col.title')}
-                    </th>
-                    <th scope="col" className={TH}>
-                      {t('holds.col.member')}
-                    </th>
-                    <th scope="col" className={TH}>
-                      {t('holds.col.pickup_until')}
-                    </th>
-                    <th scope="col" className={TH}>
-                      {t('table.actions')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.ready.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
-                        {t('holds.shelf.ready_empty')}
-                      </td>
-                    </tr>
-                  ) : (
-                    data.ready.map((h) => {
-                      const late = h.pickupUntil !== null && h.pickupUntil < today;
-                      return (
-                        <tr key={h.id} className={cn('border-t align-top', late && 'bg-destructive/5')}>
-                          <td className="px-3 py-2">
-                            <p className="font-medium">{h.record.title}</p>
-                            <p className="font-mono text-xs text-muted-foreground">{h.item?.barcode ?? '—'}</p>
-                          </td>
-                          <td className="px-3 py-2">
-                            <p className="font-mono">{h.member?.memberNo ?? '—'}</p>
-                            <p className="text-xs text-muted-foreground">{h.member?.name ?? ''}</p>
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <p>{day(h.pickupUntil)}</p>
-                            {late && <Badge tone="danger">{t('holds.overdue_pickup')}</Badge>}
-                          </td>
-                          <td className="px-3 py-2">
-                            <div className="flex flex-wrap gap-2">
-                              {branchId !== null && (
-                                <Button asChild size="sm" variant="outline">
-                                  <a href={holdSlipHref(branchId, h.id)} target="_blank" rel="noopener" aria-label={t('holds.action.slip_named', { title: h.record.title })}>
-                                    {t('holds.action.slip')}
-                                  </a>
-                                </Button>
-                              )}
-                              <Button type="button" size="sm" variant="outline" onClick={() => setCancelling(h)}>
-                                {t('holds.action.cancel')}
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section aria-labelledby={`${ids}-clear`} className="flex flex-col gap-2">
-            <h2 id={`${ids}-clear`} className="text-lg font-semibold">
-              {t('holds.shelf.to_clear', { count: data.toClear.length })}
-            </h2>
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-left">
-                  <tr>
-                    <th scope="col" className={TH}>
-                      {t('holds.col.title')}
-                    </th>
-                    <th scope="col" className={TH}>
-                      {t('holds.col.reason')}
-                    </th>
-                    <th scope="col" className={TH}>
-                      {t('table.actions')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.toClear.length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="px-3 py-6 text-center text-muted-foreground">
-                        {t('holds.shelf.to_clear_empty')}
-                      </td>
-                    </tr>
-                  ) : (
-                    data.toClear.map((h) => (
-                      <tr key={h.id} className="border-t align-top">
-                        <td className="px-3 py-2">
-                          <p className="font-medium">{h.record.title}</p>
-                          <p className="font-mono text-xs text-muted-foreground">{h.item?.barcode ?? '—'}</p>
-                        </td>
-                        <td className="px-3 py-2">{h.closeReason === null ? '—' : t(`vocab.hold_close_reason.${h.closeReason}`)}</td>
-                        <td className="px-3 py-2">
-                          <Button type="button" size="sm" variant="outline" onClick={() => void clear(h)}>
-                            {t('holds.action.clear')}
-                          </Button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section aria-labelledby={`${ids}-waiting`} className="flex flex-col gap-2">
-            <h2 id={`${ids}-waiting`} className="text-lg font-semibold">
-              {t('holds.shelf.waiting', { count: data.waitingTitles.length })}
-            </h2>
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-left">
-                  <tr>
-                    <th scope="col" className={TH}>
-                      {t('holds.col.title')}
-                    </th>
-                    <th scope="col" className={TH}>
-                      {t('holds.col.waiting')}
-                    </th>
-                    <th scope="col" className={TH}>
-                      {t('holds.col.since')}
-                    </th>
-                    <th scope="col" className={TH}>
-                      {t('table.actions')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.waitingTitles.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
-                        {t('holds.shelf.waiting_empty')}
-                      </td>
-                    </tr>
-                  ) : (
-                    data.waitingTitles.map((w) => (
-                      <tr key={w.record.id} className="border-t align-top">
-                        <td className="px-3 py-2 font-medium">{w.record.title}</td>
-                        <td className="px-3 py-2">{w.waiting}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{day(w.firstPlacedOn)}</td>
-                        <td className="px-3 py-2">
-                          <Button type="button" size="sm" variant="outline" onClick={() => setMarking(w)}>
-                            {t('holds.action.mark_ready')}
-                          </Button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <Section title={t('holds.shelf.ready', { count: data.ready.length })}>
+            <DenseTable caption={t('holds.shelf.ready', { count: data.ready.length })} columns={readyColumns} rows={data.ready} rowKey={(h) => h.id} empty={t('holds.shelf.ready_empty')} />
+          </Section>
+          <Section title={t('holds.shelf.to_clear', { count: data.toClear.length })}>
+            <DenseTable caption={t('holds.shelf.to_clear', { count: data.toClear.length })} columns={clearColumns} rows={data.toClear} rowKey={(h) => h.id} empty={t('holds.shelf.to_clear_empty')} />
+          </Section>
+          <Section title={t('holds.shelf.waiting', { count: data.waitingTitles.length })}>
+            {branchId !== null && marking !== null && (
+              <MarkReadyPanel
+                key={marking.record.id}
+                title={marking}
+                branchId={branchId}
+                onClose={() => setMarking(null)}
+                onDone={async (r) => {
+                  setNotice({ kind: 'success', text: t('holds.done.ready', { date: day(r.pickupUntil) }) });
+                  await refresh();
+                }}
+              />
+            )}
+            <DenseTable
+              caption={t('holds.shelf.waiting', { count: data.waitingTitles.length })}
+              columns={waitingColumns}
+              rows={data.waitingTitles}
+              rowKey={(w) => w.record.id}
+              rowClassName={(w) => (marking?.record.id === w.record.id ? 'bg-accent-soft' : undefined)}
+              empty={t('holds.shelf.waiting_empty')}
+            />
+          </Section>
         </>
       )}
 
@@ -307,17 +239,6 @@ export function HoldShelfScreen() {
           onClose={() => setCancelling(null)}
           onDone={async () => {
             setNotice({ kind: 'success', text: t('holds.done.cancelled') });
-            await refresh();
-          }}
-        />
-      )}
-      {branchId !== null && (
-        <MarkReadyDialog
-          title={marking}
-          branchId={branchId}
-          onClose={() => setMarking(null)}
-          onDone={async (r) => {
-            setNotice({ kind: 'success', text: t('holds.done.ready', { date: day(r.pickupUntil) }) });
             await refresh();
           }}
         />
@@ -352,21 +273,18 @@ function CancelHoldDialog({ hold, branchId, onClose, onDone }: { hold: HoldView 
   );
 }
 
-/** "Tandai siap": scan a copy of `title` from the shelf; it is kept for the first in its queue. */
-function MarkReadyDialog({ title, branchId, onClose, onDone }: { title: WaitingTitleView | null; branchId: string; onClose(): void; onDone(r: HoldActionResponse): Promise<void> }) {
+/**
+ * "Tandai siap", a panel above the queues: scan a copy of `title` from the shelf; it is kept for the first in its queue.
+ */
+function MarkReadyPanel({ title, branchId, onClose, onDone }: { title: WaitingTitleView; branchId: string; onClose(): void; onDone(r: HoldActionResponse): Promise<void> }) {
   const t = useT();
-  const ids = useId();
   const [barcode, setBarcode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    setBarcode('');
-    setError(null);
-  }, [title]);
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
-    if (title === null || barcode.trim() === '') return;
+    if (barcode.trim() === '') return;
     setBusy(true);
     setError(null);
     try {
@@ -383,35 +301,21 @@ function MarkReadyDialog({ title, branchId, onClose, onDone }: { title: WaitingT
   };
 
   return (
-    <Dialog open={title !== null} onOpenChange={(next) => (next ? undefined : onClose())}>
-      {title !== null && (
-        <DialogContent closeLabel={t('form.cancel')}>
-          <DialogHeader>
-            <DialogTitle>{t('holds.ready_dialog.title', { title: title.record.title })}</DialogTitle>
-            <DialogDescription>{t('holds.ready_dialog.description')}</DialogDescription>
-          </DialogHeader>
-          <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-3">
-            <div className="grid gap-1">
-              <Label htmlFor={`${ids}-barcode`}>{t('holds.ready_dialog.barcode')}</Label>
-              <Input id={`${ids}-barcode`} autoFocus autoComplete="off" className="font-mono" value={barcode} maxLength={200} onChange={(e) => setBarcode(e.target.value)} />
-            </div>
-            {error !== null && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={onClose}>
-                {t('form.cancel')}
-              </Button>
-              <Button type="submit" disabled={busy || barcode.trim() === ''}>
-                {t('holds.ready_dialog.submit')}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      )}
-    </Dialog>
+    <InlinePanel title={t('holds.ready_dialog.title', { title: title.record.title })} onSubmit={(e) => void submit(e)} onCancel={onClose}>
+      <p className="-mt-1.5 max-w-[75ch] text-sm text-muted-foreground">{t('holds.ready_dialog.description')}</p>
+      <Field label={t('holds.ready_dialog.barcode')} className="max-w-sm">
+        {(c) => <Input {...c} autoComplete="off" className="tracking-wide" value={barcode} maxLength={200} onChange={(e) => setBarcode(e.target.value)} />}
+      </Field>
+      {error !== null && <PageError title={error} />}
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" size="sm" disabled={busy || barcode.trim() === ''}>
+          {t('holds.ready_dialog.submit')}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onClose}>
+          {t('form.cancel')}
+        </Button>
+      </div>
+    </InlinePanel>
   );
 }
 
@@ -445,64 +349,45 @@ export function MemberHoldsPanel({
   // The panel leaves (another member, another tab) with a dialog open: the desk must not stay blocked.
   useEffect(() => () => onDialog(false), []);
   return (
-    <div className="flex flex-col gap-2">
+    <div className="grid gap-3">
       <div className="flex justify-end">
         <Button type="button" variant="outline" size="sm" onClick={() => setAdding(true)}>
           {t('holds.action.add')}
         </Button>
       </div>
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
-          <caption className="sr-only">{t('holds.member.caption', { name: member.name })}</caption>
-          <thead className="bg-muted/50 text-left">
-            <tr>
-              <th scope="col" className={TH}>
-                {t('holds.col.title')}
-              </th>
-              <th scope="col" className={TH}>
-                {t('holds.col.status')}
-              </th>
-              <th scope="col" className={TH}>
-                {t('holds.col.branch')}
-              </th>
-              <th scope="col" className={TH}>
-                {t('table.actions')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {member.holds.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
-                  {t('holds.member.empty')}
-                </td>
-              </tr>
-            ) : (
-              member.holds.map((h) => (
-                <tr key={h.id} className={cn('border-t align-top', h.status === 'ready' && 'border-l-4 border-l-primary')}>
-                  <td className="px-3 py-2">
-                    <p className="font-medium">{h.record.title}</p>
-                    {h.item !== null && <p className="font-mono text-xs text-muted-foreground">{h.item.barcode}</p>}
-                  </td>
-                  <td className="px-3 py-2">
-                    <HoldStatus hold={h} />
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">{h.pickupBranch.code}</td>
-                  <td className="px-3 py-2">
-                    {h.pickupBranch.id === branchId ? (
-                      <Button type="button" size="sm" variant="outline" onClick={() => setCancelling(h)}>
-                        {t('holds.action.cancel')}
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">{t('holds.member.other_branch', { code: h.pickupBranch.code })}</span>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DenseTable
+        caption={t('holds.member.caption', { name: member.name })}
+        columns={[
+          {
+            id: 'title',
+            header: t('holds.col.title'),
+            cell: (h) => (
+              <>
+                <p className="font-semibold">{h.record.title}</p>
+                {h.item !== null && <p className="text-meta tracking-wide text-muted-foreground">{h.item.barcode}</p>}
+              </>
+            ),
+          },
+          { id: 'status', header: t('holds.col.status'), cell: (h) => <HoldStatus hold={h} /> },
+          { id: 'branch', header: t('holds.col.branch'), className: 'whitespace-nowrap', cell: (h) => h.pickupBranch.code },
+          {
+            id: 'actions',
+            header: <span className="sr-only">{t('table.actions')}</span>,
+            className: 'py-1.5 text-right',
+            cell: (h) =>
+              h.pickupBranch.id === branchId ? (
+                <Button type="button" size="sm" variant="ghost" onClick={() => setCancelling(h)}>
+                  {t('holds.action.cancel')}
+                </Button>
+              ) : (
+                <span className="text-meta text-muted-foreground">{t('holds.member.other_branch', { code: h.pickupBranch.code })}</span>
+              ),
+          },
+        ]}
+        rows={member.holds}
+        rowKey={(h) => h.id}
+        empty={t('holds.member.empty')}
+      />
       <CancelHoldDialog
         hold={cancelling}
         branchId={branchId}
@@ -591,25 +476,20 @@ export function PlaceHoldDialog({
           ) : (
             <form
               noValidate
-              className="flex gap-2"
+              className="flex items-end gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
                 setQ(text.trim());
               }}>
-              <Label htmlFor={`${ids}-q`} className="sr-only">
-                {t('holds.place.search')}
-              </Label>
-              <Input id={`${ids}-q`} autoFocus autoComplete="off" placeholder={t('holds.place.search')} value={text} maxLength={500} onChange={(e) => setText(e.target.value)} />
-              <Button type="submit" disabled={text.trim().length < 2}>
+              <Field id={`${ids}-q`} label={t('holds.place.search')} className="min-w-0 flex-1">
+                <Input id={`${ids}-q`} autoFocus autoComplete="off" value={text} maxLength={500} onChange={(e) => setText(e.target.value)} />
+              </Field>
+              <Button type="submit" variant="outline" disabled={text.trim().length < 2}>
                 {t('holds.place.search')}
               </Button>
             </form>
           )}
-          {error !== null && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
+          {error !== null && <PageError title={error} />}
           {results.isFetching && (
             <p role="status" className="text-sm text-muted-foreground">
               {t('holds.place.searching')}
@@ -618,16 +498,16 @@ export function PlaceHoldDialog({
           {results.isError && <Notice kind="error">{problemText(t, results.error)}</Notice>}
           {q.length >= 2 && results.data !== undefined && items.length === 0 && <p className="text-sm text-muted-foreground">{t('holds.place.no_results')}</p>}
           {items.length > 0 && (
-            <ul className="flex max-h-80 flex-col divide-y overflow-y-auto rounded-md border">
+            <ul className="grid max-h-80 overflow-y-auto rounded-lg border">
               {items.map((r) => (
-                <li key={r.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                <li key={r.id} className="flex items-center justify-between gap-2 border-b px-3 py-2 text-sm last:border-b-0">
                   <span className="min-w-0">
-                    <span className="block truncate font-medium">{r.title}</span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="block truncate font-semibold">{r.title}</span>
+                    <span className="text-meta text-muted-foreground">
                       {[r.mainAgent, r.year, t('holds.place.copies', { count: r.itemCount })].filter((x) => x !== null && x !== '').join(' · ')}
                     </span>
                   </span>
-                  <Button type="button" size="sm" disabled={busy} onClick={() => void place(r.id, r.title)}>
+                  <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void place(r.id, r.title)}>
                     {t('holds.place.submit')}
                   </Button>
                 </li>
