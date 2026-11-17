@@ -365,4 +365,39 @@ describe('Meja Layanan', () => {
     // The charge booked is said as the member's card says money.
     expect(await screen.findByText('Biaya penggantian Rp 85.000 dibukukan.')).toBeTruthy();
   });
+
+  // ---- Komunitas (staff screens' data) ----
+  it("a refusal's detail line says the item and its due date (never its holder); the panel says the loan period; a return names its borrower", async () => {
+    const view = deskMember({ loanRule: { policyId: '01JZ0000000000000000000P01', code: 'DEFAULT', loanDays: 7, renewLimit: 2, loanable: true, others: 0 } });
+    const app = start({
+      'POST branches/:branchId/circulation/members/lookup': () => view,
+      'GET branches/:branchId/circulation/members/:memberId': () => view,
+      'POST branches/:branchId/circulation/loans': () => problem(409, 'CIRC_ITEM_ON_LOAN', { reason: 'other_member' }),
+      'POST branches/:branchId/circulation/items/glance': () => ({ barcode: 'B0002', title: 'Laskar Pelangi', status: 'available', branchCode: 'PUSAT', dueOn: '2026-11-21', onHoldShelf: false }),
+      'POST branches/:branchId/circulation/returns': (): ReturnResponse => ({
+        id: LOAN.id,
+        version: 2,
+        memberId: MEMBER_ID,
+        memberNo: 'A001',
+        memberName: 'Budi Santoso',
+        item: LOAN.item,
+        record: LOAN.record,
+        loanedOn: '2026-11-01',
+        dueOn: '2026-11-08',
+        returnedOn: '2026-11-08',
+        daysLate: 0,
+      }),
+    });
+    await scan('A001');
+    expect(await screen.findByText('Anggota dimuat: Budi Santoso')).toBeTruthy();
+    const panel = screen.getByRole('complementary', { name: 'Budi Santoso' });
+    expect(within(panel).getByText('Lama pinjam').nextSibling?.textContent).toBe('7 hari, perpanjang 2×');
+    await scan('B0002');
+    expect(await screen.findByText('Laskar Pelangi · B0002, jatuh tempo Sab, 21 Nov 2026.')).toBeTruthy();
+    expect(app.requests.find((r) => r.path.endsWith('/items/glance'))?.body).toEqual({ barcode: 'B0002' });
+    fireEvent.keyDown(window, { key: 'F3' });
+    await scan('B0001');
+    const returns = await screen.findByRole('table', { name: 'Pengembalian kali ini' });
+    expect(await within(returns).findByText('Budi Santoso')).toBeTruthy();
+  });
 });

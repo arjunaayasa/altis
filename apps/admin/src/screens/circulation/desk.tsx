@@ -1,7 +1,8 @@
-import { MEMBER_BLOCK_REASONS, RENEW_REFUSALS, VOID_REFUSALS, type ForceableReason, type MemberBlockReason, type RenewRefusal, type VoidRefusal } from '@altis/shared';
+import { ITEM_STATUSES, MEMBER_BLOCK_REASONS, RENEW_REFUSALS, VOID_REFUSALS, type ForceableReason, type ItemStatus, type MemberBlockReason, type RenewRefusal, type VoidRefusal } from '@altis/shared';
 import type { PaymentView } from '@altis/shared/api/charges';
 import type {
   CirculationWarningView,
+  DeskItemGlance,
   DeskLoanView,
   DeskMemberSearchResponse,
   DeskMemberSummary,
@@ -13,6 +14,7 @@ import type {
   RenewAllResponse,
   RenewResponse,
   ReturnResponse,
+  TypeLoanRule,
 } from '@altis/shared/api/circulation';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
@@ -130,6 +132,9 @@ interface ReturnRow {
   barcode: string;
   title: string;
   memberNo: string | null;
+  // ---- Komunitas (staff screens' data): who gave it back, linked for a member reader ----
+  memberId: string | null;
+  memberName: string | null;
   dueOn: string;
   daysLate: number;
   /** The days its overdue fine counted, when a fine was booked and they differ from `daysLate` (closed days). */
@@ -259,6 +264,37 @@ function borrowRefusalText(t: Translate, m: DeskMemberView): string | null {
 function lateText(t: Translate, daysLate: number, finedDays: number | null): string {
   if (daysLate <= 0) return t('circulation.due.on_time');
   return finedDays === null ? t('circulation.due.late', { count: daysLate }) : t('circulation.due.late_fined', { count: daysLate, fined: finedDays });
+}
+
+/** The refusals of a loan that are about the scanned item: the desk asks what it may say about it. */
+const REFUSALS_ABOUT_ITEM: ReadonlySet<string> = new Set([
+  'CIRC_OTHER_BRANCH',
+  'CIRC_NOT_LOANABLE',
+  'CIRC_ITEM_ON_LOAN',
+  'CIRC_ITEM_ON_HOLD',
+  'CIRC_LIMIT_REACHED',
+  'CIRC_MEMBER_BLOCKED',
+  'CIRC_NO_POLICY',
+  'TX_CONFLICT',
+  'CONFLICT_STALE',
+]);
+
+/** The detail line of a refused loan from the item's glance: "Judul · B001, jatuh tempo Sen, 21 Nov 2026." and the like. */
+export function glanceText(t: Translate, day: (d: string) => string, g: DeskItemGlance, e: ApiError): string {
+  const item = `${g.title} · ${g.barcode}`;
+  if (e.code === 'CIRC_ITEM_ON_LOAN' && g.dueOn !== null) return t('circulation.refusal.due', { item, date: day(g.dueOn) });
+  if (e.code === 'CIRC_OTHER_BRANCH') return t('circulation.refusal.branch', { item, code: g.branchCode });
+  if (e.code === 'CIRC_NOT_LOANABLE' && e.reason === 'status' && (ITEM_STATUSES as readonly string[]).includes(g.status)) {
+    return t('circulation.refusal.status', { item, status: t(`vocab.item_status.${g.status as ItemStatus}`) });
+  }
+  if (e.code === 'CIRC_ITEM_ON_HOLD' || g.onHoldShelf) return t('circulation.refusal.hold_shelf', { item });
+  return `${item}.`;
+}
+
+/** "14 hari, perpanjang 2×" ("Hari itu juga" for 0 days; "tidak bisa diperpanjang" for no renewal). */
+function loanPeriodText(t: Translate, rule: TypeLoanRule): string {
+  const days = rule.loanDays === 0 ? t('members.types.rule.same_day') : t('members.types.days', { count: rule.loanDays });
+  return rule.renewLimit === 0 ? t('circulation.member.loan_period_no_renewal', { days }) : t('circulation.member.loan_period_value', { days, count: rule.renewLimit });
 }
 
 /** The warnings of an action that went through, as one sentence each. */
@@ -526,11 +562,39 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
         setOffer({ kind: 'force', barcode, reasons: [...new Set([...(force?.reasons ?? []), reason])] });
         if (force !== undefined) setForceNote(force.note);
         say('warning', refusal.title, t('circulation.override.hint'));
+        void explain(e, barcode, panel, t('circulation.override.hint'));
         return;
       }
       if (refusal.offer !== undefined) setOffer(refusal.offer);
-      say(refusal.offer !== undefined ? 'warning' : 'error', refusal.title, refusal.offer === undefined ? undefined : t('circulation.offer.hint'));
+      const hint = refusal.offer === undefined ? undefined : t('circulation.offer.hint');
+      say(refusal.offer !== undefined ? 'warning' : 'error', refusal.title, hint);
+      void explain(e, barcode, panel, hint);
     }
+  };
+
+  // ---- Komunitas (staff screens' data) ----
+  /**
+   * Fills the detail line under a refused loan once the server has said what it may about the item (its title, and its
+   * due date, branch, status or hold shelf; never who holds it) or the member (the suspension note, the expiry date),
+   * unless another result has replaced the card meanwhile. The live regions keep the first sentence.
+   */
+  const explain = async (e: unknown, barcode: string, member: DeskMemberView, hint: string | undefined): Promise<void> => {
+    const at = seq.current;
+    if (!(e instanceof ApiError) || branchId === null) return;
+    let line: string | null = null;
+    if (e.code === 'MEMBER_SUSPENDED') line = member.statusNote;
+    else if (e.code === 'MEMBER_EXPIRED') line = member.expiresOn === null ? null : t('circulation.refusal.expired_on', { date: day(member.expiresOn) });
+    else if (REFUSALS_ABOUT_ITEM.has(e.code)) {
+      try {
+        const glance = await api<DeskItemGlance>('POST', `branches/${encodeURIComponent(branchId)}/circulation/items/glance`, { barcode });
+        line = glanceText(t, day, glance, e);
+      } catch {
+        line = null;
+      }
+    }
+    if (line === null || line === '') return;
+    const detail = [line, hint ?? ''].filter((x) => x !== '').join(' ');
+    setFeedback((f) => (f.seq === at ? { ...f, detail } : f));
   };
 
   /** Ctrl+Z: voids the last loan of this visit. */
@@ -622,6 +686,8 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
         barcode: done.item.barcode,
         title: done.record.title,
         memberNo: done.memberNo,
+        memberId: done.memberId,
+        memberName: done.memberName ?? null,
         dueOn: done.dueOn,
         daysLate: done.daysLate,
         finedDays,
@@ -1717,6 +1783,10 @@ function MemberPanel({
           },
           { key: 'late', label: t('circulation.member.overdue'), value: String(member.counts.overdue), ...(member.counts.overdue > 0 ? { tone: 'bad' as const } : {}) },
           { key: 'until', label: t('circulation.member.valid_until'), value: member.expiresOn === null ? t('members.never_expires') : day(member.expiresOn) },
+          // ---- Komunitas (staff screens' data): the loan period and renewals of the type's general rule ----
+          ...(member.loanRule === undefined || member.loanRule === null || !member.loanRule.loanable
+            ? []
+            : [{ key: 'period', label: t('circulation.member.loan_period'), value: loanPeriodText(t, member.loanRule) }]),
           ...(Number(member.charges.balance) > 0
             ? [{ key: 'balance', label: t('charges.member.balance'), value: money(member.charges.balance, member.charges.currency), tone: 'warn' as const }]
             : []),
@@ -1880,6 +1950,26 @@ function ReturnSide({ rows, back }: { rows: readonly ReturnRow[]; back: string |
 }
 
 /** Kembali Cepat's and F3's list of this session's returns, the newest first; a late one stands out. */
+/** The borrower of a return: the name (a link to the member for a member reader) and the number beside it. */
+function BorrowerCell({ row }: { row: ReturnRow }) {
+  const me = useMe();
+  if (row.memberNo === null) return <span className="text-muted-foreground">—</span>;
+  const no = <span className="text-meta font-semibold tracking-wide whitespace-nowrap text-muted-foreground tabular-nums">{row.memberNo}</span>;
+  if (row.memberName === null) return no;
+  return (
+    <span className="flex flex-wrap items-baseline gap-x-2">
+      {row.memberId !== null && holds(me, 'members.records.read') ? (
+        <Link to={`/admin/anggota/${encodeURIComponent(row.memberId)}`} className="font-semibold text-accent-text underline-offset-4 hover:underline">
+          {row.memberName}
+        </Link>
+      ) : (
+        <span className="font-semibold">{row.memberName}</span>
+      )}
+      {no}
+    </span>
+  );
+}
+
 function ReturnsTable({ rows }: { rows: readonly ReturnRow[] }) {
   const t = useT();
   const day = useCalendarDate();
@@ -1914,7 +2004,9 @@ function ReturnsTable({ rows }: { rows: readonly ReturnRow[] }) {
                   <td className={cn(TABLE.td, 'whitespace-nowrap text-muted-foreground')}>{row.time}</td>
                   <td className={cn(TABLE.td, 'font-semibold tracking-wide whitespace-nowrap')}>{row.barcode}</td>
                   <td className={TABLE.td}>{row.title}</td>
-                  <td className={cn(TABLE.td, 'whitespace-nowrap')}>{row.memberNo ?? '—'}</td>
+                  <td className={TABLE.td}>
+                    <BorrowerCell row={row} />
+                  </td>
                   <td className={cn(TABLE.td, 'whitespace-nowrap')}>{day(row.dueOn)}</td>
                   <td className={TABLE.td}>
                     <span className="grid gap-0.5">
