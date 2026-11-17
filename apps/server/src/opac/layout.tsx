@@ -47,6 +47,8 @@ export interface SiteFooter {
   address: string | null;
   /** The opening hours, one row per group of days; none: no hours block. */
   hours: readonly { days: string; time: string }[];
+  /** The language of the address and the hours when it is not the page's. */
+  contentLang?: Locale | undefined;
   /** The links: the catalogue, the home page's profile blocks with content, the news, the published menu pages. */
   links: readonly FrameLink[];
   /** The footer's search field to /cari, with the `lang` it keeps. */
@@ -221,7 +223,9 @@ function Footer(props: { locale: Locale; libraryName: string | undefined; footer
           {footer.address === null || libraryName === undefined ? null : (
             <div class="foot-block">
               <h2>{libraryName}</h2>
-              <p class="foot-address">{footer.address}</p>
+              <p class="foot-address" lang={footer.contentLang}>
+                {footer.address}
+              </p>
             </div>
           )}
           <nav class="foot-block" aria-labelledby="kaki-tautan">
@@ -240,7 +244,7 @@ function Footer(props: { locale: Locale; libraryName: string | undefined; footer
             <div class="foot-block">
               <h2 id="kaki-jam">{opacText(locale, 'shell.footer.hours')}</h2>
               <table class="foot-hours" aria-labelledby="kaki-jam">
-                <tbody>
+                <tbody lang={footer.contentLang}>
                   {footer.hours.map((h) => (
                     <tr>
                       <th scope="row">{h.days}</th>

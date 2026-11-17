@@ -40,7 +40,7 @@ export const HOME_CSS: string = [
     'border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-pop)}',
   '.home-search .search-hero{max-width:none;margin:0;display:grid;gap:.75rem}',
   '.home-search .search-row input[type=search],.home-search .search-row button{min-height:3.125rem;font-size:1.0625rem}',
-  '.home-search .search-row input[type=search]{flex-basis:16rem}',
+  '.home-search .search-row input[type=search]{flex-basis:10rem}',
   '.home-search .search-row button{padding:0 1.625rem}',
   // The field choice: radio buttons drawn as a row of pills.
   '.scope{display:flex;flex-wrap:wrap;gap:.375rem;margin:0;padding:0;border:0;min-width:0}',

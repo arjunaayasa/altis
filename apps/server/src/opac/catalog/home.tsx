@@ -113,7 +113,10 @@ function SubjectPills(props: { pills: readonly SubjectPill[]; locale: Locale; la
   );
 }
 
-/** A title as a book on the shelf: its cover (or substitute cover), title, author and availability; all one link. */
+/**
+ * A title as a book on the shelf: its cover (or substitute cover), title, author and availability, all one link (the
+ * year is the record page's).
+ */
 function Card(props: { card: TitleCard; locale: Locale; lang: Locale | null }) {
   const { card, locale, lang } = props;
   return (
@@ -131,7 +134,6 @@ function Card(props: { card: TitleCard; locale: Locale; lang: Locale | null }) {
           {card.subtitle === null || card.subtitle.trim() === '' ? null : <span class="card-subtitle">: {card.subtitle}</span>}
         </a>
         {card.mainAgent === null ? null : <span class="card-meta">{card.mainAgent}</span>}
-        {card.year === null ? null : <span class="card-meta">{card.year}</span>}
         <Availability card={card} locale={locale} />
       </span>
     </li>
@@ -139,13 +141,14 @@ function Card(props: { card: TitleCard; locale: Locale; lang: Locale | null }) {
 }
 
 /** A section's head: its heading (and a line under it) on the left, a "see all" link on the right. */
-function SectionHead(props: { id: string; heading: string; sub?: string | undefined; more?: { href: string; label: string } | undefined }) {
+function SectionHead(props: { id: string; heading: string; sub?: string | undefined; aside?: string | undefined; more?: { href: string; label: string } | undefined }) {
   return (
     <div class="section-head">
       <div>
         <h2 id={props.id}>{props.heading}</h2>
         {props.sub === undefined ? null : <p class="section-sub">{props.sub}</p>}
       </div>
+      {props.aside === undefined ? null : <p class="section-aside">{props.aside}</p>}
       {props.more === undefined ? null : (
         <a class="section-link" href={props.more.href}>
           {props.more.label}
@@ -209,7 +212,7 @@ function Classes(props: { locale: Locale; lang: Locale | null; counts: Catalogue
   const { locale, lang, counts } = props;
   return (
     <section class="home-section" aria-labelledby="jelajah-kelas">
-      <SectionHead id="jelajah-kelas" heading={opacText(locale, 'shell.home.classes')} sub={opacText(locale, 'home.subjects.scheme')} />
+      <SectionHead id="jelajah-kelas" heading={opacText(locale, 'shell.home.classes')} aside={opacText(locale, 'home.subjects.scheme')} />
       <ul class="class-grid">
         {CLASS_DIGITS.map((n) => (
           <li>

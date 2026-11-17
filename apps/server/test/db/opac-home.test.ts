@@ -306,6 +306,8 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
       // No hours set up yet: no hours block and no placeholder.
       expect(footer, path).not.toContain('foot-hours');
     }
+    // In English the library's own texts carry their language.
+    expect((await get('/?lang=en')).text).toContain('<p class="foot-address" lang="id">Jl. Pendidikan 1\nKota Contoh</p>');
   });
 
   it('with a profile: the photo under the overlay with its alt text and position, the heading, about with its facts, the services and photos, the hours; texts escaped', async () => {
