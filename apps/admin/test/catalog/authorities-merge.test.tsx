@@ -14,7 +14,8 @@ import {
   publisher,
 } from './authorities-fixtures';
 
-// The merge dialog of an authority's page (Phase 2 Task 26; spec §3.5 "Gabung", §13): it searches the target among
+// The merge panel of an authority's page (Phase 2 Task 26; spec §3.5 "Gabung", §13): it opens in the page under its
+// button (a region named by its heading, not a dialog), searches the target among
 // the live authorities of the same kind (agents: of the same type, since agents of different types cannot merge),
 // asks for a confirmation that says the merge cannot be undone, and only then posts `{intoId, version}` to
 // `POST catalog/<kind>/:id/merge` (the version is the source's). The page then shows the source as merged.
@@ -42,11 +43,16 @@ function agentRoutes(extra: Record<string, FakeHandler> = {}, posted: unknown[] 
 
 async function openMerge(): Promise<HTMLElement> {
   await screen.findByRole('heading', { name: 'Toer, Pramoedya Ananta' }, FIRST);
-  fireEvent.click(screen.getByRole('button', { name: 'Gabungkan ke otoritas lain…' }));
-  return screen.findByRole('dialog', { name: 'Gabungkan Toer, Pramoedya Ananta' });
+  const open = screen.getByRole('button', { name: 'Gabungkan ke otoritas lain…' });
+  open.focus();
+  fireEvent.click(open);
+  return screen.findByRole('region', { name: 'Gabungkan Toer, Pramoedya Ananta' });
 }
 
-/** Opens the target picker of the dialog, types `text` and picks the option `label`. */
+/** The merge panel, or null once it closed. */
+const panelShown = (): HTMLElement | null => screen.queryByRole('region', { name: /^Gabungkan / });
+
+/** Opens the target picker of the panel, types `text` and picks the option `label`. */
 async function pickTarget(dialog: HTMLElement, text: string, label: string): Promise<void> {
   fireEvent.click(within(dialog).getByRole('combobox', { name: 'Otoritas tujuan' }));
   fireEvent.change(await screen.findByPlaceholderText('Ketik bagian dari nama'), { target: { value: text } });
@@ -54,7 +60,7 @@ async function pickTarget(dialog: HTMLElement, text: string, label: string): Pro
   await waitFor(() => expect(within(dialog).getByRole('combobox', { name: 'Otoritas tujuan' }).textContent).toContain(label));
 }
 
-describe('the merge dialog', () => {
+describe('the merge panel', () => {
   it('searches live agents of the same type, leaves the source out, and posts {intoId, version} only after the confirmation', async () => {
     const posted: unknown[] = [];
     const { requests, writes } = startApp({
@@ -71,7 +77,7 @@ describe('the merge dialog', () => {
     expect(search.query.has('includeArchived')).toBe(false);
     // The source itself is not a target.
     await screen.findByRole('option', { name: 'Toer, Pramoedya A.' });
-    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Toer, Pramoedya A.']);
+    expect(within(screen.getByRole('listbox')).getAllByRole('option').map((o) => o.textContent)).toEqual(['Toer, Pramoedya A.']);
     fireEvent.click(screen.getByRole('option', { name: 'Toer, Pramoedya A.' }));
     await waitFor(() => expect(within(dialog).getByRole('combobox', { name: 'Otoritas tujuan' }).textContent).toContain('Toer, Pramoedya A.'));
 
@@ -83,7 +89,7 @@ describe('the merge dialog', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Gabungkan' }));
     await waitFor(() => expect(writes()).toEqual([`POST catalog/agents/${AGENT_PRAM_ID}/merge`]));
     expect(posted).toEqual([{ intoId: AGENT_PRAM2_ID, version: 3 }]);
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(panelShown()).toBeNull());
     expect(await screen.findByText(/Digabungkan ke Toer, Pramoedya A\./)).toBeTruthy();
     // The page reads the source again: it is merged now, with a link to the target and no more actions.
     expect(await screen.findByRole('link', { name: 'Buka otoritas tujuan' })).toBeTruthy();
@@ -91,7 +97,7 @@ describe('the merge dialog', () => {
     expect(screen.queryByRole('button', { name: 'Gabungkan ke otoritas lain…' })).toBeNull();
   });
 
-  it('"Kembali" returns to the choice; closing the dialog posts nothing', async () => {
+  it('"Kembali" returns to the choice; Esc closes the panel, posts nothing and gives the focus back to its button', async () => {
     const { writes } = startApp({ me: adminMe(), path: `/admin/catalog/authorities/agents/${AGENT_PRAM_ID}`, routes: agentRoutes() });
     const dialog = await openMerge();
     expect((within(dialog).getByRole('button', { name: 'Lanjut' }) as HTMLButtonElement).disabled).toBe(true);
@@ -99,24 +105,24 @@ describe('the merge dialog', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Lanjut' }));
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Kembali' }));
     expect(within(dialog).getByRole('combobox', { name: 'Otoritas tujuan' })).toBeTruthy();
-    fireEvent.keyDown(dialog, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    fireEvent.keyDown(within(dialog).getByRole('combobox', { name: 'Otoritas tujuan' }), { key: 'Escape' });
+    await waitFor(() => expect(panelShown()).toBeNull());
     expect(writes()).toEqual([]);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Gabungkan ke otoritas lain…' }));
   });
 
-  it('the search list opens inside the dialog, reads nothing before a letter is typed, and Escape closes the list first', async () => {
+  it('the search list opens inside the panel, reads nothing before a letter is typed, and Escape closes the list first', async () => {
     const { requests } = startApp({ me: adminMe(), path: `/admin/catalog/authorities/agents/${AGENT_PRAM_ID}`, routes: agentRoutes() });
     const dialog = await openMerge();
     fireEvent.click(within(dialog).getByRole('combobox', { name: 'Otoritas tujuan' }));
-    // Inside the dialog's content: the modal's scroll lock lets a long list scroll there.
     const input = await within(dialog).findByPlaceholderText('Ketik bagian dari nama');
     expect(within(dialog).getByText('Ketik beberapa huruf untuk mencari.')).toBeTruthy();
     expect(requests.some((r) => r.path === 'catalog/agents')).toBe(false);
     fireEvent.keyDown(input, { key: 'Escape' });
     await waitFor(() => expect(within(dialog).queryByPlaceholderText('Ketik bagian dari nama')).toBeNull());
-    expect(screen.getByRole('dialog', { name: 'Gabungkan Toer, Pramoedya Ananta' })).toBeTruthy();
-    fireEvent.keyDown(dialog, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('region', { name: 'Gabungkan Toer, Pramoedya Ananta' })).toBeTruthy();
+    fireEvent.keyDown(within(dialog).getByRole('combobox', { name: 'Otoritas tujuan' }), { key: 'Escape' });
+    await waitFor(() => expect(panelShown()).toBeNull());
   });
 
   it('a long search is cut to what the API takes (191 UTF-16 code units), never inside a surrogate pair', async () => {
@@ -129,7 +135,7 @@ describe('the merge dialog', () => {
     expect(q).toBe('\u{1F600}'.repeat(95));
   });
 
-  it('a refused merge stays in the dialog with its reason', async () => {
+  it('a refused merge stays in the panel with its reason', async () => {
     startApp({
       me: adminMe(),
       path: `/admin/catalog/authorities/agents/${AGENT_PRAM_ID}`,
@@ -140,7 +146,7 @@ describe('the merge dialog', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Lanjut' }));
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Gabungkan' }));
     expect(await within(dialog).findByText('Penggabungan ini tidak dapat dilakukan. Pilih tujuan lain yang masih aktif.')).toBeTruthy();
-    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(panelShown()).toBeTruthy();
   });
 
   it('publishers search without a type and post the publisher’s version', async () => {
@@ -160,7 +166,7 @@ describe('the merge dialog', () => {
     });
     await screen.findByRole('heading', { name: 'Gramedia Pustaka Utama' }, FIRST);
     fireEvent.click(screen.getByRole('button', { name: 'Gabungkan ke otoritas lain…' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Gabungkan Gramedia Pustaka Utama' });
+    const dialog = await screen.findByRole('region', { name: 'Gabungkan Gramedia Pustaka Utama' });
     await pickTarget(dialog, 'gramedia', 'Gramedia (Jakarta)');
     expect(requests.filter((r) => r.path === 'catalog/publishers').every((r) => !r.query.has('type'))).toBe(true);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Lanjut' }));

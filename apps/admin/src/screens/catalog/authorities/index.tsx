@@ -1,8 +1,8 @@
 import { AUTHORITY_KINDS, type AuthorityKind } from '@altis/shared/api/catalog/authorities';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { PlusIcon } from 'lucide-react';
+import { PageHead } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { useMe } from '@/lib/me';
@@ -34,10 +34,9 @@ function ViewSwitch({ orphans, onChange }: { orphans: boolean; onChange(orphans:
       aria-pressed={orphans === value}
       onClick={() => onChange(value)}
       className={cn(
-        'rounded-md px-3 py-1.5 text-sm font-medium',
-        orphans === value ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-      )}
-    >
+        'h-7.5 rounded-md px-3 text-sm font-semibold transition-colors duration-150 ease-out',
+        orphans === value ? 'bg-accent-soft text-accent-text' : 'text-muted-foreground hover:bg-layer-2 hover:text-foreground',
+      )}>
       {label}
     </button>
   );
@@ -77,26 +76,23 @@ export function AuthoritiesScreen() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex max-w-2xl flex-col gap-1">
-          <h1 className="text-2xl font-semibold">{t('catalog.authorities.title')}</h1>
-          <p className="text-sm text-muted-foreground">{t('catalog.authorities.description')}</p>
-        </div>
-        {canManage && (
-          <Button asChild>
-            <Link to={`${PATH}/${kind}/new`}>
-              <PlusIcon aria-hidden="true" />
-              {t(`catalog.authorities.add.${kind}`)}
-            </Link>
-          </Button>
-        )}
-      </header>
+    <div className="grid gap-6">
+      <PageHead
+        title={t('catalog.authorities.title')}
+        intro={t('catalog.authorities.description')}
+        actions={
+          canManage ? (
+            <Button asChild>
+              <Link to={`${PATH}/${kind}/new`}>{t(`catalog.authorities.add.${kind}`)}</Link>
+            </Button>
+          ) : undefined
+        }
+      />
       <Tabs value={kind} onValueChange={(value) => isAuthorityKind(value) && value !== kind && go(tabSearch(value, orphans))}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <TabsList aria-label={t('catalog.authorities.tabs_label')}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <TabsList aria-label={t('catalog.authorities.tabs_label')} className={WRAPPING_TABS.list}>
             {AUTHORITY_KINDS.map((k) => (
-              <TabsTrigger key={k} value={k}>
+              <TabsTrigger key={k} value={k} className={WRAPPING_TABS.trigger}>
                 {t(`catalog.authorities.tab.${k}`)}
               </TabsTrigger>
             ))}
@@ -104,7 +100,7 @@ export function AuthoritiesScreen() {
           <ViewSwitch orphans={orphans} onChange={(next) => next !== orphans && switchView(next)} />
         </div>
         {AUTHORITY_KINDS.map((k) => (
-          <TabsContent key={k} value={k} className="pt-2">
+          <TabsContent key={k} value={k} className="pt-5">
             {orphans ? (
               <OrphansView kind={k} canManage={canManage} />
             ) : (
