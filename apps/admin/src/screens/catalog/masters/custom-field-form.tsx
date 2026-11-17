@@ -1,15 +1,13 @@
 import { CUSTOM_FIELD_ENTITIES, CUSTOM_FIELD_TYPES, vocabKey, type CustomFieldEntity, type CustomFieldType } from '@altis/shared';
 import { CustomFieldBody, CustomFieldPatchBody, type CustomFieldView } from '@altis/shared/api/catalog/masters';
-import { PlusIcon, TrashIcon } from 'lucide-react';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { CheckField, Field, ProblemAlert, RootError, SELECT_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
-import { DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
 import { useDirtyGuard } from '@/lib/dirty-forms';
 import { fieldErrorText } from '@/lib/form-errors';
-import { changedFields, optionalText, orderValue, useMasterSave, type ErrorMessage, type MasterFormProps } from './master-table';
+import { MasterFormButtons, changedFields, optionalText, orderValue, useMasterSave, type ErrorMessage, type MasterFormProps } from './master-table';
 
 /**
  * A custom field (Phase 2 spec §3.7; `POST`/`PATCH catalog/custom-fields`): for records or items, its value type, code,
@@ -116,11 +114,11 @@ export function CustomFieldForm({ row, canManage, onSaved, onCancel }: MasterFor
   const optionsError = errors.options?.root;
 
   return (
-    <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
+    <form noValidate className="grid max-w-3xl gap-4" onSubmit={(e) => void submit(e)}>
       <ProblemAlert error={problem} />
       <RootError message={errors.root?.['server']?.message} />
       {row === null ? (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
           <Field label={t('catalog.masters.field.entity')} error={errors.entity}>
             {(c) => (
               <select {...c} className={SELECT_CLASS} disabled={disabled} {...form.register('entity')}>
@@ -158,7 +156,7 @@ export function CustomFieldForm({ row, canManage, onSaved, onCancel }: MasterFor
       <Field label={t('catalog.masters.field.code')} hint={t('catalog.masters.field.code_hint')} error={errors.code}>
         {(c) => <Input {...c} autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={32} disabled={disabled} {...form.register('code')} />}
       </Field>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
         <Field label={t('catalog.masters.field.label_id')} error={errors.labelId}>
           {(c) => <Input {...c} autoComplete="off" maxLength={191} disabled={disabled} {...form.register('labelId')} />}
         </Field>
@@ -167,8 +165,8 @@ export function CustomFieldForm({ row, canManage, onSaved, onCancel }: MasterFor
         </Field>
       </div>
       {choice && (
-        <fieldset className="grid gap-3 rounded-md border p-3">
-          <legend className="px-1 text-sm font-medium">{t('catalog.masters.options.legend')}</legend>
+        <fieldset className="grid gap-3">
+          <legend className="mb-1 text-sm font-bold">{t('catalog.masters.options.legend')}</legend>
           <p className="text-xs text-muted-foreground">{t('catalog.masters.options.hint')}</p>
           {options.length === 0 && <p className="text-sm text-muted-foreground">{t('catalog.masters.options.none')}</p>}
           {options.map((option, i) => {
@@ -186,22 +184,21 @@ export function CustomFieldForm({ row, canManage, onSaved, onCancel }: MasterFor
                   {(c) => <Input {...c} autoComplete="off" maxLength={191} disabled={disabled} {...form.register(`options.${i}.labelEn`)} />}
                 </Field>
                 {canManage && (
-                  <Button type="button" variant="ghost" size="icon" className="sm:mt-6" aria-label={t('catalog.masters.options.remove', { n })} onClick={() => remove(i)}>
-                    <TrashIcon aria-hidden="true" />
+                  <Button type="button" variant="ghost" size="sm" className="sm:mt-6" aria-label={t('catalog.masters.options.remove', { n })} onClick={() => remove(i)}>
+                    {t('catalog.masters.options.remove_short')}
                   </Button>
                 )}
               </div>
             );
           })}
           {optionsError !== undefined && (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="text-meta font-semibold text-bad">
               {fieldErrorText(t, optionsError)}
             </p>
           )}
           {canManage && (
             <div>
-              <Button type="button" variant="outline" size="sm" onClick={() => append({ value: '', labelId: '', labelEn: '' })}>
-                <PlusIcon aria-hidden="true" />
+              <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => append({ value: '', labelId: '', labelEn: '' })}>
                 {t('catalog.masters.options.add')}
               </Button>
             </div>
@@ -225,16 +222,7 @@ export function CustomFieldForm({ row, canManage, onSaved, onCancel }: MasterFor
       <Field label={t('catalog.masters.field.sort_order')} hint={t('catalog.masters.field.sort_order_hint')} error={errors.sortOrder} className="max-w-40">
         {(c) => <Input {...c} type="number" inputMode="numeric" min={0} step={1} disabled={disabled} {...form.register('sortOrder')} />}
       </Field>
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          {t(canManage ? 'form.cancel' : 'catalog.masters.close')}
-        </Button>
-        {canManage && (
-          <Button type="submit" disabled={isSubmitting}>
-            {t(isSubmitting ? 'form.saving' : 'form.save')}
-          </Button>
-        )}
-      </DialogFooter>
+      <MasterFormButtons canManage={canManage} busy={isSubmitting} onCancel={onCancel} />
     </form>
   );
 }

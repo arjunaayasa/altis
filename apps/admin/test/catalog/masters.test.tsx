@@ -182,7 +182,7 @@ describe('MastersScreen', () => {
     const { requests } = start({ path: '/admin/catalog/masters?tab=languages', routes: { 'POST catalog/languages': () => ({ id: NEW_ID, version: 0 }) } });
     await screen.findByRole('table', { name: 'Daftar bahasa' });
     fireEvent.click(screen.getByRole('button', { name: 'Tambah bahasa' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah bahasa' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah bahasa' });
     fireEvent.change(within(dialog).getByLabelText('Kode'), { target: { value: ' sun ' } });
     fireEvent.change(within(dialog).getByLabelText('Nama (Indonesia)'), { target: { value: 'Sunda' } });
     fireEvent.change(within(dialog).getByLabelText('Nama (Inggris)'), { target: { value: 'Sundanese' } });
@@ -191,7 +191,7 @@ describe('MastersScreen', () => {
     expect(sent(requests, 'POST', 'catalog/languages')[0]!.body).toEqual({ code: 'sun', nameId: 'Sunda', nameEn: 'Sundanese' });
     expect(await screen.findByText('Bahasa sun disimpan.')).toBeTruthy();
     await waitFor(() => expect(gets(requests, 'catalog/languages')).toBe(2));
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Tambah bahasa' })).toBeNull();
   });
 
   it('puts a server field error on its field', async () => {
@@ -201,7 +201,7 @@ describe('MastersScreen', () => {
     });
     await screen.findByRole('table', { name: 'Daftar bahasa' });
     fireEvent.click(screen.getByRole('button', { name: 'Tambah bahasa' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah bahasa' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah bahasa' });
     fireEvent.change(within(dialog).getByLabelText('Kode'), { target: { value: 'ind' } });
     fireEvent.change(within(dialog).getByLabelText('Nama (Indonesia)'), { target: { value: 'Indonesia' } });
     fireEvent.change(within(dialog).getByLabelText('Nama (Inggris)'), { target: { value: 'Indonesian' } });
@@ -217,7 +217,7 @@ describe('MastersScreen', () => {
     });
     const table = await screen.findByRole('table', { name: 'Daftar pemasok' });
     fireEvent.click(within(table).getByRole('button', { name: 'Ubah GRAMED' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah pemasok' });
+    const dialog = await screen.findByRole('region', { name: 'Ubah pemasok' });
     expect((within(dialog).getByLabelText('Nama kontak') as HTMLInputElement).value).toBe('Sari');
     fireEvent.change(within(dialog).getByLabelText('Telepon'), { target: { value: '0812-1111' } });
     fireEvent.change(within(dialog).getByLabelText('Nama kontak'), { target: { value: '  ' } });
@@ -233,7 +233,7 @@ describe('MastersScreen', () => {
     });
     await screen.findByRole('table', { name: 'Daftar tipe koleksi' });
     fireEvent.click(screen.getByRole('button', { name: 'Tambah tipe koleksi' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah tipe koleksi' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah tipe koleksi' });
     fireEvent.change(within(dialog).getByLabelText('Kode'), { target: { value: 'REF' } });
     fireEvent.change(within(dialog).getByLabelText('Nama (Indonesia)'), { target: { value: 'Referensi' } });
     fireEvent.change(within(dialog).getByLabelText('Nama (Inggris)'), { target: { value: 'Reference' } });
@@ -339,16 +339,16 @@ describe('MastersScreen', () => {
     });
     const table = await screen.findByRole('table', { name: 'Daftar bahasa' });
     fireEvent.click(within(table).getByRole('button', { name: 'Ubah eng' }));
-    let dialog = await screen.findByRole('dialog', { name: 'Ubah bahasa' });
+    let dialog = await screen.findByRole('region', { name: 'Ubah bahasa' });
     fireEvent.change(within(dialog).getByLabelText('Nama (Indonesia)'), { target: { value: 'Bahasa Inggris' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan' }));
     expect(await within(dialog).findByText('Data ini sudah diubah oleh orang lain. Muat ulang, lalu coba lagi.')).toBeTruthy();
     await waitFor(() => expect(gets(requests, 'catalog/languages')).toBe(2));
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Batal' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Ubah bahasa' })).toBeNull());
     fireEvent.click(within(table).getByRole('button', { name: 'Ubah eng' }));
-    dialog = await screen.findByRole('dialog', { name: 'Ubah bahasa' });
+    dialog = await screen.findByRole('region', { name: 'Ubah bahasa' });
     expect((within(dialog).getByLabelText('Nama (Inggris)') as HTMLInputElement).value).toBe('English (UK)');
     fireEvent.change(within(dialog).getByLabelText('Nama (Indonesia)'), { target: { value: 'Bahasa Inggris' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan' }));
@@ -364,7 +364,7 @@ describe('MastersScreen', () => {
     });
     await screen.findByRole('table', { name: 'Daftar ruas tambahan' });
     fireEvent.click(screen.getByRole('button', { name: 'Tambah ruas tambahan' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah ruas tambahan' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah ruas tambahan' });
     fireEvent.change(within(dialog).getByLabelText('Untuk'), { target: { value: 'items' } });
     fireEvent.change(within(dialog).getByLabelText('Jenis isian'), { target: { value: 'select' } });
     fireEvent.change(within(dialog).getByLabelText('Kode'), { target: { value: 'KONDISI' } });
@@ -423,7 +423,7 @@ describe('MastersScreen', () => {
     });
     const table = await screen.findByRole('table', { name: 'Daftar ruas tambahan' });
     fireEvent.click(within(table).getByRole('button', { name: 'Ubah ASAL' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah ruas tambahan' });
+    const dialog = await screen.findByRole('region', { name: 'Ubah ruas tambahan' });
     // Entity and type never change (the strict patch refuses them): shown, not editable.
     expect(within(dialog).queryByLabelText('Untuk')).toBeNull();
     expect(within(dialog).getByText('Pilihan tunggal')).toBeTruthy();
