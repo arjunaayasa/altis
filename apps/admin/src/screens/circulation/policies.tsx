@@ -17,6 +17,7 @@ import { FORM_PARSE } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { changedFields, isFieldProblem, isStale, putFieldErrors, serverIssues, useMasterList, zodIssues } from '@/screens/catalog/masters/master-table';
 import { cn } from '@/lib/utils';
+import { useMoney } from './charges';
 import { useMemberTypes, useTypeName } from './common';
 
 /**
@@ -294,6 +295,7 @@ function PolicyForm({ row, canManage, onSaved, onCancel }: { row: PolicyView | n
 export function PoliciesScreen() {
   const t = useT();
   const me = useMe();
+  const money = useMoney();
   const typeName = useTypeName();
   const types = useMemberTypes(true);
   const queryClient = useQueryClient();
@@ -382,7 +384,7 @@ export function PoliciesScreen() {
       cell: (r) =>
         Number(r.finePerDay) === 0
           ? t('circulation.rules.no_fine')
-          : t('circulation.rules.fine_value', { amount: typed(r.finePerDay), currency: r.currency, grace: r.graceDays }),
+          : t('circulation.rules.fine_value', { amount: money(r.finePerDay, r.currency), grace: r.graceDays }),
     },
     { id: 'open', header: t('circulation.policies.col.open_loans'), headClassName: 'text-right', className: 'text-right', cell: (r) => String(r.openLoans) },
     {
