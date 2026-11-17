@@ -365,6 +365,7 @@ const TABS: readonly Tab[] = ['pending', 'misplaced', 'unexpected', 'unknown', '
 
 export function StocktakeSessionScreen() {
   const t = useT();
+  const locale = useLocale();
   const me = useMe();
   const time = useTime();
   const queryClient = useQueryClient();
@@ -488,7 +489,8 @@ export function StocktakeSessionScreen() {
     ['stocktake.ui.count.unexpected', shown.unexpected],
     ['stocktake.ui.count.unknown', shown.unknownCodes],
   ];
-  const pct = shown.total === 0 ? 0 : Math.round((shown.found / shown.total) * 1000) / 10;
+  // The share found, with the decimal mark of the screen's language (8,3 % in Indonesian).
+  const pct = new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'id-ID', { maximumFractionDigits: 1 }).format(shown.total === 0 ? 0 : Math.round((shown.found / shown.total) * 1000) / 10);
 
   const lastTone = last === null ? null : OUTCOME_TONE[last.outcome];
   return (

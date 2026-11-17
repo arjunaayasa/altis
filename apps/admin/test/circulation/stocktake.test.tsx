@@ -190,6 +190,22 @@ describe('stocktake', () => {
     await waitFor(() => expect(finish).toEqual({ confirmName: 'Inventarisasi 2026', markMissing: true, restoreFound: true }));
   });
 
+  it('says the share found with the decimal mark of the language', async () => {
+    startApp({
+      me: adminMe(),
+      path: `/admin/layanan/inventarisasi/${BRANCH}/${ID}`,
+      routes: {
+        'GET branches': () => ({ items: [BRANCH_VIEW] }),
+        'GET branches/:branchId/stocktakes/:id': () => session({ counts: { ...COUNTS, total: 12, found: 1, pending: 10 } }),
+        'GET branches/:branchId/stocktakes/:id/items': empty,
+        'GET branches/:branchId/stocktakes/:id/unknown-codes': empty,
+        'GET branches/:branchId/stocktakes/:id/officers': () => ({ items: [] }),
+        'GET catalog/locations': () => ({ items: [] }),
+      },
+    });
+    expect(await screen.findByText('8,3% eksemplar cakupan sudah ditemukan.')).toBeTruthy();
+  });
+
   it('shows the polled counts again after my scan', async () => {
     let polled = COUNTS;
     const app = startApp({
