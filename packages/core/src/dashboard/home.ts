@@ -139,7 +139,7 @@ async function longOverdue(db: Db, now: number, tz: string): Promise<number> {
 }
 
 /** The usage section of the library dashboard: the loans of the last DASHBOARD_USAGE_DAYS days by class and title. */
-async function usageSection(db: Db, today: string): Promise<NonNullable<LibraryDashboard['usage']>> {
+async function usageSection(db: Db, today: string): Promise<Usage> {
   const from = addDays(today, -(DASHBOARD_USAGE_DAYS - 1));
   const lent = () => db.selectFrom('loans as l').where('l.loaned_on', '>=', from).where('l.loaned_on', '<=', today).where(notVoided);
   const [byClass, byRecord] = await Promise.all([
@@ -161,6 +161,31 @@ async function usageSection(db: Db, today: string): Promise<NonNullable<LibraryD
   return { from, to: today, bySubject, topTitles };
 }
 
+/** How long (ms) a process keeps the usage section of a day before it reads it again. */
+export const DASHBOARD_USAGE_TTL_MS = 5 * 60_000;
+
+type Usage = NonNullable<LibraryDashboard['usage']>;
+
+/** The usage section read per database: the day it is of, the instant it was read at, and the read (shared while pending). */
+const usageCache = new WeakMap<object, { today: string; at: number; value: Promise<Usage> }>();
+
+/**
+ * {@link usageSection}, kept for {@link DASHBOARD_USAGE_TTL_MS} per database and day: it groups a month of loans by
+ * class and by title, Beranda polls it every minute in every open tab, and its figures barely move within minutes. It
+ * is the same for every caller (the permission is checked before). A failed read is not kept; a clock that went back
+ * reads again.
+ */
+function cachedUsageSection(db: Db, today: string, now: number): Promise<Usage> {
+  const hit = usageCache.get(db);
+  if (hit !== undefined && hit.today === today && now >= hit.at && now - hit.at < DASHBOARD_USAGE_TTL_MS) return hit.value;
+  const value = usageSection(db, today);
+  usageCache.set(db, { today, at: now, value });
+  value.catch(() => {
+    if (usageCache.get(db)?.value === value) usageCache.delete(db);
+  });
+  return value;
+}
+
 /** The library dashboard for a caller holding `grants` (see `LibraryDashboard`): each section only for its readers. */
 export async function libraryDashboard(db: Db, grants: Grants, now: number): Promise<LibraryDashboard> {
   const tz = await libraryTimeZone(db);
@@ -168,7 +193,7 @@ export async function libraryDashboard(db: Db, grants: Grants, now: number): Pro
   const [members, overdue, usage] = await Promise.all([
     can(grants, 'members.records.read') ? membersSection(db, today) : null,
     can(grants, 'circulation.records.read') ? longOverdue(db, now, tz) : null,
-    can(grants, 'reports.statistics.read') ? usageSection(db, today) : null,
+    can(grants, 'reports.statistics.read') ? cachedUsageSection(db, today, now) : null,
   ]);
   return { today, members, loans: overdue === null ? null : { longOverdue: overdue }, usage };
 }
