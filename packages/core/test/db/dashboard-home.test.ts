@@ -6,7 +6,7 @@ import { PERMISSIONS, newId, normalizeKey, type Permission } from '@altis/shared
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
 import type { Grants } from '../../src/authz/grants.js';
-import { deskDashboard, libraryDashboard } from '../../src/dashboard/home.js';
+import { DASHBOARD_USAGE_TTL_MS, deskDashboard, libraryDashboard } from '../../src/dashboard/home.js';
 import { reportById } from '../../src/reports/registry.js';
 import { previewReport } from '../../src/reports/runs/preview.js';
 import { loadAccredSettings } from '../../src/settings/accreditation.js';
@@ -29,6 +29,7 @@ describe.skipIf(!ctx.available)(`Beranda's library figures [${engineLabel()}]`, 
   let ut: string;
   let cb: string;
   const records: Record<string, string> = {};
+  const items: Record<string, string> = {};
 
   beforeAll(async () => {
     h = await testDb();
@@ -50,6 +51,7 @@ describe.skipIf(!ctx.available)(`Beranda's library figures [${engineLabel()}]`, 
     const copy = async (key: string, title: string, classification: string, branchId = ut) => {
       const c = await seedCopy(db, { branchId, title, barcode: `B-${key}`, classification });
       records[key] = c.recordId;
+      items[key] = c.itemId;
       return c;
     };
     const novel = await copy('novel', 'Laskar Pelangi', '899');
@@ -200,5 +202,15 @@ describe.skipIf(!ctx.available)(`Beranda's library figures [${engineLabel()}]`, 
   it('a super admin’s grants (every permission) read every section', async () => {
     const all = await libraryDashboard(h.db, grantsOf(PERMISSIONS), NOW);
     expect([all.members !== null, all.loans !== null, all.usage !== null]).toEqual([true, true, true]);
+  });
+
+  it('the usage section is read again only after a few minutes (or on another day)', async () => {
+    const stats = grantsOf(['reports.statistics.read']);
+    const kamus = async (now: number) => (await libraryDashboard(h.db, stats, now)).usage!.topTitles.find((x) => x.recordId === records['other'])?.loans;
+    expect(await kamus(NOW)).toBe(1);
+    // One more loan of the dictionary, lent and returned this week.
+    await seedLoan(h.db, { recordId: records['other']!, itemId: items['other']!, memberId: null, branchId: cb, loanedOn: '2026-03-09', dueOn: '2026-03-16', returnedOn: '2026-03-10' });
+    expect(await kamus(NOW + 60_000)).toBe(1);
+    expect(await kamus(NOW + DASHBOARD_USAGE_TTL_MS)).toBe(2);
   });
 });

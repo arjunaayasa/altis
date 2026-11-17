@@ -78,7 +78,8 @@ export interface TopTitle {
  *   every branch;
  * - `usage` (`reports.statistics.read`): the loans lent from `from` to `to` ({@link DASHBOARD_USAGE_DAYS} days, every
  *   branch, voided ones not) by DDC main class (the classes with a loan, most first) and the
- *   {@link DASHBOARD_TOP_TITLES} most borrowed titles (most first, ties by title).
+ *   {@link DASHBOARD_TOP_TITLES} most borrowed titles (most first, ties by title); a server process reads it again
+ *   at most every few minutes.
  */
 export interface LibraryDashboard {
   today: string;
