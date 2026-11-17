@@ -588,6 +588,8 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
       try {
         const glance = await api<DeskItemGlance>('POST', `branches/${encodeURIComponent(branchId)}/circulation/items/glance`, { barcode });
         line = glanceText(t, day, glance, e);
+        // The refused row of this visit gets its title too.
+        setVisit((rows) => rows.map((r) => (r.kind === 'refused' && r.title === '' && normalizeCode(r.barcode) === normalizeCode(barcode) ? { ...r, title: glance.title } : r)));
       } catch {
         line = null;
       }
