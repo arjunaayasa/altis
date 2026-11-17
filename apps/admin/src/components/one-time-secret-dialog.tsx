@@ -1,4 +1,3 @@
-import { CheckIcon, CopyIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -68,12 +67,11 @@ export function OneTimeSecretDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         {value !== null && (
-          <div className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-layer px-3 py-2">
             <code translate="no" className={cn('flex-1 font-mono break-all select-all', valueClassName)}>
               {value}
             </code>
             <Button type="button" variant="outline" size="sm" onClick={() => void copy()}>
-              {copied ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
               {t(copied ? 'users.temp_password.copied' : 'users.temp_password.copy')}
             </Button>
           </div>

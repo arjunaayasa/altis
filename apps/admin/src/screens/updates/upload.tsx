@@ -6,9 +6,9 @@ import {
   type UpdateUploadBody,
   type UpdateUploadDryRun,
 } from '@altis/shared/api/updates';
-import { CircleCheckIcon, CircleXIcon, InfoIcon, PackageCheckIcon, UploadIcon, XIcon } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { NoticeAlert, ProblemAlert } from '@/components/form-field';
+import { StatusText } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -120,18 +120,16 @@ export function PrecheckList({ report, id, latest = null }: { report: PrecheckRe
   const bytes = useBytes();
   const entitlement = report.notEntitled === null ? null : t(ENTITLEMENT_REASONS[report.notEntitled]!);
   return (
-    <div id={id} className="flex flex-col gap-2 text-sm">
+    <div id={id} className="grid gap-2 text-sm">
       {report.ok ? (
-        <p className="flex items-start gap-2">
-          <CircleCheckIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-          <span>{t('updates.prechecks.ok')}</span>
+        <p>
+          <StatusText tone="ok">{t('updates.prechecks.ok')}</StatusText>
         </p>
       ) : (
-        <ul aria-label={t('updates.prechecks.label')} className="flex flex-col gap-1.5">
+        <ul aria-label={t('updates.prechecks.label')} className="grid list-disc gap-1.5 pl-5 marker:text-bad">
           {report.failures.map((failure) => (
-            <li key={failure} className="flex items-start gap-2">
-              <CircleXIcon className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
-              <span>
+            <li key={failure}>
+              <span className="font-semibold text-bad">
                 {failureText(t, failure)}
                 {failure === 'min_upgrade_from' && <> {t('updates.prechecks.stepping_stone', { version: report.candidate.minUpgradeFrom })}</>}
                 {failure === 'entitlement' && entitlement !== null && <> {entitlement}</>}
@@ -140,10 +138,9 @@ export function PrecheckList({ report, id, latest = null }: { report: PrecheckRe
           ))}
         </ul>
       )}
-      <ul className="flex flex-col gap-1.5 text-muted-foreground">
+      <ul className="grid list-disc gap-1.5 pl-5 text-muted-foreground">
         {report.steppingStone && (
-          <li className="flex items-start gap-2">
-            <InfoIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <li>
             <span>
               {t('update.precheck.stepping_stone')}
               {latest !== null && <> {t('updates.available.latest', { version: latest })}</>}
@@ -151,18 +148,15 @@ export function PrecheckList({ report, id, latest = null }: { report: PrecheckRe
           </li>
         )}
         {report.dbRestoreNeeded && (
-          <li className="flex items-start gap-2 text-foreground">
-            <InfoIcon className="mt-0.5 size-4 shrink-0 text-warning-foreground" aria-hidden="true" />
-            <span className="font-medium">{t('update.precheck.db_restore_needed')}</span>
+          <li>
+            <StatusText tone="warn">{t('update.precheck.db_restore_needed')}</StatusText>
           </li>
         )}
-        <li className="flex items-start gap-2">
-          <InfoIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        <li>
           <span>{t('update.precheck.estimate', { minutes: minutesOf(report.estimateMs) })}</span>
         </li>
         {report.headroomBytes > 0 && (
-          <li className="flex items-start gap-2">
-            <InfoIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <li>
             <span>{t('updates.prechecks.headroom', { size: bytes(report.headroomBytes) })}</span>
           </li>
         )}
@@ -326,9 +320,11 @@ export function PackageUploadPanel({ blocked }: { blocked: boolean }) {
 
   return (
     <SettingsSection title={t('updates.upload.title')} description={t('updates.upload.body')}>
-      <form noValidate className="flex flex-col gap-3" onSubmit={start}>
-        <div className="grid gap-2">
-          <Label htmlFor={fileId}>{t('updates.upload.file')}</Label>
+      <form noValidate className="grid gap-3" onSubmit={start}>
+        <div className="grid max-w-md gap-1.5">
+          <Label htmlFor={fileId} className="text-meta">
+            {t('updates.upload.file')}
+          </Label>
           <Input
             id={fileId}
             ref={input}
@@ -344,28 +340,26 @@ export function PackageUploadPanel({ blocked }: { blocked: boolean }) {
             }}
           />
           {fileError && (
-            <p id={`${fileId}-error`} className="text-sm text-destructive">
+            <p id={`${fileId}-error`} className="text-meta font-semibold text-bad">
               {t('updates.upload.choose')}
             </p>
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={busy}>
-            <UploadIcon aria-hidden="true" />
+          <Button type="submit" variant="outline" disabled={busy}>
             {t('updates.upload.submit')}
           </Button>
           {(progress !== null || phase.kind === 'checking') && (
             <Button type="button" variant="outline" onClick={() => run.current?.abort()}>
-              <XIcon aria-hidden="true" />
               {t('updates.upload.cancel')}
             </Button>
           )}
         </div>
       </form>
       {progress !== null && (
-        <div className="flex flex-col gap-1">
+        <div className="grid gap-1">
           <div className="flex items-baseline justify-between gap-2 text-sm">
-            <span className="font-medium">{progressLabel}</span>
+            <span className="font-semibold">{progressLabel}</span>
             <span className="tabular-nums">{Math.round(pct)} %</span>
           </div>
           <ProgressBar value={pct} label={progressLabel} />
@@ -382,11 +376,8 @@ export function PackageUploadPanel({ blocked }: { blocked: boolean }) {
       {cancelled && <NoticeAlert>{t('updates.upload.cancelled')}</NoticeAlert>}
       {problem !== null && <RefusalAlert error={problem} />}
       {report !== null && (
-        <div className="flex flex-col gap-3 rounded-md border p-3">
-          <p className="flex items-start gap-2 text-sm font-medium">
-            <PackageCheckIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            <span>{t('updates.upload.report', { version: report.version, date: day(report.releasedAt) })}</span>
-          </p>
+        <div className="grid gap-3 rounded-lg border p-4">
+          <p className="text-sm font-bold">{t('updates.upload.report', { version: report.version, date: day(report.releasedAt) })}</p>
           <PrecheckList id={reportId} report={report.precheck} />
           <div className="flex flex-wrap gap-2">
             <Button type="button" disabled={busy || installed || blocked || !report.precheck.ok} aria-describedby={reportId} onClick={install}>
@@ -399,7 +390,7 @@ export function PackageUploadPanel({ blocked }: { blocked: boolean }) {
         </div>
       )}
       {report === null && uploaded !== null && !busy && (
-        <div className="flex flex-col gap-2">
+        <div className="grid gap-2">
           <p className="text-sm text-muted-foreground">{t('updates.upload.retry_hint')}</p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" size="sm" onClick={checkAgain}>

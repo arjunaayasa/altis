@@ -154,13 +154,13 @@ export function DatabaseStep({
       ) : (
         <div className="space-y-1 text-sm" aria-live="polite">
           <p>{t('db.result.ok', { flavor: FLAVOR_NAMES[current.flavor] ?? current.flavor, version: current.version })}</p>
-          <p>{t('db.result.pool', { n: current.poolSize })}</p>
+          <p>{t(current.poolSize === 1 ? 'db.result.pool_one' : 'db.result.pool', { n: current.poolSize })}</p>
           {current.problems.map((p) => (
-            <p key={p} className="text-destructive">
+            <p key={p} className="font-semibold text-bad">
               {p === 'VERSION_TOO_OLD' || p === 'ENGINE_NOT_INNODB' || p === 'NO_FULLTEXT' ? t(`db.problem.${p}`) : p}
             </p>
           ))}
-          {current.empty ? <p>{t('db.result.empty')}</p> : current.resumable ? <p>{t('db.result.resumable')}</p> : <p className="text-destructive">{t('db.result.not_empty')}</p>}
+          {current.empty ? <p>{t('db.result.empty')}</p> : current.resumable ? <p>{t('db.result.resumable')}</p> : <p className="font-semibold text-bad">{t('db.result.not_empty')}</p>}
         </div>
       )}
 

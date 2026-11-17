@@ -4,11 +4,10 @@ import type { EventItem } from '@altis/shared/api/events';
 import { JOB_STATUS_VALUES, type JobStatusValue, type JobView } from '@altis/shared/api/jobs';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { DownloadIcon } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { CheckField, Field, Notice, NoticeAlert } from '@/components/form-field';
 import { useReturnFocus } from '@/components/return-focus';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Callout } from '@/components/layout';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -258,33 +257,28 @@ function PrepareForm({ backupId, onStarted }: { backupId: string; onStarted(jobI
         }}
       />
       {unencrypted && (
-        <Alert className="border-warning-foreground/30 bg-warning text-warning-foreground">
-          <AlertDescription className="text-current">{t('backups.prepare.unencrypted_warning')}</AlertDescription>
-        </Alert>
+        <Callout tone="warn" title={t('backups.prepare.unencrypted_warning')} />
       )}
       {live !== null && (
-        <Alert>
-          <AlertDescription className="text-foreground">
-            <p>{t('backups.prepare.in_progress', { job: live })}</p>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <Button type="button" size="sm" disabled={busy} onClick={() => onStarted(live)}>
-                {t('backups.prepare.wait')}
+        <Callout title={t('backups.prepare.in_progress', { job: live })}>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <Button type="button" size="sm" disabled={busy} onClick={() => onStarted(live)}>
+              {t('backups.prepare.wait')}
+            </Button>
+            {holds(me, 'system.jobs.manage') && (
+              <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void cancelLive()}>
+                {t('backups.prepare.cancel_job')}
               </Button>
-              {holds(me, 'system.jobs.manage') && (
-                <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void cancelLive()}>
-                  {t('backups.prepare.cancel_job')}
-                </Button>
-              )}
-              <Link to={`/admin/jobs/${encodeURIComponent(live)}`} className="text-sm text-primary underline-offset-4 hover:underline">
-                {t('backups.prepare.open_job')}
-              </Link>
-            </div>
-          </AlertDescription>
-        </Alert>
+            )}
+            <Link to={`/admin/jobs/${encodeURIComponent(live)}`} className="text-sm font-semibold text-accent-text underline-offset-4 hover:underline">
+              {t('backups.prepare.open_job')}
+            </Link>
+          </div>
+        </Callout>
       )}
       {notice !== null && <NoticeAlert tone="success">{notice}</NoticeAlert>}
       {error !== null && (
-        <p id={ids.error} role="alert" className="text-sm text-destructive">
+        <p id={ids.error} role="alert" className="text-meta font-semibold text-bad">
           {error}
         </p>
       )}
@@ -409,7 +403,6 @@ function PrepareFollow({ jobId, backupId, onAgain }: { jobId: string; backupId: 
       <div className="grid gap-4">
         <NoticeAlert tone="success">{t('backups.prepare.ready')}</NoticeAlert>
         <a href={`/api/v1/backups/${encodeURIComponent(backupId)}/download`} download className={buttonVariants({ className: 'self-start' })}>
-          <DownloadIcon aria-hidden="true" />
           {t('backups.prepare.download')}
         </a>
         <p className="text-sm text-muted-foreground">{t('backups.prepare.ready_hint')}</p>

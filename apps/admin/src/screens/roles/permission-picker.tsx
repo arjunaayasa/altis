@@ -1,6 +1,5 @@
 import type { Permission } from '@altis/shared';
 import type { PermissionItem } from '@altis/shared/api/roles';
-import { CheckIcon, MinusIcon } from 'lucide-react';
 import { CheckField } from '@/components/form-field';
 import { useT, type TKey } from '@/i18n';
 import { grantable } from '@/lib/access';
@@ -47,31 +46,26 @@ export function PermissionPicker({
   };
 
   return (
-    <div className="grid gap-4">
+    <div className="grid">
       {[...groups].map(([module, items]) => (
-        <fieldset key={module} className="rounded-md border p-3">
-          <legend className="px-1 text-sm font-medium">{t(`perm.module.${module}` as TKey)}</legend>
+        <fieldset key={module} className="grid min-w-0 gap-2.5 border-t py-4 first:border-t-0 first:pt-0">
+          <legend className="float-left mb-2.5 w-full text-sm font-bold">{t(`perm.module.${module}` as TKey)}</legend>
           {readOnly ? (
-            <ul className="grid gap-x-6 gap-y-2 pt-1 text-sm sm:grid-cols-2">
+            <ul className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2 xl:grid-cols-3">
               {items.map((item) => {
                 const granted = selected.has(item.key);
                 return (
-                  <li key={item.key} className={cn('flex items-start gap-2', !granted && 'text-muted-foreground')}>
-                    {granted ? (
-                      <CheckIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-                    ) : (
-                      <MinusIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                    )}
-                    <span>
-                      {t(`perm.${item.key}`)}
-                      <span className="sr-only"> {t(granted ? 'roles.perm_granted' : 'roles.perm_not_granted')}</span>
+                  <li key={item.key} className={cn('flex flex-wrap items-baseline gap-x-1.5', !granted && 'text-muted-foreground')}>
+                    <span className={cn(granted && 'font-semibold')}>{t(`perm.${item.key}`)}</span>
+                    <span data-grant className="text-xs text-muted-foreground">
+                      {t(granted ? 'roles.perm_granted' : 'roles.perm_not_granted')}
                     </span>
                   </li>
                 );
               })}
             </ul>
           ) : (
-            <div className="grid gap-x-6 gap-y-3 pt-1 sm:grid-cols-2">
+            <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
               {items.map((item) => {
                 const verdict = grantable(me, item.key);
                 const hint =

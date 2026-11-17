@@ -1,8 +1,8 @@
 import type { SessionItem } from '@altis/shared/api/auth';
 import { useQueryClient } from '@tanstack/react-query';
-import { MonitorSmartphoneIcon } from 'lucide-react';
 import { useState } from 'react';
 import { NoticeAlert, ProblemAlert } from '@/components/form-field';
+import { LoadingState, Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useLocale, useT, type Translate } from '@/i18n';
 import { api } from '@/lib/api';
@@ -57,8 +57,6 @@ function describeDevice(t: Translate, userAgent: string | null): string {
   });
 }
 
-const BADGE = 'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium';
-
 /** `/admin/profile/sessions`. */
 export function SessionsScreen() {
   const t = useT();
@@ -92,26 +90,21 @@ export function SessionsScreen() {
   return (
     <ProfilePage>
       <ProfileSection title={t('profile.sessions.title')} description={t('profile.sessions.description')}>
-        {sessions.isPending && (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
-        )}
+        {sessions.isPending && <LoadingState lines={3} />}
         <ProblemAlert error={sessions.error ?? problem} />
         {ended && <NoticeAlert tone="success">{t('profile.sessions.revoked')}</NoticeAlert>}
         {list.length > 0 && (
-          <ul aria-label={t('profile.sessions.list')} className="divide-y">
+          <ul aria-label={t('profile.sessions.list')} className="divide-y rounded-lg border">
             {list.map((s) => {
               const device = describeDevice(t, s.userAgent);
               return (
-                <li key={s.id} className="flex flex-wrap items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                <li key={s.id} className="flex flex-wrap items-start justify-between gap-3 px-3 py-2.5">
                   <div className="flex min-w-0 items-start gap-3">
-                    <MonitorSmartphoneIcon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
                     <div className="grid min-w-0 gap-1">
                       <p className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{device}</span>
-                        {s.current && <span className={`${BADGE} border-primary/30 bg-primary/10 text-primary`}>{t('profile.sessions.current')}</span>}
-                        {s.remembered && <span className={`${BADGE} text-muted-foreground`}>{t('profile.sessions.remembered')}</span>}
+                        <span className="font-semibold">{device}</span>
+                        {s.current && <Tag>{t('profile.sessions.current')}</Tag>}
+                        {s.remembered && <Tag>{t('profile.sessions.remembered')}</Tag>}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {t('profile.sessions.last_seen', { time: time.format(s.lastSeenAt) })} ·{' '}

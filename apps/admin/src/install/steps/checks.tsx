@@ -142,7 +142,7 @@ export function ChecksStep({ checks, onRerun, onContinue }: { checks: InstallChe
               <li key={name} className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <Status tone={tone}>{t(`checks.status.${tone}`)}</Status>
-                  <span className="text-sm font-medium">{t(`checks.name.${name}`)}</span>
+                  <span className="text-sm font-semibold">{t(`checks.name.${name}`)}</span>
                   <span className="text-xs text-muted-foreground">{check.detail}</span>
                 </div>
                 {check.ok ? null : <p className="text-sm text-muted-foreground">{t(`checks.fix.${name}`)}</p>}
@@ -164,13 +164,13 @@ export function ChecksStep({ checks, onRerun, onContinue }: { checks: InstallChe
         {probes.status === 'failed' ? <ProblemAlert error={probes.error} /> : null}
         {results === null ? null : (
           <dl className="grid gap-2 text-sm sm:grid-cols-[auto_1fr] sm:gap-x-4">
-            <dt className="font-medium">{t('checks.browser.polling')}</dt>
+            <dt className="font-semibold">{t('checks.browser.polling')}</dt>
             <dd>{results.polling ? t('checks.browser.works') : t('checks.browser.fails')}</dd>
-            <dt className="font-medium">{t('checks.browser.sse')}</dt>
+            <dt className="font-semibold">{t('checks.browser.sse')}</dt>
             <dd>{results.sse ? t('checks.browser.works') : t('checks.browser.sse_off')}</dd>
-            <dt className="font-medium">{t('checks.browser.methods')}</dt>
+            <dt className="font-semibold">{t('checks.browser.methods')}</dt>
             <dd>{blocked.length === 0 ? t('checks.browser.works') : t('checks.browser.methods_blocked', { methods: blocked.join(', ') })}</dd>
-            <dt className="font-medium">{t('checks.browser.chunk')}</dt>
+            <dt className="font-semibold">{t('checks.browser.chunk')}</dt>
             <dd>{results.chunkBytes === null ? t('checks.browser.chunk_none') : formatBytes(locale, results.chunkBytes)}</dd>
           </dl>
         )}
@@ -210,12 +210,12 @@ export function ChecksStep({ checks, onRerun, onContinue }: { checks: InstallChe
           ) : (
             <p className="text-sm">
               {results.ipAtSuggested
-                ? t('checks.network.suggestion', { hops: results.suggestedHops, ip: results.ipAtSuggested })
-                : t('checks.network.suggestion_no_ip', { hops: results.suggestedHops })}
+                ? t(results.suggestedHops === 1 ? 'checks.network.suggestion_one' : 'checks.network.suggestion', { hops: results.suggestedHops, ip: results.ipAtSuggested })
+                : t(results.suggestedHops === 1 ? 'checks.network.suggestion_no_ip_one' : 'checks.network.suggestion_no_ip', { hops: results.suggestedHops })}
             </p>
           )}
           {spoofable ? (
-            <p id="install-hops-spoofable" className="text-sm text-destructive">
+            <p id="install-hops-spoofable" className="text-sm font-semibold text-bad">
               {t('checks.network.spoofable')}
             </p>
           ) : null}
@@ -238,7 +238,7 @@ export function ChecksStep({ checks, onRerun, onContinue }: { checks: InstallChe
           {ip === null ? (
             <p className="text-sm">{t('checks.network.ip_unknown')}</p>
           ) : hops === results.suggestedHops ? null : (
-            <p className="text-sm">{t('checks.network.ip_for_hops', { hops, ip })}</p>
+            <p className="text-sm">{t(hops === 1 ? 'checks.network.ip_for_hops_one' : 'checks.network.ip_for_hops', { hops, ip })}</p>
           )}
           <div className="flex items-start gap-2">
             <input
@@ -251,7 +251,7 @@ export function ChecksStep({ checks, onRerun, onContinue }: { checks: InstallChe
               aria-describedby={[spoofable ? 'install-hops-spoofable' : null, ip === null ? null : 'install-ip-confirm-hint'].filter((id) => id !== null).join(' ') || undefined}
             />
             <div className="grid gap-1">
-              <label htmlFor="install-ip-confirm" className="text-sm font-medium">
+              <label htmlFor="install-ip-confirm" className="text-sm font-semibold">
                 {ip === null ? t('checks.network.confirm_hops') : t('checks.network.confirm')}
               </label>
               {ip === null ? null : (

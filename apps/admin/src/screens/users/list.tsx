@@ -3,14 +3,13 @@ import type { TemporaryPasswordResponse, UserListItem, UserListResponse, UserSta
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
-import { PlusIcon, SearchIcon } from 'lucide-react';
 import { useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { DataTable, Pager, useDateTime } from '@/components/data-table';
-import { Badge, Notice, SELECT_CLASS } from '@/components/form-field';
+import { Notice, SELECT_CLASS } from '@/components/form-field';
+import { ErrorState, FilterField, FilterRow, MoreMenu, MoreMenuItem, MoreMenuRule, PageHead, SkeletonTable, Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useT, type Translate } from '@/i18n';
 import { holds, meId, roleLabel } from '@/lib/access';
 import { api } from '@/lib/api';
@@ -38,7 +37,7 @@ const NO_USERS: UserListItem[] = [];
 
 type Action = 'disable' | 'reset_password' | 'reset_2fa';
 
-const STATUS_TONE = { active: 'info', disabled: 'neutral', locked: 'danger' } as const;
+const STATUS_TONE = { active: 'ok', disabled: 'neutral', locked: 'bad' } as const;
 
 const CONFIRM_LABEL: Record<Action, 'users.action.disable' | 'users.action.reset_password' | 'users.action.reset_2fa'> = {
   disable: 'users.action.disable',
@@ -132,10 +131,7 @@ export function UsersListScreen() {
       column.accessor('username', {
         header: t('users.col.username'),
         cell: (info) => (
-          <Link
-            to={`/admin/users/${encodeURIComponent(info.row.original.id)}`}
-            className="font-medium text-primary underline-offset-4 hover:underline"
-          >
+          <Link to={`/admin/users/${encodeURIComponent(info.row.original.id)}`} className="font-semibold text-accent-text underline-offset-4 hover:underline">
             {info.getValue()}
           </Link>
         ),
@@ -160,7 +156,7 @@ export function UsersListScreen() {
       }),
       column.accessor('status', {
         header: t('users.col.status'),
-        cell: (info) => <Badge tone={STATUS_TONE[info.getValue()]}>{statusText(t, info.getValue())}</Badge>,
+        cell: (info) => <Tag tone={STATUS_TONE[info.getValue()]}>{statusText(t, info.getValue())}</Tag>,
       }),
       column.accessor('totpEnabled', {
         header: t('users.col.2fa'),
@@ -184,31 +180,24 @@ export function UsersListScreen() {
       ...base,
       column.display({
         id: 'actions',
-        header: t('table.actions'),
+        header: () => <span className="sr-only">{t('table.actions')}</span>,
         cell: (info) => {
           const user = info.row.original;
           if (user.id === selfId) return null;
           return (
-            <div className="flex flex-wrap gap-1">
-              {user.status !== 'active' && (
-                <Button variant="outline" size="sm" onClick={() => void enable(user)}>
-                  {t('users.action.enable')}
-                </Button>
-              )}
+            <MoreMenu small label={t('users.more_named', { name: user.name })}>
+              {user.status !== 'active' && <MoreMenuItem onSelect={() => void enable(user)}>{t('users.action.enable')}</MoreMenuItem>}
+              <MoreMenuItem onSelect={() => setPending({ action: 'reset_password', user })}>{t('users.action.reset_password')}</MoreMenuItem>
+              {user.totpEnabled && <MoreMenuItem onSelect={() => setPending({ action: 'reset_2fa', user })}>{t('users.action.reset_2fa')}</MoreMenuItem>}
               {user.status !== 'disabled' && (
-                <Button variant="outline" size="sm" onClick={() => setPending({ action: 'disable', user })}>
-                  {t('users.action.disable')}
-                </Button>
+                <>
+                  <MoreMenuRule />
+                  <MoreMenuItem danger onSelect={() => setPending({ action: 'disable', user })}>
+                    {t('users.action.disable')}
+                  </MoreMenuItem>
+                </>
               )}
-              <Button variant="outline" size="sm" onClick={() => setPending({ action: 'reset_password', user })}>
-                {t('users.action.reset_password')}
-              </Button>
-              {user.totpEnabled && (
-                <Button variant="outline" size="sm" onClick={() => setPending({ action: 'reset_2fa', user })}>
-                  {t('users.action.reset_2fa')}
-                </Button>
-              )}
-            </div>
+            </MoreMenu>
           );
         },
       }),
@@ -228,37 +217,25 @@ export function UsersListScreen() {
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">{t('nav.users')}</h1>
-        {canManage && (
-          <Button asChild>
-            <Link to="/admin/users/new">
-              <PlusIcon aria-hidden="true" />
-              {t('users.add')}
-            </Link>
-          </Button>
-        )}
-      </div>
+    <div className="grid gap-6">
+      <PageHead
+        title={t('nav.users')}
+        intro={t('users.intro')}
+        actions={
+          canManage ? (
+            <Button asChild>
+              <Link to="/admin/users/new">{t('users.add')}</Link>
+            </Button>
+          ) : undefined
+        }
+      />
+      {notice !== null && <Notice kind={notice.kind}>{notice.text}</Notice>}
 
-      <form role="search" onSubmit={submitSearch} className="flex flex-wrap items-end gap-2">
-        <div className="grid min-w-56 flex-1 gap-2 sm:max-w-sm">
-          <Label htmlFor={ids.search}>{t('users.search')}</Label>
-          <Input
-            id={ids.search}
-            type="search"
-            maxLength={64}
-            placeholder={t('users.search_placeholder')}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-          />
-        </div>
-        <Button type="submit" variant="outline">
-          <SearchIcon aria-hidden="true" />
-          {t('users.search_submit')}
-        </Button>
-        <div className="grid gap-2">
-          <Label htmlFor={ids.status}>{t('users.status_filter')}</Label>
+      <FilterRow label={t('users.filters')} onSubmit={submitSearch} submitLabel={t('users.search_submit')}>
+        <FilterField wide id={ids.search} label={t('users.search')}>
+          <Input id={ids.search} type="search" maxLength={64} placeholder={t('users.search_placeholder')} value={draft} onChange={(e) => setDraft(e.target.value)} />
+        </FilterField>
+        <FilterField id={ids.status} label={t('users.status_filter')}>
           <select
             id={ids.status}
             className={SELECT_CLASS}
@@ -275,31 +252,18 @@ export function UsersListScreen() {
               </option>
             ))}
           </select>
-        </div>
-      </form>
+        </FilterField>
+      </FilterRow>
 
-      {notice !== null && <Notice kind={notice.kind}>{notice.text}</Notice>}
-
-      {list.isError ? (
-        <Notice
-          kind="error"
-          action={
-            <Button variant="outline" size="sm" onClick={() => void list.refetch()}>
-              {t('table.retry')}
-            </Button>
-          }
-        >
-          {problemText(t, list.error)}
-        </Notice>
+      {list.isError && list.data === undefined ? (
+        <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
       ) : list.data === undefined ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
+        <SkeletonTable label={t('shell.loading')} columns={canManage ? 8 : 7} />
       ) : (
-        <>
+        <div className="grid gap-3">
           <DataTable table={table} caption={t('users.caption')} empty={t('users.empty')} />
-          <Pager page={page} pages={pages} label={t('users.paging', { page, pages, total })} onPage={setPage} />
-        </>
+          <Pager page={page} pages={pages} label={t(total === 1 ? 'users.paging_one' : 'users.paging', { page, pages, total })} onPage={setPage} />
+        </div>
       )}
 
       {pending !== null && (

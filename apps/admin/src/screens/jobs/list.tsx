@@ -8,7 +8,8 @@ import { useId, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { DataTable, useDateTime } from '@/components/data-table';
-import { Badge, Field, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { SELECT_CLASS } from '@/components/form-field';
+import { ErrorState, FilterField, FilterRow, PageHead, SkeletonTable, Tag, type TagTone } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type TKey, type Translate } from '@/i18n';
@@ -62,18 +63,18 @@ export function scheduleLabel(t: Translate, name: string): string {
   return isMessageKey(key) ? t(key) : name;
 }
 
-const STATUS_TONE: Readonly<Record<JobStatusValue, 'neutral' | 'info' | 'warning' | 'danger'>> = {
+const STATUS_TONE: Readonly<Record<JobStatusValue, TagTone>> = {
   queued: 'neutral',
-  running: 'info',
-  succeeded: 'info',
-  dead: 'danger',
+  running: 'neutral',
+  succeeded: 'ok',
+  dead: 'bad',
   cancelled: 'neutral',
 };
 
-/** The status of a job as a badge. */
+/** The status of a job as a tag: its word, in its colour. */
 export function JobStatusBadge({ status }: { status: JobStatusValue }) {
   const t = useT();
-  return <Badge tone={STATUS_TONE[status]}>{t(`jobs.status.${status}`)}</Badge>;
+  return <Tag tone={STATUS_TONE[status]}>{t(`jobs.status.${status}`)}</Tag>;
 }
 
 /** Whether a job still has work ahead (it can be cancelled or run). */
@@ -98,15 +99,15 @@ export function JobsSectionTabs({ current }: { current: 'jobs' | 'schedules' }) 
       to={to}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'rounded-md px-3 py-1.5 text-sm font-medium',
-        active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+        '-mb-px block border-b-2 px-2.5 py-2 text-sm font-semibold',
+        active ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
       )}
     >
       {t(key)}
     </Link>
   );
   return (
-    <nav aria-label={t('jobs.sections')} className="flex gap-1">
+    <nav aria-label={t('jobs.sections')} className="flex flex-wrap gap-x-1 border-b">
       {tab('/admin/jobs', 'jobs.tab.jobs', current === 'jobs')}
       {tab('/admin/jobs/schedules', 'jobs.tab.schedules', current === 'schedules')}
     </nav>
@@ -117,11 +118,10 @@ export function JobsSectionTabs({ current }: { current: 'jobs' | 'schedules' }) 
 export function JobsHeader({ current, description }: { current: 'jobs' | 'schedules'; description: string }) {
   const t = useT();
   return (
-    <header className="flex flex-col gap-3">
-      <h1 className="text-2xl font-semibold">{t('nav.jobs')}</h1>
+    <div className="grid gap-4">
+      <PageHead title={t('nav.jobs')} intro={description} />
       <JobsSectionTabs current={current} />
-      <p className="text-sm text-muted-foreground">{description}</p>
-    </header>
+    </div>
   );
 }
 
@@ -135,7 +135,7 @@ export function ProgressBar({ value, label, className }: { value: number; label:
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={pct}
-      className={cn('h-2 w-full overflow-hidden rounded-full bg-muted', className)}
+      className={cn('h-2 w-full overflow-hidden rounded-full bg-layer-2', className)}
     >
       <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${pct}%` }} />
     </div>
@@ -279,7 +279,7 @@ export function JobsListScreen() {
             <Link
               to={`/admin/jobs/${encodeURIComponent(info.row.original.id)}`}
               aria-label={t('jobs.open_label', { name: jobTypeLabel(t, info.row.original.type) })}
-              className="text-primary underline-offset-4 hover:underline"
+              className="font-semibold text-accent-text underline-offset-4 hover:underline"
             >
               {t('jobs.open')}
             </Link>
@@ -292,59 +292,68 @@ export function JobsListScreen() {
   const table = useTable({ features, columns, data: items, getRowId: (job) => job.id });
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="grid gap-6">
       <JobsHeader current="jobs" description={t('jobs.description')} />
 
-      <form
-        noValidate
-        aria-label={t('jobs.filters')}
-        className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2"
-        onSubmit={(e) => void apply(e)}
-      >
-        <Field label={t('jobs.filter.status')} error={errors.status}>
-          {(c) => (
-            <select {...c} className={SELECT_CLASS} {...form.register('status')}>
-              <option value="">{t('jobs.filter.status_all')}</option>
-              {JOB_STATUS_VALUES.map((status) => (
-                <option key={status} value={status}>
-                  {t(`jobs.status.${status}`)}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-        <Field label={t('jobs.filter.type')} hint={t('jobs.filter.type_hint')} error={errors.type}>
-          {(c) => (
+      <div className="grid gap-1.5">
+        <FilterRow
+          label={t('jobs.filters')}
+          onSubmit={(e) => void apply(e)}
+          actions={
             <>
-              <Input {...c} list={typesId} autoComplete="off" spellCheck={false} maxLength={64} {...form.register('type')} />
-              <datalist id={typesId}>
-                {KNOWN_TYPES.map((type) => (
-                  <option key={type} value={type} label={jobTypeLabel(t, type)} />
-                ))}
-              </datalist>
+              <Button type="submit" variant="outline">
+                {t('jobs.filter.apply')}
+              </Button>
+              <Button type="button" variant="link" onClick={clear}>
+                {t('jobs.filter.reset')}
+              </Button>
             </>
-          )}
-        </Field>
-        <div className="flex flex-wrap gap-2 sm:col-span-2">
-          <Button type="submit">{t('jobs.filter.apply')}</Button>
-          <Button type="button" variant="outline" onClick={clear}>
-            {t('jobs.filter.reset')}
-          </Button>
-        </div>
-      </form>
-
-      {list.isError ? (
-        <ProblemAlert error={list.error}>
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => void list.refetch()}>
-            {t('table.retry')}
-          </Button>
-        </ProblemAlert>
-      ) : list.data === undefined ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
+          }
+        >
+          <FilterField label={t('jobs.filter.status')} error={errors.status}>
+            {(c) => (
+              <select {...c} className={SELECT_CLASS} {...form.register('status')}>
+                <option value="">{t('jobs.filter.status_all')}</option>
+                {JOB_STATUS_VALUES.map((status) => (
+                  <option key={status} value={status}>
+                    {t(`jobs.status.${status}`)}
+                  </option>
+                ))}
+              </select>
+            )}
+          </FilterField>
+          <FilterField wide label={t('jobs.filter.type')} error={errors.type}>
+            {(c) => (
+              <>
+                <Input
+                  {...c}
+                  aria-describedby={[c['aria-describedby'], `${typesId}-hint`].filter(Boolean).join(' ')}
+                  list={typesId}
+                  autoComplete="off"
+                  spellCheck={false}
+                  maxLength={64}
+                  {...form.register('type')}
+                />
+                <datalist id={typesId}>
+                  {KNOWN_TYPES.map((type) => (
+                    <option key={type} value={type} label={jobTypeLabel(t, type)} />
+                  ))}
+                </datalist>
+              </>
+            )}
+          </FilterField>
+        </FilterRow>
+        <p id={`${typesId}-hint`} className="text-xs text-muted-foreground">
+          {t('jobs.filter.type_hint')}
         </p>
+      </div>
+
+      {list.isError && list.data === undefined ? (
+        <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
+      ) : list.data === undefined ? (
+        <SkeletonTable label={t('shell.loading')} columns={8} />
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="grid gap-3">
           <DataTable table={table} caption={t('jobs.caption')} empty={t('jobs.empty')} />
           {list.hasNextPage ? (
             <div>
@@ -353,7 +362,7 @@ export function JobsListScreen() {
               </Button>
             </div>
           ) : (
-            items.length > 0 && <p className="text-sm text-muted-foreground">{t('jobs.end')}</p>
+            items.length > 0 && <p className="text-meta text-muted-foreground">{t('jobs.end')}</p>
           )}
         </div>
       )}

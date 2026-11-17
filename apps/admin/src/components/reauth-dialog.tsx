@@ -148,7 +148,7 @@ export function ReauthDialog() {
             </Field>
           )}
           {error !== null && (
-            <p id={ids.error} role="alert" className="text-sm text-destructive">
+            <p id={ids.error} role="alert" className="text-meta font-semibold text-bad">
               {error}
             </p>
           )}
