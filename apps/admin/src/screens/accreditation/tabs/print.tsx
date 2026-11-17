@@ -1,17 +1,18 @@
 import type { DossierBody, EvidenceListResponse } from '@altis/shared/api/accreditation';
 import type { ReportRunCreateBody, ReportRunListResponse, ReportRunStarted, ReportRunView } from '@altis/shared/api/reports';
 import { useQueryClient } from '@tanstack/react-query';
-import { FileArchiveIcon, FileTextIcon, LockIcon } from 'lucide-react';
 import { useId, useState, type JSX, type ReactNode } from 'react';
 import { ComponentSizes } from '@/components/accreditation/print/component-sizes';
 import { RunCard, StartedRunCard } from '@/components/accreditation/print/run-card';
 import { accredKeys, accredPaths, useInstruments, usePeriod } from '@/components/accreditation/usage/queries';
-import { Badge, Notice, RefetchProblem } from '@/components/form-field';
+import { Notice, RefetchProblem } from '@/components/form-field';
+import { Callout, LoadingState, TABLE, Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT, type TKey } from '@/i18n';
 import { api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
 import { useApiQuery } from '@/lib/me';
+import { cn } from '@/lib/utils';
 import { useRetryKey } from '@/screens/catalog/exchange/summary-view';
 import { confirmReauth } from '@/screens/reports/run-history';
 
@@ -73,13 +74,12 @@ interface Start {
   body: unknown;
 }
 
-/** A card of the tab: a titled region. */
-function Card({ title, children, icon }: { title: string; children: ReactNode; icon?: ReactNode }) {
+/** A part of the tab: a titled region, a thin rule above all but the first. */
+function Card({ title, children }: { title: string; children: ReactNode }) {
   const titleId = useId();
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <h3 id={titleId} className="flex items-center gap-2 text-base font-semibold">
-        {icon}
+    <section aria-labelledby={titleId} className="grid min-w-0 gap-3 border-t pt-5 first:border-t-0 first:pt-0">
+      <h3 id={titleId} className="text-base font-bold">
         {title}
       </h3>
       {children}
@@ -134,23 +134,15 @@ export function PrintTab({ periodId }: { periodId: string }): JSX.Element {
 
   const dossier = (action: string, body: DossierBody): Start => documentStart(`dossier:${action}`, 'dossier', body, true);
 
-  const action = (label: TKey, start: Start, o: { icon?: ReactNode; variant?: 'default' | 'outline' } = {}) => (
+  const action = (label: TKey, start: Start, o: { variant?: 'default' | 'outline' } = {}) => (
     <Button type="button" variant={o.variant ?? 'outline'} disabled={busy !== null} onClick={() => void begin(start)}>
-      {o.icon}
       {t(label)}
-      {start.personal && <LockIcon aria-hidden="true" className="opacity-60" />}
     </Button>
   );
 
   let body: JSX.Element;
   if (period.data === undefined || (instruments.data === undefined && !instruments.isError)) {
-    body = period.isError ? (
-      <Notice kind="error">{problemText(t, period.error)}</Notice>
-    ) : (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('shell.loading')}
-      </p>
-    );
+    body = period.isError ? <Notice kind="error">{problemText(t, period.error)}</Notice> : <LoadingState />;
   } else {
     const instrument = instruments.data?.instruments.find((i) => i.id === period.data.instrumentId);
     const scored = instrument?.scored ?? true;
@@ -160,15 +152,13 @@ export function PrintTab({ periodId }: { periodId: string }): JSX.Element {
     const fresh = started.filter((id) => !listedIds.has(id));
 
     body = (
-      <div className="flex flex-col gap-4">
+      <div className="grid max-w-5xl gap-5">
         {scored && (
           <Card title={t('report.accreditation.self_assessment.title')}>
-            <p className="rounded-md border-2 border-destructive/40 bg-destructive/5 px-3 py-2 text-sm font-semibold tracking-wide text-destructive">
-              {t('accred.simulation.header')}
-            </p>
+            <Callout tone="warn" title={t('accred.simulation.header')} />
             <p className="text-sm text-muted-foreground">{t('accreditation.print.simulation.intro')}</p>
             <div className="flex flex-wrap gap-2">
-              {action('accreditation.print.simulation.make', documentStart('simulation', 'self-assessment', {}, true), { icon: <FileTextIcon aria-hidden="true" /> })}
+              {action('accreditation.print.simulation.make', documentStart('simulation', 'self-assessment', {}, true))}
             </div>
             {failed('simulation')}
           </Card>
@@ -177,17 +167,15 @@ export function PrintTab({ periodId }: { periodId: string }): JSX.Element {
         <Card title={t('report.accreditation.dossier.title')}>
           <p className="text-sm text-muted-foreground">{t('accreditation.print.dossier.intro')}</p>
           <div className="flex flex-wrap gap-2">
-            {action('accreditation.print.dossier.pdf', dossier('pdf', { format: 'pdf' }), { icon: <FileTextIcon aria-hidden="true" />, variant: 'default' })}
-            {action('accreditation.print.dossier.zip', dossier('zip', { format: 'zip' }), { icon: <FileArchiveIcon aria-hidden="true" /> })}
-            {scored && action('accreditation.print.dossier.zip_components', dossier('zip_components', { format: 'zip_components' }), { icon: <FileArchiveIcon aria-hidden="true" /> })}
+            {action('accreditation.print.dossier.pdf', dossier('pdf', { format: 'pdf' }), { variant: 'default' })}
+            {action('accreditation.print.dossier.zip', dossier('zip', { format: 'zip' }))}
+            {scored && action('accreditation.print.dossier.zip_components', dossier('zip_components', { format: 'zip_components' }))}
           </div>
           {scored && <p className="text-xs text-muted-foreground">{t('accreditation.print.dossier.zip_hint')}</p>}
           {scored && (
             <div className="grid gap-1">
               <div className="flex flex-wrap gap-2">
-                {action('accreditation.print.request_letter', dossier('request_letter', { format: 'pdf', part: 'request_letter' }), {
-                  icon: <FileTextIcon aria-hidden="true" />,
-                })}
+                {action('accreditation.print.request_letter', dossier('request_letter', { format: 'pdf', part: 'request_letter' }))}
               </div>
               <p className="text-xs text-muted-foreground">{t('accreditation.print.request_letter_hint')}</p>
             </div>
@@ -201,28 +189,29 @@ export function PrintTab({ periodId }: { periodId: string }): JSX.Element {
         <Card title={t('report.accreditation.statement_1000.title')}>
           <p className="text-sm text-muted-foreground">{t('accreditation.print.statement.intro')}</p>
           <div className="flex flex-wrap gap-2">
-            {action('accreditation.print.statement.make', documentStart('statement', 'statement-1000', {}, false), { icon: <FileTextIcon aria-hidden="true" /> })}
+            {action('accreditation.print.statement.make', documentStart('statement', 'statement-1000', {}, false))}
           </div>
           {failed('statement')}
         </Card>
 
         <Card title={t('accreditation.print.annexes.title')}>
           <p className="text-sm text-muted-foreground">{t('accreditation.print.annexes.intro')}</p>
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
+          <div className={TABLE.wrap}>
+            <table className={TABLE.table}>
+              <caption className="sr-only">{t('accreditation.print.annexes.title')}</caption>
               <tbody>
                 {ANNEXES.map((reportId) => {
                   const title = t(`report.${reportId}.title`);
                   const personal = PERSONAL_ANNEXES.has(reportId);
                   return (
-                    <tr key={reportId} data-report-id={reportId} className="border-t first:border-t-0">
-                      <th scope="row" className="px-3 py-2 text-left font-normal">
+                    <tr key={reportId} data-report-id={reportId}>
+                      <th scope="row" className={cn(TABLE.td, 'text-left font-normal')}>
                         <span className="flex flex-wrap items-center gap-2">
                           {title}
-                          {personal && <Badge tone="warning">{t('accreditation.print.annexes.personal')}</Badge>}
+                          {personal && <Tag tone="warn">{t('accreditation.print.annexes.personal')}</Tag>}
                         </span>
                       </th>
-                      <td className="px-3 py-2">
+                      <td className={TABLE.td}>
                         <div className="flex flex-wrap justify-end gap-2">
                           {(['csv', 'xlsx'] as const).map((format) => {
                             const formatLabel = t(`vocab.report_format.${format}`);
@@ -237,10 +226,8 @@ export function PrintTab({ periodId }: { periodId: string }): JSX.Element {
                                 aria-label={t('accreditation.print.annexes.make', { format: formatLabel, title })}
                                 onClick={() =>
                                   void begin({ action: `annex:${reportId}:${format}`, personal, path: personal ? 'reports/runs/personal' : 'reports/runs', body: runBody })
-                                }
-                              >
+                                }>
                                 {formatLabel}
-                                {personal && <LockIcon aria-hidden="true" className="opacity-60" />}
                               </Button>
                             );
                           })}
@@ -262,7 +249,7 @@ export function PrintTab({ periodId }: { periodId: string }): JSX.Element {
           {fresh.length === 0 && listed.length === 0 ? (
             runs.data !== undefined && <p className="text-sm text-muted-foreground">{t('accreditation.print.runs.empty')}</p>
           ) : (
-            <ul className="grid gap-2">
+            <ul className="grid border-t">
               {fresh.map((id) => (
                 <StartedRunCard key={id} runId={id} limitMb={limitMb} evidence={evidence.data?.evidence} />
               ))}
@@ -283,9 +270,9 @@ export function PrintTab({ periodId }: { periodId: string }): JSX.Element {
   }
 
   return (
-    <section aria-labelledby={titleId} data-period-id={periodId} className="flex flex-col gap-4">
-      <div className="grid gap-1">
-        <h2 id={titleId} className="text-lg font-semibold">
+    <section aria-labelledby={titleId} data-period-id={periodId} className="grid min-w-0 gap-5">
+      <div className="grid max-w-[75ch] gap-1">
+        <h2 id={titleId} className="text-base font-bold">
           {t('accreditation.print.title')}
         </h2>
         <p className="text-sm text-muted-foreground">{t('accreditation.print.intro')}</p>

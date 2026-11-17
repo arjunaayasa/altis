@@ -1,7 +1,8 @@
 import { ACTIVITY_KINDS, vocabKey, type ActivityKind } from '@altis/shared';
 import { ActivityBody, ActivityPatchBody, type ActivityView } from '@altis/shared/api/accreditation';
 import { useForm } from 'react-hook-form';
-import { Badge, CheckField, Field, ProblemAlert, RootError, TEXTAREA_CLASS } from '@/components/form-field';
+import { CheckField, Field, ProblemAlert, RootError, TEXTAREA_CLASS } from '@/components/form-field';
+import { Tag } from '@/components/layout';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
 import { useDirtyGuard } from '@/lib/dirty-forms';
@@ -99,7 +100,7 @@ function ActivityForm({ row, canManage, onSaved, onCancel }: RegisterFormProps<A
     <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
       <ProblemAlert error={problem} />
       <RootError message={errors.root?.['server']?.message} />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
         <Field label={t('accreditation.registers.activities.field.kind')} error={errors.kind}>
           {(c) => (
             <VocabSelect
@@ -166,7 +167,7 @@ export function ActivitiesRegister() {
       header: t('accreditation.registers.activities.col.title'),
       cell: (r) => (
         <span className="grid">
-          <span className="font-medium">{r.title}</span>
+          <span className="font-semibold">{r.title}</span>
           {r.partner !== null && <span className="text-muted-foreground">{r.partner}</span>}
         </span>
       ),
@@ -181,8 +182,8 @@ export function ActivitiesRegister() {
       header: t('accreditation.registers.activities.col.flags'),
       cell: (r) => (
         <span className="flex flex-wrap gap-1">
-          {r.usesLibraryFacility && <Badge tone="info">{t('accreditation.registers.activities.badge.facility')}</Badge>}
-          {r.externalSpeaker && <Badge tone="info">{t('accreditation.registers.activities.badge.speaker')}</Badge>}
+          {r.usesLibraryFacility && <Tag>{t('accreditation.registers.activities.badge.facility')}</Tag>}
+          {r.externalSpeaker && <Tag>{t('accreditation.registers.activities.badge.speaker')}</Tag>}
         </span>
       ),
     },

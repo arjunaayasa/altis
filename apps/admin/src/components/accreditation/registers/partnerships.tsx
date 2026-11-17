@@ -81,7 +81,7 @@ function PartnershipForm({ row, canManage, onSaved, onCancel }: RegisterFormProp
     <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
       <ProblemAlert error={problem} />
       <RootError message={errors.root?.['server']?.message} />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
         <Field label={t('accreditation.registers.partnerships.field.partner')} error={errors.partner}>
           {(c) => <Input {...c} autoComplete="off" maxLength={191} disabled={disabled} {...form.register('partner')} />}
         </Field>
@@ -133,7 +133,7 @@ export function PartnershipsRegister() {
       header: t('accreditation.registers.partnerships.col.partner'),
       cell: (r) => (
         <span className="grid">
-          <span className="font-medium">{r.partner}</span>
+          <span className="font-semibold">{r.partner}</span>
           {r.scope !== null && <span className="line-clamp-2 text-muted-foreground">{r.scope}</span>}
         </span>
       ),

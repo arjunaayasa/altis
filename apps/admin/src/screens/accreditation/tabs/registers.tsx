@@ -6,7 +6,8 @@ import { DocumentsRegister } from '@/components/accreditation/registers/document
 import { PartnershipsRegister } from '@/components/accreditation/registers/partnerships';
 import { useCanManage } from '@/components/accreditation/registers/register-table';
 import { StaffRegister } from '@/components/accreditation/registers/staff';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Callout } from '@/components/layout';
+import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
 import { useT } from '@/i18n';
 
 /**
@@ -28,18 +29,18 @@ export function RegistersTab(props: { periodId: string }): JSX.Element {
   const headingId = useId();
   const [tab, setTab] = useState<RegisterKind>('activities');
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-4" data-period-id={props.periodId}>
-      <div className="grid gap-1">
-        <h2 id={headingId} className="text-lg font-semibold">
+    <section aria-labelledby={headingId} className="grid min-w-0 gap-4" data-period-id={props.periodId}>
+      <div className="grid max-w-[75ch] gap-1">
+        <h2 id={headingId} className="text-base font-bold">
           {t('accreditation.registers.title')}
         </h2>
-        <p className="max-w-3xl text-sm text-muted-foreground">{t('accreditation.registers.intro')}</p>
+        <p className="text-sm text-muted-foreground">{t('accreditation.registers.intro')}</p>
       </div>
-      {!canManage && <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{t('accreditation.registers.read_only')}</p>}
-      <Tabs value={tab} onValueChange={(value) => (isRegisterTab(value) ? setTab(value) : undefined)}>
-        <TabsList aria-label={t('accreditation.registers.tabs_label')} className="h-auto flex-wrap justify-start">
+      {!canManage && <Callout role="status" title={t('accreditation.registers.read_only')} />}
+      <Tabs value={tab} onValueChange={(value) => (isRegisterTab(value) ? setTab(value) : undefined)} className="min-w-0">
+        <TabsList aria-label={t('accreditation.registers.tabs_label')} className={WRAPPING_TABS.list}>
           {REGISTER_TABS.map((kind) => (
-            <TabsTrigger key={kind} value={kind}>
+            <TabsTrigger key={kind} value={kind} className={WRAPPING_TABS.trigger}>
               {t(`accreditation.registers.tab.${kind}`)}
             </TabsTrigger>
           ))}

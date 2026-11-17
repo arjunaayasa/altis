@@ -8,7 +8,7 @@ import { EvidenceMinutes } from '@/components/accreditation/evidence-minutes';
 import { EvidenceUpload } from '@/components/accreditation/evidence-upload';
 import { accredKeys, accredPaths } from '@/components/accreditation/usage/queries';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { Badge } from '@/components/form-field';
+import { Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT, type TKey, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
@@ -79,19 +79,19 @@ export function EvidenceChecklist({
 
   if (items.length === 0) return <p className="text-sm text-muted-foreground">{t('accreditation.workspace.evidence.empty')}</p>;
   return (
-    <ul aria-label={t('accreditation.workspace.evidence.title')} className="grid gap-2">
+    <ul aria-label={t('accreditation.workspace.evidence.title')} className="grid border-t">
       {items.map((item) => {
         const state = status?.find((s) => s.code === item.code);
         return (
-          <li key={item.code} className="grid gap-1 rounded-md border px-3 py-2 text-sm">
+          <li key={item.code} className="grid gap-1.5 border-b py-2.5 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{keyText(t, item.labelKey)}</span>
-              {item.primary && <Badge tone="info">{t('accreditation.workspace.evidence.primary')}</Badge>}
-              <Badge>{t(vocabKey('evidence_kind', item.kind))}</Badge>
+              <span className="font-semibold">{keyText(t, item.labelKey)}</span>
+              {item.primary && <Tag>{t('accreditation.workspace.evidence.primary')}</Tag>}
+              <Tag>{t(vocabKey('evidence_kind', item.kind))}</Tag>
               {state !== undefined && (
-                <Badge tone={state.present ? 'info' : 'warning'}>
+                <Tag tone={state.present ? 'ok' : 'warn'}>
                   {t(state.present ? 'accreditation.workspace.evidence.present' : 'accreditation.workspace.evidence.absent')}
-                </Badge>
+                </Tag>
               )}
             </div>
             {item.kind === 'generated' && item.reportId !== null && (
@@ -107,7 +107,7 @@ export function EvidenceChecklist({
                     <Link
                       to={`/admin/reports/${encodeURIComponent(item.reportId)}`}
                       search={{ periodId }}
-                      className="text-primary underline-offset-4 hover:underline">
+                      className="font-semibold text-accent-text underline-offset-4 hover:underline">
                       {t('accreditation.workspace.evidence.draft_open')}
                     </Link>
                   </>
@@ -124,7 +124,7 @@ export function EvidenceChecklist({
                   return (
                     <li key={file.id} className="flex flex-wrap items-center gap-2">
                       <span>
-                        <a href={`/files/${encodeURIComponent(file.id)}`} className="text-primary underline-offset-4 hover:underline">
+                        <a href={`/files/${encodeURIComponent(file.id)}`} className="font-semibold text-accent-text underline-offset-4 hover:underline">
                           {file.name}
                         </a>
                         {file.caption !== '' && <span className="text-muted-foreground"> · {file.caption}</span>}
@@ -132,7 +132,7 @@ export function EvidenceChecklist({
                       {id !== undefined && (
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           aria-label={t('accreditation.workspace.evidence.remove_named', { name: file.name })}
                           onClick={() => setRemoving({ id, name: file.name })}>
@@ -156,7 +156,7 @@ export function EvidenceChecklist({
               </ul>
             )}
             {canUpload && item.kind !== 'generated' && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-start gap-2">
                 <EvidenceUpload
                   periodId={periodId}
                   indicatorCode={indicatorCode}

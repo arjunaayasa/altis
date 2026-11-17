@@ -99,7 +99,7 @@ export function AnswerPicker({
   };
 
   return (
-    <div className="grid gap-3">
+    <div className="grid max-w-3xl gap-3">
       <div className="grid gap-1 text-sm">
         {result !== undefined && (
           <p>{suggestion === null ? t('accreditation.workspace.suggestion_none') : t('accreditation.workspace.suggestion', { answer: suggestion })}</p>
@@ -109,14 +109,14 @@ export function AnswerPicker({
         )}
         {stored !== null && stored.note !== null && <p className="text-muted-foreground">{t('accreditation.workspace.stored_note', { note: stored.note })}</p>}
         {result !== undefined && (
-          <p className="font-medium">
+          <p className="font-semibold">
             {result.final === null ? t('accreditation.workspace.final_none') : t('accreditation.workspace.final', { answer: result.final })}
           </p>
         )}
       </div>
 
       <fieldset className="grid gap-2">
-        <legend className="mb-1 text-sm font-medium">{t('accreditation.workspace.answer.legend')}</legend>
+        <legend className="mb-1 text-meta font-semibold">{t('accreditation.workspace.answer.legend')}</legend>
         <div className="grid gap-1">
           {ANSWER_LETTERS.map((l) => (
             <label key={l} className="flex items-start gap-2 text-sm">
@@ -134,7 +134,7 @@ export function AnswerPicker({
           ))}
         </div>
         {pickError && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-meta font-semibold text-bad">
             {t('accreditation.workspace.answer.pick')}
           </p>
         )}

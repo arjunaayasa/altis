@@ -102,7 +102,7 @@ function DocumentForm({ row, canManage, onSaved, onCancel }: RegisterFormProps<D
     <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
       <ProblemAlert error={problem} />
       <RootError message={errors.root?.['server']?.message} />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
         <Field label={t('accreditation.registers.documents.field.kind')} error={errors.kind}>
           {(c) => (
             <VocabSelect
@@ -132,8 +132,8 @@ function DocumentForm({ row, canManage, onSaved, onCancel }: RegisterFormProps<D
         </Field>
       </div>
       {kind !== '' && aspects.length > 0 && (
-        <fieldset className="grid gap-2 rounded-md border p-3" aria-describedby={hintId}>
-          <legend className="px-1 text-sm font-medium">{t('accreditation.registers.documents.field.aspects')}</legend>
+        <fieldset className="grid gap-2" aria-describedby={hintId}>
+          <legend className="mb-1 text-meta font-semibold">{t('accreditation.registers.documents.field.aspects')}</legend>
           <p id={hintId} className="text-xs text-muted-foreground">
             {t('accreditation.registers.documents.field.aspects_hint')}
           </p>
@@ -174,7 +174,7 @@ export function DocumentsRegister() {
       header: t('accreditation.registers.documents.col.title'),
       cell: (r) => (
         <span className="grid">
-          <span className="font-medium">{r.title}</span>
+          <span className="font-semibold">{r.title}</span>
           {r.reference !== null && <span className="text-muted-foreground">{r.reference}</span>}
         </span>
       ),

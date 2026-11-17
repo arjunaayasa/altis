@@ -1,9 +1,9 @@
 import { USAGE_CELL_GROUP_KEY, USAGE_IMPORT_ONLY_METRICS, USAGE_PUT_MAX_CELLS, type UsageGridView, type UsagePutBody } from '@altis/shared/api/accreditation';
 import type { UsageMetric } from '@altis/shared';
 import { useQueryClient } from '@tanstack/react-query';
-import { SaveIcon, Undo2Icon } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
-import { Badge, Field, Notice, SELECT_CLASS } from '@/components/form-field';
+import { Field, Notice, SELECT_CLASS } from '@/components/form-field';
+import { Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT, type Translate } from '@/i18n';
@@ -68,7 +68,7 @@ export function useMonthLabel(): (month: string) => string {
   }, [locale]);
 }
 
-const SOURCE_TONE = { manual: 'info', slims: 'neutral', none: 'neutral' } as const;
+const SOURCE_TONE = { manual: 'neutral', slims: 'neutral', none: 'neutral' } as const;
 
 type SaveState =
   | { kind: 'idle' }
@@ -209,11 +209,11 @@ export function UsageGrid({ periodId, grid, span, editable }: UsageGridProps) {
             aria-invalid={isInvalid ? true : undefined}
             disabled={!groupEditable || saving || USAGE_IMPORT_ONLY_METRICS.includes(metric)}
             onChange={(e) => change(key, e.target.value)}
-            className={cn('h-8 w-24 text-right tabular-nums', dirty && 'border-primary bg-primary/5')}
+            className={cn('h-8 w-24 text-right tabular-nums', dirty && 'border-primary bg-accent-soft')}
           />
-          <Badge tone={SOURCE_TONE[source]} className={source === 'none' ? 'opacity-70' : undefined}>
+          <Tag tone={SOURCE_TONE[source]} className={source === 'none' ? 'text-faint' : undefined}>
             {t(`report.source.${source}`)}
-          </Badge>
+          </Tag>
           {month !== null && c?.spanTo !== null && c?.spanTo !== undefined && (
             <span className="text-xs text-muted-foreground">{t('accreditation.usage.until', { date: c.spanTo })}</span>
           )}
@@ -223,7 +223,7 @@ export function UsageGrid({ periodId, grid, span, editable }: UsageGridProps) {
   };
 
   const metricHeader = (metric: UsageMetric) => (
-    <th key={metric} scope="col" className="px-2 py-2 text-right align-bottom text-xs font-medium text-muted-foreground">
+    <th key={metric} scope="col" className="px-2 py-2 text-right align-bottom text-xs font-semibold text-muted-foreground">
       {t(`vocab.usage_metric.${metric}`)}
     </th>
   );
@@ -254,11 +254,9 @@ export function UsageGrid({ periodId, grid, span, editable }: UsageGridProps) {
           <div className="flex flex-wrap items-center gap-2">
             {edits.size > 0 && <span className="text-sm text-muted-foreground">{t('accreditation.usage.changes', { count: number.format(edits.size) })}</span>}
             <Button type="button" variant="outline" disabled={edits.size === 0 || saving} onClick={discard}>
-              <Undo2Icon aria-hidden="true" />
               {t('accreditation.usage.discard')}
             </Button>
             <Button type="button" disabled={edits.size === 0 || saving} onClick={() => void save()}>
-              <SaveIcon aria-hidden="true" />
               {saving ? t('accreditation.usage.saving') : t('accreditation.usage.save')}
             </Button>
           </div>
@@ -272,12 +270,12 @@ export function UsageGrid({ periodId, grid, span, editable }: UsageGridProps) {
 
       <div className="overflow-x-auto rounded-md border">
         <table aria-labelledby={ids.monthly} className="w-full text-sm">
-          <caption id={ids.monthly} className="px-3 py-2 text-left font-medium">
+          <caption id={ids.monthly} className="px-3 py-2 text-left font-semibold">
             {t('accreditation.usage.monthly_caption', { group: groupLabel })}
           </caption>
-          <thead className="bg-muted/50">
+          <thead className="bg-layer text-left">
             <tr>
-              <th scope="col" className="px-3 py-2 text-left align-bottom text-xs font-medium text-muted-foreground">
+              <th scope="col" className="px-3 py-2 text-left align-bottom text-xs font-semibold text-muted-foreground">
                 {t('accreditation.usage.month')}
               </th>
               {monthly.map(metricHeader)}
@@ -304,10 +302,10 @@ export function UsageGrid({ periodId, grid, span, editable }: UsageGridProps) {
           <p className="text-xs text-muted-foreground">{t('accreditation.usage.span_hint', { from: span.from, to: span.to })}</p>
           <div className="overflow-x-auto rounded-md border">
             <table aria-labelledby={ids.span} className="w-full text-sm">
-              <caption id={ids.span} className="px-3 py-2 text-left font-medium">
+              <caption id={ids.span} className="px-3 py-2 text-left font-semibold">
                 {t('accreditation.usage.span_caption', { group: groupLabel })}
               </caption>
-              <thead className="bg-muted/50">
+              <thead className="bg-layer text-left">
                 <tr>
                   <td />
                   {spanMetrics.map(metricHeader)}
