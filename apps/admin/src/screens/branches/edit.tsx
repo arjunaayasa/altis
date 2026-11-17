@@ -2,11 +2,11 @@ import { BranchCreateBody, BranchPatchBody, type BranchItem, type BranchListResp
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeftIcon } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { useForm, type UseFormRegisterReturn } from 'react-hook-form';
 import type { z } from 'zod';
-import { Field, Notice, ProblemAlert, RefetchProblem, TEXTAREA_CLASS } from '@/components/form-field';
+import { Field, Notice, NoticeAlert, ProblemAlert, RefetchProblem, TEXTAREA_CLASS } from '@/components/form-field';
+import { BackLink, ErrorState, FORM_FULL, FormBar, FormSection, LoadingState, PageHead, StatusText } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
@@ -40,15 +40,6 @@ function timeZones(): string[] {
   }
 }
 
-function BackLink({ label }: { label: string }) {
-  return (
-    <Link to="/admin/branches" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-      <ArrowLeftIcon className="size-4" aria-hidden="true" />
-      {label}
-    </Link>
-  );
-}
-
 type BranchField = 'code' | 'name' | 'address' | 'timezone';
 
 /** The four fields, shared by the create and the edit form (both have them under the same names). */
@@ -70,7 +61,7 @@ function BranchFields({
       <Field label={t('branches.field.name')} error={errors.name}>
         {(c) => <Input {...c} autoComplete="off" maxLength={191} {...register('name')} />}
       </Field>
-      <Field label={t('branches.field.address')} error={errors.address} className="sm:col-span-2">
+      <Field label={t('branches.field.address')} error={errors.address} className={FORM_FULL}>
         {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={1000} {...register('address', { setValueAs: addressValue })} />}
       </Field>
       <Field label={t('branches.field.timezone')} hint={t('branches.field.timezone_hint')} error={errors.timezone}>
@@ -117,17 +108,19 @@ export function BranchCreateScreen() {
   });
 
   return (
-    <div className="flex max-w-2xl flex-col gap-4">
-      <BackLink label={t('branches.back')} />
-      <h1 className="text-2xl font-semibold">{t('branches.new.title')}</h1>
+    <div className="grid max-w-5xl gap-6">
+      <div className="grid gap-3">
+        <BackLink to="/admin/branches">{t('branches.back')}</BackLink>
+        <PageHead title={t('branches.new.title')} />
+      </div>
       {/* The server would refuse (and record the refusal): say so before anything is typed. */}
       {!canManage && <ProblemAlert error={new ApiError(403, 'AUTHZ_DENIED')} />}
       {problem !== null && <Notice kind="error">{problem}</Notice>}
       <form noValidate onSubmit={(e) => void submit(e)}>
-        <fieldset disabled={!canManage} className="grid min-w-0 gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2">
+        <FormSection title={t('branches.form.about')} intro={t('branches.form.about_intro')} disabled={!canManage}>
           <BranchFields register={(name, options) => form.register(name, options)} errors={errors} />
-          {canManage && <FormButtons busy={isSubmitting} />}
-        </fieldset>
+        </FormSection>
+        {canManage && <FormButtons busy={isSubmitting} dirty={isDirty} />}
       </form>
     </div>
   );
@@ -138,17 +131,18 @@ function patchValues(b: BranchItem): PatchInput {
 }
 
 /** Save and Cancel (back to the list). */
-function FormButtons({ busy }: { busy: boolean }) {
+function FormButtons({ busy, dirty }: { busy: boolean; dirty: boolean }) {
   const t = useT();
   return (
-    <div className="flex gap-2 sm:col-span-2">
+    <FormBar>
       <Button type="submit" disabled={busy}>
         {t(busy ? 'form.saving' : 'form.save')}
       </Button>
       <Button asChild variant="outline">
         <Link to="/admin/branches">{t('form.cancel')}</Link>
       </Button>
-    </div>
+      {dirty && <StatusText tone="warn">{t('system.unsaved')}</StatusText>}
+    </FormBar>
   );
 }
 
@@ -186,11 +180,11 @@ function BranchEditForm({ branch, canManage }: { branch: BranchItem; canManage: 
     <>
       {problem !== null && <Notice kind="error">{problem}</Notice>}
       <form noValidate onSubmit={(e) => void submit(e)}>
-        <fieldset disabled={!canManage} className="grid min-w-0 gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2">
+        <FormSection title={t('branches.form.about')} intro={t('branches.form.about_intro')} disabled={!canManage}>
           {/* The patch form has the same four fields (plus `version`, which is not shown). */}
           <BranchFields register={(name, options) => form.register(name, options)} errors={errors} />
-          {canManage && <FormButtons busy={isSubmitting} />}
-        </fieldset>
+        </FormSection>
+        {canManage && <FormButtons busy={isSubmitting} dirty={isDirty} />}
       </form>
     </>
   );
@@ -205,25 +199,31 @@ export function BranchEditScreen() {
   const branch = branches.data?.items.find((b) => b.id === branchId);
 
   return (
-    <div className="flex max-w-2xl flex-col gap-4">
-      <BackLink label={t('branches.back')} />
+    <div className="grid max-w-5xl gap-6">
       {/* The data wins over an error: a failed background refetch keeps the form and what was typed. */}
       {branches.data === undefined ? (
-        branches.isError ? (
-          <Notice kind="error">{problemText(t, branches.error)}</Notice>
-        ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
-        )
+        <>
+          <BackLink to="/admin/branches">{t('branches.back')}</BackLink>
+          {branches.isError ? (
+            <ErrorState title={problemText(t, branches.error)} error={null} onRetry={() => void branches.refetch()} retrying={branches.isFetching} />
+          ) : (
+            <LoadingState />
+          )}
+        </>
       ) : branch === undefined ? (
-        <Notice kind="error">{t('error.NOT_FOUND')}</Notice>
+        <>
+          <BackLink to="/admin/branches">{t('branches.back')}</BackLink>
+          <ErrorState title={t('error.NOT_FOUND')} error={null} />
+        </>
       ) : (
         <>
-          <h1 className="text-2xl font-semibold">{branch.name}</h1>
+          <div className="grid gap-3">
+            <BackLink to="/admin/branches">{t('branches.back')}</BackLink>
+            <PageHead title={branch.name} intro={branch.code} />
+          </div>
           <RefetchProblem query={branches} />
-          {branch.archivedAt !== null && <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{t('branches.archived_notice')}</p>}
-          {!canManage && <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{t('branches.read_only')}</p>}
+          {branch.archivedAt !== null && <NoticeAlert>{t('branches.archived_notice')}</NoticeAlert>}
+          {!canManage && <NoticeAlert>{t('branches.read_only')}</NoticeAlert>}
           <BranchEditForm key={branch.id} branch={branch} canManage={canManage} />
         </>
       )}

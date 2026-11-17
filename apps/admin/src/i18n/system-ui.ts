@@ -1,0 +1,53 @@
+// The copy of the Sistem module's screens in the admin's shared layout (page heads, filter rows, row menus, the words
+// of buttons that used to be icons) and the English singulars of counted texts (`<key>_one`, chosen when the count is
+// 1; Indonesian has one form). Joined into ADMIN_ID / ADMIN_EN at their end (i18n/id.ts, i18n/en.ts).
+
+export const SYSTEM_UI_ID = {
+  'system.unsaved': 'Ada perubahan yang belum disimpan.',
+  'users.intro': 'Akun staf yang masuk ke admin: status, verifikasi dua langkah, dan perannya.',
+  'users.filters': 'Saringan pengguna',
+  'users.more_named': 'Tindakan untuk {name}',
+  'users.paging_one': 'Halaman {page} dari {pages} · {total} pengguna',
+  'users.form.account': 'Akun',
+  'users.form.account_intro': 'Nama yang dipakai untuk masuk dan nama yang tampil di admin.',
+  'users.form.access': 'Masuk dan bahasa',
+  'users.form.access_intro': 'Kata sandi awal, bahasa admin, dan aturan masuk pengguna ini.',
+  'users.roles.remove_short': 'Lepas',
+  'roles.intro': 'Kumpulan izin yang diberikan kepada pengguna, secara global atau per cabang.',
+  'roles.permission_count_one': '{count} izin',
+  'roles.holder_count_one': '{count} pengguna',
+  'roles.holders_hint_one': 'Dipegang {count} pengguna. Perubahan izin berlaku bagi mereka pada permintaan berikutnya.',
+  'roles.more_named': 'Tindakan untuk peran {name}',
+  'roles.form.about': 'Peran',
+  'roles.form.about_intro': 'Nama dan keterangan yang dilihat admin saat menetapkan peran.',
+  'branches.intro': 'Tempat layanan perpustakaan. Peran dan eksemplar dapat dibatasi per cabang.',
+  'branches.filters': 'Saringan cabang',
+  'branches.more_named': 'Tindakan untuk {name}',
+  'branches.form.about': 'Cabang',
+  'branches.form.about_intro': 'Kode dan nama dipakai di semua layar; zona waktu menentukan jam buka dan jatuh tempo.',
+} as const;
+
+export const SYSTEM_UI_EN: Record<keyof typeof SYSTEM_UI_ID, string> = {
+  'system.unsaved': 'There are unsaved changes.',
+  'users.intro': 'Staff accounts that sign in to the admin: their status, two-step verification and roles.',
+  'users.filters': 'User filters',
+  'users.more_named': 'Actions for {name}',
+  'users.paging_one': 'Page {page} of {pages} · {total} user',
+  'users.form.account': 'Account',
+  'users.form.account_intro': 'The name used to sign in and the name shown in the admin.',
+  'users.form.access': 'Sign-in and language',
+  'users.form.access_intro': 'The first password, the admin language and the sign-in rules of this user.',
+  'users.roles.remove_short': 'Remove',
+  'roles.intro': 'Sets of permissions given to users, globally or per branch.',
+  'roles.permission_count_one': '{count} permission',
+  'roles.holder_count_one': '{count} user',
+  'roles.holders_hint_one': 'Held by {count} user. Permission changes apply to them on their next request.',
+  'roles.more_named': 'Actions for the role {name}',
+  'roles.form.about': 'Role',
+  'roles.form.about_intro': 'The name and description admins see when they assign the role.',
+  'branches.intro': 'The places where the library serves. Roles and items can be limited to one branch.',
+  'branches.filters': 'Branch filters',
+  'branches.more_named': 'Actions for {name}',
+  'branches.form.about': 'Branch',
+  'branches.form.about_intro': 'The code and name show on every screen; the time zone sets opening hours and due dates.',
+};

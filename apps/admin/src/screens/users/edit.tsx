@@ -2,12 +2,12 @@ import { UserCreateBody, UserPatchBody, type UserDetail } from '@altis/shared/ap
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
-import { ArrowLeftIcon } from 'lucide-react';
 import { useState, type ComponentProps } from 'react';
 import { useForm, type FieldValues, type UseFormReturn } from 'react-hook-form';
 import type { z } from 'zod';
 import { useDateTime } from '@/components/data-table';
-import { Badge, CheckField, Field, Notice, ProblemAlert, RefetchProblem, SELECT_CLASS } from '@/components/form-field';
+import { CheckField, Field, Notice, ProblemAlert, RefetchProblem, SELECT_CLASS } from '@/components/form-field';
+import { BackLink, ErrorState, FORM_FULL, FormBar, FormSection, LoadingState, PageHead, StatusText, Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type Translate } from '@/i18n';
@@ -36,15 +36,6 @@ type PatchInput = z.input<typeof UserPatchBody>;
 /** An empty text field is "not set" (null); surrounding spaces of an e-mail address are not part of it. */
 const emailValue = (v: unknown): unknown => (typeof v === 'string' ? (v.trim() === '' ? null : v.trim()) : v);
 const localeValue = (v: unknown): unknown => (v === '' ? null : v);
-
-function BackLink({ label }: { label: string }) {
-  return (
-    <Link to="/admin/users" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-      <ArrowLeftIcon className="size-4" aria-hidden="true" />
-      {label}
-    </Link>
-  );
-}
 
 function LocaleSelect({ t, ...props }: { t: Translate } & ComponentProps<'select'>) {
   return (
@@ -93,14 +84,16 @@ export function UserCreateScreen() {
   });
 
   return (
-    <div className="flex max-w-2xl flex-col gap-4">
-      <BackLink label={t('users.back')} />
-      <h1 className="text-2xl font-semibold">{t('users.new.title')}</h1>
+    <div className="grid max-w-5xl gap-6">
+      <div className="grid gap-3">
+        <BackLink to="/admin/users">{t('users.back')}</BackLink>
+        <PageHead title={t('users.new.title')} />
+      </div>
       {/* The server would refuse (and record the refusal): say so before anything is typed. */}
       {!canManage && <ProblemAlert error={new ApiError(403, 'AUTHZ_DENIED')} />}
       {problem !== null && <Notice kind="error">{problem}</Notice>}
       <form noValidate onSubmit={(e) => void submit(e)}>
-        <fieldset disabled={!canManage} className="grid min-w-0 gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2">
+        <FormSection title={t('users.form.account')} intro={t('users.form.account_intro')} disabled={!canManage}>
           <Field label={t('users.field.username')} hint={t('users.field.username_hint')} error={errors.username}>
             {(c) => <Input {...c} autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={64} {...form.register('username')} />}
           </Field>
@@ -110,27 +103,30 @@ export function UserCreateScreen() {
           <Field label={t('users.field.email')} hint={t('users.field.email_hint')} error={errors.email}>
             {(c) => <Input {...c} type="email" autoComplete="off" maxLength={191} {...form.register('email', { setValueAs: emailValue })} />}
           </Field>
+        </FormSection>
+        <FormSection title={t('users.form.access')} intro={t('users.form.access_intro')} disabled={!canManage}>
           <Field label={t('users.field.password')} hint={t('users.field.password_hint')} error={errors.password}>
             {(c) => <Input {...c} type="password" autoComplete="new-password" {...form.register('password')} />}
           </Field>
           <Field label={t('users.field.locale')} error={errors.locale}>
             {(c) => <LocaleSelect t={t} {...c} {...form.register('locale', { setValueAs: localeValue })} />}
           </Field>
-          <div className="grid content-start gap-3 sm:col-span-2">
+          <div className={`grid content-start gap-3 ${FORM_FULL}`}>
             <CheckField label={t('users.field.mfa_required')} hint={t('users.field.mfa_required_hint')} {...form.register('mfaRequired')} />
             <CheckField label={t('users.field.must_change_password')} {...form.register('mustChangePassword')} />
           </div>
-          {canManage && (
-            <div className="flex gap-2 sm:col-span-2">
-              <Button type="submit" disabled={isSubmitting}>
-                {t(isSubmitting ? 'form.saving' : 'form.save')}
-              </Button>
-              <Button asChild variant="outline">
-                <Link to="/admin/users">{t('form.cancel')}</Link>
-              </Button>
-            </div>
-          )}
-        </fieldset>
+        </FormSection>
+        {canManage && (
+          <FormBar>
+            <Button type="submit" disabled={isSubmitting}>
+              {t(isSubmitting ? 'form.saving' : 'form.save')}
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/admin/users">{t('form.cancel')}</Link>
+            </Button>
+            {isDirty && <StatusText tone="warn">{t('system.unsaved')}</StatusText>}
+          </FormBar>
+        )}
       </form>
     </div>
   );
@@ -180,7 +176,7 @@ function UserForm({ user, canManage, isSelf, reload }: { user: UserDetail; canMa
   };
 
   return (
-    <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
+    <form noValidate onSubmit={(e) => void submit(e)} className="grid gap-4">
       {notice !== null && (
         <Notice
           kind={notice.kind}
@@ -195,7 +191,7 @@ function UserForm({ user, canManage, isSelf, reload }: { user: UserDetail; canMa
           {notice.text}
         </Notice>
       )}
-      <fieldset disabled={!canManage} className="grid min-w-0 gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2">
+      <FormSection title={t('users.form.account')} intro={t('users.form.account_intro')} disabled={!canManage}>
         <Field label={t('users.field.username')} hint={t('users.field.username_hint')} error={errors.username}>
           {(c) => <Input {...c} autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={64} {...form.register('username')} />}
         </Field>
@@ -208,21 +204,22 @@ function UserForm({ user, canManage, isSelf, reload }: { user: UserDetail; canMa
         <Field label={t('users.field.locale')} error={errors.locale}>
           {(c) => <LocaleSelect t={t} {...c} {...form.register('locale', { setValueAs: localeValue })} />}
         </Field>
-        <div className="sm:col-span-2">
+        <div className={FORM_FULL}>
           {isSelf ? (
             <CheckField label={t('users.field.mfa_required')} hint={t('users.field.mfa_required_self')} checked={user.mfaRequired} disabled readOnly />
           ) : (
             <CheckField label={t('users.field.mfa_required')} hint={t('users.field.mfa_required_hint')} {...form.register('mfaRequired')} />
           )}
         </div>
-        {canManage && (
-          <div className="sm:col-span-2">
-            <Button type="submit" disabled={isSubmitting}>
-              {t(isSubmitting ? 'form.saving' : 'form.save')}
-            </Button>
-          </div>
-        )}
-      </fieldset>
+      </FormSection>
+      {canManage && (
+        <FormBar className="border-t-0 pt-0">
+          <Button type="submit" disabled={isSubmitting}>
+            {t(isSubmitting ? 'form.saving' : 'form.save')}
+          </Button>
+          {isDirty && <StatusText tone="warn">{t('system.unsaved')}</StatusText>}
+        </FormBar>
+      )}
     </form>
   );
 }
@@ -240,43 +237,37 @@ export function UserEditScreen() {
   // The data wins over an error: a failed background refetch keeps the forms and what was typed (RefetchProblem).
   if (user.data === undefined && user.isError) {
     return (
-      <div className="flex max-w-2xl flex-col gap-4">
-        <BackLink label={t('users.back')} />
-        <Notice kind="error">{problemText(t, user.error)}</Notice>
+      <div className="grid max-w-5xl gap-6">
+        <BackLink to="/admin/users">{t('users.back')}</BackLink>
+        <ErrorState title={problemText(t, user.error)} error={null} onRetry={() => void user.refetch()} retrying={user.isFetching} />
       </div>
     );
   }
-  if (user.data === undefined) {
-    return (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('shell.loading')}
-      </p>
-    );
-  }
+  if (user.data === undefined) return <LoadingState />;
   const u = user.data;
   const isSelf = meId(me) === u.id;
   const reload = async (): Promise<UserDetail | undefined> => (await user.refetch()).data;
 
   return (
-    <div className="flex max-w-3xl flex-col gap-4">
-      <BackLink label={t('users.back')} />
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">{u.name}</h1>
-        <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-          <div className="flex gap-2">
+    <div className="grid max-w-5xl gap-6">
+      <div className="grid gap-3">
+        <BackLink to="/admin/users">{t('users.back')}</BackLink>
+        <PageHead title={u.name} intro={`@${u.username}`} />
+        <dl className="flex flex-wrap gap-x-6 gap-y-1 text-meta">
+          <div className="flex items-center gap-2">
             <dt className="text-muted-foreground">{t('users.info.status')}</dt>
             <dd>
-              <Badge tone={u.status === 'active' ? 'info' : u.status === 'locked' ? 'danger' : 'neutral'}>{t(`users.status.${u.status}`)}</Badge>
+              <Tag tone={u.status === 'active' ? 'ok' : u.status === 'locked' ? 'bad' : 'neutral'}>{t(`users.status.${u.status}`)}</Tag>
             </dd>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <dt className="text-muted-foreground">{t('users.info.2fa')}</dt>
             <dd>
               {t(u.totpEnabled ? 'users.2fa.on' : 'users.2fa.off')}
               {u.mfaRequired && ` · ${t('users.2fa.required')}`}
             </dd>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <dt className="text-muted-foreground">{t('users.info.last_login')}</dt>
             <dd>{u.lastLoginAt === null ? t('users.never') : formatDate(u.lastLoginAt)}</dd>
           </div>

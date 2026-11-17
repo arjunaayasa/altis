@@ -1,6 +1,7 @@
 import { CATALOG_EN } from './catalog';
 import { KOMUNITAS_EN } from './komunitas';
 import { SHELL_EN } from './shell';
+import { SYSTEM_UI_EN } from './system-ui';
 import type { AdminKey } from './id';
 
 /** The admin SPA's own strings in English, complete: typed against the Indonesian keys (`id.ts`). */
@@ -1187,4 +1188,6 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   ...KOMUNITAS_EN,
   // ---- The shell: module bar, sidebar, user menu and theme (i18n/shell.ts) ----
   ...SHELL_EN,
+  // ---- The Sistem module's screens in the shared layout (i18n/system-ui.ts) ----
+  ...SYSTEM_UI_EN,
 };
