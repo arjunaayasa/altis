@@ -228,8 +228,9 @@ function Footer(props: { locale: Locale; libraryName: string | undefined; footer
               </p>
             </div>
           )}
-          <nav class="foot-block" aria-labelledby="kaki-tautan">
-            <h2 id="kaki-tautan">{opacText(locale, 'shell.footer.links')}</h2>
+          {/* A list under its heading, not a second navigation landmark: the header's menu is the site's. */}
+          <div class="foot-block">
+            <h2>{opacText(locale, 'shell.footer.links')}</h2>
             <ul class="foot-links">
               {footer.links.map((link) => (
                 <li>
@@ -239,7 +240,7 @@ function Footer(props: { locale: Locale; libraryName: string | undefined; footer
                 </li>
               ))}
             </ul>
-          </nav>
+          </div>
           {footer.hours.length === 0 ? null : (
             <div class="foot-block">
               <h2 id="kaki-jam">{opacText(locale, 'shell.footer.hours')}</h2>
