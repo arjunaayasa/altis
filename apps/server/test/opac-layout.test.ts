@@ -1,5 +1,5 @@
 import { createXmlReader, type XmlEvent } from '@altis/core';
-import { BASE_CSS, OPAC_CSS, SHELL_CSS } from '@altis/opac-theme';
+import { BASE_CSS, DETAIL_CSS, OPAC_CSS, SHELL_CSS } from '@altis/opac-theme';
 import { COMMUNITY_SOURCE_URL, LOCALES, t, type Locale } from '@altis/shared';
 import { Hono, type Context } from 'hono';
 import { Fragment, jsx } from 'hono/jsx';
@@ -471,6 +471,12 @@ describe('the shell theme (S16)', () => {
   it('the footer: on a wide screen its grid has a column per block it shows', () => {
     expect(SHELL_CSS).toContain('.foot-grid{grid-template-columns:1.2fr 1fr 1fr 1.3fr}.foot-grid-3{grid-template-columns:1fr 1fr 1.3fr}');
     expect(SHELL_CSS).toContain('.foot-grid-2{grid-template-columns:1fr 1.3fr}');
+  });
+
+  it('a summary drawn as a flex row (the citations, the shelf map) carries a chevron that turns when it is open', () => {
+    expect(DETAIL_CSS).toContain('.citations summary::after,.shelf-map summary::after{content:"";');
+    expect(DETAIL_CSS).toContain('.citations[open] summary::after,.shelf-map[open] summary::after{transform:');
+    expect(DETAIL_CSS).toContain('.citations summary::-webkit-details-marker,.shelf-map summary::-webkit-details-marker{display:none}');
   });
 
   it('the footer: its links, then "Ditenagai ALTIS Community" with the source code link (AGPL-3.0 §13, rel="noopener") and the staff sign-in, in both languages', async () => {
