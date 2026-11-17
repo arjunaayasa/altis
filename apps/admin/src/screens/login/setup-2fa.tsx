@@ -2,7 +2,6 @@ import { totpCodeField, type RecoveryCodesResponse, type TwoFactorSetupResponse 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { CopyIcon, DownloadIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -63,11 +62,11 @@ export function RecoveryCodes({ codes }: { codes: readonly string[] }) {
   const text = [t('codes.file_header', { library: me?.library.name ?? 'ALTIS', username }), '', ...codes, ''].join('\r\n');
   return (
     <section aria-labelledby={headingId} className="grid gap-3">
-      <h2 id={headingId} className="text-base font-semibold">
+      <h2 id={headingId} className="text-base font-bold">
         {t('codes.heading')}
       </h2>
       <p className="text-sm text-muted-foreground">{t('codes.description')}</p>
-      <ol aria-label={t('codes.title')} className="grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-md border bg-muted/50 p-4 font-mono text-sm">
+      <ol aria-label={t('codes.title')} className="grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-md border bg-layer p-4 font-mono text-sm">
         {codes.map((code) => (
           <li key={code}>{code}</li>
         ))}
@@ -75,13 +74,11 @@ export function RecoveryCodes({ codes }: { codes: readonly string[] }) {
       <div className="flex flex-wrap gap-2">
         {canCopy() && (
           <Button type="button" variant="outline" size="sm" onClick={() => void copyText(text).then(setCopied)}>
-            <CopyIcon aria-hidden="true" />
             {t('codes.copy')}
           </Button>
         )}
         <Button asChild variant="outline" size="sm">
           <a href={`data:text/plain;charset=utf-8,${encodeURIComponent(text)}`} download={t('codes.file_name')}>
-            <DownloadIcon aria-hidden="true" />
             {t('codes.download')}
           </a>
         </Button>
@@ -199,10 +196,9 @@ export function TwoFactorEnrolment({ onEnabled, onSessionEnded }: { onEnabled: (
         <QrCode text={setup.otpauthUri} label={t('twofa.qr_label')} className="size-48 rounded-md border bg-white" />
         <p className="text-sm text-muted-foreground">{t('twofa.secret_label')}</p>
         <div className="flex flex-wrap items-center gap-2">
-          <code className="rounded-md border bg-muted/50 px-3 py-2 font-mono text-sm break-all select-all">{grouped(setup.secret)}</code>
+          <code className="rounded-md border bg-layer px-3 py-2 font-mono text-sm break-all select-all">{grouped(setup.secret)}</code>
           {canCopy() && (
             <Button type="button" variant="outline" size="sm" onClick={() => void copyText(setup.secret).then(setCopied)}>
-              <CopyIcon aria-hidden="true" />
               {t('twofa.copy_secret')}
             </Button>
           )}

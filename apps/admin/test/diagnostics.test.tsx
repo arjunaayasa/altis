@@ -509,7 +509,7 @@ describe('the edition and the releases (1d Task 29)', () => {
     expect(within(release).getByText('0.2.0')).toBeTruthy();
     expect(within(release).getByText('0.1.5')).toBeTruthy();
     expect(within(release).getByText('0.1.5 (lebih lama): diabaikan')).toBeTruthy();
-    expect(within(release).getByText(/3 dokumen, seq tertinggi 7/).className).toMatch(/text-destructive/);
+    expect(within(release).getByText(/3 dokumen, seq tertinggi 7/).className).toMatch(/text-bad/);
     expect(within(release).getByText(/Berkas penuh/)).toBeTruthy();
   });
 });

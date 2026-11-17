@@ -6,7 +6,7 @@ import type {
 } from '@altis/shared/api/notifications';
 import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { CheckCheckIcon } from 'lucide-react';
+import { Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useDateTime } from '@/components/data-table';
 import { useT, type TKey } from '@/i18n';
@@ -97,29 +97,30 @@ export function NotificationPanel({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex max-h-[min(32rem,80dvh)] flex-col">
       <div className="flex items-center justify-between gap-2 border-b px-4 py-2">
-        <h2 className="text-sm font-semibold">{t('notifications.title')}</h2>
+        <h2 className="text-sm font-bold">{t('notifications.title')}</h2>
         <Button variant="ghost" size="sm" disabled={unread === 0 || markAll.isPending} onClick={() => markAll.mutate()}>
-          <CheckCheckIcon aria-hidden="true" />
           {t('notifications.mark_all_read')}
         </Button>
       </div>
       {failed && (
-        <p role="alert" className="border-b px-4 py-2 text-sm text-destructive">
+        <p role="alert" className="border-b px-4 py-2 text-sm font-semibold text-bad">
           {t('notifications.action_failed')}
         </p>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {list.isPending ? (
-          <p className="px-4 py-6 text-center text-sm text-muted-foreground">{t('shell.loading')}</p>
+          <p role="status" className="px-4 py-6 text-sm text-muted-foreground">
+            {t('shell.loading')}
+          </p>
         ) : list.isError ? (
-          <div className="flex flex-col items-center gap-2 px-4 py-6 text-sm">
-            <p>{t('notifications.load_failed')}</p>
+          <div className="grid justify-items-start gap-2 px-4 py-6 text-sm">
+            <p className="font-semibold text-bad">{t('notifications.load_failed')}</p>
             <Button variant="outline" size="sm" onClick={() => void list.refetch()}>
               {t('notifications.retry')}
             </Button>
           </div>
         ) : items.length === 0 ? (
-          <p className="px-4 py-6 text-center text-sm text-muted-foreground">{t('notifications.empty')}</p>
+          <p className="px-4 py-6 text-sm text-muted-foreground">{t('notifications.empty')}</p>
         ) : (
           <ul aria-label={t('notifications.title')} className="divide-y">
             {items.map((item) => (
@@ -153,14 +154,11 @@ function NotificationRow({ item, when, onOpen }: { item: NotificationItem; when:
   const text = bodyKey === item.titleKey ? bodyKey : t(bodyKey as TKey, item.params);
   const body = text === bodyKey ? '' : text;
   const content = (
-    <span className="flex items-start gap-2">
-      <span aria-hidden="true" className={cn('mt-1.5 size-2 shrink-0 rounded-full', item.read ? 'bg-transparent' : 'bg-primary')} />
-      <span className="flex min-w-0 flex-col gap-0.5">
-        {!item.read && <span className="sr-only">{t('notifications.unread')}</span>}
-        <span className={cn('text-sm', !item.read && 'font-semibold')}>{title}</span>
-        {body !== '' && <span className="text-sm text-muted-foreground">{body}</span>}
-        <span className="text-xs text-muted-foreground">{when}</span>
-      </span>
+    <span className="flex min-w-0 flex-col items-start gap-0.5">
+      {!item.read && <Tag className="mb-0.5">{t('notifications.unread')}</Tag>}
+      <span className={cn('text-sm', !item.read && 'font-semibold')}>{title}</span>
+      {body !== '' && <span className="text-sm text-muted-foreground">{body}</span>}
+      <span className="text-xs text-muted-foreground">{when}</span>
     </span>
   );
   const actionable = !item.read || (item.link !== null && safeNext(item.link) === item.link);

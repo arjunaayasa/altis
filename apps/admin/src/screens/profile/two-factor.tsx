@@ -2,11 +2,11 @@ import { TwoFactorDisableBody, totpCodeField, type RecoveryCodesResponse } from 
 import { passwordField } from '@altis/shared/api/common';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { ShieldCheckIcon, ShieldOffIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Field, NoticeAlert, ProblemAlert, RootError, describedBy } from '@/components/form-field';
+import { StatusText } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
@@ -61,13 +61,8 @@ export function ProfileTwoFactorScreen() {
   return (
     <ProfilePage>
       <ProfileSection title={t('profile.2fa.title')}>
-        <p className="flex items-start gap-2 text-sm">
-          {user.totpEnabled ? (
-            <ShieldCheckIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
-          ) : (
-            <ShieldOffIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          )}
-          <span>{t(user.totpEnabled ? 'profile.2fa.on' : 'profile.2fa.off')}</span>
+        <p className="text-sm">
+          {user.totpEnabled ? <StatusText tone="ok">{t('profile.2fa.on')}</StatusText> : <span>{t('profile.2fa.off')}</span>}
         </p>
         {!user.totpEnabled && (
           <>
