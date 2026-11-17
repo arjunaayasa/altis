@@ -6,7 +6,6 @@ import { useState, type BaseSyntheticEvent } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { CheckField, Field, ProblemAlert, RootError, SELECT_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
-import { DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
 import { api } from '@/lib/api';
@@ -198,10 +197,10 @@ export function LocationForm({
   };
 
   return (
-    <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
+    <form noValidate className="grid max-w-3xl gap-4" onSubmit={(e) => void submit(e)}>
       <ProblemAlert error={problem} />
       <RootError message={errors.root?.['server']?.message} />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
         <Field label={t('catalog.locations.field.kind')} error={errors.kind}>
           {(c) => (
             <select {...c} className={SELECT_CLASS} disabled={disabled} {...form.register('kind', { onChange: (e: { target: { value: string } }) => kindChanged(e.target.value as LocationKind) })}>
@@ -231,7 +230,7 @@ export function LocationForm({
         )}
       </div>
       <p className="-mt-2 text-xs text-muted-foreground">{t('catalog.locations.field.kind_hint')}</p>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
         <Field label={t('catalog.locations.field.code')} hint={t('catalog.locations.field.code_hint')} error={errors.code}>
           {(c) => <Input {...c} autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={32} disabled={disabled} {...form.register('code')} />}
         </Field>
@@ -244,7 +243,7 @@ export function LocationForm({
       </Field>
       {kind === 'shelf' && (
         <div className="grid gap-2">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
             <Field label={t('catalog.locations.field.class_from')} error={errors.classFrom}>
               {(c) => <Input {...c} autoComplete="off" spellCheck={false} maxLength={32} disabled={disabled} {...form.register('classFrom')} />}
             </Field>
@@ -255,22 +254,22 @@ export function LocationForm({
           <p className="text-xs text-muted-foreground">{t('catalog.locations.field.class_hint')}</p>
         </div>
       )}
-      <div className="grid items-end gap-4 sm:grid-cols-2">
+      <div className="grid items-end gap-x-5 gap-y-4 sm:grid-cols-2">
         <CheckField label={t('catalog.locations.field.is_public')} disabled={disabled} {...form.register('isPublic')} />
         <Field label={t('catalog.locations.field.sort_order')} error={errors.sortOrder} className="max-w-40">
           {(c) => <Input {...c} type="number" inputMode="numeric" min={0} step={1} disabled={disabled} {...form.register('sortOrder')} />}
         </Field>
       </div>
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          {t(canManage ? 'form.cancel' : 'catalog.locations.form.close')}
-        </Button>
+      <div className="flex flex-wrap gap-2">
         {canManage && (
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" size="sm" disabled={isSubmitting}>
             {t(isSubmitting ? 'form.saving' : 'form.save')}
           </Button>
         )}
-      </DialogFooter>
+        <Button type="button" size="sm" variant="outline" className="bg-background" onClick={onCancel}>
+          {t(canManage ? 'form.cancel' : 'catalog.locations.form.close')}
+        </Button>
+      </div>
     </form>
   );
 }
