@@ -1,14 +1,24 @@
 import type { CatalogSearchResult } from '@altis/core';
 import type { Locale } from '@altis/shared';
 import type { JSX } from 'hono/jsx/jsx-runtime';
-import { FacetsAside, HiddenParams, formatCount, type FacetNames } from './facets-view.js';
+import { FILTER_PARAMS, FacetsAside, HiddenParams, formatCount, type FacetNames } from './facets-view.js';
 import { opacText, type OpacKey } from './messages.js';
 import { ResultCard, type ResultCardData } from './result-card.js';
-import { OPAC_SEARCH_TEXT_MAX, OPAC_SORTS, masterName, searchPath, type OpacSearchEcho, type OpacSort, type SearchMasters } from './search-params.js';
+import {
+  OPAC_SEARCH_SCOPES,
+  OPAC_SEARCH_TEXT_MAX,
+  OPAC_SORTS,
+  masterName,
+  searchPath,
+  type OpacSearchEcho,
+  type OpacSort,
+  type SearchMasters,
+} from './search-params.js';
 
-// The OPAC search page (Phase 2 Task 33; spec §4.4–§4.7, §9.1), `GET /cari`, inside opacPage's frame: the search box
-// (the text, the filters and the order kept as hidden inputs), the notices (the index being rebuilt, the spelling
-// correction), the count ("lebih dari 10.000" past the cap), the order form, the result cards, the page cap message,
+// The OPAC search page (Phase 2 Task 33; spec §4.4–§4.7, §9.1), `GET /cari`, inside opacPage's frame: the search box in
+// the header's search band (the field, the text, the filters and the order kept as hidden inputs), the notices (the
+// index being rebuilt, the spelling correction), the heading with the order form, the count ("lebih dari 10.000" past
+// the cap), the results as a list with thin lines between them, the empty state, the page cap message,
 // the pager (at most 50 pages, §4.5), the link to the results' feed, and the facets aside (facets-view.tsx). Every
 // control is a link or a GET form, so all of it works without JavaScript; the page writes no script.
 
@@ -52,18 +62,30 @@ function sortOf(echo: OpacSearchEcho, text: string): OpacSort {
   return (echo.urut as OpacSort | undefined) ?? (text === '' ? 'terbaru' : 'relevansi');
 }
 
-function SearchBox(props: { locale: Locale; lang: Locale | null; echo: OpacSearchEcho; text: string }) {
+/** The search box of the results page (the header's search band): the field, the text, the other parameters kept. */
+export function SearchBox(props: { locale: Locale; lang: Locale | null; echo: OpacSearchEcho; text: string }) {
   const { locale, lang, echo, text } = props;
+  const scope = echo.ruas ?? 'semua';
   return (
     <form class="search-box search-main" role="search" method="get" action="/cari">
       <label for="cari-q" class="visually-hidden">
         {opacText(locale, 'shell.search.label')}
       </label>
       <span class="search-row">
+        <label for="cari-ruas" class="visually-hidden">
+          {opacText(locale, 'search.scope.label')}
+        </label>
+        <select id="cari-ruas" name="ruas">
+          {OPAC_SEARCH_SCOPES.map((s) => (
+            <option value={s} selected={s === scope}>
+              {opacText(locale, `search.scope.${s}`)}
+            </option>
+          ))}
+        </select>
         <input id="cari-q" type="search" name="q" value={text} maxlength={OPAC_SEARCH_TEXT_MAX} placeholder={opacText(locale, 'shell.search.placeholder')} />
         <button type="submit">{opacText(locale, 'shell.search.submit')}</button>
       </span>
-      <HiddenParams echo={echo} omit={['q', 'persis']} lang={lang} />
+      <HiddenParams echo={echo} omit={['q', 'persis', 'ruas']} lang={lang} />
     </form>
   );
 }
@@ -202,12 +224,9 @@ export function SearchView(props: SearchViewProps) {
   const aside = (
     <FacetsAside input={facetInput} facets={result.facets} approximate={result.facetsApproximate} sample={FACET_SAMPLE} hasResults={hasResults} />
   );
+  const hasFilters = FILTER_PARAMS.some((p) => echo[p] !== undefined);
   return (
     <div class="search-page">
-      <div class="search-head">
-        <h1>{searchTitle(locale, text)}</h1>
-        <SearchBox locale={locale} lang={lang} echo={echo} text={text} />
-      </div>
       {result.building ? (
         <p class="notice notice-warn" role="status">
           {opacText(locale, 'search.building')}
@@ -216,13 +235,13 @@ export function SearchView(props: SearchViewProps) {
       {result.correction === null ? null : <Correction locale={locale} lang={lang} echo={echo} correction={result.correction} />}
       <div class="search-layout">
         <section class="search-results" aria-labelledby="hasil-judul">
-          <h2 id="hasil-judul" class="visually-hidden">
-            {opacText(locale, 'search.results')}
-          </h2>
+          <div class="results-head">
+            <h1 id="hasil-judul">{searchTitle(locale, text)}</h1>
+            {hasResults ? <SortForm locale={locale} lang={lang} echo={echo} text={text} /> : null}
+          </div>
           {hasResults ? (
             <div class="search-summary">
               <Count locale={locale} result={result} page={page} pageSize={pageSize} />
-              <SortForm locale={locale} lang={lang} echo={echo} text={text} />
               {/* With results the facets aside is there: on a narrow screen it comes after them. */}
               <a class="filter-jump" href="#saring">
                 {opacText(locale, 'search.facets.title')}
@@ -234,6 +253,11 @@ export function SearchView(props: SearchViewProps) {
                 <strong>{opacText(locale, 'search.empty.title')}</strong>
               </p>
               <p>{opacText(locale, 'search.empty.hint')}</p>
+              {hasFilters ? (
+                <a class="empty-clear" href={searchPath(echo, Object.fromEntries(FILTER_PARAMS.map((p) => [p, null])), lang)}>
+                  {opacText(locale, 'search.filters.clear')}
+                </a>
+              ) : null}
             </div>
           )}
           {cards.length === 0 ? null : (
