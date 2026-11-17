@@ -1,12 +1,10 @@
 import { SRU_INDEXES, type DuplicateHint, type IsbnLookupResponse, type SruIndex, type SruSearchResponse } from '@altis/shared/api/catalog/copy';
 import type { RecordDraft } from '@altis/shared/api/catalog/record-data';
 import type { CatalogConfigView } from '@altis/shared/api/settings';
-import { ChevronLeftIcon, ChevronRightIcon, SearchIcon } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Badge, CheckField, Field, Notice, SELECT_CLASS } from '@/components/form-field';
-import { useReturnFocus } from '@/components/return-focus';
+import { InlinePanel } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useT, type TKey, type Translate } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
@@ -25,15 +23,16 @@ import { useScannerInput } from '@/lib/scanner';
  *   its own scanner meanwhile).
  * - `IsbnLookupButton`: "Cari ISBN" → `GET catalog/lookup/isbn/:isbn`. A record of the catalogue already holding the
  *   ISBN goes to `onExisting` (the editor shows "Sudah ada di katalog" with a link and "Tambah eksemplar"); otherwise
- *   the candidates of the enabled sources open in a dialog, with the sources that did not answer.
+ *   the candidates of the enabled sources open in an inline panel under the button, with the sources that did not
+ *   answer.
  * - Each candidate shows its title, main author, publisher, year and ISBNs, and its duplicate hint (the stored record
  *   it most likely duplicates, with its score; the record opens in a new tab, so the form is kept). "Pilih" →
  *   `onPick({draft, source})`; with "Tambah eksemplar sekarang" ticked, `onPick({draft, source, addItemNow: true})`
  *   (M13: the editor opens the saved record's items tab).
  * - The answers come from other servers: every value is rendered as text, never as markup or a link (only the duplicate
  *   hint, an id of our own, becomes a link).
- * - No `<form>` element reaches the editor's form: the dialogs render in a portal, and the search form stops its submit
- *   event from bubbling up the React tree.
+ * - Both open as inline panels in the page (Esc or "Tutup" closes them), above the editor's form, never inside it; the
+ *   search form also stops its submit event from bubbling up the React tree.
  * - The searches are not retried by the client (each one is outbound work for the server, and the ISBN lookup counts
  *   on a per-user limit of 30 a minute); a 429 shows its wait.
  */
@@ -128,9 +127,9 @@ function CandidateCard({ c }: { c: Candidate }) {
   const facts = [author, draft.edition, publisher, draft.publicationYear].filter((x): x is string => x !== undefined && x !== '');
   const isbns = draft.identifiers.filter((i) => i.type === 'isbn').map((i) => i.value);
   return (
-    <li className="flex flex-wrap items-start justify-between gap-3 rounded-md border p-3 text-sm">
+    <li className="flex flex-wrap items-start justify-between gap-3 rounded-md border bg-background px-3 py-2.5 text-sm">
       <div className="grid min-w-0 flex-1 gap-1">
-        <p className="font-medium break-words">{title}</p>
+        <p className="font-semibold break-words">{title}</p>
         {facts.length > 0 && <p className="break-words text-muted-foreground">{facts.join(' · ')}</p>}
         {isbns.length > 0 && <p className="text-xs break-all text-muted-foreground">{t('catalog.sru.isbns', { list: isbns.join(', ') })}</p>}
         {c.sourceName !== null && <p className="text-xs text-muted-foreground">{t('catalog.sru.from_source', { source: c.sourceName })}</p>}
@@ -142,7 +141,7 @@ function CandidateCard({ c }: { c: Candidate }) {
               target="_blank"
               rel="noopener noreferrer"
               aria-label={t('catalog.sru.duplicate_open_label', { title: draft.title })}
-              className="text-xs text-primary underline-offset-4 hover:underline"
+              className="text-xs font-semibold text-accent-text underline-offset-4 hover:underline"
             >
               {t('catalog.sru.duplicate_open')}
             </a>
@@ -318,12 +317,10 @@ function SruSearchPanel({ initialIsbn, onPick }: { initialIsbn: string; onPick(c
           {(page.start > 1 || to < page.total) && (
             <nav aria-label={t('catalog.sru.paging')} className="flex flex-wrap justify-between gap-2">
               <Button type="button" variant="outline" size="sm" disabled={page.start <= 1} onClick={() => pageOf(Math.max(1, page.start - SRU_PAGE))}>
-                <ChevronLeftIcon aria-hidden="true" />
                 {t('catalog.sru.prev')}
               </Button>
               <Button type="button" variant="outline" size="sm" disabled={to >= page.total} onClick={() => pageOf(page.start + SRU_PAGE)}>
                 {t('catalog.sru.next')}
-                <ChevronRightIcon aria-hidden="true" />
               </Button>
             </nav>
           )}
@@ -359,8 +356,7 @@ function SruSearchPanel({ initialIsbn, onPick }: { initialIsbn: string; onPick(c
         <Field label={t('catalog.sru.term')} error={termError || failedField === 'q' ? 'catalog.sru.term_required' : undefined}>
           {(control) => <Input {...control} type="search" value={term} maxLength={TERM_MAX} autoComplete="off" onChange={(e) => setTerm(e.target.value)} />}
         </Field>
-        <Button type="submit" disabled={busy}>
-          <SearchIcon aria-hidden="true" />
+        <Button type="submit" variant="outline" className="bg-background" disabled={busy}>
           {t(busy ? 'catalog.sru.searching' : 'catalog.sru.search')}
         </Button>
       </form>
@@ -376,25 +372,20 @@ function SruSearchPanel({ initialIsbn, onPick }: { initialIsbn: string; onPick(c
   );
 }
 
-/** "Salin dari SRU": search an enabled SRU server and pick a record. */
+/** "Salin dari SRU": search an enabled SRU server and pick a record, in an inline panel while `open`. */
 export function SruCopyDialog({ open, onOpenChange, initialIsbn, onPick }: SruCopyDialogProps): ReactNode {
   const t = useT();
-  const focus = useReturnFocus();
+  if (!open) return null;
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"
-        closeLabel={t('catalog.sru.close')}
-        onOpenAutoFocus={focus.onOpenAutoFocus}
-        onCloseAutoFocus={focus.onCloseAutoFocus}
-      >
-        <DialogHeader>
-          <DialogTitle>{t('catalog.sru.dialog.title')}</DialogTitle>
-          <DialogDescription>{t('catalog.sru.dialog.description')}</DialogDescription>
-        </DialogHeader>
-        {open && <SruSearchPanel initialIsbn={initialIsbn?.trim() ?? ''} onPick={onPick} />}
-      </DialogContent>
-    </Dialog>
+    <InlinePanel title={t('catalog.sru.dialog.title')} onCancel={() => onOpenChange(false)}>
+      <p className="max-w-[75ch] text-sm text-muted-foreground">{t('catalog.sru.dialog.description')}</p>
+      <SruSearchPanel initialIsbn={initialIsbn?.trim() ?? ''} onPick={onPick} />
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant="outline" className="bg-background" onClick={() => onOpenChange(false)}>
+          {t('catalog.sru.close')}
+        </Button>
+      </div>
+    </InlinePanel>
   );
 }
 
@@ -445,7 +436,6 @@ function LookupResult({ result, onPick }: { result: IsbnLookupResponse; onPick(c
 /** "Cari ISBN": look the ISBN up locally, then at the enabled sources (§6.3). */
 export function IsbnLookupButton({ isbn, onPick, onExisting }: IsbnLookupButtonProps): ReactNode {
   const t = useT();
-  const focus = useReturnFocus();
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [result, setResult] = useState<IsbnLookupResponse | null>(null);
@@ -469,37 +459,31 @@ export function IsbnLookupButton({ isbn, onPick, onExisting }: IsbnLookupButtonP
 
   return (
     <>
-      <Button type="button" variant="outline" disabled={value === '' || busy} onClick={() => void lookup()}>
-        <SearchIcon aria-hidden="true" />
+      <Button type="button" variant="outline" size="sm" className="bg-background" disabled={value === '' || busy} onClick={() => void lookup()}>
         {t(busy ? 'catalog.sru.lookup.busy' : 'catalog.sru.lookup.button')}
       </Button>
       {problem !== null && (
-        <p role="alert" className="w-full text-sm text-destructive">
+        <p role="alert" className="w-full text-sm font-semibold text-bad">
           {problem}
         </p>
       )}
-      <Dialog open={result !== null} onOpenChange={(next) => (next ? undefined : setResult(null))}>
-        <DialogContent
-          className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"
-          closeLabel={t('catalog.sru.close')}
-          onOpenAutoFocus={focus.onOpenAutoFocus}
-          onCloseAutoFocus={focus.onCloseAutoFocus}
-        >
-          <DialogHeader>
-            <DialogTitle>{t('catalog.sru.lookup.title', { isbn: result?.isbn13 ?? value })}</DialogTitle>
-            <DialogDescription>{t('catalog.sru.lookup.description')}</DialogDescription>
-          </DialogHeader>
-          {result !== null && (
-            <LookupResult
-              result={result}
-              onPick={(c) => {
-                setResult(null);
-                onPick(c);
-              }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      {result !== null && (
+        <InlinePanel className="w-full bg-background" title={t('catalog.sru.lookup.title', { isbn: result.isbn13 })} onCancel={() => setResult(null)}>
+          <p className="max-w-[75ch] text-sm text-muted-foreground">{t('catalog.sru.lookup.description')}</p>
+          <LookupResult
+            result={result}
+            onPick={(c) => {
+              setResult(null);
+              onPick(c);
+            }}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => setResult(null)}>
+              {t('catalog.sru.close')}
+            </Button>
+          </div>
+        </InlinePanel>
+      )}
     </>
   );
 }

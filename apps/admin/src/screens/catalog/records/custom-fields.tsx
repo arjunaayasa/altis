@@ -5,7 +5,7 @@ import { Field, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT } from '@/i18n';
 import { fieldErrorText } from '@/lib/form-errors';
-import { ErrorText, errorAt } from './agent-picker';
+import { ErrorText, LIST_LEGEND, errorAt } from './agent-picker';
 import { emptyCustomValue, shownCustomFields, type CustomFormValue, type RecordFormValues } from './draft-to-form';
 
 /**
@@ -46,8 +46,9 @@ export function CustomFieldsSection({
 
   if (shown.length === 0) return null;
   return (
-    <fieldset className="grid min-w-0 gap-4 sm:grid-cols-2">
-      <legend className="mb-1 text-sm font-medium">{t('catalog.records.section.custom')}</legend>
+    <fieldset className="grid min-w-0 gap-x-5 gap-y-4 sm:grid-cols-2">
+      {/* The editor's part "Ruas tambahan" shows the same words as its heading. */}
+      <legend className="sr-only">{t('catalog.records.section.custom')}</legend>
       {shown.map((def) => {
         const index = fields.findIndex((f) => f.code === def.code);
         if (index < 0) return null;
@@ -142,7 +143,7 @@ function MultiSelect({
         const toggle = (value: string, on: boolean): void => field.onChange(on ? [...picked, value] : picked.filter((v) => v !== value));
         return (
           <fieldset className="grid content-start gap-2" aria-invalid={error === undefined ? undefined : true} aria-describedby={error === undefined ? undefined : errorId}>
-            <legend className="mb-1 text-sm font-medium">{label}</legend>
+            <legend className={LIST_LEGEND}>{label}</legend>
             {def.options.map((o) => (
               <label key={o.value} className="flex items-center gap-2 text-sm">
                 <input type="checkbox" className="size-4 accent-primary" checked={picked.includes(o.value)} onChange={(e) => toggle(o.value, e.target.checked)} />
@@ -181,8 +182,8 @@ export function CustomFieldInputs({
   const locale = useLocale();
   if (defs.length === 0) return null;
   return (
-    <fieldset className="grid min-w-0 gap-4 sm:grid-cols-2">
-      <legend className="mb-1 text-sm font-medium">{t('catalog.records.section.custom')}</legend>
+    <fieldset className="grid min-w-0 gap-x-5 gap-y-4 sm:grid-cols-2">
+      <legend className={LIST_LEGEND}>{t('catalog.records.section.custom')}</legend>
       {defs.map((def) => {
         const plain = locale === 'en' ? (def.labelEn ?? def.labelId) : def.labelId;
         const label = def.required ? t('catalog.records.required', { label: plain }) : plain;
@@ -282,7 +283,7 @@ function MultiSelectInput({
   const message = error === undefined ? undefined : fieldErrorText(t, { message: error });
   return (
     <fieldset className="grid content-start gap-2" aria-invalid={message === undefined ? undefined : true} aria-describedby={message === undefined ? undefined : errorId}>
-      <legend className="mb-1 text-sm font-medium">{label}</legend>
+      <legend className={LIST_LEGEND}>{label}</legend>
       {def.options.map((o) => (
         <label key={o.value} className="flex items-center gap-2 text-sm">
           <input
@@ -296,7 +297,7 @@ function MultiSelectInput({
         </label>
       ))}
       {message !== undefined && (
-        <p id={errorId} className="text-sm text-destructive">
+        <p id={errorId} className="text-meta font-semibold text-bad">
           {message}
         </p>
       )}

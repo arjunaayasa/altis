@@ -236,6 +236,19 @@ export const RECORDS_ID = {
   'catalog.records.bulk.refused.archived': 'Cantuman sudah diarsipkan.',
   'catalog.records.bulk.close': 'Tutup',
   'catalog.records.bulk.done': 'Selesai',
+
+  // ---- the layout of the list and the editor ----
+  'catalog.records.list.intro': 'Semua cantuman bibliografi koleksi. Cari atau saring, lalu buka cantuman untuk menyuntingnya.',
+  'catalog.records.list.empty_all': 'Belum ada cantuman',
+  'catalog.records.list.empty_all_hint': 'Tambahkan cantuman pertama, atau impor cantuman yang sudah Anda miliki.',
+  'catalog.records.list.import': 'Impor cantuman',
+  'catalog.records.list.shown': '{count} cantuman tampil',
+  'catalog.records.row.up': 'Naik',
+  'catalog.records.row.down': 'Turun',
+  'catalog.records.row.remove': 'Hapus',
+  'catalog.records.unsaved': 'Ada perubahan yang belum disimpan.',
+  'catalog.records.more': 'Tindakan lain untuk cantuman ini',
+  'catalog.records.side': 'Sampul dan pemeriksaan duplikat',
 } as const;
 
 export const RECORDS_EN: Record<keyof typeof RECORDS_ID, string> = {
@@ -466,4 +479,16 @@ export const RECORDS_EN: Record<keyof typeof RECORDS_ID, string> = {
   'catalog.records.bulk.refused.archived': 'The record is archived.',
   'catalog.records.bulk.close': 'Close',
   'catalog.records.bulk.done': 'Done',
+  // ---- the layout of the list and the editor ----
+  'catalog.records.list.intro': 'Every bibliographic record of the collection. Search or filter, then open a record to edit it.',
+  'catalog.records.list.empty_all': 'No records yet',
+  'catalog.records.list.empty_all_hint': 'Add the first record, or import the records you already have.',
+  'catalog.records.list.import': 'Import records',
+  'catalog.records.list.shown': '{count} records shown',
+  'catalog.records.row.up': 'Up',
+  'catalog.records.row.down': 'Down',
+  'catalog.records.row.remove': 'Remove',
+  'catalog.records.unsaved': 'There are unsaved changes.',
+  'catalog.records.more': 'More actions for this record',
+  'catalog.records.side': 'Cover and duplicate check',
 };
