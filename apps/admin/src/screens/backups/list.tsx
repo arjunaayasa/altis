@@ -1,10 +1,10 @@
 import type { BackupCreateResponse, BackupItem, BackupListResponse } from '@altis/shared/api/backups';
 import { useQueryClient } from '@tanstack/react-query';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
-import { ArchiveIcon, DownloadIcon, RotateCcwIcon } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { DataTable, useDateTime } from '@/components/data-table';
-import { Badge, CheckField, Notice, ProblemAlert } from '@/components/form-field';
+import { CheckField, Notice } from '@/components/form-field';
+import { ErrorState, MoreMenu, MoreMenuItem, PageHead, SectionHead, SkeletonTable, Tag, type TagTone } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
@@ -40,18 +40,18 @@ import { UploadPanel, useBytes } from './upload';
 /** The React Query key of the list (the shell makes it stale on any `system.backup` event, lib/realtime.ts). */
 export const BACKUPS_KEY = ['backups'] as const;
 
-const STATUS_TONE: Readonly<Record<BackupItem['status'], 'neutral' | 'info' | 'warning' | 'danger'>> = {
-  running: 'info',
-  ok: 'neutral',
-  failed: 'danger',
+const STATUS_TONE: Readonly<Record<BackupItem['status'], TagTone>> = {
+  running: 'neutral',
+  ok: 'ok',
+  failed: 'bad',
   deleted: 'neutral',
-  uploaded: 'info',
+  uploaded: 'neutral',
 };
 
-/** The status of a backup as a badge. */
+/** The status of a backup as a tag: its word, in its colour. */
 function BackupStatusBadge({ status }: { status: BackupItem['status'] }) {
   const t = useT();
-  return <Badge tone={STATUS_TONE[status]}>{t(`backups.status.${status}`)}</Badge>;
+  return <Tag tone={STATUS_TONE[status]}>{t(`backups.status.${status}`)}</Tag>;
 }
 
 const features = tableFeatures({});
@@ -88,8 +88,8 @@ function CreateBackup() {
   };
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <h2 id={titleId} className="text-base font-semibold">
+    <section aria-labelledby={titleId} className="grid min-w-0 content-start gap-3">
+      <h2 id={titleId} className="text-base font-bold">
         {t('backups.create.title')}
       </h2>
       <CheckField
@@ -101,7 +101,6 @@ function CreateBackup() {
       />
       <div>
         <Button disabled={busy} onClick={() => void create()}>
-          <ArchiveIcon aria-hidden="true" />
           {t('backups.create.submit')}
         </Button>
       </div>
@@ -160,9 +159,9 @@ export function BackupsScreen() {
                 <span className="flex flex-wrap items-center gap-1.5">
                   <span>{t(`backups.kind.${item.kind}`)}</span>
                   {item.external && (
-                    <Badge tone="warning" title={t('backups.external_hint')}>
+                    <Tag tone="warn" title={t('backups.external_hint')}>
                       {t('backups.external')}
-                    </Badge>
+                    </Tag>
                   )}
                 </span>
                 {item.status === 'ok' && (
@@ -208,30 +207,18 @@ export function BackupsScreen() {
             const restore = mayRestore && (item.status === 'ok' || item.status === 'uploaded');
             if (!prepare && !restore) return null;
             return (
-              <span className="flex flex-wrap justify-end gap-2">
+              <MoreMenu small label={t('backups.more_named', { time: when })}>
                 {prepare && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    aria-label={t('backups.action.prepare_label', { time: when })}
-                    onClick={() => setPreparing({ backup: item, open: true })}
-                  >
-                    <DownloadIcon aria-hidden="true" />
+                  <MoreMenuItem aria-label={t('backups.action.prepare_label', { time: when })} onSelect={() => setPreparing({ backup: item, open: true })}>
                     {t('backups.action.prepare')}
-                  </Button>
+                  </MoreMenuItem>
                 )}
                 {restore && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    aria-label={t('backups.action.restore_label', { time: when })}
-                    onClick={() => setRestoring({ backup: item, open: true })}
-                  >
-                    <RotateCcwIcon aria-hidden="true" />
+                  <MoreMenuItem danger aria-label={t('backups.action.restore_label', { time: when })} onSelect={() => setRestoring({ backup: item, open: true })}>
                     {t('backups.action.restore')}
-                  </Button>
+                  </MoreMenuItem>
                 )}
-              </span>
+              </MoreMenu>
             );
           },
         }),
@@ -244,37 +231,27 @@ export function BackupsScreen() {
   const next = list.data?.nextScheduledAt;
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">{t('nav.backups')}</h1>
-        <p className="text-sm text-muted-foreground">{t('backups.description')}</p>
+    <div className="grid gap-6">
+      <div className="grid gap-2">
+        <PageHead title={t('nav.backups')} intro={t('backups.description')} />
         {next !== undefined && (
-          <p className="text-sm">{next === null ? t('backups.next_off') : t('backups.next', { time: dateTime(next) })}</p>
+          <p className="text-meta text-muted-foreground">{next === null ? t('backups.next_off') : t('backups.next', { time: dateTime(next) })}</p>
         )}
-      </header>
+      </div>
 
       {(mayCreate || mayRestore) && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-x-8 gap-y-6 lg:grid-cols-2">
           {mayCreate && <CreateBackup />}
           {mayRestore && <UploadPanel onUploaded={() => void queryClient.invalidateQueries({ queryKey: BACKUPS_KEY })} />}
         </div>
       )}
 
-      <section aria-labelledby={listId} className="flex flex-col gap-3">
-        <h2 id={listId} className="text-lg font-semibold">
-          {t('backups.list.title')}
-        </h2>
+      <section aria-labelledby={listId} className="grid gap-3">
+        <SectionHead id={listId} title={t('backups.list.title')} />
         {list.isError && list.data === undefined ? (
-          <ProblemAlert error={list.error}>
-            <p>{t('backups.load_failed')}</p>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => void list.refetch()}>
-              {t('table.retry')}
-            </Button>
-          </ProblemAlert>
+          <ErrorState title={t('backups.load_failed')} error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
         ) : list.data === undefined ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <SkeletonTable label={t('shell.loading')} columns={6} rows={3} />
         ) : (
           <DataTable table={table} caption={t('backups.caption')} empty={t('backups.empty')} />
         )}

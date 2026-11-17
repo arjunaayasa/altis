@@ -1,6 +1,7 @@
 import { CATALOG_ID } from './catalog';
 import { KOMUNITAS_ID } from './komunitas';
 import { SHELL_ID } from './shell';
+import { SYSTEM_UI_ID } from './system-ui';
 
 /**
  * The admin SPA's own strings, in Indonesian: the default language of ALTIS and the source of truth for
@@ -1251,6 +1252,8 @@ export const ADMIN_ID = {
   ...KOMUNITAS_ID,
   // ---- The shell: module bar, sidebar, user menu and theme (i18n/shell.ts) ----
   ...SHELL_ID,
+  // ---- The Sistem module's screens in the shared layout (i18n/system-ui.ts) ----
+  ...SYSTEM_UI_ID,
 } satisfies Record<string, string>;
 
 export type AdminKey = keyof typeof ADMIN_ID;

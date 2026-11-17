@@ -3,7 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
 import { useMemo, useState } from 'react';
 import { DataTable, useDateTime } from '@/components/data-table';
-import { Notice, NoticeAlert, ProblemAlert, RefetchProblem } from '@/components/form-field';
+import { Notice, NoticeAlert, RefetchProblem } from '@/components/form-field';
+import { ErrorState, SkeletonTable } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type Translate } from '@/i18n';
@@ -57,7 +58,10 @@ function describeExpr(t: Translate, expr: string): string | null {
   const hourly = /^(\d{1,2}) \* \* \* \*$/.exec(expr.trim());
   if (hourly !== null && Number(hourly[1]) <= 59) return t('jobs.schedules.every_hour', { minute: Number(hourly[1]) });
   const every = /^\*\/(\d{1,2}) \* \* \* \*$/.exec(expr.trim());
-  if (every !== null && Number(every[1]) >= 1) return t('jobs.schedules.every_minutes', { minutes: Number(every[1]) });
+  if (every !== null && Number(every[1]) >= 1) {
+    const minutes = Number(every[1]);
+    return t(minutes === 1 ? 'jobs.schedules.every_minutes_one' : 'jobs.schedules.every_minutes', { minutes });
+  }
   return null;
 }
 
@@ -215,22 +219,16 @@ export function SchedulesScreen() {
   const table = useTable({ features, columns, data: list.data?.items ?? NO_ITEMS, getRowId: (s) => s.name });
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="grid gap-6">
       <JobsHeader current="schedules" description={t('jobs.schedules.description')} />
       {!manage && <NoticeAlert>{t('jobs.schedules.read_only')}</NoticeAlert>}
       {outcome !== null && <Notice kind={outcome.kind}>{outcome.text}</Notice>}
       <RefetchProblem query={list} />
       {list.data === undefined ? (
         list.isError ? (
-          <ProblemAlert error={list.error}>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => void list.refetch()}>
-              {t('table.retry')}
-            </Button>
-          </ProblemAlert>
+          <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <SkeletonTable label={t('shell.loading')} columns={5} />
         )
       ) : (
         <DataTable table={table} caption={t('jobs.schedules.caption')} empty={t('jobs.schedules.empty')} />

@@ -1,5 +1,5 @@
 import { BARCODE_SYMBOLOGIES, LABEL_KINDS, LABEL_PAGE_MM, LabelProfile, LabelProfileList, type CatalogSettings, type LabelPageName } from '@altis/shared/api/settings';
-import { ChevronDownIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { ChevronDownIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useFieldArray, useWatch, type UseFormReturn } from 'react-hook-form';
 import { CheckField, Field, SELECT_CLASS } from '@/components/form-field';
@@ -191,7 +191,7 @@ function ProfileFieldset({
 
   return (
     <fieldset className="grid min-w-0 gap-4 rounded-md border p-4">
-      <legend className="px-1 text-sm font-semibold">{name}</legend>
+      <legend className="px-1 text-sm font-bold">{name}</legend>
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_11rem]">
         <div className="grid content-start gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -260,7 +260,7 @@ function ProfileFieldset({
               <NumberField form={form} path={`${p}.page.wMm`} label={t('catalog.settings.labels.page_w')} readOnly={readOnly} locked={!custom} />
               <NumberField form={form} path={`${p}.page.hMm`} label={t('catalog.settings.labels.page_h')} readOnly={readOnly} locked={!custom} />
               {pageError !== undefined && (
-                <p role="alert" className="text-sm text-destructive sm:col-span-2">
+                <p role="alert" className="text-meta font-semibold text-bad sm:col-span-2">
                   {t('catalog.settings.labels.page')}: {errorText(t, pageError)}
                 </p>
               )}
@@ -313,14 +313,13 @@ function ProfileFieldset({
         </div>
       </div>
       {rowError !== undefined && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-meta font-semibold text-bad">
           {errorText(t, rowError)}
         </p>
       )}
       {!readOnly && (
         <div>
           <Button type="button" variant="outline" size="sm" disabled={!canRemove} onClick={onRemove}>
-            <Trash2Icon aria-hidden="true" />
             {t('catalog.settings.labels.remove', { name })}
           </Button>
         </div>
@@ -375,7 +374,6 @@ export function LabelProfilesEditor({ form, readOnly }: { form: UseFormReturn<Ca
       {!readOnly && (
         <div>
           <Button type="button" variant="outline" size="sm" onClick={add}>
-            <PlusIcon aria-hidden="true" />
             {t('catalog.settings.labels.add')}
           </Button>
         </div>

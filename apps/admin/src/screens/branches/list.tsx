@@ -1,17 +1,16 @@
 import type { BranchItem, BranchListResponse, BranchView } from '@altis/shared/api/branches';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
-import { PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { DataTable } from '@/components/data-table';
-import { Badge, CheckField, Notice } from '@/components/form-field';
+import { CheckField, Notice } from '@/components/form-field';
+import { ErrorState, FilterRow, MoreMenu, MoreMenuItem, MoreMenuRule, PageHead, SkeletonTable, Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
-import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 
 /**
@@ -30,6 +29,7 @@ export function BranchesListScreen() {
   const t = useT();
   const me = useMe();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const canManage = holds(me, 'system.branches.manage');
   const [showArchived, setShowArchived] = useState(false);
   const [archiving, setArchiving] = useState<BranchItem | null>(null);
@@ -55,16 +55,13 @@ export function BranchesListScreen() {
           return (
             <span className="flex flex-wrap items-center gap-2">
               {canManage ? (
-                <Link
-                  to={`/admin/branches/${encodeURIComponent(branch.id)}`}
-                  className="font-medium text-primary underline-offset-4 hover:underline"
-                >
+                <Link to={`/admin/branches/${encodeURIComponent(branch.id)}`} className="font-semibold text-accent-text underline-offset-4 hover:underline">
                   {branch.code}
                 </Link>
               ) : (
-                <span className="font-medium">{branch.code}</span>
+                <span className="font-semibold">{branch.code}</span>
               )}
-              {branch.isDefault && <Badge tone="info">{t('branches.default')}</Badge>}
+              {branch.isDefault && <Tag>{t('branches.default')}</Tag>}
             </span>
           );
         },
@@ -78,8 +75,8 @@ export function BranchesListScreen() {
       column.accessor('archivedAt', {
         header: t('branches.col.status'),
         cell: (info) => {
-          if (info.getValue() !== null) return <Badge tone="neutral">{t('branches.archived')}</Badge>;
-          return <Badge tone="info">{t('branches.active')}</Badge>;
+          if (info.getValue() !== null) return <Tag>{t('branches.archived')}</Tag>;
+          return <Tag tone="ok">{t('branches.active')}</Tag>;
         },
       }),
     ];
@@ -88,58 +85,50 @@ export function BranchesListScreen() {
       ...base,
       column.display({
         id: 'actions',
-        header: t('table.actions'),
+        header: () => <span className="sr-only">{t('table.actions')}</span>,
         cell: (info) => {
           const branch = info.row.original;
           return (
-            <div className="flex flex-wrap gap-1">
-              <Button asChild variant="outline" size="sm">
-                <Link to={`/admin/branches/${encodeURIComponent(branch.id)}`}>{t('branches.action.edit')}</Link>
-              </Button>
+            <MoreMenu small label={t('branches.more_named', { name: branch.name })}>
+              <MoreMenuItem onSelect={() => void navigate({ to: `/admin/branches/${encodeURIComponent(branch.id)}` })}>{t('branches.action.edit')}</MoreMenuItem>
               {!branch.isDefault && branch.archivedAt === null && (
-                <Button variant="outline" size="sm" onClick={() => setArchiving(branch)}>
-                  {t('branches.action.archive')}
-                </Button>
+                <>
+                  <MoreMenuRule />
+                  <MoreMenuItem danger onSelect={() => setArchiving(branch)}>
+                    {t('branches.action.archive')}
+                  </MoreMenuItem>
+                </>
               )}
-            </div>
+            </MoreMenu>
           );
         },
       }),
     ]);
-  }, [t, canManage]);
+  }, [t, canManage, navigate]);
 
   const table = useTable({ features, columns, data: branches.data?.items ?? NO_BRANCHES, getRowId: (branch) => branch.id });
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">{t('nav.branches')}</h1>
-        {canManage && (
-          <Button asChild>
-            <Link to="/admin/branches/new">
-              <PlusIcon aria-hidden="true" />
-              {t('branches.add')}
-            </Link>
-          </Button>
-        )}
-      </div>
-      <CheckField label={t('branches.show_archived')} checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-      {notice !== null && <Notice kind="success">{notice}</Notice>}
-      {branches.isError ? (
-        <Notice
-          kind="error"
-          action={
-            <Button variant="outline" size="sm" onClick={() => void branches.refetch()}>
-              {t('table.retry')}
+    <div className="grid gap-6">
+      <PageHead
+        title={t('nav.branches')}
+        intro={t('branches.intro')}
+        actions={
+          canManage ? (
+            <Button asChild>
+              <Link to="/admin/branches/new">{t('branches.add')}</Link>
             </Button>
-          }
-        >
-          {problemText(t, branches.error)}
-        </Notice>
+          ) : undefined
+        }
+      />
+      {notice !== null && <Notice kind="success">{notice}</Notice>}
+      <FilterRow label={t('branches.filters')}>
+        <CheckField label={t('branches.show_archived')} checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+      </FilterRow>
+      {branches.isError && branches.data === undefined ? (
+        <ErrorState error={branches.error} onRetry={() => void branches.refetch()} retrying={branches.isFetching} />
       ) : branches.data === undefined ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
+        <SkeletonTable label={t('shell.loading')} columns={canManage ? 6 : 5} rows={3} />
       ) : (
         <DataTable table={table} caption={t('branches.caption')} empty={t('branches.empty')} />
       )}

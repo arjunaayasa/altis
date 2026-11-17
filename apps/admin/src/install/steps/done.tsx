@@ -15,7 +15,7 @@ export function DoneStep({ next }: { next: string }) {
   return (
     <div className="space-y-6">
       <StepHeading title={t('done.title')} intro={t('done.body')} />
-      <p className="rounded-md bg-muted p-3 text-sm">{t('done.two_factor')}</p>
+      <p className="rounded-md border bg-layer px-3.5 py-3 text-sm">{t('done.two_factor')}</p>
       <Button asChild>
         <a href={safePath(next)}>{t('done.login')}</a>
       </Button>
