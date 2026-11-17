@@ -199,23 +199,31 @@ export function Wizard() {
 
   return (
     <InstallLocaleProvider locale={locale}>
-      <div className="min-h-screen bg-muted/40 text-foreground">
+      <div className="min-h-screen bg-layer text-foreground">
         <header className="border-b bg-background">
           <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 px-4 py-3">
             <div>
-              <h1 className="text-lg font-semibold">{t('app.title')}</h1>
+              <h1 className="text-base font-bold">{t('app.title')}</h1>
               <p className="text-xs text-muted-foreground">{t('app.subtitle')}</p>
             </div>
             <div role="group" aria-label={t('app.language')} className="flex gap-1">
               {LANGUAGES.map((l) => (
-                <Button key={l.locale} type="button" size="sm" variant={l.locale === locale ? 'secondary' : 'ghost'} aria-pressed={l.locale === locale} onClick={() => setLocale(l.locale)}>
+                <Button
+                  key={l.locale}
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="aria-pressed:bg-accent-soft aria-pressed:text-accent-text"
+                  aria-pressed={l.locale === locale}
+                  onClick={() => setLocale(l.locale)}
+                >
                   {l.label}
                 </Button>
               ))}
             </div>
           </div>
         </header>
-        <main className="mx-auto max-w-3xl space-y-4 px-4 py-6">
+        <main className="mx-auto grid max-w-3xl gap-4 px-4 py-6">
           {index < 0 ? null : (
             <nav aria-label={t('app.steps_label')}>
               <p className="mb-2 text-xs text-muted-foreground">{t('app.step_of', { n: index + 1, total: STEP_LIST.length })}</p>
@@ -225,8 +233,8 @@ export function Wizard() {
                     key={s.key}
                     aria-current={i === index ? 'step' : undefined}
                     className={cn(
-                      'rounded-md px-2 py-1 text-xs',
-                      i === index ? 'bg-primary text-primary-foreground' : i < index ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground',
+                      'rounded px-2 py-1 text-xs',
+                      i === index ? 'bg-accent-soft font-bold text-accent-text' : i < index ? 'text-foreground' : 'text-muted-foreground',
                     )}
                   >
                     {i}. {t(s.key)}
@@ -235,7 +243,7 @@ export function Wizard() {
               </ol>
             </nav>
           )}
-          <div className="space-y-6 rounded-lg border bg-card p-6 text-card-foreground">{body}</div>
+          <div className="grid gap-6 rounded-lg border bg-background p-6">{body}</div>
         </main>
       </div>
     </InstallLocaleProvider>

@@ -56,14 +56,14 @@ export function AdminStep({ onDone, recover }: { onDone(installState: string): v
   let problem = null;
   if (error instanceof ApiError && error.code === 'PASSWORD_TOO_WEAK' && error.reason !== undefined && POLICY_REASONS.has(error.reason)) {
     problem = (
-      <p role="alert" className="text-sm text-destructive">
+      <p role="alert" className="text-sm font-semibold text-bad">
         {t(`admin.password.${error.reason}` as InstallKey)}
       </p>
     );
   } else if (error instanceof ApiError && error.code === 'VALIDATION_FAILED' && (error.errors?.length ?? 0) > 0) {
     const fields = [...new Set(error.errors!.map((e) => e.path.split('.')[0] ?? ''))].map((f) => (FIELD_LABELS[f] === undefined ? f : t(FIELD_LABELS[f]!)));
     problem = (
-      <p role="alert" className="text-sm text-destructive">
+      <p role="alert" className="text-sm font-semibold text-bad">
         {t('admin.field_invalid', { fields: fields.join(', ') })}
       </p>
     );
@@ -122,7 +122,7 @@ export function AdminStep({ onDone, recover }: { onDone(installState: string): v
             required
           />
         </Field>
-        <p className="rounded-md bg-muted p-3 text-sm">{t('admin.two_factor_note')}</p>
+        <p className="rounded-md border bg-layer px-3.5 py-3 text-sm">{t('admin.two_factor_note')}</p>
         {problem}
         <div className="border-t pt-4">
           <Button type="submit" disabled={busy || username.trim() === '' || name.trim() === '' || password === ''}>
