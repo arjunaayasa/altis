@@ -243,7 +243,7 @@ export function Wizard() {
               </ol>
             </nav>
           )}
-          <div className="grid gap-6 rounded-lg border bg-background p-6">{body}</div>
+          <div className="grid gap-6 rounded-lg border bg-background p-4 sm:p-6">{body}</div>
         </main>
       </div>
     </InstallLocaleProvider>
