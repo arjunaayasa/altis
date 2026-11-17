@@ -1,4 +1,5 @@
 import { t } from '@altis/shared';
+import { opacText } from './catalog/messages.js';
 import { Layout, toDocument, type PageOptions } from './layout.js';
 
 // The OPAC's own error pages (Phase 1b; spec §4.9, §13.3): 404, 500 and the maintenance page. Each returns a whole
@@ -14,6 +15,10 @@ export function renderNotFound(o: PageOptions): string {
     <Layout {...o} title={title} description={t(locale, 'opac.not_found.body')} indexable={false}>
       <h1>{title}</h1>
       <p>{t(locale, 'opac.not_found.body')}</p>
+      {/* The way back the text names, as a link (the home page in the language of this one). */}
+      <p>
+        <a href={o.frame?.homeHref ?? '/'}>{opacText(locale, 'shell.menu.home')}</a>
+      </p>
     </Layout>,
   );
 }
