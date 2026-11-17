@@ -4,15 +4,18 @@ import { COMMUNITY_SOURCE_URL, LOCALES, t, type Locale } from '@altis/shared';
 import { OPAC_HOME_OVERLAY, brandRgb } from '@altis/shared/api/opac-home';
 import type { Child, PropsWithChildren } from 'hono/jsx';
 import { opacText } from './catalog/messages.js';
+import { OPAC_SEARCH_SCOPES, type OpacSearchScope } from './catalog/search-params.js';
 
 // The frame of every OPAC page (spec §4.9, §7.4, §9.2, decision D30; Phase 2 Task 21): `<html lang data-accent>`, the
-// head, a skip link to the content, a header with the library name, the language switch and (for the catalogue's
-// pages) the menu and a search form, a footer with the staff sign-in and the link to the source code (AGPL-3.0
-// section 13: the users of a network service are offered its source). Text goes through JSX, which escapes it, and
+// head, a skip link to the content, a header bar in the library's colour with the library name, the member area link,
+// the language switch and (for the catalogue's pages) the site menu (on a narrow screen one "Katalog" link) and a
+// search band, and a dark footer: for the catalogue's pages the library's address, its links, opening hours and a
+// search field, on every page the line "Ditenagai ALTIS Community" with the link to the source code (AGPL-3.0 section
+// 13: the users of a network service are offered its source) and the staff sign-in. Text goes through JSX, which escapes it, and
 // there is no inline script, style attribute or event handler: the stylesheet is the one @altis/opac-theme file under
 // a content hash, so the CSP needs no `unsafe-inline`; a JSON-LD script carries the response's nonce (catalog/page.tsx),
-// which is also in `<meta name="csp-nonce">` like the admin's index.html. The one style element, the home page's
-// library colour, carries that nonce too and holds a colour rebuilt from its six hex digits, nothing else.
+// which is also in `<meta name="csp-nonce">` like the admin's index.html. The one style element, the library colour of
+// the header bar, carries that nonce too and holds a colour rebuilt from its six hex digits, nothing else.
 
 /** The first 10 hex digits of the SHA-256 of OPAC_CSS, computed once at module load (M30). */
 export const OPAC_CSS_HASH: string = sha256hex(OPAC_CSS).slice(0, 10);
@@ -34,22 +37,46 @@ export interface FrameLink {
   href: string;
   label: string;
   lang?: Locale | undefined;
+  /** The link of the page (or the section of the site) being shown: `aria-current="page"`. */
+  current?: boolean | undefined;
+}
+
+/** The footer's blocks of a catalogue page; each left out when it has nothing to show. */
+export interface SiteFooter {
+  /** The library's address (line breaks kept), or null. */
+  address: string | null;
+  /** The opening hours, one row per group of days; none: no hours block. */
+  hours: readonly { days: string; time: string }[];
+  /** The language of the address and the hours when it is not the page's. */
+  contentLang?: Locale | undefined;
+  /** The links: the catalogue, the home page's profile blocks with content, the news, the published menu pages. */
+  links: readonly FrameLink[];
+  /** The footer's search field to /cari, with the `lang` it keeps. */
+  search: { lang: Locale | null };
 }
 
 /**
  * What the catalogue's pages add to the 1b frame (Phase 2 Task 21, catalog/page.tsx `pageFrame`): links built from
- * config.baseUrl and the normalised request path (S7), the menu, and the search form. Without it a page keeps the 1b
- * header: relative `?lang=` links (the same path on this site), no menu, no search form.
+ * config.baseUrl and the normalised request path (S7), the site menu, the search band, and the footer's blocks.
+ * Without it a page keeps the 1b header and footer: relative `?lang=` links (the same path on this site), no menu, no
+ * search form, only the footer's bottom line.
  */
 export interface PageFrame {
   /** The brand link (the home page, in the page's language when it came from `?lang=`). */
   homeHref: string;
   /** The language switch: each language's link to this page with its query. */
   langHrefs: Readonly<Record<Locale, string>>;
-  /** The menu pages (none: no menu). */
+  /** The site menu (none: no menu). */
   nav: readonly FrameLink[];
-  /** The search form to /cari, with the `lang` it keeps; null: none. */
+  /** The search band to /cari, with the `lang` it keeps; null: none. */
   search: { lang: Locale | null } | null;
+  // ---- Komunitas (OPAC look) ----
+  /** The footer's blocks; absent: the bottom line only. */
+  footer?: SiteFooter | undefined;
+  /** The library's colour of the header bar (`#rrggbb`); null or absent: the accent's. */
+  brand?: string | null | undefined;
+  /** The page's own search form for the search band, in place of `search`'s. */
+  searchBand?: Child;
 }
 
 // ---- Komunitas (OPAC home page) ----
@@ -143,10 +170,10 @@ export interface LayoutProps extends PageOptions {
 }
 
 /**
- * The search form of the header (and of the home page, `id` and `hero` apart): GET /cari with a labelled `q`, and the
- * page's `lang` when it came from the query, so that the results stay in that language.
+ * A search form: GET /cari with a labelled `q`, and the page's `lang` when it came from the query, so that the results
+ * stay in that language. `scope`: the field choice (`ruas`) before the text, the one given selected.
  */
-export function SearchForm(props: { locale: Locale; lang: Locale | null; id: string; hero?: boolean }) {
+export function SearchForm(props: { locale: Locale; lang: Locale | null; id: string; hero?: boolean; scope?: OpacSearchScope; footer?: boolean }) {
   const { locale, lang, id } = props;
   return (
     <form class={props.hero === true ? 'search-box search-hero' : 'search-box'} role="search" method="get" action="/cari">
@@ -158,11 +185,95 @@ export function SearchForm(props: { locale: Locale; lang: Locale | null; id: str
         </label>
       )}
       <span class="search-row">
-        <input id={id} type="search" name="q" maxlength={500} placeholder={opacText(locale, 'shell.search.placeholder')} />
+        {props.scope === undefined ? null : (
+          <>
+            <label for={`${id}-ruas`} class="visually-hidden">
+              {opacText(locale, 'search.scope.label')}
+            </label>
+            <select id={`${id}-ruas`} name="ruas">
+              {OPAC_SEARCH_SCOPES.map((s) => (
+                <option value={s} selected={s === props.scope}>
+                  {opacText(locale, `search.scope.${s}`)}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+        <input
+          id={id}
+          type="search"
+          name="q"
+          maxlength={500}
+          placeholder={opacText(locale, props.footer === true ? 'shell.footer.search_placeholder' : 'shell.search.placeholder')}
+        />
         {lang === null ? null : <input type="hidden" name="lang" value={lang} />}
         <button type="submit">{opacText(locale, 'shell.search.submit')}</button>
       </span>
     </form>
+  );
+}
+
+/** The footer: the library's blocks when the page has them (`footer`), then the software's line and the staff link. */
+function Footer(props: { locale: Locale; libraryName: string | undefined; footer: SiteFooter | undefined }) {
+  const { locale, libraryName, footer } = props;
+  return (
+    <footer class="site-footer">
+      {footer === undefined ? null : (
+        <div class="foot-grid">
+          {footer.address === null || libraryName === undefined ? null : (
+            <div class="foot-block">
+              <h2>{libraryName}</h2>
+              <p class="foot-address" lang={footer.contentLang}>
+                {footer.address}
+              </p>
+            </div>
+          )}
+          {/* A list under its heading, not a second navigation landmark: the header's menu is the site's. */}
+          <div class="foot-block">
+            <h2>{opacText(locale, 'shell.footer.links')}</h2>
+            <ul class="foot-links">
+              {footer.links.map((link) => (
+                <li>
+                  <a href={link.href} lang={link.lang}>
+                    {link.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {footer.hours.length === 0 ? null : (
+            <div class="foot-block">
+              <h2 id="kaki-jam">{opacText(locale, 'shell.footer.hours')}</h2>
+              <table class="foot-hours" aria-labelledby="kaki-jam">
+                <tbody lang={footer.contentLang}>
+                  {footer.hours.map((h) => (
+                    <tr>
+                      <th scope="row">{h.days}</th>
+                      <td>{h.time}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div class="foot-block foot-search">
+            <h2>{opacText(locale, 'shell.footer.search')}</h2>
+            <SearchForm locale={locale} lang={footer.search.lang} id="cari-kaki" footer />
+          </div>
+        </div>
+      )}
+      <div class="foot-bottom">
+        <p>
+          <span>{opacText(locale, 'shell.footer.powered')}</span>
+          <a href={COMMUNITY_SOURCE_URL} rel="noopener">
+            {opacText(locale, 'shell.footer.source')}
+          </a>
+        </p>
+        <p>
+          <a href="/admin/login">{t(locale, 'opac.home.staff_login')}</a>
+        </p>
+      </div>
+    </footer>
   );
 }
 
@@ -177,7 +288,9 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
   const hero = props.hero;
   const headerClass =
     hero === undefined ? 'site-header' : hero.photo === null ? 'site-header hero-band' : `site-header hero-band hero-photo hero-ov-${heroOverlay(hero.photo.overlay)}`;
-  const brand = hero === undefined ? null : brandColor(hero.brand);
+  const brand = brandColor(hero?.brand ?? frame?.brand);
+  // The home link is `/` or `/?lang=xx`: the catalogue's is the same with `/cari`.
+  const catalogHref = frame === undefined ? null : `/cari${frame.homeHref.slice(1)}`;
   return (
     <html lang={locale} data-accent={accent}>
       <head>
@@ -191,7 +304,7 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
         <title>{title}</title>
         <link rel="icon" href={NO_ICON} />
         <link rel="stylesheet" href={`/assets/${OPAC_CSS_FILE}`} />
-        {brand === null ? null : <style nonce={nonce}>{`.hero-band{--hero-bg:${brand}}`}</style>}
+        {brand === null ? null : <style nonce={nonce}>{`.site-header{--hero-bg:${brand}}`}</style>}
         {props.head ?? null}
       </head>
       <body>
@@ -213,6 +326,25 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
             <a class="brand" href={frame?.homeHref ?? '/'}>
               {libraryName ?? t(locale, 'opac.home.title')}
             </a>
+            {nav.length === 0 ? null : (
+              <nav class="menu" aria-label={opacText(locale, 'shell.nav.label')}>
+                <ul>
+                  {nav.map((link) => (
+                    <li>
+                      <a href={link.href} lang={link.lang} aria-current={link.current === true ? 'page' : undefined}>
+                        {link.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            )}
+            {/* On a narrow screen the menu gives way to this one link to the catalogue (the footer keeps the others). */}
+            {nav.length === 0 || catalogHref === null ? null : (
+              <a class="nav-catalog" href={catalogHref}>
+                {opacText(locale, 'shell.menu.catalog')}
+              </a>
+            )}
             {/* Komunitas (member area): a static link; the page never reads a member session for it. */}
             <a class="akun-link" href="/akun">
               {opacText(locale, 'akun.header.link')}
@@ -225,22 +357,15 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
               ))}
             </nav>
           </div>
-          {nav.length === 0 && search === null ? null : (
-            <div class="bar bar-tools">
-              {nav.length === 0 ? null : (
-                <nav class="menu" aria-label={opacText(locale, 'shell.nav.label')}>
-                  <ul>
-                    {nav.map((link) => (
-                      <li>
-                        <a href={link.href} lang={link.lang}>
-                          {link.label}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </nav>
-              )}
-              {search === null ? null : <SearchForm locale={locale} lang={search.lang} id="cari-situs" />}
+          {frame?.searchBand !== undefined ? (
+            <div class="search-band">
+              <div class="bar bar-tools">{frame.searchBand}</div>
+            </div>
+          ) : search === null ? null : (
+            <div class="search-band">
+              <div class="bar bar-tools">
+                <SearchForm locale={locale} lang={search.lang} id="cari-situs" scope="semua" />
+              </div>
             </div>
           )}
           {hero === undefined ? null : (
@@ -257,14 +382,7 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
         <main id={MAIN_ID} tabindex={-1}>
           {children}
         </main>
-        <footer class="site-footer">
-          <div class="bar">
-            <a href="/admin/login">{t(locale, 'opac.home.staff_login')}</a>
-            <a href={COMMUNITY_SOURCE_URL} rel="noopener">
-              {opacText(locale, 'shell.footer.source')}
-            </a>
-          </div>
-        </footer>
+        <Footer locale={locale} libraryName={libraryName} footer={frame?.footer} />
       </body>
     </html>
   );

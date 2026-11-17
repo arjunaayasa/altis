@@ -12,8 +12,7 @@
 
 /** The CSS of Halaman & Berita. */
 export const PAGES_CSS: string = [
-  '.page-note{margin:0 0 1.5rem;padding:.75rem 1rem;background:var(--surface);border:1px solid var(--border);' +
-    'border-left:4px solid var(--accent);border-radius:var(--radius)}',
+  '.page-note{margin:0 0 1.5rem;padding:.75rem 1rem;background:var(--layer);border:1px solid var(--border);border-radius:var(--radius)}',
   '.page-back a,.news-feed a,.news-pager a{display:inline-flex;align-items:center;min-height:2.75rem}',
   '.page-meta{margin:0 0 1rem;color:var(--muted);font-size:.875rem}',
   '.page-lead{font-size:1.125rem}',
@@ -32,16 +31,16 @@ export const PAGES_CSS: string = [
   '.page-body figcaption{color:var(--muted);font-size:.875rem}',
   '.page-body hr{margin:2rem 0;border:0;border-top:1px solid var(--border)}',
   '.page-body code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9375em}',
-  '.page-body pre{max-width:100%;overflow-x:auto;margin:0 0 1rem;padding:.75rem;background:var(--surface);' +
+  '.page-body pre{max-width:100%;overflow-x:auto;margin:0 0 1rem;padding:.75rem;background:var(--layer);' +
     'border:1px solid var(--border);border-radius:var(--radius)}',
   '.page-body table{display:block;max-width:100%;overflow-x:auto;margin:0 0 1rem;border-collapse:collapse}',
   '.page-body th,.page-body td{padding:.5rem;border:1px solid var(--border);text-align:left;vertical-align:top}',
-  '.page-body th{background:var(--surface)}',
+  '.page-body th{background:var(--layer)}',
 
   // The news list.
   '.news-feed{margin:0 0 1rem}',
   '.news-index{display:grid;gap:1rem;margin:0;padding:0;list-style:none}',
-  '.news-index article{padding:1rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}',
+  '.news-index article{padding:1rem 0 0;border-top:1px solid var(--border)}',
   '.news-index h2{margin:0 0 .25rem;font-size:1.125rem;line-height:1.4}',
   '.news-index .page-meta{margin-bottom:.5rem}',
   '.news-index p:last-child{margin-bottom:0}',

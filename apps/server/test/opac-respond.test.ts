@@ -281,8 +281,10 @@ describe('opacContext', () => {
       return c.text('ok');
     });
     await app.request('/x', { headers: { Host: 'evil.example' } });
-    expect(got).toEqual({ locale: 'en', libraryName: 'Perpus', accent: 'green', baseUrl: BASE, indexable: true, nav: [] });
-    expect(cache.reads.sort()).toEqual(['library.locale', 'library.name', 'opac.accent', 'opac.indexable']);
+    // The site of the menu and the footer: nothing set up, no news published.
+    const site = { address: null, hours: [], brand: null, profile: false, services: false, contact: false, news: false };
+    expect(got).toEqual({ locale: 'en', libraryName: 'Perpus', accent: 'green', baseUrl: BASE, indexable: true, nav: [], site });
+    expect(cache.reads.sort()).toEqual(['library.address', 'library.locale', 'library.name', 'opac.accent', 'opac.home', 'opac.indexable']);
     await app.request('/x?lang=id');
     expect(got?.locale).toBe('id');
   });
