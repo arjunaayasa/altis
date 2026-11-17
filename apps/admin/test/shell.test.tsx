@@ -342,6 +342,32 @@ describe('navigation and language', () => {
     expect(screen.queryByRole('link', { name: 'Konfigurasi Sistem' })).toBeNull();
   });
 
+  it('a change of screen moves the focus to its heading and names the page in the tab title; the first screen keeps it', async () => {
+    document.title = 'ALTIS Admin';
+    const { router } = setup(signedIn());
+    await screen.findByText('Selamat datang, Ani.');
+    expect(document.activeElement).toBe(document.body);
+    expect(document.title).toBe('Beranda · ALTIS Admin');
+    const link = within(sidebar('Beranda')).getByRole('link', { name: 'Tambah anggota' });
+    link.focus();
+    fireEvent.click(link);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/anggota/baru'));
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Anggota baru' });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    expect(heading.getAttribute('tabindex')).toBe('-1');
+    expect(document.title).toBe('Daftar Anggota · ALTIS Admin');
+
+    // A screen that focuses a control of its own keeps it: the heading does not take it back.
+    await router.navigate({ href: '/admin/anggota' });
+    const list = await screen.findByRole('heading', { level: 1, name: 'Anggota' });
+    await waitFor(() => expect(document.activeElement).toBe(list));
+    const search = screen.getByRole('searchbox', { name: 'Cari' });
+    search.focus();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(document.activeElement).toBe(search);
+    expect(document.title).toBe('Daftar Anggota · ALTIS Admin');
+  });
+
   /** "Pintasan" of an admin: the desk, quick return, a new member, the member import. */
   const BERANDA_SHORTCUTS: [string, string][] = [
     ['Meja Layanan', '/admin/layanan'],
