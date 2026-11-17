@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { Layout, toDocument, type HeroBand } from '../src/opac/layout.js';
 
 // The OPAC home page's hero band as the frame draws it: the overlay over the photo as one class of the theme's steps
-// (never lighter than the floor, whatever value reaches it), the library colour as a style element that carries the
+// (never lighter than the floor, whatever value reaches it), the library colour (of the header bar) as a style element that carries the
 // response's nonce and holds a colour rebuilt from six hex digits (anything else writes none), and the heading and lead
 // marked with their language when they are the other language's. The theme styles every class the band can carry.
 
@@ -47,7 +47,7 @@ describe('the hero band', () => {
 
   it('the library colour: a style element with the nonce and the colour rebuilt from its digits; anything else none', () => {
     const html = render({ title: 'Judul', lead: null, photo: null, brand: '#1e3a8a' });
-    expect(html).toContain(`<style nonce="${NONCE}">.hero-band{--hero-bg:#1e3a8a}</style>`);
+    expect(html).toContain(`<style nonce="${NONCE}">.site-header{--hero-bg:#1e3a8a}</style>`);
     expect(html).not.toContain('style=');
     for (const brand of ['#1E3A8A', '#1e3a8a;}body{display:none', 'red', '', null, undefined]) {
       expect(render({ title: 'Judul', lead: null, photo: null, brand }), String(brand)).not.toContain('<style');

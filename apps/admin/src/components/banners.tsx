@@ -19,7 +19,7 @@ export function Banners({ banners }: { banners: readonly Banner[] }) {
   const mismatch = useBuildMismatch();
   if (banners.length === 0 && !mismatch) return null;
   return (
-    <section aria-label={t('shell.banners_label')} className="flex flex-col gap-2 px-4 pt-4 md:px-6">
+    <section aria-label={t('shell.banners_label')} className="flex flex-col gap-2 px-4 pt-4 lg:px-8">
       {mismatch && (
         <Alert className="border-primary/30" data-banner="build">
           <RefreshCwIcon aria-hidden="true" />

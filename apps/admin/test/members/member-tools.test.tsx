@@ -1,17 +1,17 @@
 import type { BranchView } from '@altis/shared/api/branches';
-import type { MemberListItem, MemberTypeView } from '@altis/shared/api/members';
+import type { MemberListItem, MemberTypeView, MemberView } from '@altis/shared/api/members';
 import type { StationView } from '@altis/shared/api/visits';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { parseClassPairs } from '@/screens/members/bulk';
-import { adminMe, startApp } from '../fake-api';
+import { adminMe, problem, startApp } from '../fake-api';
 
 // The member tools and visits screens, their main paths: the member list's bulk bar (select two members, extend them,
-// see the refusal), the class pairs of the promotion, the guestbook stations (a new station shows its code once), and
-// the staff check-in of Kunjungan.
+// see the refusal) and a row's ⋯ menu (one member's page with its panel open, archive asked first), the class pairs of
+// the promotion, the guestbook stations (a new station shows its code once), and the staff check-in of Kunjungan.
 
 beforeAll(async () => {
-  await Promise.all([import('@/screens/members/list'), import('@/screens/visits/visits')]);
+  await Promise.all([import('@/screens/members/list'), import('@/screens/members/edit'), import('@/screens/visits/visits')]);
 });
 
 afterEach(() => {
@@ -59,6 +59,40 @@ const member = (n: number): MemberListItem => ({
   photoFileId: null,
 });
 
+/** The whole member behind a row of the list. */
+const view = (m: MemberListItem): MemberView => ({
+  id: m.id,
+  memberNo: m.memberNo,
+  type: m.type,
+  homeBranchId: null,
+  storedStatus: 'active',
+  status: m.status,
+  statusNote: null,
+  name: m.name,
+  gender: null,
+  birthDate: null,
+  identityNo: null,
+  institution: null,
+  className: m.className,
+  email: null,
+  phone: null,
+  address: null,
+  postalCode: null,
+  mailingAddress: null,
+  notes: null,
+  photoFileId: null,
+  locale: 'id',
+  joinedOn: '2026-07-01',
+  validFrom: '2026-07-01',
+  expiresOn: m.expiresOn,
+  openLoans: 0,
+  source: 'manual',
+  archived: false,
+  createdAt: 1_763_164_800_000,
+  updatedAt: 1_763_164_800_000,
+  version: 1,
+});
+
 describe('the member list bulk bar', () => {
   it('extends the selected members and lists the one refused, with its reason', async () => {
     const app = startApp({
@@ -84,6 +118,73 @@ describe('the member list bulk bar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tambah ke antrean kartu' }));
     expect(await screen.findByText('2 anggota ditambahkan ke antrean kartu.')).toBeTruthy();
+  });
+
+  it('a row ⋯ menu: extend and suspend open the member page with that panel; a suspended member is reactivated', async () => {
+    const suspended = { ...member(2), status: 'suspended' as const };
+    const app = startApp({
+      me: adminMe(),
+      path: '/admin/anggota',
+      routes: {
+        'GET members/types': () => ({ items: [SISWA] }),
+        'GET branches': () => ({ items: [BRANCH] }),
+        'POST members/search': () => ({ items: [member(1), suspended], nextCursor: null }),
+        'GET members/:id': (req) => (req.path.endsWith(member(1).id) ? view(member(1)) : { ...view(suspended), storedStatus: 'suspended', statusNote: 'Kartu hilang' }),
+        'GET members/:id/events': () => ({ items: [], nextCursor: null }),
+      },
+    });
+    const menu = async (name: string): Promise<HTMLElement> => {
+      fireEvent.keyDown(await screen.findByRole('button', { name: `Tindakan untuk ${name}` }), { key: 'Enter' });
+      return screen.findByRole('menu');
+    };
+    const first = await menu('Anggota 1');
+    expect(within(first).getAllByRole('menuitem').map((i) => i.textContent)).toEqual([
+      'Lihat dan ubah',
+      'Layani di Meja Layanan',
+      'Perpanjang masa…',
+      'Tangguhkan…',
+      'Arsipkan…',
+    ]);
+    fireEvent.click(within(first).getByRole('menuitem', { name: 'Perpanjang masa…' }));
+    expect(await screen.findByRole('form', { name: 'Perpanjang masa keanggotaan' })).toBeTruthy();
+    expect(app.router.state.location.pathname).toBe(`/admin/anggota/${member(1).id}`);
+
+    await app.router.navigate({ href: '/admin/anggota' });
+    const second = await menu('Anggota 2');
+    expect(within(second).queryByRole('menuitem', { name: 'Tangguhkan…' })).toBeNull();
+    fireEvent.click(within(second).getByRole('menuitem', { name: 'Aktifkan kembali…' }));
+    expect(await screen.findByRole('form', { name: 'Aktifkan kembali Anggota 2?' })).toBeTruthy();
+  });
+
+  it('a row ⋯ menu archives one member after asking; open loans are refused above the table, with the way to the desk', async () => {
+    let loans = 2;
+    const app = startApp({
+      me: adminMe(),
+      path: '/admin/anggota',
+      routes: {
+        'GET members/types': () => ({ items: [SISWA] }),
+        'GET branches': () => ({ items: [BRANCH] }),
+        'POST members/search': () => ({ items: [member(1)], nextCursor: null }),
+        'GET members/:id': () => ({ ...view(member(1)), openLoans: loans, version: 4 }),
+        'DELETE members/:id': () => (loans > 0 ? problem(409, 'MEMBER_IN_USE') : { id: member(1).id, version: 5 }),
+      },
+    });
+    const archive = async (): Promise<void> => {
+      fireEvent.keyDown(await screen.findByRole('button', { name: 'Tindakan untuk Anggota 1' }), { key: 'Enter' });
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Arsipkan…' }));
+      const dialog = await screen.findByRole('alertdialog', { name: 'Arsipkan Anggota 1?' });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Arsipkan' }));
+    };
+    await archive();
+    const refused = await screen.findByRole('alert');
+    expect(within(refused).getByText('Anggota 1 tidak dapat diarsipkan: masih ada 2 pinjaman terbuka.')).toBeTruthy();
+    expect(within(refused).getByRole('link', { name: 'Layani di Meja Layanan' }).getAttribute('href')).toBe(`/admin/layanan?member=${member(1).id}`);
+
+    loans = 0;
+    await archive();
+    expect(await screen.findByText('Anggota 1 diarsipkan.')).toBeTruthy();
+    expect(screen.queryByText(/tidak dapat diarsipkan/)).toBeNull();
+    expect(app.requests.filter((r) => r.method === 'DELETE').map((r) => r.body)).toEqual([{ version: 4 }, { version: 4 }]);
   });
 
   it('reads class pairs line by line; a line without an arrow is named', () => {

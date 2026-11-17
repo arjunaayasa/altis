@@ -89,7 +89,7 @@ export function Status({ tone, children }: { tone: Tone; children: ReactNode }) 
         'inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium',
         tone === 'ok' && 'bg-secondary text-secondary-foreground',
         tone === 'warn' && 'bg-warning text-warning-foreground',
-        tone === 'error' && 'bg-destructive text-white',
+        tone === 'error' && 'bg-destructive text-destructive-foreground',
       )}
     >
       {children}

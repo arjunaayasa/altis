@@ -13,14 +13,15 @@ import type { JSX } from 'hono/jsx/jsx-runtime';
 import { linkableUrl, attachmentMedia } from './attachment-viewer.js';
 import { AvailabilitySection, type Availability } from './availability.js';
 import { CitationsSection } from './citations-view.js';
+import { BookCover } from './cover.js';
 import { opacText } from './messages.js';
 import type { OpacContext, OpacPageOptions } from './page.js';
 import { absoluteUrl, withLang } from './urls.js';
 
 // The OPAC record detail (Phase 2 Task 34; spec §9.3, §9.4), the page of `/katalog/:id/:slug`:
 //
-//   header         the cover (or the material type's icon), the type, the title and subtitle, the statement of
-//                  responsibility, the agents linking to `/cari?pengarang=<id>`
+//   header         the cover (or the substitute cover: cover.tsx), the title and subtitle, the material type, the
+//                  statement of responsibility, the agents linking to `/cari?pengarang=<id>`
 //   sections       summary, notes, availability (availability.tsx, with the shelf maps), the full description,
 //                  subjects linking to `/cari?subjek=<id>`, relations both ways, the public custom fields ("Informasi
 //                  lain"), at most 20 public attachments (each to its viewer), the citations (citations-view.tsx)
@@ -40,7 +41,7 @@ export const DESCRIPTION_MAX = 160;
 
 /** What the page shows besides the record itself. */
 export interface DetailExtras {
-  /** The record's cover when it is a public, stored file; else null (the icon). */
+  /** The record's cover when it is a public, stored file; else null (the substitute cover). */
   coverFileId: string | null;
   availability: Availability;
   /** The live custom field definitions (their types and option labels). */
@@ -115,32 +116,6 @@ function DetailHead(props: { d: RecordData; o: RecordRenderOptions }) {
         ))}
       <meta name="twitter:card" content="summary" />
     </>
-  );
-}
-
-// ---- the material type's icon (a record without a cover) ------------------------------------------------------------
-
-/** One small line drawing per schema.org type (48 × 48, stroked in the text colour by the theme). */
-const ICONS: Readonly<Record<string, readonly string[]>> = {
-  Book: ['M12 8h22a4 4 0 0 1 4 4v28H16a4 4 0 0 1-4-4z', 'M12 36a4 4 0 0 1 4-4h22', 'M19 15h12', 'M19 21h12'],
-  Thesis: ['M12 8h22a4 4 0 0 1 4 4v28H16a4 4 0 0 1-4-4z', 'M12 36a4 4 0 0 1 4-4h22', 'M18 18l7-4 7 4-7 4z', 'M21 20v3c2 1.5 6 1.5 8 0v-3'],
-  Periodical: ['M10 8h28v32H10z', 'M15 15h18', 'M15 21h8', 'M27 21h6v8h-6z', 'M15 27h8', 'M15 33h18'],
-  Map: ['M8 12l10-4 12 4 10-4v28l-10 4-12-4-10 4z', 'M18 8v28', 'M30 12v28'],
-  AudioObject: ['M20 34V12l16-4v22', 'M20 34a4 4 0 1 1-4-4 4 4 0 0 1 4 4z', 'M36 30a4 4 0 1 1-4-4 4 4 0 0 1 4 4z'],
-  VideoObject: ['M8 12h32v24H8z', 'M21 18l9 6-9 6z'],
-  CreativeWork: ['M10 10h28v28H10z', 'M10 30l9-9 7 7 4-4 8 8', 'M30 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3z'],
-};
-
-function TypeIcon(props: { schemaType: string }) {
-  const paths = ICONS[props.schemaType] ?? ICONS['CreativeWork']!;
-  return (
-    <span class="record-cover record-icon" aria-hidden="true">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="96" height="96" focusable="false">
-        {paths.map((d) => (
-          <path d={d} />
-        ))}
-      </svg>
-    </span>
   );
 }
 
@@ -405,17 +380,26 @@ function RecordView(props: { d: RecordData; extras: DetailExtras; locale: Locale
   return (
     <article class="record">
       <header class="record-header">
-        {extras.coverFileId === null ? (
-          <TypeIcon schemaType={d.materialType.schemaType} />
-        ) : (
-          <img class="record-cover" src={`/files/${encodeURIComponent(extras.coverFileId)}`} alt="" width={200} height={300} decoding="async" />
-        )}
+        <BookCover
+          book={{
+            title: d.title,
+            author: (d.agents.find((a) => a.isMain) ?? d.agents[0])?.name ?? null,
+            callNumber: d.callNumber ?? null,
+            classification: d.classification ?? null,
+            coverFileId: extras.coverFileId,
+          }}
+          size="detail"
+          imgClass="record-cover"
+          width={200}
+          height={300}
+          lazy={false}
+        />
         <div class="record-heading">
-          <p class="record-type">{typeName(d, locale)}</p>
           <h1>
             {d.title}
             {subtitle === '' ? null : <span class="record-subtitle">: {subtitle}</span>}
           </h1>
+          <p class="record-type">{typeName(d, locale)}</p>
           {d.responsibility === undefined || d.responsibility.trim() === '' ? null : <p class="record-responsibility">{d.responsibility}</p>}
           <Agents d={d} locale={locale} keep={keep} />
           <MemberActions id={d.id} member={extras.member} locale={locale} keep={keep} />

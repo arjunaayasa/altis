@@ -77,8 +77,23 @@ async function returnToTab(queryClient: QueryClient): Promise<void> {
 
 const calls = (): [string, string][] => fetchMock.mock.calls.map((c) => [c[1]?.method ?? 'GET', String(c[0])]);
 
-/** The desktop navigation (the mobile copy sits next to it, hidden by CSS). */
-const mainNav = (name = 'Navigasi utama'): HTMLElement => screen.getAllByRole('navigation', { name })[0]!;
+/** The module bar under the top bar. */
+const mainNav = (name = 'Navigasi utama'): HTMLElement => screen.getByRole('navigation', { name });
+
+/** The sidebar: the pages of the active module (`Menu <module>`). */
+const sidebar = (module: string, name = `Menu ${module}`): HTMLElement => screen.getByRole('navigation', { name });
+
+const linksOf = (el: HTMLElement): [string | null, string | null][] =>
+  within(el)
+    .getAllByRole('link')
+    .map((a) => [a.textContent, a.getAttribute('href')]);
+
+/** The module the shell marks as the one the page is in. */
+const currentModule = (): (string | null)[] =>
+  within(mainNav())
+    .getAllByRole('link')
+    .filter((a) => a.getAttribute('aria-current') === 'true')
+    .map((a) => a.textContent);
 
 beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
@@ -118,13 +133,17 @@ describe('route gate', () => {
   it('a section without a screen yet shows "not found" inside the frame', async () => {
     setup(signedIn(), '/admin/no-such-section');
     expect(await screen.findByText('Halaman tidak ditemukan')).toBeTruthy();
-    expect(within(mainNav()).getByRole('link', { name: 'Pengguna' })).toBeTruthy();
+    expect(within(mainNav()).getByRole('link', { name: 'Sistem' })).toBeTruthy();
+    // A path no route serves belongs to no module: Beranda's sidebar.
+    expect(currentModule()).toEqual(['Beranda']);
+    expect(within(sidebar('Beranda')).getByRole('link', { name: 'Ringkasan' })).toBeTruthy();
   });
 
   it('the community edition has no Lisensi screen: /admin/license is "not found" inside the frame, and no link leads there', async () => {
     setup(signedIn({ permissions: systemRolePermissions('super_admin'), superAdmin: true }), '/admin/license');
     expect(await screen.findByText('Halaman tidak ditemukan')).toBeTruthy();
     expect(within(mainNav()).queryByRole('link', { name: 'Lisensi' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Lisensi' })).toBeNull();
     expect(document.querySelector('a[href="/admin/license"]')).toBeNull();
   });
 });
@@ -170,7 +189,7 @@ describe('a session that ends while the shell is open', () => {
     expect(router.state.location.pathname).toBe('/admin/profile');
     expect((screen.getByLabelText('Nama') as HTMLInputElement).value).toBe('Ani Lestari');
     expect(dirtyForms.count()).toBe(1);
-    expect(within(mainNav()).getByRole('link', { name: 'Pengguna' })).toBeTruthy();
+    expect(within(mainNav()).getByRole('link', { name: 'Sistem' })).toBeTruthy();
 
     fireEvent.click(within(warning).getByRole('button', { name: 'Masuk lagi' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/admin/login'));
@@ -193,6 +212,15 @@ describe('a session that ends while the shell is open', () => {
     // Nothing read for Ani is shown to Budi.
     expect(queryClient.getQueryData(['users', 'list', { q: '' }])).toBeUndefined();
     expect(queryClient.getQueryData(ME_KEY)).toMatchObject({ user: { id: 'u2' } });
+  });
+
+  it('a session that now owes the second factor (signed in again elsewhere) → /admin/login/2fa, never the error page', async () => {
+    const { router, queryClient, answerMe } = setup(signedIn(), '/admin/profile');
+    await screen.findByLabelText('Nama');
+    answerMe({ ...signedIn({ permissions: [] }), stage: 'mfa' });
+    await returnToTab(queryClient);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/login/2fa'));
+    expect(screen.queryByText('Terjadi kesalahan')).toBeNull();
   });
 });
 
@@ -226,127 +254,252 @@ describe('CSRF recovery and the identity of the page', () => {
 });
 
 describe('navigation and language', () => {
-  it('an admin sees every section but Konfigurasi Sistem', async () => {
-    setup(signedIn());
+  /** Each module of an admin with the pages its sidebar lists, opened through the module bar. */
+  const ADMIN_MODULES: [string, string, [string, string][]][] = [
+    ['Beranda', '/admin', [['Ringkasan', '/admin']]],
+    [
+      'Katalog',
+      '/admin/catalog/records',
+      // An admin has no Migrasi SLiMS (ADMIN_EXCLUDED).
+      [
+        ['Bibliografi', '/admin/catalog/records'],
+        ['Eksemplar', '/admin/catalog/items'],
+        ['Otoritas', '/admin/catalog/authorities'],
+        ['Lokasi & Rak', '/admin/catalog/locations'],
+        ['Data Induk', '/admin/catalog/masters'],
+        ['Impor/Ekspor', '/admin/catalog/exchange'],
+        ['Cetak Label', '/admin/catalog/labels'],
+        ['Duplikat', '/admin/catalog/duplicates'],
+      ],
+    ],
+    [
+      'Layanan',
+      '/admin/layanan',
+      [
+        ['Meja Layanan', '/admin/layanan'],
+        ['Kembali Cepat', '/admin/layanan/kembali'],
+        ['Rak Tunggu & Reservasi', '/admin/layanan/rak-tunggu'],
+        ['Baca di Tempat', '/admin/layanan/baca'],
+        ['Denda & Pembayaran', '/admin/layanan/denda'],
+        ['Terlambat & Jatuh Tempo', '/admin/layanan/terlambat'],
+        ['Pengingat E-mail', '/admin/layanan/pengingat'],
+        ['Aturan Peminjaman', '/admin/layanan/aturan'],
+        ['Kalender', '/admin/layanan/kalender'],
+        ['Kunjungan', '/admin/layanan/kunjungan'],
+        ['Perangkat Buku Tamu', '/admin/layanan/buku-tamu'],
+        ['Inventarisasi', '/admin/layanan/inventarisasi'],
+      ],
+    ],
+    [
+      'Anggota',
+      '/admin/anggota',
+      [
+        ['Daftar Anggota', '/admin/anggota'],
+        ['Tipe Anggota', '/admin/anggota/tipe'],
+        ['Impor Anggota', '/admin/anggota/impor'],
+        ['Surat Bebas Pustaka', '/admin/anggota/bebas-pustaka'],
+        ['Cetak Kartu', '/admin/anggota/kartu'],
+      ],
+    ],
+    [
+      'Laporan',
+      '/admin/reports',
+      [
+        ['Laporan', '/admin/reports'],
+        ['Akreditasi', '/admin/accreditation'],
+      ],
+    ],
+    [
+      'OPAC',
+      '/admin/opac/pages',
+      [
+        ['Halaman & Berita', '/admin/opac/pages'],
+        ['Halaman awal', '/admin/opac/beranda'],
+        // Not a page of the admin: the public site.
+        ['Situs publik', '/'],
+      ],
+    ],
+    [
+      'Sistem',
+      '/admin/users',
+      [
+        ['Pengguna', '/admin/users'],
+        ['Peran', '/admin/roles'],
+        ['Cabang', '/admin/branches'],
+        ['Pengaturan', '/admin/settings'],
+        ['Pembaruan', '/admin/updates'],
+        ['Log audit', '/admin/audit'],
+        ['Tugas dan Jadwal', '/admin/jobs'],
+        ['Cadangan', '/admin/backups'],
+        ['Diagnostik', '/admin/diagnostics'],
+        ['Tentang', '/admin/about'],
+      ],
+    ],
+  ];
+
+  it('an admin sees every module; the sidebar lists the pages of the module only, every page but Konfigurasi Sistem', async () => {
+    const { router } = setup(signedIn());
     await screen.findByText('Selamat datang, Ani.');
-    const links = within(mainNav())
-      .getAllByRole('link')
-      .map((a) => [a.textContent, a.getAttribute('href')]);
-    expect(links).toEqual([
-      ['Beranda', '/admin'],
-      // Phase 2 (§13): the Katalog and OPAC groups come first; an admin has no Migrasi SLiMS (ADMIN_EXCLUDED).
-      ['Bibliografi', '/admin/catalog/records'],
-      ['Eksemplar', '/admin/catalog/items'],
-      ['Otoritas', '/admin/catalog/authorities'],
-      ['Lokasi & Rak', '/admin/catalog/locations'],
-      ['Data Induk', '/admin/catalog/masters'],
-      ['Impor/Ekspor', '/admin/catalog/exchange'],
-      ['Cetak Label', '/admin/catalog/labels'],
-      ['Duplikat', '/admin/catalog/duplicates'],
-      // The Layanan and Anggota groups: the desk and its lists, the members.
-      ['Meja Layanan', '/admin/layanan'],
-      ['Kembali Cepat', '/admin/layanan/kembali'],
-      ['Rak Tunggu & Reservasi', '/admin/layanan/rak-tunggu'],
-      ['Baca di Tempat', '/admin/layanan/baca'],
-      ['Denda & Pembayaran', '/admin/layanan/denda'],
-      ['Terlambat & Jatuh Tempo', '/admin/layanan/terlambat'],
-      ['Pengingat E-mail', '/admin/layanan/pengingat'],
-      ['Aturan Peminjaman', '/admin/layanan/aturan'],
-      ['Kalender', '/admin/layanan/kalender'],
-      ['Kunjungan', '/admin/layanan/kunjungan'],
-      ['Perangkat Buku Tamu', '/admin/layanan/buku-tamu'],
-      ['Inventarisasi', '/admin/layanan/inventarisasi'],
-      ['Daftar Anggota', '/admin/anggota'],
-      ['Tipe Anggota', '/admin/anggota/tipe'],
-      ['Impor Anggota', '/admin/anggota/impor'],
-      ['Surat Bebas Pustaka', '/admin/anggota/bebas-pustaka'],
-      ['Cetak Kartu', '/admin/anggota/kartu'],
-      // The Laporan group: the report catalogue and the accreditation workspace.
-      ['Laporan', '/admin/reports'],
-      ['Akreditasi', '/admin/accreditation'],
-      ['Halaman & Berita', '/admin/opac/pages'],
-      ['Halaman awal', '/admin/opac/beranda'],
-      ['Pengguna', '/admin/users'],
-      ['Peran', '/admin/roles'],
-      ['Cabang', '/admin/branches'],
-      ['Pengaturan', '/admin/settings'],
-      ['Pembaruan', '/admin/updates'],
-      ['Log audit', '/admin/audit'],
-      ['Tugas dan Jadwal', '/admin/jobs'],
-      ['Cadangan', '/admin/backups'],
-      ['Diagnostik', '/admin/diagnostics'],
-      ['Tentang', '/admin/about'],
-    ]);
+    // Each module opens its first page.
+    expect(linksOf(mainNav())).toEqual(ADMIN_MODULES.map(([name, first]) => [name, first]));
+    for (const [name, first, pages] of ADMIN_MODULES) {
+      fireEvent.click(within(mainNav()).getByRole('link', { name }));
+      await waitFor(() => expect(router.state.location.pathname).toBe(first));
+      expect(currentModule()).toEqual([name]);
+      expect(linksOf(sidebar(name))).toEqual(name === 'Beranda' ? [...pages, ...BERANDA_SHORTCUTS] : pages);
+    }
+    expect(screen.queryByRole('link', { name: 'Konfigurasi Sistem' })).toBeNull();
   });
 
-  it('the menu marks one item: the page’s own, else the closest one above it', async () => {
-    const marked = async (path: string): Promise<(string | null)[]> => {
+  it('a change of screen moves the focus to its heading and names the page in the tab title; the first screen keeps it', async () => {
+    document.title = 'ALTIS Admin';
+    const { router } = setup(signedIn());
+    await screen.findByText('Selamat datang, Ani.');
+    expect(document.activeElement).toBe(document.body);
+    expect(document.title).toBe('Beranda · ALTIS Admin');
+    const link = within(sidebar('Beranda')).getByRole('link', { name: 'Tambah anggota' });
+    link.focus();
+    fireEvent.click(link);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/anggota/baru'));
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Anggota baru' });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    expect(heading.getAttribute('tabindex')).toBe('-1');
+    expect(document.title).toBe('Daftar Anggota · ALTIS Admin');
+
+    // A screen that focuses a control of its own keeps it: the heading does not take it back.
+    await router.navigate({ href: '/admin/anggota' });
+    const list = await screen.findByRole('heading', { level: 1, name: 'Anggota' });
+    await waitFor(() => expect(document.activeElement).toBe(list));
+    const search = screen.getByRole('searchbox', { name: 'Cari' });
+    search.focus();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(document.activeElement).toBe(search);
+    expect(document.title).toBe('Daftar Anggota · ALTIS Admin');
+  });
+
+  /** "Pintasan" of an admin: the desk, quick return, a new member, the member import. */
+  const BERANDA_SHORTCUTS: [string, string][] = [
+    ['Meja Layanan', '/admin/layanan'],
+    ['Kembali Cepat', '/admin/layanan/kembali'],
+    ['Tambah anggota', '/admin/anggota/baru'],
+    ['Impor Anggota', '/admin/anggota/impor'],
+  ];
+
+  it('Beranda lists its overview, then the shortcuts the user may open under "Pintasan"', async () => {
+    setup(signedIn());
+    await screen.findByText('Selamat datang, Ani.');
+    expect(within(sidebar('Beranda')).getByRole('list', { name: 'Pintasan' })).toBeTruthy();
+    expect(linksOf(within(sidebar('Beranda')).getByRole('list', { name: 'Pintasan' }))).toEqual(BERANDA_SHORTCUTS);
+  });
+
+  it('the active module follows the route, deep links and detail pages included; one page is marked', async () => {
+    const marked = async (path: string): Promise<[(string | null)[], (string | null)[]]> => {
       const { view } = setup(signedIn({ permissions: systemRolePermissions('super_admin'), superAdmin: true }), path);
-      await waitFor(() => within(mainNav()).getByRole('link', { name: 'Kembali Cepat' }));
-      const links = within(mainNav())
+      await waitFor(() => expect(currentModule()).toHaveLength(1));
+      const module = currentModule()[0]!;
+      const pages = within(sidebar(module!))
         .getAllByRole('link')
         .filter((a) => a.getAttribute('aria-current') === 'page')
         .map((a) => a.textContent);
       view.unmount();
-      return links;
+      return [[module], pages];
     };
-    expect(await marked('/admin/layanan/kembali')).toEqual(['Kembali Cepat']);
-    expect(await marked('/admin/layanan?member=01J0000000000000000000000A')).toEqual(['Meja Layanan']);
-    expect(await marked('/admin/anggota/tipe')).toEqual(['Tipe Anggota']);
-    expect(await marked('/admin/anggota/01J0000000000000000000000A')).toEqual(['Daftar Anggota']);
+    expect(await marked('/admin/layanan/kembali')).toEqual([['Layanan'], ['Kembali Cepat']]);
+    expect(await marked('/admin/layanan?member=01J0000000000000000000000A')).toEqual([['Layanan'], ['Meja Layanan']]);
+    expect(await marked('/admin/anggota/tipe')).toEqual([['Anggota'], ['Tipe Anggota']]);
+    expect(await marked('/admin/anggota/01J0000000000000000000000A')).toEqual([['Anggota'], ['Daftar Anggota']]);
+    expect(await marked('/admin/settings/catalog')).toEqual([['Sistem'], ['Pengaturan']]);
+    expect(await marked('/admin/accreditation/01J0000000000000000000000A')).toEqual([['Laporan'], ['Akreditasi']]);
+    // A page of its own path under no menu item still opens its module.
+    expect(await marked('/admin/catalog/runs/01J0000000000000000000000A')).toEqual([['Katalog'], []]);
+    expect(await marked('/admin/profile')).toEqual([['Beranda'], []]);
+    expect(await marked('/admin')).toEqual([['Beranda'], ['Ringkasan']]);
   });
 
-  it('a super admin sees Konfigurasi Sistem', async () => {
-    setup(signedIn({ permissions: systemRolePermissions('super_admin'), superAdmin: true }));
-    await screen.findByText('Selamat datang, Ani.');
-    expect(within(mainNav()).getByRole('link', { name: 'Konfigurasi Sistem' })).toBeTruthy();
+  it('the top bar says where the user is: the module, then the page', async () => {
+    setup(signedIn(), '/admin/anggota/tipe');
+    const crumbs = await screen.findByRole('navigation', { name: 'Lokasi halaman' });
+    expect(within(crumbs).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Anggota', '›Tipe Anggota']);
+    expect(within(crumbs).getAllByRole('listitem')[1]!.getAttribute('aria-current')).toBe('page');
   });
 
-  it('the sections sit under their group headings, Katalog, Layanan, Anggota, Laporan, OPAC then Sistem; Beranda above them', async () => {
-    setup(signedIn({ permissions: systemRolePermissions('super_admin'), superAdmin: true }));
+  it('a super admin sees Konfigurasi Sistem under Sistem', async () => {
+    setup(signedIn({ permissions: systemRolePermissions('super_admin'), superAdmin: true }), '/admin/system');
+    expect(await within(await screen.findByRole('navigation', { name: 'Menu Sistem' })).findByRole('link', { name: 'Konfigurasi Sistem' })).toBeTruthy();
+  });
+
+  it('Phase 2: a catalogue reader sees Beranda, Katalog with its seven pages and Sistem with Tentang only', async () => {
+    const { router } = setup(signedIn({ permissions: ['catalog.records.read'] }));
     await screen.findByText('Selamat datang, Ani.');
-    const nav = mainNav();
-    const groups = within(nav)
-      .getAllByRole('list')
-      .filter((list) => list.hasAttribute('aria-label'));
-    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual(['Katalog', 'Layanan', 'Anggota', 'Laporan', 'OPAC', 'Sistem']);
-    // Each heading is shown above its list.
-    for (const name of ['Katalog', 'OPAC', 'Sistem']) expect(within(nav).getByText(name, { selector: 'p' })).toBeTruthy();
-    // The Laporan heading and the Laporan item read the same.
-    expect(within(nav).getAllByText('Laporan', { selector: 'p' })).toHaveLength(1);
-    expect(within(groups[0]!).getAllByRole('link').map((a) => a.textContent)).toContain('Migrasi SLiMS');
-    expect(within(groups[1]!).getAllByRole('link').map((a) => a.textContent)).toEqual([
+    expect(within(mainNav()).getAllByRole('link').map((a) => a.textContent)).toEqual(['Beranda', 'Katalog', 'Sistem']);
+    // No shortcut: none of their pages is open to a catalogue reader.
+    expect(within(sidebar('Beranda')).queryByRole('list', { name: 'Pintasan' })).toBeNull();
+    fireEvent.click(within(mainNav()).getByRole('link', { name: 'Katalog' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/catalog/records'));
+    expect(within(sidebar('Katalog')).getAllByRole('link')).toHaveLength(7);
+    fireEvent.click(within(mainNav()).getByRole('link', { name: 'Sistem' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/about'));
+    expect(linksOf(sidebar('Sistem'))).toEqual([['Tentang', '/admin/about']]);
+  });
+
+  it('a user holding the desk at one branch only: Beranda, Layanan (the desk pages), Sistem (Tentang), the desk shortcuts', async () => {
+    const deskOnly: SignedIn = { ...signedIn({ permissions: [] }), branchPermissions: { b1: ['circulation.desk.use'] } };
+    const { router } = setup(deskOnly);
+    await screen.findByText('Selamat datang, Ani.');
+    expect(within(mainNav()).getAllByRole('link').map((a) => a.textContent)).toEqual(['Beranda', 'Layanan', 'Sistem']);
+    expect(linksOf(within(sidebar('Beranda')).getByRole('list', { name: 'Pintasan' }))).toEqual(BERANDA_SHORTCUTS.slice(0, 2));
+    fireEvent.click(within(mainNav()).getByRole('link', { name: 'Layanan' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/layanan'));
+    expect(within(sidebar('Layanan')).getAllByRole('link').map((a) => a.textContent)).toEqual([
       'Meja Layanan',
       'Kembali Cepat',
       'Rak Tunggu & Reservasi',
       'Baca di Tempat',
-      'Denda & Pembayaran',
-      'Terlambat & Jatuh Tempo',
-      'Pengingat E-mail',
-      'Aturan Peminjaman',
-      'Kalender',
-      'Kunjungan',
-      'Perangkat Buku Tamu',
-      'Inventarisasi',
     ]);
-    expect(within(groups[2]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Daftar Anggota', 'Tipe Anggota', 'Impor Anggota', 'Surat Bebas Pustaka', 'Cetak Kartu']);
-    expect(within(groups[3]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Laporan', 'Akreditasi']);
-    expect(within(groups[4]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Halaman & Berita', 'Halaman awal']);
-    expect(within(groups[5]!).getByRole('link', { name: 'Konfigurasi Sistem' })).toBeTruthy();
-    // Beranda belongs to no group.
-    for (const g of groups) expect(within(g).queryByRole('link', { name: 'Beranda' })).toBeNull();
-    expect(within(nav).getByRole('link', { name: 'Beranda' })).toBeTruthy();
   });
 
-  it('Phase 2: a catalogue reader sees the Katalog group of seven and Tentang under Sistem, nothing else', async () => {
-    setup(signedIn({ permissions: ['catalog.records.read'] }));
-    await screen.findByText('Selamat datang, Ani.');
-    const groups = within(mainNav())
-      .getAllByRole('list')
-      .filter((list) => list.hasAttribute('aria-label'));
-    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual(['Katalog', 'Sistem']);
-    expect(within(groups[0]!).getAllByRole('link')).toHaveLength(7);
-    expect(within(groups[1]!).getAllByRole('link').map((a) => a.textContent)).toEqual(['Tentang']);
+  it('"Menu" opens the sidebar as a drawer on a narrow screen; Escape closes it and gives the focus back', async () => {
+    setup(signedIn(), '/admin/anggota');
+    const menu = await screen.findByRole('button', { name: 'Menu' });
+    expect(menu.getAttribute('aria-controls')).toBe('altis-sidebar');
+    expect(menu.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(menu);
+    expect(menu.getAttribute('aria-expanded')).toBe('true');
+    // The focus goes to the marked page.
+    await waitFor(() => expect(document.activeElement?.textContent).toBe('Daftar Anggota'));
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(menu.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(menu);
+  });
+
+  it('the open drawer is a modal dialog: the rest of the frame is inert, Escape closes it from anywhere, a change of page closes it', async () => {
+    const { router } = setup(signedIn(), '/admin/anggota');
+    // jsdom knows the attribute, not the property.
+    const inert = (...els: HTMLElement[]): boolean[] => els.map((el) => el.hasAttribute('inert'));
+    const menu = await screen.findByRole('button', { name: 'Menu' });
+    const header = screen.getByRole('banner');
+    const content = document.getElementById('main')!.parentElement!;
+    const skip = screen.getByRole('link', { name: 'Lewati ke konten utama' });
+    expect(inert(header, content, skip)).toEqual([false, false, false]);
+
+    fireEvent.click(menu);
+    const drawer = screen.getByRole('dialog', { name: 'Menu' });
+    expect(drawer.getAttribute('aria-modal')).toBe('true');
+    expect(drawer.id).toBe('altis-sidebar');
+    expect(inert(header, content, skip)).toEqual([true, true, true]);
+    // The focus somewhere else (a click on the page under the scrim): Escape still closes it.
+    act(() => (document.activeElement as HTMLElement).blur());
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).toBeNull();
+    expect(inert(header, content, skip)).toEqual([false, false, false]);
+    expect(document.activeElement).toBe(menu);
+
+    // Open again, then the page changes by other means (the command palette, a link in a notification): it closes.
+    fireEvent.click(menu);
+    expect(menu.getAttribute('aria-expanded')).toBe('true');
+    await act(() => router.navigate({ to: '/admin/profile' }));
+    expect(menu.getAttribute('aria-expanded')).toBe('false');
+    expect(inert(header)).toEqual([false]);
   });
 
   it("the user's own language wins over the library's", async () => {
@@ -354,6 +507,58 @@ describe('navigation and language', () => {
     expect(await screen.findByText('Welcome, Ani.')).toBeTruthy();
     expect(document.documentElement.lang).toBe('en');
     expect(within(mainNav('Main navigation')).getByRole('link', { name: 'Home' })).toBeTruthy();
+    expect(within(sidebar('Home', 'Home menu')).getByRole('link', { name: 'Overview' })).toBeTruthy();
+  });
+});
+
+describe('user menu', () => {
+  const openUserMenu = async (): Promise<HTMLElement> => {
+    fireEvent.keyDown(await screen.findByRole('button', { name: 'Akun Ani' }), { key: 'Enter' });
+    return screen.findByRole('menu');
+  };
+
+  afterEach(() => {
+    localStorage.clear();
+    document.documentElement.removeAttribute('data-theme');
+  });
+
+  it('holds the profile, the theme (following the system at first), the language and signing out', async () => {
+    setup(signedIn());
+    await screen.findByText('Selamat datang, Ani.');
+    const menu = await openUserMenu();
+    expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Profil saya', 'Keluar']);
+    expect(
+      within(menu)
+        .getAllByRole('menuitemradio')
+        .map((i) => [i.textContent, i.getAttribute('aria-checked')]),
+    ).toEqual([
+      ['Terang', 'false'],
+      ['Gelap', 'false'],
+      ['Ikuti sistem', 'true'],
+      ['Bahasa Indonesia', 'true'],
+      ['English', 'false'],
+    ]);
+  });
+
+  it('Gelap puts data-theme="dark" on the page and remembers it in this browser; Ikuti sistem forgets it', async () => {
+    setup(signedIn());
+    await screen.findByText('Selamat datang, Ani.');
+    fireEvent.click(within(await openUserMenu()).getByRole('menuitemradio', { name: 'Gelap' }));
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    expect(localStorage.getItem('altis.admin.theme')).toBe('dark');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    expect(within(await openUserMenu()).getByRole('menuitemradio', { name: 'Gelap' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitemradio', { name: 'Ikuti sistem' }));
+    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+    expect(localStorage.getItem('altis.admin.theme')).toBeNull();
+  });
+
+  it('Keluar signs out', async () => {
+    const { router } = setup(signedIn());
+    await screen.findByText('Selamat datang, Ani.');
+    fireEvent.click(within(await openUserMenu()).getByRole('menuitem', { name: 'Keluar' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/login'));
+    expect(calls()).toContainEqual(['POST', '/api/v1/auth/logout']);
   });
 });
 
@@ -415,7 +620,7 @@ describe('command palette', () => {
     const options = within(dialog)
       .getAllByRole('option')
       .map((o) => o.textContent?.replace('dipakai', '').trim());
-    expect(options).toEqual(['Beranda', 'Log audit', 'Tentang', 'Profil saya', 'Keluar', 'Bahasa Indonesia', 'English']);
+    expect(options).toEqual(['Beranda', 'Log audit', 'Tentang', 'Profil saya', 'Keluar', 'Bahasa Indonesia', 'English', 'Terang', 'Gelap', 'Ikuti sistem']);
 
     fireEvent.click(within(dialog).getByRole('option', { name: 'English' }));
     await waitFor(() => expect(calls()).toContainEqual(['PATCH', '/api/v1/auth/me']));

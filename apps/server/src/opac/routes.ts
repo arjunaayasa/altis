@@ -10,7 +10,7 @@ import type { AppEnv } from '../http/request-id.js';
 import { route, type RouteDecl } from '../http/route.js';
 import { loggableError } from '../safe-error.js';
 import { homeResponse } from './catalog/home.js';
-import { pageFrame, requestNow } from './catalog/page.js';
+import { pageFrame, readSiteInfo, requestNow, siteContentLang, type SiteInfo } from './catalog/page.js';
 import { navPages, type OpacNavLink } from './catalog/queries.js';
 import { OPAC_CSS_FILE } from './layout.js';
 import { renderError, renderNotFound } from './pages.js';
@@ -109,10 +109,10 @@ export { wantsHtml } from '../http/html-request.js';
 
 /**
  * The OPAC 404 page in the catalogue's frame (Phase 2 Task 21): its language is `?lang=`, then `library.locale`; it
- * carries the library's name, accent and menu when they can be read, the search form, and a language switch that
- * keeps the path from the request's config.baseUrl (S7; on this site before the install). The settings come from the
- * cache; a failed read (no database, a database error) is only logged, never turned into another answer: a 404 stays
- * a 404 page.
+ * carries the library's name, accent, colour, menu and footer (address, hours) when they can be read, as every other
+ * page does, the search form, and a language switch that keeps the path from the request's config.baseUrl (S7; on this
+ * site before the install). The settings come from the cache; a failed read (no database, a database error) is only
+ * logged, never turned into another answer: a 404 stays a 404 page.
  */
 export async function notFoundResponse(
   c: Context<AppEnv>,
@@ -128,15 +128,23 @@ export async function notFoundResponse(
   }
   const locale = resolveLocale(c.req.query('lang'), s?.libraryLocale);
   let nav: OpacNavLink[] = [];
+  let site: SiteInfo | undefined;
   if (o.db !== undefined && s !== null) {
+    const now = requestNow(c);
     try {
-      nav = await navPages(o.db.db, requestNow(c), locale);
+      nav = await navPages(o.db.db, now, locale);
     } catch (error) {
       o.log.warn('opac: the menu is unavailable for the 404 page', { err: loggableError(error) });
     }
+    try {
+      site = { ...(await readSiteInfo(o.settings, o.db.db, now)), contentLang: siteContentLang(s.libraryLocale, locale) };
+    } catch (error) {
+      o.log.warn('opac: the site details are unavailable for the 404 page', { err: loggableError(error) });
+    }
   }
   const config: { baseUrl?: unknown } | undefined = c.get('config');
-  const frame = pageFrame(c, { locale, baseUrl: typeof config?.baseUrl === 'string' ? config.baseUrl : '', nav }, { search: true });
+  const baseUrl = typeof config?.baseUrl === 'string' ? config.baseUrl : '';
+  const frame = pageFrame(c, { locale, baseUrl, nav, ...(site === undefined ? {} : { site }) }, { search: true });
   return htmlResponse(c, 404, (nonce) =>
     renderNotFound({ locale, nonce, frame, ...(s === null ? {} : { libraryName: s.libraryName, accent: s.accent }) }),
   );

@@ -39,11 +39,10 @@ export const AKUN_CSS: string = [
   '.akun-no{font-variant-numeric:tabular-nums;letter-spacing:.02em}',
 
   // Notices.
-  '.akun-flash{padding:.75rem 1rem;border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:var(--radius);' +
-    'background:var(--surface)}',
-  '.akun-flash-ok{border-left-color:var(--ok)}',
-  '.akun-flash-warn{border-left-color:var(--warn)}',
-  '.akun-flash-error{border-left-color:var(--danger)}',
+  '.akun-flash{padding:.75rem 1rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--layer)}',
+  '.akun-flash-ok{border-color:var(--ok)}',
+  '.akun-flash-warn{border-color:var(--warn)}',
+  '.akun-flash-error{border-color:var(--danger)}',
 
   // The member's facts, the tables and lists, the pager.
   '.akun-greeting{font-size:1.125rem;font-weight:600}',
@@ -80,7 +79,7 @@ export const AKUN_CSS: string = [
 
   // The member card: ID-1 proportions, printed alone.
   '.akun-card{max-width:24rem;aspect-ratio:85.6/54;display:flex;flex-direction:column;justify-content:space-between;gap:.5rem;' +
-    'padding:1rem;border:1px solid var(--border);border-top:6px solid var(--accent);border-radius:var(--radius);background:var(--surface)}',
+    'padding:1rem;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface)}',
   '.akun-card p{margin:0}',
   '.akun-card-library{font-weight:700}',
   '.akun-card-main{display:flex;gap:.75rem;align-items:flex-start}',

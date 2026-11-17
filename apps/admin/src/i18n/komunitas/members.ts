@@ -118,6 +118,7 @@ export const MEMBERS_ID = {
   'members.reactivate.body': 'Anggota dapat meminjam lagi dan catatan penangguhan dihapus.',
   'members.archive.title': 'Arsipkan {name}?',
   'members.archive.body': 'Anggota tidak lagi tampil di daftar dan tidak dapat meminjam. Datanya tetap disimpan. Anggota yang masih punya pinjaman terbuka tidak dapat diarsipkan.',
+  'members.archive.done': '{name} diarsipkan.',
   'members.types.intro':
     'Tipe anggota menentukan batas jumlah pinjaman dan masa keanggotaan. Lama pinjam dan batas perpanjangan diatur di Aturan Peminjaman.',
   'members.types.add': 'Tambah tipe anggota',
@@ -165,7 +166,7 @@ export const MEMBERS_ID = {
   'members.import.intro':
     'Berkas CSV dengan baris kepala. Kolom wajib: member_no, name, member_type (kode tipe). Pemisah koma atau titik koma; CSV dari Excel bisa langsung dipakai.',
   'members.import.file': 'Berkas CSV',
-  'members.import.file_hint': 'Paling besar 50 MB atau 50.000 baris.',
+  'members.import.file_hint': 'Pemisah koma atau titik koma, UTF-8 atau Windows-1252, paling banyak 5.000 baris.',
   'members.import.no_file': 'Pilih berkas CSV terlebih dahulu.',
   'members.import.template': 'Unduh templat CSV',
   'members.import.mode': 'Bila nomor anggota sudah terdaftar',
@@ -318,6 +319,7 @@ export const MEMBERS_EN: Record<keyof typeof MEMBERS_ID, string> = {
   'members.reactivate.body': 'The member can borrow again and the suspension note is cleared.',
   'members.archive.title': 'Archive {name}?',
   'members.archive.body': 'The member leaves the list and can’t borrow. The data is kept. A member with open loans can’t be archived.',
+  'members.archive.done': '{name} archived.',
   'members.types.intro': 'A member type sets the loan limit and the membership period. Loan periods and renewal limits are set in Loan Rules.',
   'members.types.add': 'Add member type',
   'members.types.caption': 'Member types',
@@ -364,7 +366,7 @@ export const MEMBERS_EN: Record<keyof typeof MEMBERS_ID, string> = {
   'members.import.intro':
     'A CSV file with a header row. Required columns: member_no, name, member_type (a type code). Comma or semicolon separated; a CSV saved from Excel works as it is.',
   'members.import.file': 'CSV file',
-  'members.import.file_hint': 'At most 50 MB or 50,000 rows.',
+  'members.import.file_hint': 'Comma or semicolon separated, UTF-8 or Windows-1252, at most 5,000 rows.',
   'members.import.no_file': 'Choose a CSV file first.',
   'members.import.template': 'Download CSV template',
   'members.import.mode': 'When a member number already exists',

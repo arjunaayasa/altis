@@ -1,4 +1,4 @@
-import { legacyTarget, popularRecordIds, recordUrlPath } from '@altis/core';
+import { legacyTarget, pickPolicy, popularRecordIds, recordUrlPath } from '@altis/core';
 import { countGrouped, type DbHandle } from '@altis/db';
 import type { Locale } from '@altis/shared';
 import { sourceNameField } from '@altis/shared/api/catalog/migration';
@@ -36,6 +36,9 @@ export interface TitleCard {
   coverFileId: string | null;
   /** The display name of the main agent (`is_main`), if any. */
   mainAgent: string | null;
+  /** The record's call number and classification: the substitute cover's spine label and cloth colour. */
+  callNumber: string | null;
+  classification: string | null;
   // ---- Komunitas (OPAC home page) ----
   /**
    * From the search index's facets: `available` when a copy is on an open shelf now (`av`), `unavailable` when the
@@ -156,9 +159,17 @@ async function mainAgents(db: Db, ids: readonly string[]): Promise<Map<string, s
   return out;
 }
 
-const CARD_COLUMNS = ['id', 'title', 'subtitle', 'publication_year', 'cover_file_id'] as const;
+const CARD_COLUMNS = ['id', 'title', 'subtitle', 'publication_year', 'cover_file_id', 'call_number', 'classification'] as const;
 
-type CardRow = { id: string; title: string; subtitle: string | null; publication_year: string | null; cover_file_id: string | null };
+type CardRow = {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  publication_year: string | null;
+  cover_file_id: string | null;
+  call_number: string | null;
+  classification: string | null;
+};
 
 /**
  * The availability of each of `ids` the search index knows (see TitleCard): one read of the facets `av` and `br` for
@@ -185,6 +196,8 @@ async function cards(db: Db, rows: readonly CardRow[]): Promise<TitleCard[]> {
     year: r.publication_year,
     coverFileId: r.cover_file_id,
     mainAgent: agents.get(r.id) ?? null,
+    callNumber: r.call_number,
+    classification: r.classification,
     availability: available.get(r.id) ?? null,
   }));
 }
@@ -319,6 +332,113 @@ export async function activeMemberCount(db: Db, today: string): Promise<number> 
     .where((eb) => eb.or([eb('expires_on', 'is', null), eb('expires_on', '>=', today)]))
     .executeTakeFirst();
   return Number(row?.n ?? 0);
+}
+
+/** Whether a news post is published at `now`: the site menu's "Berita" entry. */
+export async function hasPublishedNews(db: Db, now: number): Promise<boolean> {
+  const rows = await publishedPages(db, 'news', now).select('id').limit(1).execute();
+  return rows.length > 0;
+}
+
+/** The ten DDC main classes as the search index writes them (the `cl` facet). */
+export const CLASS_DIGITS = Object.freeze(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] as const);
+
+/** The collection's facts the home page shows from the search index. */
+export interface CatalogueFacts {
+  /** The public titles of each DDC main class (the `cl` facet), 0 for a class without one. */
+  classes: Readonly<Record<(typeof CLASS_DIGITS)[number], number>>;
+  /** The public titles with a copy on an open shelf now (the `av` facet). */
+  available: number;
+}
+
+/**
+ * The collection's facts from the search index in one read: the public documents (`search_doc.is_public`) counted per
+ * value of the `cl` and `av` facets. The counts are what the search finds for `/cari?kelas=N` and `/cari?tersedia=1`.
+ */
+export async function catalogueFacts(db: Db): Promise<CatalogueFacts> {
+  const rows = await countGrouped(
+    db
+      .selectFrom('search_facet as f')
+      .innerJoin('search_doc as d', 'd.record_id', 'f.record_id')
+      .where('d.is_public', '=', 1)
+      .where('f.facet', 'in', ['cl', 'av']),
+    { facet: 'f.facet', value: 'f.value_key' },
+  );
+  const classes = Object.fromEntries(CLASS_DIGITS.map((d) => [d, 0])) as Record<(typeof CLASS_DIGITS)[number], number>;
+  let available = 0;
+  for (const r of rows) {
+    const value = String(r.value);
+    if (r.facet === 'av' && value === '1') available += r.count;
+    else if (r.facet === 'cl' && (CLASS_DIGITS as readonly string[]).includes(value)) classes[value as (typeof CLASS_DIGITS)[number]] += r.count;
+  }
+  return { classes, available };
+}
+
+/** How long the home page keeps the collection's facts before it reads them again. */
+export const CATALOGUE_FACTS_TTL_MS = 60_000;
+
+/** The facts read per database, with the time (a monotonic clock) they were read at; a pending read is shared. */
+const factsCache = new WeakMap<object, { at: number; value: Promise<CatalogueFacts> }>();
+
+/**
+ * {@link catalogueFacts}, kept for {@link CATALOGUE_FACTS_TTL_MS} per database with the rest of the home page's data:
+ * the counts change with the catalogue, and a minute late is fine for a home page that every visitor opens. A failed
+ * read is not kept.
+ */
+export function cachedCatalogueFacts(db: Db, clock: () => number = () => performance.now()): Promise<CatalogueFacts> {
+  const now = clock();
+  const hit = factsCache.get(db);
+  if (hit !== undefined && now - hit.at < CATALOGUE_FACTS_TTL_MS) return hit.value;
+  const value = catalogueFacts(db);
+  factsCache.set(db, { at: now, value });
+  value.catch(() => {
+    if (factsCache.get(db)?.value === value) factsCache.delete(db);
+  });
+  return value;
+}
+
+/** The loan terms of one member type as the public may read them. */
+export interface PublicLoanRule {
+  /** The member type's name in the page's language (else the Indonesian one, `lang: 'id'`). */
+  name: string;
+  lang?: Locale;
+  /** The most open loans a member of the type may hold; null: no limit. */
+  limit: number | null;
+  /** The loan period in days of the type's general rule (0: due the same day). */
+  days: number;
+}
+
+/**
+ * The loan terms per member type: each live member type that may borrow (its limit is not 0), with its limit and the
+ * loan period of the rule that applies to its members' loans of any collection and material (the rule resolution of
+ * the desk: the most specific live rule for the type alone, else the general one). A type whose rule refuses loans, or
+ * that no rule covers, is left out. No member is read: only the member types and the rules.
+ */
+export async function publicLoanRules(db: Db, locale: Locale): Promise<PublicLoanRule[]> {
+  const [types, rules] = await Promise.all([
+    db
+      .selectFrom('member_types')
+      .select(['id', 'name_id', 'name_en', 'loan_limit'])
+      .where('archived_at', 'is', null)
+      .orderBy('sort_order')
+      .orderBy('code_key')
+      .execute(),
+    db
+      .selectFrom('policies')
+      .select(['member_type_id', 'collection_type_id', 'material_type_id', 'branch_id', 'loanable', 'loan_days'])
+      .where('archived_at', 'is', null)
+      .execute(),
+  ]);
+  const out: PublicLoanRule[] = [];
+  for (const type of types) {
+    const limit = type.loan_limit === null ? null : Number(type.loan_limit);
+    if (limit === 0) continue;
+    const rule = pickPolicy(rules, { memberTypeId: type.id, collectionTypeId: null, materialTypeId: null, branchId: null });
+    if (rule === null || Number(rule.loanable) !== 1) continue;
+    const english = locale === 'en' && type.name_en !== null && type.name_en.trim() !== '' ? type.name_en : null;
+    out.push({ name: english ?? type.name_id, ...(locale === 'en' && english === null ? { lang: 'id' as const } : {}), limit, days: Number(rule.loan_days) });
+  }
+  return out;
 }
 
 /** How many records the OPAC shows. */
