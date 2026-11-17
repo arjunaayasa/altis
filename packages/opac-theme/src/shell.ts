@@ -98,8 +98,10 @@ export const SHELL_CSS: string = [
   '.search-row{display:flex;flex-wrap:wrap;gap:.5rem}',
   '.search-box input[type=search],.search-box select{min-height:2.875rem;padding:0 .75rem;border:1px solid var(--border-strong);' +
     'border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font:inherit}',
-  '.search-box input[type=search]{flex:1 1 12rem;min-width:0}',
-  '.search-box select{flex:0 1 auto;max-width:100%}',
+  '.search-box input[type=search]{flex:1 1 8rem;min-width:0}',
+  // The field choice takes a row of its own on a phone, so that the text and its button share the next one.
+  '.search-box select{flex:1 1 100%;max-width:100%}',
+  '@media (min-width:30rem){.search-box select{flex:0 1 auto}.search-box input[type=search]{flex-basis:12rem}}',
   '.search-box input::placeholder{color:var(--faint);opacity:1}',
   '.search-box button{min-height:2.875rem;padding:0 1.375rem;border:0;border-radius:var(--radius-sm);background:var(--accent);' +
     'color:var(--accent-ink);font:inherit;font-weight:700;cursor:pointer}',
@@ -108,6 +110,7 @@ export const SHELL_CSS: string = [
   '.section-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.25rem 1rem;margin:0 0 .875rem}',
   '.section-head h2{margin:0}',
   '.section-sub{margin:.125rem 0 0;color:var(--muted);font-size:.875rem}',
+  '.section-aside{margin:0;color:var(--muted);font-size:.875rem}',
   '.section-link{display:inline-flex;align-items:center;min-height:2.75rem;font-weight:600}',
 
   // Home page blocks shared with other pages: the class grid and the news list.
@@ -128,6 +131,8 @@ export const SHELL_CSS: string = [
   '.news-list{display:grid;gap:1.5rem;margin:0;padding:0;list-style:none}',
   '.news-list article{display:grid;gap:.375rem;align-content:start;padding-top:.875rem;border-top:1px solid var(--border)}',
   '.news-list h3{margin:0;font-size:1rem;line-height:1.4}',
+  '.news-list h3 a{color:var(--text);text-decoration:none}',
+  '.news-list h3 a:hover{color:var(--accent);text-decoration:underline}',
   '.news-list time{display:block;color:var(--muted);font-size:.8125rem}',
   '.news-list p{margin:0;color:var(--muted);font-size:.9375rem}',
   '@media (min-width:54rem){.news-list{grid-template-columns:repeat(3,minmax(0,1fr))}}',
@@ -213,16 +218,18 @@ export const SHELL_CSS: string = [
   '.foot-block p{margin:0;line-height:1.75}',
   '.foot-address{white-space:pre-line}',
   '.foot-links{margin:0;padding:0;list-style:none}',
-  '.site-footer .foot-links a{min-height:2.25rem}',
+  '.site-footer .foot-links a{min-height:1.75rem}',
   '.foot-hours{border-collapse:collapse;line-height:1.75}',
   '.foot-hours th{padding:0 1rem 0 0;font-weight:400;text-align:left;vertical-align:top}',
-  '.foot-hours td{padding:0;font-variant-numeric:tabular-nums;color:var(--foot-text)}',
+  '.foot-hours td{padding:0;font-variant-numeric:tabular-nums;color:var(--foot-text);white-space:nowrap;vertical-align:top}',
   '.foot-search{--focus:#fff}',
   '.foot-search input[type=search]{background:rgb(255 255 255/.06);border-color:rgb(255 255 255/.3);color:var(--foot-text)}',
   '.foot-search input::placeholder{color:var(--foot-muted)}',
   '.foot-bottom{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0 1.5rem;max-width:var(--wide);margin:0 auto;' +
     'padding:.5rem var(--gutter) 1rem;font-size:.8125rem}',
-  '.foot-grid+.foot-bottom{margin-top:2rem;border-top:1px solid rgb(255 255 255/.12)}',
+  // The line above the bottom row spans the content, not the gutters.
+  '.foot-grid+.foot-bottom{position:relative;margin-top:2rem}',
+  '.foot-grid+.foot-bottom::before{content:"";position:absolute;top:0;left:var(--gutter);right:var(--gutter);border-top:1px solid rgb(255 255 255/.12)}',
   '.foot-bottom p{display:flex;flex-wrap:wrap;align-items:center;gap:0 1rem;margin:0}',
   '@media (min-width:40rem){.foot-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}',
   '@media (min-width:60rem){.foot-grid{grid-template-columns:1.2fr 1fr 1fr 1.3fr}}',

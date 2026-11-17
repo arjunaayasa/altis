@@ -67,6 +67,8 @@ export interface SiteInfo {
   contact: boolean;
   /** A news post is published: the menu's "Berita". */
   news: boolean;
+  /** The language of the library's own texts (the address, the hours) when it is not the page's. */
+  contentLang?: Locale | undefined;
 }
 
 /** The site of `home` with `address` and whether news is published (see SiteInfo). */
@@ -167,7 +169,7 @@ export async function opacContext(rc: OpacContextSource): Promise<OpacContext> {
     baseUrl: rc.config.baseUrl,
     indexable: indexable !== false,
     nav: await navPages(handle, now, locale),
-    site: siteInfo(home ?? OPAC_HOME_DEFAULT, address ?? null, news),
+    site: { ...siteInfo(home ?? OPAC_HOME_DEFAULT, address ?? null, news), contentLang: isLocale(libraryLocale) && libraryLocale !== locale ? libraryLocale : undefined },
   };
 }
 
@@ -307,7 +309,7 @@ export function siteFooter(locale: Locale, site: SiteInfo | undefined, pages: re
   if (site?.news === true) links.push({ href: keep('/berita'), label: opacText(locale, 'shell.menu.news') });
   if (site?.contact === true) links.push({ href: `${keep('/')}#kunjungi`, label: opacText(locale, 'shell.footer.visit') });
   for (const page of pages) links.push({ href: keep(page.href), label: page.label, lang: page.lang });
-  return { address: site?.address ?? null, hours: site?.hours ?? [], links, search: { lang } };
+  return { address: site?.address ?? null, hours: site?.hours ?? [], contentLang: site?.contentLang, links, search: { lang } };
 }
 
 /**

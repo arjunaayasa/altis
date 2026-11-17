@@ -41,7 +41,7 @@ export const SEARCH_CSS: string = [
   '.result-list .card{display:grid;grid-template-columns:2.75rem minmax(0,1fr);gap:1rem;align-items:start;padding:1rem 0;' +
     'border-bottom:1px solid var(--border)}',
   '.result-list .card-cover{width:2.75rem;border-radius:1px 3px 3px 1px}',
-  '.result-list .card-title{font-size:1.125rem;line-height:1.35}',
+  '.result-list .card-title{color:var(--accent);font-size:1.125rem;line-height:1.35}',
   '.result-list .card-meta{font-size:.875rem}',
   '.result-line{color:var(--text);font-size:.9375rem;overflow-wrap:anywhere}',
   '.call-number{font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:.02em}',

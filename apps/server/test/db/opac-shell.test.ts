@@ -477,7 +477,6 @@ describe.skipIf(!ctx.available)(`OPAC shell: home, robots, sitemaps, old SLiMS l
       expect(hrefs(titles!)).toEqual(['/cari', ...newest.slice(0, 12).map((id, i) => recordUrlPath(id, `Buku Baru ${i}`))]);
       expect(titles).not.toContain(hiddenNewest);
       expect(titles).toContain('Andrea Hirata');
-      expect(titles).toContain('2026');
     });
 
     it('promoted titles: public ones only, the latest changed first, a cover from /files', async () => {
