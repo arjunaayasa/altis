@@ -87,7 +87,10 @@ export const SHELL_CSS: string = [
     'border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:.9375rem;text-decoration:none}',
   '.site-header .akun-link{padding:0 .625rem;color:#fff;font-size:.9375rem;text-decoration:none}',
   '.site-header .akun-link:hover,.nav-catalog:hover{text-decoration:underline}',
-  '@media (min-width:52rem){.menu{display:block}.nav-catalog{display:none}}',
+  // On a tablet the menu takes a line of its own under the name, the account link and the language switch; on a wide
+  // screen it sits between them, and a long menu wraps within its own box rather than push either onto a line alone.
+  '@media (min-width:52rem){.menu{display:block;flex:1 1 100%;order:1}.nav-catalog{display:none}}',
+  '@media (min-width:64rem){.menu{flex:1 1 0%;min-width:0;order:0}.menu ul{justify-content:flex-end}}',
 
   // The search band under the header bar (the catalogue's pages): the second neutral layer, the search form.
   '.search-band{background:var(--layer);border-bottom:1px solid var(--border);color:var(--text);--focus:var(--accent)}',
