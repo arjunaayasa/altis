@@ -1,6 +1,6 @@
 import type { MarcJsonDataField, MarcJsonRecord } from '@altis/shared/api/catalog/exchange';
-import { DownloadIcon } from 'lucide-react';
-import { ProblemAlert } from '@/components/form-field';
+import { ErrorState, LoadingState, TABLE } from '@/components/layout';
+import { buttonVariants } from '@/components/ui/button';
 import { useT } from '@/i18n';
 import { useApiQuery } from '@/lib/me';
 
@@ -45,58 +45,57 @@ export function MarcTab({ recordId }: { recordId: string }) {
   const base = `/api/v1/catalog/records/${encodeURIComponent(recordId)}/marc`;
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-sm text-muted-foreground">{t('catalog.records.marc.hint')}</p>
-      <div className="flex flex-wrap gap-2">
-        <a href={`${base}?format=mrc`} download className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline">
-          <DownloadIcon className="size-4" aria-hidden="true" />
-          {t('catalog.records.marc.download_mrc')}
-        </a>
-        <a href={`${base}?format=xml`} download className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline">
-          <DownloadIcon className="size-4" aria-hidden="true" />
-          {t('catalog.records.marc.download_xml')}
-        </a>
+    <div className="grid gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-[75ch] text-sm text-muted-foreground">{t('catalog.records.marc.hint')}</p>
+        <div className="flex flex-wrap gap-2">
+          <a href={`${base}?format=mrc`} download className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            {t('catalog.records.marc.download_mrc')}
+          </a>
+          <a href={`${base}?format=xml`} download className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            {t('catalog.records.marc.download_xml')}
+          </a>
+        </div>
       </div>
       {marc.data === undefined ? (
         marc.isError ? (
-          <ProblemAlert error={marc.error} />
+          <ErrorState error={marc.error} onRetry={() => void marc.refetch()} retrying={marc.isFetching} />
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <LoadingState />
         )
       ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <table className="w-full font-mono text-xs">
+        <div className={TABLE.wrap}>
+          {/* The MARC data keeps a fixed-width face: the leader's and the indicators' positions are read by column. */}
+          <table className={TABLE.table}>
             <caption className="sr-only">{t('catalog.records.marc.caption')}</caption>
-            <thead className="bg-muted/50 text-left font-sans text-sm">
+            <thead>
               <tr>
-                <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+                <th scope="col" className={`${TABLE.th} w-px`}>
                   {t('catalog.records.marc.tag')}
                 </th>
-                <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+                <th scope="col" className={`${TABLE.th} w-px`}>
                   {t('catalog.records.marc.indicators')}
                 </th>
-                <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+                <th scope="col" className={TABLE.th}>
                   {t('catalog.records.marc.data')}
                 </th>
               </tr>
             </thead>
-            <tbody>
-              <tr className="border-t align-top">
-                <th scope="row" className="px-3 py-1.5 text-left font-medium" title={t('catalog.records.marc.leader')}>
+            <tbody className="font-mono text-xs">
+              <tr>
+                <th scope="row" className={`${TABLE.td} text-left font-semibold`} title={t('catalog.records.marc.leader')}>
                   LDR
                 </th>
-                <td className="px-3 py-1.5" />
-                <td className="px-3 py-1.5 whitespace-pre-wrap">{marc.data.leader}</td>
+                <td className={TABLE.td} />
+                <td className={`${TABLE.td} whitespace-pre-wrap`}>{marc.data.leader}</td>
               </tr>
               {rowsOf(marc.data).map((row, i) => (
-                <tr key={`${row.tag}-${i}`} className="border-t align-top">
-                  <th scope="row" className="px-3 py-1.5 text-left font-medium">
+                <tr key={`${row.tag}-${i}`}>
+                  <th scope="row" className={`${TABLE.td} text-left font-semibold`}>
                     {row.tag}
                   </th>
-                  <td className="px-3 py-1.5 whitespace-pre">{row.indicators === null ? '' : showIndicators(row.indicators)}</td>
-                  <td className="px-3 py-1.5 break-words whitespace-pre-wrap">{row.content}</td>
+                  <td className={`${TABLE.td} whitespace-pre`}>{row.indicators === null ? '' : showIndicators(row.indicators)}</td>
+                  <td className={`${TABLE.td} break-words whitespace-pre-wrap`}>{row.content}</td>
                 </tr>
               ))}
             </tbody>

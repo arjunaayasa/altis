@@ -19,14 +19,27 @@ function TabsList({ className, ...props }: ComponentProps<typeof TabsPrimitive.L
   );
 }
 
-function TabsTrigger({ className, ...props }: ComponentProps<typeof TabsPrimitive.Trigger>) {
+/**
+ * A trigger. Radix focuses a pressed trigger from script, which a browser takes for keyboard focus and outlines: a
+ * trigger pressed with the pointer is marked (`data-pointer`) until it loses the focus, and draws no outline meanwhile;
+ * the arrow keys move the focus to an unmarked trigger, which does.
+ */
+function TabsTrigger({ className, onPointerDown, onBlur, ...props }: ComponentProps<typeof TabsPrimitive.Trigger>) {
   return (
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        "-mb-px inline-flex items-center justify-center gap-1.5 border-b-2 border-transparent px-0 pt-1 text-sm font-semibold whitespace-nowrap text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 data-[state=active]:border-primary data-[state=active]:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "-mb-px inline-flex items-center justify-center gap-1.5 border-b-2 border-transparent px-0 pt-1 text-sm font-semibold whitespace-nowrap text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 data-pointer:focus-visible:outline-none data-[state=active]:border-primary data-[state=active]:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
+      onPointerDown={(event) => {
+        event.currentTarget.dataset['pointer'] = '';
+        onPointerDown?.(event);
+      }}
+      onBlur={(event) => {
+        delete event.currentTarget.dataset['pointer'];
+        onBlur?.(event);
+      }}
       {...props}
     />
   );

@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { SideSection } from '@/components/layout';
 import { CheckField, Field, Notice, ProblemAlert, RefetchProblem } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +15,7 @@ import { ApiError, api } from '@/lib/api';
 import { useDirtyGuard } from '@/lib/dirty-forms';
 import { FORM_PARSE, applyServerErrors, hasFieldErrors, problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
-import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, saveSettings, wholeNumberIn, type SaveOutcome } from './library';
+import { SettingsFooter, SettingsLoader, SettingsPage, saveSettings, wholeNumberIn, type SaveOutcome } from './library';
 
 /**
  * Pengaturan → Keamanan (spec §13.3 "kebijakan sandi, idle sesi, 2FA wajib per peran"):
@@ -77,7 +78,7 @@ function SecuritySettingsForm({ initial, canManage }: { initial: SecuritySetting
   });
 
   return (
-    <SettingsSection title={t('settings.security.policy_title')}>
+    <SideSection title={t('settings.security.policy_title')}>
       <form noValidate className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
         <Field
           label={t('settings.security.password_min_length')}
@@ -124,7 +125,7 @@ function SecuritySettingsForm({ initial, canManage }: { initial: SecuritySetting
           />
         </div>
       </form>
-    </SettingsSection>
+    </SideSection>
   );
 }
 
@@ -190,7 +191,7 @@ function RoleMfaList() {
           if (!canManage) {
             return (
               <li key={role.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2 text-sm">
-                <span className="font-medium">{name}</span>
+                <span className="font-semibold">{name}</span>
                 <span className="text-muted-foreground">
                   {t('roles.mfa_status', { value: t(role.mfaRequired ? 'form.yes' : 'form.no') })} · {holders}
                 </span>
@@ -217,11 +218,11 @@ function RoleMfaList() {
   }
 
   return (
-    <SettingsSection title={t('settings.security.mfa_title')} description={t('settings.security.mfa_description')}>
+    <SideSection title={t('settings.security.mfa_title')} intro={t('settings.security.mfa_description')}>
       {notice !== null && <Notice kind={notice.kind}>{notice.text}</Notice>}
       {canRead && <RefetchProblem query={roles} />}
       {content}
-    </SettingsSection>
+    </SideSection>
   );
 }
 

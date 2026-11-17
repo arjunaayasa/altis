@@ -16,8 +16,9 @@ import { TodayStrip, useDeskToday, useLibraryToday } from '@/screens/dashboard-t
 import { UsageBlocks } from '@/screens/dashboard-usage';
 
 /**
- * Beranda: the first screen after signing in. Its title with today's date, the desk's branch when the user serves at
- * more than one, and a welcome; then, each only for a user who may read it:
+ * Beranda: the first screen after signing in. Its title with today's date, today's opening hours (as the public home
+ * page shows them; none set: nothing), the desk's branch when the user serves at more than one, and a welcome; then,
+ * each only for a user who may read it:
  *
  * 1. the strip of today's figures (screens/dashboard-today.tsx);
  * 2. the desk's activity per hour today beside "Perlu perhatian" (dashboard-activity.tsx, dashboard-attention.tsx);
@@ -60,7 +61,10 @@ export function HomeScreen() {
 
   const deskBranch = desk.branches?.find((b) => b.id === desk.branchId);
   const today = library.data?.today ?? deskQuery.data?.on ?? browserToday();
-  const lead = [longDate(today), ...(deskBranch !== undefined && (desk.branches?.length ?? 0) > 1 ? [t('dashboard.today.branch', { name: deskBranch.name })] : [])];
+  // ---- Komunitas (staff screens' data): today's opening hours, as the public home page has them ----
+  const open = library.data?.openToday ?? null;
+  const hours = open === null ? [] : open.closed ? [t('dashboard.home.closed_today')] : open.times.length > 0 ? [t('dashboard.home.open_today', { hours: open.times.join(', ') })] : [];
+  const lead = [longDate(today), ...hours, ...(deskBranch !== undefined && (desk.branches?.length ?? 0) > 1 ? [t('dashboard.today.branch', { name: deskBranch.name })] : [])];
   const hasActivity = desk.branchId !== null;
   const hasAttention = attention.length > 0 || attentionSources.reads;
   const seesLibrary =

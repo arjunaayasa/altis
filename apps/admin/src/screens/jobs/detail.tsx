@@ -1,13 +1,13 @@
 import type { EventItem } from '@altis/shared/api/events';
 import { JOB_STATUS_VALUES, type JobStatusValue, type JobView } from '@altis/shared/api/jobs';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from '@tanstack/react-router';
-import { ArrowLeftIcon, PlayIcon, RotateCcwIcon, SquareIcon, XIcon } from 'lucide-react';
+import { useParams } from '@tanstack/react-router';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useDateTime } from '@/components/data-table';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { JOB_POLL_MS } from '@/components/job-progress';
-import { Notice, NoticeAlert, ProblemAlert } from '@/components/form-field';
+import { Notice, NoticeAlert } from '@/components/form-field';
+import { BackLink as LayoutBackLink, ErrorState, LoadingState, PageHead } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/i18n';
 import { holds, meId } from '@/lib/access';
@@ -108,20 +108,15 @@ function whenVisible(signal: AbortSignal): Promise<void> {
 
 function BackLink() {
   const t = useT();
-  return (
-    <Link to="/admin/jobs" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-      <ArrowLeftIcon className="size-4" aria-hidden="true" />
-      {t('jobs.detail.back')}
-    </Link>
-  );
+  return <LayoutBackLink to="/admin/jobs">{t('jobs.detail.back')}</LayoutBackLink>;
 }
 
-/** One row of the facts list. */
+/** One row of the facts list: the label left, the value right, a thin rule above. */
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid gap-1 sm:grid-cols-[12rem_1fr] sm:gap-4">
+    <div className="grid gap-1 border-t py-2.5 sm:grid-cols-[12rem_1fr] sm:gap-4">
       <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="text-sm break-words">{children}</dd>
+      <dd className="min-w-0 text-sm break-words">{children}</dd>
     </div>
   );
 }
@@ -261,22 +256,16 @@ function JobDetail({ id }: { id: string }) {
   // ---- render ------------------------------------------------------------------------------------------------------
   if (job === undefined) {
     return (
-      <div className="flex max-w-3xl flex-col gap-6">
+      <div className="grid max-w-5xl gap-6">
         <BackLink />
         {query.isError ? (
           query.error instanceof ApiError && query.error.code === 'NOT_FOUND' ? (
             <Notice kind="error">{t('jobs.detail.not_found')}</Notice>
           ) : (
-            <ProblemAlert error={query.error}>
-              <Button variant="outline" size="sm" className="mt-2" onClick={() => void query.refetch()}>
-                {t('table.retry')}
-              </Button>
-            </ProblemAlert>
+            <ErrorState error={query.error} onRetry={() => void query.refetch()} retrying={query.isFetching} />
           )
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <LoadingState />
         )}
       </div>
     );
@@ -289,53 +278,54 @@ function JobDetail({ id }: { id: string }) {
   const message = jobMessageText(t, job);
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
-      <BackLink />
-      <header className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold">{jobTypeLabel(t, job.type)}</h1>
-          <JobStatusBadge status={job.status} />
-        </div>
-        <p className="font-mono text-xs text-muted-foreground">{job.type}</p>
-      </header>
+    <div className="grid max-w-5xl gap-6">
+      <div className="grid gap-3">
+        <BackLink />
+        <PageHead
+          title={
+            <span className="flex flex-wrap items-center gap-3">
+              {jobTypeLabel(t, job.type)}
+              <JobStatusBadge status={job.status} />
+            </span>
+          }
+          intro={<span className="font-mono text-xs">{job.type}</span>}
+          actions={
+            offerRetry || offerCancel || offerDrive || driving ? (
+              <>
+                {offerRetry && (
+                  <Button disabled={busy} onClick={() => void retry()}>
+                    {t('jobs.retry')}
+                  </Button>
+                )}
+                {(offerDrive || driving) &&
+                  (driving ? (
+                    <Button variant="outline" onClick={stopDriving}>
+                      {t('jobs.drive.stop')}
+                    </Button>
+                  ) : (
+                    <Button variant={offerRetry ? 'outline' : 'default'} onClick={() => void drive()}>
+                      {t('jobs.drive')}
+                    </Button>
+                  ))}
+                {offerCancel && (
+                  <Button variant="outline" disabled={busy || !job.cancellable} onClick={() => setConfirmCancel(true)}>
+                    {t('jobs.cancel')}
+                  </Button>
+                )}
+              </>
+            ) : undefined
+          }
+        />
+      </div>
 
-      <section className="flex flex-col gap-2">
+      <section aria-label={t('jobs.detail.progress')} className="grid max-w-[75ch] gap-2">
         <div className="flex items-baseline justify-between gap-2 text-sm">
-          <span className="font-medium">{t('jobs.detail.progress')}</span>
+          <span className="font-semibold">{t('jobs.detail.progress')}</span>
           <span className="tabular-nums">{Math.round(job.progress)} %</span>
         </div>
         <ProgressBar value={job.progress} label={t('jobs.detail.progress')} />
         {message !== null && <p className="text-sm text-muted-foreground">{message}</p>}
       </section>
-
-      {(offerRetry || offerCancel || offerDrive || driving) && (
-        <div className="flex flex-wrap gap-2">
-          {offerRetry && (
-            <Button disabled={busy} onClick={() => void retry()}>
-              <RotateCcwIcon aria-hidden="true" />
-              {t('jobs.retry')}
-            </Button>
-          )}
-          {(offerDrive || driving) &&
-            (driving ? (
-              <Button variant="outline" onClick={stopDriving}>
-                <SquareIcon aria-hidden="true" />
-                {t('jobs.drive.stop')}
-              </Button>
-            ) : (
-              <Button onClick={() => void drive()}>
-                <PlayIcon aria-hidden="true" />
-                {t('jobs.drive')}
-              </Button>
-            ))}
-          {offerCancel && (
-            <Button variant="outline" disabled={busy || !job.cancellable} onClick={() => setConfirmCancel(true)}>
-              <XIcon aria-hidden="true" />
-              {t('jobs.cancel')}
-            </Button>
-          )}
-        </div>
-      )}
       {offerCancel && !job.cancellable && <p className="text-sm text-muted-foreground">{t('jobs.cancel.unavailable')}</p>}
       {driving ? (
         <NoticeAlert>{t('jobs.drive.running')}</NoticeAlert>
@@ -345,11 +335,11 @@ function JobDetail({ id }: { id: string }) {
       {outcome !== null &&
         (outcome.kind === 'info' ? <NoticeAlert>{outcome.text}</NoticeAlert> : <Notice kind={outcome.kind}>{outcome.text}</Notice>)}
 
-      <section aria-labelledby={factsId} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-        <h2 id={factsId} className="sr-only">
+      <section aria-labelledby={factsId} className="grid gap-1">
+        <h2 id={factsId} className="text-base font-bold">
           {t('jobs.detail.facts')}
         </h2>
-        <dl className="flex flex-col gap-3">
+        <dl className="grid">
           <Fact label={t('jobs.detail.id')}>
             <span className="font-mono text-xs">{job.id}</span>
           </Fact>
@@ -369,8 +359,8 @@ function JobDetail({ id }: { id: string }) {
           {hasPayload && (
             <Fact label={t('jobs.detail.payload')}>
               <details>
-                <summary className="cursor-pointer text-primary">{t('jobs.detail.payload_show')}</summary>
-                <pre className="mt-1 overflow-x-auto rounded bg-muted p-2 text-xs break-all whitespace-pre-wrap">
+                <summary className="cursor-pointer font-semibold text-accent-text">{t('jobs.detail.payload_show')}</summary>
+                <pre className="mt-1 overflow-x-auto rounded border bg-layer p-2 text-xs break-all whitespace-pre-wrap">
                   {JSON.stringify(job.payload, null, 2)}
                 </pre>
               </details>

@@ -4,13 +4,13 @@ import type { MemberListItem } from '@altis/shared/api/members';
 import { useQueryClient } from '@tanstack/react-query';
 import { useId, useState, type FormEvent } from 'react';
 import { Field, Notice, ProblemAlert, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
+import { Callout, InlinePanel, PageError, SelectionBar } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/lib/me';
 import { useMemberTypes, useTypeName } from '@/screens/circulation/common';
-import { Callout, InlinePanel } from '@/screens/circulation/parts';
 import { refreshMembers } from './common';
 import { addToCardQueue } from './tools';
 
@@ -142,7 +142,7 @@ export function BulkBar({ selected, onClear, canManage }: { selected: MemberList
         title={panel === 'promote' ? t('members.tools.bulk.promote') : t('members.tools.bulk.panel_title', { action: t(`members.tools.bulk.${panel}`), count })}
         onSubmit={(e) => void submit(e)}
         onCancel={() => setPanel(null)}>
-        <div className="grid max-w-3xl gap-3 sm:grid-cols-2">
+        <div className="grid max-w-3xl gap-x-5 gap-y-4 sm:grid-cols-2">
           {panel === 'extend' && (
             <>
               <Field id={`${ids}-from`} label={t('members.tools.bulk.from')}>
@@ -195,11 +195,7 @@ export function BulkBar({ selected, onClear, canManage }: { selected: MemberList
             </Field>
           )}
         </div>
-        {error !== null && (
-          <p role="alert" className="text-sm text-bad">
-            {error}
-          </p>
-        )}
+        {error !== null && <PageError title={error} />}
         <ProblemAlert error={problem} />
         {result !== null && (
           <Callout tone={result.refused.length > 0 ? 'warn' : 'ok'} role="status" title={t('members.tools.bulk.done', { done: result.done })}>
@@ -246,32 +242,24 @@ export function BulkBar({ selected, onClear, canManage }: { selected: MemberList
   }
 
   return (
-    <div className="grid gap-3">
-      <section aria-label={t('members.tools.selected', { count })} className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-lg border border-primary bg-accent-soft px-3 py-2">
-        <p className="mr-1.5 text-sm font-bold text-accent-text" role="status">
-          {t('members.tools.selected', { count })}
-        </p>
-        {canManage &&
-          ACTIONS.map((p) => (
-            <Button key={p} size="sm" variant="ghost" aria-pressed={panel === p} className="aria-pressed:bg-background aria-pressed:text-foreground" onClick={() => (panel === p ? setPanel(null) : open(p))}>
-              {t(`members.tools.bulk.${p}`)}
-            </Button>
-          ))}
-        {canManage && (
-          <Button size="sm" variant="ghost" aria-pressed={panel === 'promote'} className="aria-pressed:bg-background aria-pressed:text-foreground" onClick={() => (panel === 'promote' ? setPanel(null) : open('promote'))}>
-            {t('members.tools.bulk.promote')}
-          </Button>
-        )}
-        <Button size="sm" variant="ghost" onClick={queue}>
+    <SelectionBar
+      count={count}
+      label={t('members.tools.selected', { count })}
+      actions={canManage ? [...ACTIONS, 'promote' as const].map((p) => ({ id: p, label: t(`members.tools.bulk.${p}`) })) : []}
+      open={panel}
+      onOpenChange={(id) => (id === null ? setPanel(null) : open(id as Panel))}
+      extra={
+        <Button type="button" size="sm" variant="ghost" onClick={queue}>
           {t('members.tools.to_card_queue')}
         </Button>
-        <span className="flex-1" />
-        <Button size="sm" variant="ghost" onClick={onClear}>
-          {t('members.tools.clear_selection')}
-        </Button>
-      </section>
+      }
+      onClear={() => {
+        setPanel(null);
+        onClear();
+      }}
+      clearLabel={t('members.tools.clear_selection')}>
       {queued !== null && <Notice kind="success">{t('members.tools.added_to_queue', { count: queued })}</Notice>}
       {panelFields}
-    </div>
+    </SelectionBar>
   );
 }

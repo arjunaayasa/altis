@@ -18,6 +18,8 @@ export const DETAIL_CSS: string = [
   '.record-heading h1{margin:0;font-size:clamp(1.5rem,1.3rem + .8vw,1.75rem);line-height:1.2;overflow-wrap:anywhere}',
   '.record-subtitle{font-weight:400}',
   '.record-type{margin:0;color:var(--muted);font-size:.9375rem}',
+  // What the copies allow now, in the words of the title's card.
+  '.record-shelf{margin:.25rem 0 0;font-size:1rem}',
   '.record-responsibility{margin:0;font-size:1.0625rem}',
   '.record-agents{display:flex;flex-wrap:wrap;gap:0 1rem;margin:0;padding:0;list-style:none}',
   '.record-agents li{display:inline-flex;align-items:center;flex-wrap:wrap;min-height:2.75rem}',
@@ -48,6 +50,12 @@ export const DETAIL_CSS: string = [
 
   // The citations.
   '.citations summary{display:flex;align-items:center;min-height:2.75rem;cursor:pointer}',
+  // A summary drawn as a flex row has no marker of its own: a chevron (one 2 px line) says it opens, and turns when open.
+  '.citations summary,.shelf-map summary{list-style:none}',
+  '.citations summary::-webkit-details-marker,.shelf-map summary::-webkit-details-marker{display:none}',
+  '.citations summary::after,.shelf-map summary::after{content:"";flex:none;width:.5rem;height:.5rem;margin:0 .25rem 0 .875rem;' +
+    'border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:translateY(-.1875rem) rotate(45deg)}',
+  '.citations[open] summary::after,.shelf-map[open] summary::after{transform:translateY(.125rem) rotate(225deg)}',
   '.citations summary h2{display:inline;margin:0}',
   '.citation-list{display:grid;gap:.25rem;margin:1rem 0}',
   '.citation-list dt{color:var(--muted);font-weight:600}',

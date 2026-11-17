@@ -20,6 +20,7 @@ import type { z } from 'zod';
 import { createApp } from '../src/app.js';
 import { cspHeader } from '../src/http/csp.js';
 import type { OpsFence } from '../src/http/ops-fence.js';
+import { opacText } from '../src/opac/catalog/messages.js';
 import { renderError, renderMaintenance, renderNotFound } from '../src/opac/pages.js';
 import { OPAC_CSS_HASH } from '../src/opac/routes.js';
 import { ALL_ROUTES } from '../src/routes.js';
@@ -239,6 +240,8 @@ describe('not found', () => {
     expect(html).toContain(`<h1>${esc(t('id', 'opac.not_found.title'))}</h1>`);
     expect(html).toContain(esc(t('id', 'opac.not_found.body')));
     expect(html).toMatch(/<a [^>]*href="\/"/);
+    // The way back the text names is a link of its own under it.
+    expect(html).toContain(`<p><a href="/">${esc(opacText('id', 'shell.menu.home'))}</a></p>`);
     expect(html).toContain('<meta name="robots" content="noindex"');
     expect(res.headers.get('cache-control')).toBe('no-store');
   });

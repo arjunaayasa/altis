@@ -1,10 +1,9 @@
 import type { BackupItem, BackupUploadResponse } from '@altis/shared/api/backups';
-import { UploadIcon, XIcon } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Notice, NoticeAlert } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FileInput } from '@/components/file-input';
 import { useLocale, useT } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
@@ -169,18 +168,20 @@ export function UploadPanel({ onUploaded }: { onUploaded(item: BackupItem): void
   const pct = progress === null || progress.total === 0 ? 0 : (progress.done / progress.total) * 100;
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <h2 id={titleId} className="text-base font-semibold">
+    <section aria-labelledby={titleId} className="grid min-w-0 content-start gap-3">
+      <h2 id={titleId} className="text-base font-bold">
         {t('backups.upload.title')}
       </h2>
       <p className="text-sm text-muted-foreground">{t('backups.upload.description')}</p>
-      <form noValidate className="flex flex-col gap-3" onSubmit={start}>
-        <div className="grid gap-2">
-          <Label htmlFor={fileId}>{t('backups.upload.file')}</Label>
-          <Input
+      <form noValidate className="grid gap-3" onSubmit={start}>
+        <div className="grid gap-1.5">
+          <Label htmlFor={fileId} className="text-meta">
+            {t('backups.upload.file')}
+          </Label>
+          <FileInput
             id={fileId}
             ref={input}
-            type="file"
+            chosen={file?.name ?? null}
             accept=".altisbak,application/octet-stream"
             disabled={busy}
             onChange={(e) => {
@@ -190,22 +191,20 @@ export function UploadPanel({ onUploaded }: { onUploaded(item: BackupItem): void
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={busy}>
-            <UploadIcon aria-hidden="true" />
+          <Button type="submit" variant="outline" disabled={busy}>
             {t('backups.upload.submit')}
           </Button>
           {busy && (
             <Button type="button" variant="outline" onClick={() => run.current?.abort()}>
-              <XIcon aria-hidden="true" />
               {t('backups.upload.cancel')}
             </Button>
           )}
         </div>
       </form>
       {progress !== null && (
-        <div className="flex flex-col gap-1">
+        <div className="grid gap-1">
           <div className="flex items-baseline justify-between gap-2 text-sm">
-            <span className="font-medium">{t(progress.kind === 'hashing' ? 'backups.upload.hashing' : 'backups.upload.sending')}</span>
+            <span className="font-semibold">{t(progress.kind === 'hashing' ? 'backups.upload.hashing' : 'backups.upload.sending')}</span>
             <span className="tabular-nums">{Math.round(pct)} %</span>
           </div>
           <ProgressBar value={pct} label={t(progress.kind === 'hashing' ? 'backups.upload.hashing' : 'backups.upload.sending')} />

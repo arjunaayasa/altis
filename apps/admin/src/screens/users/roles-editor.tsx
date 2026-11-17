@@ -2,9 +2,9 @@ import type { BranchListResponse } from '@altis/shared/api/branches';
 import type { PermissionListResponse, RoleItem, RoleListResponse } from '@altis/shared/api/roles';
 import type { RoleAssignment, UserDetail } from '@altis/shared/api/users';
 import { useQueryClient } from '@tanstack/react-query';
-import { PlusIcon, XIcon } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { Badge, Notice, SELECT_CLASS } from '@/components/form-field';
+import { SectionHead } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useT } from '@/i18n';
@@ -123,11 +123,9 @@ export function RolesEditor({ user, canManage, isSelf }: { user: UserDetail; can
   };
 
   return (
-    <section aria-labelledby={ids.heading} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <div className="flex flex-col gap-1">
-        <h2 id={ids.heading} className="text-lg font-semibold">
-          {t('users.roles.title')}
-        </h2>
+    <section aria-labelledby={ids.heading} className="grid gap-3 border-t pt-5">
+      <div className="grid max-w-[75ch] gap-1">
+        <SectionHead id={ids.heading} title={t('users.roles.title')} />
         <p className="text-sm text-muted-foreground">{t('users.roles.description')}</p>
         {isSelf && canManage && <p className="text-sm">{t('users.roles.self')}</p>}
       </div>
@@ -135,7 +133,7 @@ export function RolesEditor({ user, canManage, isSelf }: { user: UserDetail; can
       {list.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('users.roles.none')}</p>
       ) : (
-        <ul className="flex flex-col divide-y rounded-md border">
+        <ul className="grid divide-y rounded-lg border">
           {list.map((a) => {
             const name = nameOf(a);
             const where = scopeText(a.branchId);
@@ -143,22 +141,21 @@ export function RolesEditor({ user, canManage, isSelf }: { user: UserDetail; can
             const verdict = role === undefined ? 'not_held' : assignable(me, role);
             return (
               <li key={pairOf(a)} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
-                <span className="min-w-0 font-medium [overflow-wrap:anywhere]">{name}</span>
+                <span className="min-w-0 font-semibold [overflow-wrap:anywhere]">{name}</span>
                 {/* A branch name can be long ("… (diarsipkan)" too): it wraps inside the badge on a 375 px phone. */}
-                <Badge tone={a.branchId === null ? 'info' : 'neutral'} className="min-w-0 whitespace-normal [overflow-wrap:anywhere]">
+                <Badge tone="neutral" className="min-w-0 whitespace-normal [overflow-wrap:anywhere]">
                   {where}
                 </Badge>
                 {editable &&
                   (verdict === 'ok' ? (
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
                       className="ml-auto"
                       aria-label={t('users.roles.remove', { role: name, scope: where })}
-                      title={t('users.roles.remove', { role: name, scope: where })}
                       onClick={() => setList(list.filter((x) => x !== a))}
                     >
-                      <XIcon aria-hidden="true" />
+                      {t('users.roles.remove_short')}
                     </Button>
                   ) : (
                     <span className="ml-auto text-xs text-muted-foreground">
@@ -172,10 +169,10 @@ export function RolesEditor({ user, canManage, isSelf }: { user: UserDetail; can
       )}
 
       {editable && (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="grid min-w-48 flex-1 gap-2">
-              <Label htmlFor={ids.role}>{t('users.roles.role')}</Label>
+        <div className="grid gap-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="grid min-w-48 flex-1 gap-1.5">
+              <Label htmlFor={ids.role} className="text-meta">{t('users.roles.role')}</Label>
               <select id={ids.role} className={SELECT_CLASS} value={roleId} onChange={(e) => chooseRole(e.target.value)}>
                 <option value="">{t('users.roles.choose')}</option>
                 {offered.map((r) => (
@@ -185,8 +182,8 @@ export function RolesEditor({ user, canManage, isSelf }: { user: UserDetail; can
                 ))}
               </select>
             </div>
-            <div className="grid min-w-48 flex-1 gap-2">
-              <Label htmlFor={ids.scope}>{t('users.roles.scope')}</Label>
+            <div className="grid min-w-48 flex-1 gap-1.5">
+              <Label htmlFor={ids.scope} className="text-meta">{t('users.roles.scope')}</Label>
               <select
                 id={ids.scope}
                 className={SELECT_CLASS}
@@ -203,7 +200,6 @@ export function RolesEditor({ user, canManage, isSelf }: { user: UserDetail; can
               </select>
             </div>
             <Button type="button" variant="outline" disabled={selected === undefined} onClick={add}>
-              <PlusIcon aria-hidden="true" />
               {t('users.roles.add')}
             </Button>
           </div>

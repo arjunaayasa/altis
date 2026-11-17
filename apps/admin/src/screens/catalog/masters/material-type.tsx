@@ -12,10 +12,10 @@ import {
 } from '@altis/shared/api/catalog/masters';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
-import { ArrowLeftIcon } from 'lucide-react';
 import { useState, type BaseSyntheticEvent } from 'react';
 import { useForm, useWatch, type UseFormReturn } from 'react-hook-form';
 import { Field, Notice, ProblemAlert, RootError, SELECT_CLASS } from '@/components/form-field';
+import { BackLink, Callout, FORM_FULL, FormBar, FormSection, LoadingState, PageError, PageHead } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT } from '@/i18n';
@@ -262,7 +262,7 @@ function MaterialTypeForm({
 
   const register = form.register;
   return (
-    <form noValidate className="flex flex-col gap-6" onSubmit={(e) => void submit(e)}>
+    <form noValidate className="grid gap-3" onSubmit={(e) => void submit(e)}>
       {problem !== null && (
         <ProblemAlert error={problem}>
           {problem instanceof ApiError && problem.code === 'CONFLICT_STALE' && (
@@ -274,71 +274,58 @@ function MaterialTypeForm({
       )}
       <RootError message={errors.root?.['server']?.message} />
 
-      <section className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2">
-        <h2 className="text-base font-semibold sm:col-span-2">{t('catalog.masters.mt.section.identity')}</h2>
-        <Field label={t('catalog.masters.field.code')} hint={t('catalog.masters.field.code_hint')} error={errors.code}>
-          {(c) => <Input {...c} autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={32} disabled={disabled} {...register('code')} />}
-        </Field>
-        <Field label={t('catalog.masters.field.sort_order')} hint={t('catalog.masters.field.sort_order_hint')} error={errors.sortOrder}>
-          {(c) => <Input {...c} type="number" inputMode="numeric" min={0} step={1} disabled={disabled} {...register('sortOrder')} />}
-        </Field>
-        <Field label={t('catalog.masters.field.name_id')} error={errors.nameId}>
-          {(c) => <Input {...c} autoComplete="off" maxLength={191} disabled={disabled} {...register('nameId')} />}
-        </Field>
-        <Field label={t('catalog.masters.field.name_en')} error={errors.nameEn}>
-          {(c) => <Input {...c} autoComplete="off" maxLength={191} disabled={disabled} {...register('nameEn')} />}
-        </Field>
-      </section>
+      <div>
+        <FormSection title={t('catalog.masters.mt.section.identity')} disabled={disabled}>
+          <Field label={t('catalog.masters.field.code')} hint={t('catalog.masters.field.code_hint')} error={errors.code}>
+            {(c) => <Input {...c} autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={32} disabled={disabled} {...register('code')} />}
+          </Field>
+          <Field label={t('catalog.masters.field.sort_order')} hint={t('catalog.masters.field.sort_order_hint')} error={errors.sortOrder}>
+            {(c) => <Input {...c} type="number" inputMode="numeric" min={0} step={1} disabled={disabled} {...register('sortOrder')} />}
+          </Field>
+          <Field label={t('catalog.masters.field.name_id')} error={errors.nameId}>
+            {(c) => <Input {...c} autoComplete="off" maxLength={191} disabled={disabled} {...register('nameId')} />}
+          </Field>
+          <Field label={t('catalog.masters.field.name_en')} error={errors.nameEn}>
+            {(c) => <Input {...c} autoComplete="off" maxLength={191} disabled={disabled} {...register('nameEn')} />}
+          </Field>
+        </FormSection>
 
-      <section className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2">
-        <h2 className="text-base font-semibold sm:col-span-2">{t('catalog.masters.mt.section.description')}</h2>
-        <CodeSelect form={form} name="marcType" label={t('catalog.masters.mt.marc_type')} options={MARC_TYPES} disabled={disabled} />
-        <CodeSelect form={form} name="marcLevel" label={t('catalog.masters.mt.marc_level')} options={MARC_LEVELS} disabled={disabled} />
-        {(['contentType', 'mediaType', 'carrierType'] as const).map((name) => (
-          <CodeSelect
-            key={name}
-            form={form}
-            name={name}
-            label={t(name === 'contentType' ? 'catalog.masters.mt.content_type' : name === 'mediaType' ? 'catalog.masters.mt.media_type' : 'catalog.masters.mt.carrier_type')}
-            hint={name === 'contentType' ? t('catalog.masters.mt.rda_hint') : undefined}
-            options={RDA_OPTIONS[name]}
-            disabled={disabled}
-          />
-        ))}
-        <span aria-hidden="true" className="hidden sm:block" />
-        <CodeSelect form={form} name="schemaType" label={t('catalog.masters.mt.schema_type')} hint={t('catalog.masters.mt.types_hint')} options={SCHEMA_TYPES} disabled={disabled} />
-        <CodeSelect form={form} name="dcmiType" label={t('catalog.masters.mt.dcmi_type')} options={DCMI_TYPES} disabled={disabled} />
-      </section>
+        <FormSection title={t('catalog.masters.mt.section.description')} disabled={disabled}>
+          <CodeSelect form={form} name="marcType" label={t('catalog.masters.mt.marc_type')} options={MARC_TYPES} disabled={disabled} />
+          <CodeSelect form={form} name="marcLevel" label={t('catalog.masters.mt.marc_level')} options={MARC_LEVELS} disabled={disabled} />
+          {(['contentType', 'mediaType', 'carrierType'] as const).map((name) => (
+            <CodeSelect
+              key={name}
+              form={form}
+              name={name}
+              label={t(name === 'contentType' ? 'catalog.masters.mt.content_type' : name === 'mediaType' ? 'catalog.masters.mt.media_type' : 'catalog.masters.mt.carrier_type')}
+              hint={name === 'contentType' ? t('catalog.masters.mt.rda_hint') : undefined}
+              options={RDA_OPTIONS[name]}
+              disabled={disabled}
+            />
+          ))}
+          <CodeSelect form={form} name="schemaType" label={t('catalog.masters.mt.schema_type')} hint={t('catalog.masters.mt.types_hint')} options={SCHEMA_TYPES} disabled={disabled} />
+          <CodeSelect form={form} name="dcmiType" label={t('catalog.masters.mt.dcmi_type')} options={DCMI_TYPES} disabled={disabled} />
+        </FormSection>
 
-      <section className="grid gap-4 rounded-lg border bg-card p-4">
-        <div className="grid gap-1">
-          <h2 className="text-base font-semibold">{t('catalog.masters.mt.section.template')}</h2>
-          <p className="text-sm text-muted-foreground">{t('catalog.masters.mt.template_hint')}</p>
-        </div>
-        <TemplateEditor form={form} disabled={disabled} languages={lists.languages} collectionTypes={lists.collectionTypes} customFields={lists.customFields} />
-      </section>
+        <FormSection title={t('catalog.masters.mt.section.template')} intro={t('catalog.masters.mt.template_hint')} className="md:grid-cols-1 lg:grid-cols-1">
+          <div className={FORM_FULL}>
+            <TemplateEditor form={form} disabled={disabled} languages={lists.languages} collectionTypes={lists.collectionTypes} customFields={lists.customFields} />
+          </div>
+        </FormSection>
 
-      {canManage && (
-        <div className="flex gap-2">
-          <Button type="submit" disabled={isSubmitting}>
-            {t(isSubmitting ? 'form.saving' : 'form.save')}
-          </Button>
-          <Button asChild variant="outline">
-            <Link to="/admin/catalog/masters">{t('form.cancel')}</Link>
-          </Button>
-        </div>
-      )}
+        {canManage && (
+          <FormBar>
+            <Button type="submit" disabled={isSubmitting}>
+              {t(isSubmitting ? 'form.saving' : 'form.save')}
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/admin/catalog/masters">{t('form.cancel')}</Link>
+            </Button>
+          </FormBar>
+        )}
+      </div>
     </form>
-  );
-}
-
-function BackLink() {
-  const t = useT();
-  return (
-    <Link to="/admin/catalog/masters" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-      <ArrowLeftIcon className="size-4" aria-hidden="true" />
-      {t('catalog.masters.mt.back')}
-    </Link>
   );
 }
 
@@ -366,13 +353,8 @@ function useLists(): { lists: Lists | null; error: unknown } {
 }
 
 function Loading({ error }: { error: unknown }) {
-  const t = useT();
   if (error !== null && error !== undefined) return <ProblemAlert error={error} />;
-  return (
-    <p role="status" className="text-sm text-muted-foreground">
-      {t('shell.loading')}
-    </p>
-  );
+  return <LoadingState />;
 }
 
 /** `/admin/catalog/masters/material-types/new`. */
@@ -382,14 +364,14 @@ export function MaterialTypeCreateScreen() {
   const canManage = holds(me, 'catalog.masters.manage');
   const { lists, error } = useLists();
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
-      <BackLink />
+    <div className="grid max-w-5xl gap-6">
+      <BackLink to="/admin/catalog/masters">{t('catalog.masters.mt.back')}</BackLink>
       {/* The page shows once its lists came: the heading and the form together. */}
       {lists === null ? (
         <Loading error={error} />
       ) : (
         <>
-          <h1 className="text-2xl font-semibold">{t('catalog.masters.mt.new_title')}</h1>
+          <PageHead title={t('catalog.masters.mt.new_title')} />
           {/* The server would refuse (and record the refusal): say so before anything is typed. */}
           {!canManage && <ProblemAlert error={new ApiError(403, 'AUTHZ_DENIED')} />}
           <MaterialTypeForm row={null} canManage={canManage} lists={lists} onSaved={() => undefined} onStale={async () => undefined} />
@@ -424,20 +406,19 @@ export function MaterialTypeEditScreen() {
   };
 
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
-      <BackLink />
+    <div className="grid max-w-5xl gap-6">
+      <BackLink to="/admin/catalog/masters">{t('catalog.masters.mt.back')}</BackLink>
       {types.data === undefined || (row !== undefined && lists === null) ? (
         <Loading error={types.data === undefined ? (types.isError ? types.error : null) : error} />
       ) : row === undefined || lists === null ? (
-        <Notice kind="error">{t('catalog.masters.mt.not_found')}</Notice>
+        <PageError title={t('catalog.masters.mt.not_found')} />
       ) : (
         <>
-          <h1 className="text-2xl font-semibold">{locale === 'en' ? row.nameEn : row.nameId}</h1>
+          <PageHead title={locale === 'en' ? row.nameEn : row.nameId} intro={t('catalog.masters.mt.usage', { count: count(row.usage) })} />
           {(saved !== null || created) && <Notice kind="success">{t('catalog.masters.done.saved.material_types', { code: saved ?? row.code })}</Notice>}
           {types.isRefetchError && <ProblemAlert error={types.error} />}
-          {row.archived && <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{t('catalog.masters.mt.archived_notice')}</p>}
-          {!canManage && <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{t('catalog.masters.mt.read_only')}</p>}
-          <p className="text-sm text-muted-foreground">{t('catalog.masters.mt.usage', { count: count(row.usage) })}</p>
+          {row.archived && <Callout title={t('catalog.masters.mt.archived_notice')} />}
+          {!canManage && <Callout title={t('catalog.masters.mt.read_only')} />}
           <MaterialTypeForm key={`${row.id}:${formKey}`} row={row} canManage={canManage} lists={lists} onSaved={setSaved} onStale={reload} />
         </>
       )}

@@ -1,12 +1,14 @@
 import { SlimsDbSource, type SlimsTestResponse } from '@altis/shared/api/catalog/migration';
-import { PlugIcon } from 'lucide-react';
 import { useId, useRef, useState, type ReactNode } from 'react';
 import { CheckField, Field, Notice } from '@/components/form-field';
+import { TABLE } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { FileInput } from '@/components/file-input';
 import { useLocale, useT, type TKey } from '@/i18n';
 import { api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
+import { cn } from '@/lib/utils';
 import { useBytes } from '@/screens/backups/upload';
 
 /**
@@ -120,7 +122,7 @@ function FileField({
     <Field label={label} {...(hint === undefined ? {} : { hint })} error={error}>
       {(c) => (
         <div className="grid gap-1">
-          <Input {...c} type="file" accept={accept} onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
+          <FileInput {...c} accept={accept} onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
           {file !== null && <p className="text-xs text-muted-foreground">{t('catalog.migration.file.chosen', { name: file.name, size: bytes(file.size) })}</p>}
         </div>
       )}
@@ -155,28 +157,28 @@ function TestAnswer({ answer }: { answer: SlimsTestResponse }) {
     <div className="flex flex-col gap-2">
       {head}
       {tables.length > 0 && (
-        <div className="overflow-x-auto rounded-md border">
-          <table aria-labelledby={tablesId} className="w-full text-sm">
-            <caption id={tablesId} className="px-3 py-2 text-left font-medium">
+        <div className={TABLE.wrap}>
+          <table aria-labelledby={tablesId} className={TABLE.table}>
+            <caption id={tablesId} className="px-3 py-2 text-left text-sm font-bold">
               {t('catalog.migration.db.tables')}
             </caption>
-            <thead className="bg-muted/50 text-left">
+            <thead>
               <tr>
-                <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+                <th scope="col" className={TABLE.th}>
                   {t('catalog.migration.db.col_table')}
                 </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium text-muted-foreground">
+                <th scope="col" className={cn(TABLE.th, 'text-right')}>
                   {t('catalog.migration.db.col_rows')}
                 </th>
               </tr>
             </thead>
             <tbody>
               {tables.map((x) => (
-                <tr key={x.name} className="border-t">
-                  <th scope="row" className="px-3 py-1 text-left font-mono text-xs font-normal">
+                <tr key={x.name}>
+                  <th scope="row" className={cn(TABLE.td, 'py-1.5 text-left font-normal')}>
                     {x.name}
                   </th>
-                  <td className="px-3 py-1 text-right tabular-nums">{x.rows < 0 ? t('catalog.migration.db.rows_unknown') : number.format(x.rows)}</td>
+                  <td className={cn(TABLE.td, 'py-1.5 text-right')}>{x.rows < 0 ? t('catalog.migration.db.rows_unknown') : number.format(x.rows)}</td>
                 </tr>
               ))}
             </tbody>
@@ -252,7 +254,6 @@ function DbFields({ db, errors, onChange }: { db: DbDraft; errors: DbErrors; onC
       <CheckField label={t('catalog.migration.db.tls')} checked={db.tls} onChange={(e) => set({ tls: e.target.checked })} />
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" disabled={test.kind === 'testing'} onClick={() => void runTest()}>
-          <PlugIcon aria-hidden="true" />
           {t('catalog.migration.db.test')}
         </Button>
         {test.kind === 'testing' && (
@@ -308,19 +309,16 @@ export function SourceStep({
   };
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-4 rounded-lg border bg-card p-4">
-      <div className="flex flex-col gap-1">
-        <p className="text-xs text-muted-foreground">{t('catalog.migration.step', { n: 1 })}</p>
-        <h2 id={titleId} className="text-base font-semibold">
-          {t('catalog.migration.source.title')}
-        </h2>
-      </div>
+    <section aria-labelledby={titleId} className="grid max-w-4xl gap-4">
+      <h2 id={titleId} className="text-base font-bold">
+        {t('catalog.migration.source.title')}
+      </h2>
       <fieldset className="grid gap-3">
-        <legend className="mb-1 text-sm font-medium">{t('catalog.migration.source.kind')}</legend>
+        <legend className="mb-1 text-sm font-bold">{t('catalog.migration.source.kind')}</legend>
         {choice('db', 'catalog.migration.source.kind_db', 'catalog.migration.source.kind_db_hint')}
         {choice('dump', 'catalog.migration.source.kind_dump', 'catalog.migration.source.kind_dump_hint')}
         {errors.kind !== undefined && (
-          <p id={kindError} className="text-sm text-destructive">
+          <p id={kindError} className="text-meta font-semibold text-bad">
             {t(errors.kind)}
           </p>
         )}
@@ -344,7 +342,7 @@ export function SourceStep({
           onPick={(files) => onChange({ ...value, files })}
         />
       )}
-      <div className="flex gap-2">
+      <div className="flex gap-2 border-t pt-4">
         <Button type="button" onClick={onNext}>
           {t('catalog.migration.next')}
         </Button>

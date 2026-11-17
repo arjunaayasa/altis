@@ -178,7 +178,9 @@ describe('stocktake', () => {
     expect(await within(recent).findByText('dibatalkan')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Selesaikan sesi' }));
-    const dialog = await screen.findByRole('dialog');
+    // The finish opens as a panel under the page head (not a dialog).
+    const dialog = await screen.findByRole('form', { name: 'Selesaikan sesi inventarisasi' });
+    expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.change(within(dialog).getByLabelText(/^Ketik nama sesi/), { target: { value: 'Inventarisasi' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Selesaikan' }));
     expect(await within(dialog).findByText('Nama sesi tidak sama.')).toBeTruthy();
@@ -186,6 +188,22 @@ describe('stocktake', () => {
     fireEvent.change(within(dialog).getByLabelText(/^Ketik nama sesi/), { target: { value: 'Inventarisasi 2026' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Selesaikan' }));
     await waitFor(() => expect(finish).toEqual({ confirmName: 'Inventarisasi 2026', markMissing: true, restoreFound: true }));
+  });
+
+  it('says the share found with the decimal mark of the language', async () => {
+    startApp({
+      me: adminMe(),
+      path: `/admin/layanan/inventarisasi/${BRANCH}/${ID}`,
+      routes: {
+        'GET branches': () => ({ items: [BRANCH_VIEW] }),
+        'GET branches/:branchId/stocktakes/:id': () => session({ counts: { ...COUNTS, total: 12, found: 1, pending: 10 } }),
+        'GET branches/:branchId/stocktakes/:id/items': empty,
+        'GET branches/:branchId/stocktakes/:id/unknown-codes': empty,
+        'GET branches/:branchId/stocktakes/:id/officers': () => ({ items: [] }),
+        'GET catalog/locations': () => ({ items: [] }),
+      },
+    });
+    expect(await screen.findByText('8,3% eksemplar cakupan sudah ditemukan.')).toBeTruthy();
   });
 
   it('shows the polled counts again after my scan', async () => {

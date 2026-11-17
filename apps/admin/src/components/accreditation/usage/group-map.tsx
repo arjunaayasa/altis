@@ -118,7 +118,7 @@ export function GroupMap({ editable, unknownDefault, periodId, title, intro }: G
   return (
     <section aria-labelledby={titleId} className="grid gap-3">
       <div className="grid gap-1">
-        <h3 id={titleId} className="text-base font-semibold">
+        <h3 id={titleId} className="text-base font-bold">
           {title ?? t('accreditation.usage.groups.title')}
         </h3>
         <p className="text-sm text-muted-foreground">{intro ?? t('accreditation.usage.groups.intro')}</p>
@@ -137,12 +137,12 @@ export function GroupMap({ editable, unknownDefault, periodId, title, intro }: G
           {types.length === 0 && <p className="text-sm text-muted-foreground">{t('accreditation.usage.groups.empty')}</p>}
           <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-left">
+              <thead className="bg-layer text-left">
                 <tr>
-                  <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+                  <th scope="col" className="px-3 py-2 font-semibold text-muted-foreground">
                     {t('accreditation.usage.groups.col_type')}
                   </th>
-                  <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+                  <th scope="col" className="px-3 py-2 font-semibold text-muted-foreground">
                     {t('accreditation.usage.groups.col_group')}
                   </th>
                 </tr>

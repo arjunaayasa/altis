@@ -141,7 +141,18 @@ const HOME: OpacHomeContent = {
 
 describe('the site menu and the footer', () => {
   it('siteInfo: each of Profil, Layanan and Kontak only with its home block switched on and with content', () => {
-    expect(siteInfo(OPAC_HOME_DEFAULT, null, false)).toEqual({ address: null, hours: [], brand: null, profile: false, services: false, contact: false, news: false });
+    expect(siteInfo(OPAC_HOME_DEFAULT, null, false)).toEqual({
+      address: null,
+      hours: [],
+      brand: null,
+      profile: false,
+      services: false,
+      contact: false,
+      news: false,
+      logo: null,
+      phone: null,
+      email: null,
+    });
     expect(siteInfo(HOME, 'Jl. Kenari 12', true)).toEqual({
       address: 'Jl. Kenari 12',
       hours: [
@@ -153,6 +164,9 @@ describe('the site menu and the footer', () => {
       services: true,
       contact: true,
       news: true,
+      logo: null,
+      phone: null,
+      email: null,
     });
     const off = siteInfo({ ...HOME, blocks: { ...HOME.blocks, about: false, services: false, visit: false } }, '  ', false);
     expect(off).toMatchObject({ address: null, hours: [], profile: false, services: false, contact: false });
@@ -196,6 +210,8 @@ describe('the site menu and the footer', () => {
     expect(footer).toContain(`<h2>${esc(opacText('id', 'shell.footer.search'))}</h2><form class="search-box" role="search" method="get" action="/cari">`);
     expect(footer).toContain('id="cari-kaki"');
     expect(footer).toContain(`<span>${esc(opacText('id', 'shell.footer.powered'))}</span>`);
+    // Four blocks: the wide grid's four columns.
+    expect(footer).toContain('<div class="foot-grid">');
   });
 
   it('a footer block without content is left out, never filled with a placeholder', () => {
@@ -205,6 +221,10 @@ describe('the site menu and the footer', () => {
     expect([...footer.matchAll(/<h2[^>]*>([^<]*)<\/h2>/g)].map((m) => m[1])).toEqual([esc(opacText('id', 'shell.footer.links')), esc(opacText('id', 'shell.footer.search'))]);
     const links = /<ul class="foot-links">([\s\S]*?)<\/ul>/.exec(footer)![1]!;
     expect([...links.matchAll(/href="([^"]*)"/g)].map((m) => m[1])).toEqual(['/cari']);
+    // The blocks left share the wide row: no empty column, the search field not squeezed beside one.
+    expect(footer).toContain('<div class="foot-grid foot-grid-2">');
+    const hoursOnly = footerOf(frameWith(siteFooter('id', siteInfo(HOME, null, false), [], null)));
+    expect(hoursOnly).toContain('<div class="foot-grid foot-grid-3">');
     // A page without the catalogue's frame (the 1b pages): the bottom line only.
     const bare = footerOf({ homeHref: '/', langHrefs: { id: '?lang=id', en: '?lang=en' }, nav: [], search: null });
     expect(bare).not.toContain('foot-grid');

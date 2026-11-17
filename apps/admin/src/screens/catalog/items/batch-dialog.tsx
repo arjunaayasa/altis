@@ -1,11 +1,10 @@
 import { ITEM_STATUSES, type ItemStatus } from '@altis/shared';
 import { ITEM_BATCH_MAX, ItemBatchBody, type ItemBatchResponse } from '@altis/shared/api/catalog/items';
 import { issueCode } from '@altis/shared/api/common';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Field, Notice, SELECT_CLASS } from '@/components/form-field';
-import { useReturnFocus } from '@/components/return-focus';
+import { InlinePanel } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useT, type TKey } from '@/i18n';
 import { api, type FieldError } from '@/lib/api';
@@ -46,6 +45,8 @@ import {
  * - The request carries an `Idempotency-Key`: sent again after a lost answer, the same batch is not made twice.
  * - Field errors land on their fields (`template.<field>` on the template's, `template.custom.<code>` on its custom
  *   field): an exhausted pattern on the pattern.
+ * - It opens as an inline panel under its button (Esc or "Batal" closes it). It renders no `<form>`: the items tab may
+ *   sit inside a host's form.
  */
 
 type BatchField = 'branch' | 'patternId' | 'count' | 'collectionTypeId' | 'status' | 'locationId';
@@ -72,17 +73,12 @@ export function BatchDialog({
   onClose(): void;
 }) {
   const t = useT();
-  const focus = useReturnFocus();
+  if (!open) return null;
   return (
-    <Dialog open={open} onOpenChange={(next) => (next ? undefined : onClose())}>
-      <DialogContent closeLabel={t('catalog.items.batch.close')} onOpenAutoFocus={focus.onOpenAutoFocus} onCloseAutoFocus={focus.onCloseAutoFocus}>
-        <DialogHeader>
-          <DialogTitle>{t('catalog.items.batch.title')}</DialogTitle>
-          <DialogDescription>{t('catalog.items.batch.description', { max: ITEM_BATCH_MAX })}</DialogDescription>
-        </DialogHeader>
-        {open && <BatchBody recordId={recordId} preferredType={defaultCollectionTypeId} onCreated={onCreated} onClose={onClose} />}
-      </DialogContent>
-    </Dialog>
+    <InlinePanel title={t('catalog.items.batch.title')} onCancel={onClose}>
+      <p className="max-w-[75ch] text-sm text-muted-foreground">{t('catalog.items.batch.description', { max: ITEM_BATCH_MAX })}</p>
+      <BatchBody recordId={recordId} preferredType={defaultCollectionTypeId} onCreated={onCreated} onClose={onClose} />
+    </InlinePanel>
   );
 }
 
@@ -110,6 +106,11 @@ function BatchBody({ recordId, preferredType, onCreated, onClose }: { recordId: 
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ItemBatchResponse | null>(null);
+  const done = useRef<HTMLButtonElement>(null);
+  // Once made, the form's buttons are gone: the focus goes to "Selesai".
+  useEffect(() => {
+    if (result !== null) done.current?.focus();
+  }, [result]);
 
   // What the selects show: the choice made, else the first branch, the first pattern and the default type.
   const branch = managed.some((b) => b.id === chosenBranch) ? chosenBranch : (managed[0]?.id ?? '');
@@ -179,45 +180,56 @@ function BatchBody({ recordId, preferredType, onCreated, onClose }: { recordId: 
 
   if (result !== null) {
     return (
-      <div className="flex flex-col gap-3">
-        <section className="flex flex-col gap-1">
+      <div className="grid gap-3">
+        <section className="grid gap-1">
           <h3 id={ids.created} className="text-sm font-semibold">
             {t('catalog.items.batch.created', { count: result.created.length })}
           </h3>
-          <ul aria-labelledby={ids.created} className="flex max-h-48 flex-wrap gap-x-4 gap-y-1 overflow-y-auto font-mono text-sm">
+          <ul aria-labelledby={ids.created} className="flex max-h-48 flex-wrap gap-x-4 gap-y-1 overflow-y-auto text-sm">
             {result.created.map((c) => (
               <li key={c.id}>{c.barcode}</li>
             ))}
           </ul>
         </section>
         {result.skipped.length > 0 && (
-          <section className="flex flex-col gap-1">
+          <section className="grid gap-1">
             <h3 id={ids.skipped} className="text-sm font-semibold">
               {t('catalog.items.batch.skipped', { count: result.skipped.length })}
             </h3>
             <p className="text-xs text-muted-foreground">{t('catalog.items.batch.skipped_hint')}</p>
-            <ul aria-labelledby={ids.skipped} className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-sm">
+            <ul aria-labelledby={ids.skipped} className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
               {result.skipped.map((s) => (
                 <li key={s.barcode}>{s.barcode}</li>
               ))}
             </ul>
           </section>
         )}
-        <DialogFooter>
-          <Button type="button" onClick={onClose}>
+        <div className="flex flex-wrap gap-2">
+          <Button ref={done} type="button" size="sm" onClick={onClose}>
             {t('catalog.items.batch.done')}
           </Button>
-        </DialogFooter>
+        </div>
       </div>
     );
   }
 
-  if (config.data !== undefined && patterns.length === 0) return <Notice kind="error">{t('catalog.items.batch.no_patterns')}</Notice>;
+  if (config.data !== undefined && patterns.length === 0) {
+    return (
+      <>
+        <Notice kind="error">{t('catalog.items.batch.no_patterns')}</Notice>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={onClose}>
+            {t('catalog.items.batch.close')}
+          </Button>
+        </div>
+      </>
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="grid gap-4">
       {problem !== null && <Notice kind="error">{problem}</Notice>}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
         <Field id={ids.branch} label={t('catalog.items.filter.branch')} hint={t('catalog.items.quick.branch_hint')} error={errorOf('branch')}>
           {(c) => (
             <select
@@ -296,14 +308,14 @@ function BatchBody({ recordId, preferredType, onCreated, onClose }: { recordId: 
           setCustomErrors((old) => withoutCustomError(old, code));
         }}
       />
-      <DialogFooter>
-        <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
-          {t('form.cancel')}
-        </Button>
-        <Button type="button" disabled={busy} onClick={() => void create()}>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" disabled={busy} onClick={() => void create()}>
           {t(busy ? 'catalog.items.batch.creating' : 'catalog.items.batch.create')}
         </Button>
-      </DialogFooter>
+        <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onClose}>
+          {t('form.cancel')}
+        </Button>
+      </div>
     </div>
   );
 }

@@ -1,11 +1,12 @@
 import type { CirculationSettingsBody, CirculationSettingsView } from '@altis/shared/api/settings';
 import { useQueryClient } from '@tanstack/react-query';
 import { useId, useState, type FormEvent } from 'react';
+import { SideSection } from '@/components/layout';
 import { Field, SELECT_CLASS } from '@/components/form-field';
 import { Input } from '@/components/ui/input';
 import { useT, type TKey } from '@/i18n';
 import { useDirtyGuard } from '@/lib/dirty-forms';
-import { SettingsFooter, SettingsSection, saveSettings, type SaveOutcome } from './library';
+import { SettingsFooter, saveSettings, type SaveOutcome } from './library';
 
 /**
  * Two more forms of Pengaturan › Sirkulasi, both in the group `circulation`:
@@ -108,7 +109,7 @@ export function FinesSettingsForm({ initial, canManage }: { initial: Circulation
   };
 
   return (
-    <SettingsSection title={t('charges.settings.title')} description={t('charges.settings.intro')}>
+    <SideSection title={t('charges.settings.title')} intro={t('charges.settings.intro')}>
       <form noValidate className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => void submit(e)}>
         <fieldset disabled={!canManage} className="contents">
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
@@ -136,7 +137,7 @@ export function FinesSettingsForm({ initial, canManage }: { initial: Circulation
           <SettingsFooter canManage={canManage} busy={busy} outcome={outcome} problem={problem} rootError={undefined} />
         </div>
       </form>
-    </SettingsSection>
+    </SideSection>
   );
 }
 
@@ -193,7 +194,7 @@ export function HoldsSettingsForm({ initial, canManage }: { initial: Circulation
   };
 
   return (
-    <SettingsSection title={t('charges.settings.holds_title')} description={t('charges.settings.holds_intro')}>
+    <SideSection title={t('charges.settings.holds_title')} intro={t('charges.settings.holds_intro')}>
       <form noValidate className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => void submit(e)}>
         <fieldset disabled={!canManage} className="contents">
           {flag('enabled', 'charges.settings.holds_enabled')}
@@ -207,6 +208,6 @@ export function HoldsSettingsForm({ initial, canManage }: { initial: Circulation
           <SettingsFooter canManage={canManage} busy={busy} outcome={outcome} problem={problem} rootError={undefined} />
         </div>
       </form>
-    </SettingsSection>
+    </SideSection>
   );
 }

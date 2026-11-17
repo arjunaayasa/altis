@@ -1,4 +1,15 @@
-import { keptItems, locationPaths, openLoanDueDates, type LocationPath } from '@altis/core';
+import {
+  addShelfCopy,
+  copyShelfState,
+  emptyShelfCounts,
+  keptItems,
+  locationPaths,
+  openLoanDueDates,
+  shelfStatusOf,
+  type CopyShelfState,
+  type LocationPath,
+  type ShelfStatus,
+} from '@altis/core';
 import type { DbHandle } from '@altis/db';
 import { t, type ItemStatus, type Locale } from '@altis/shared';
 import type { RecordData } from '@altis/shared/api/catalog/record-data';
@@ -12,7 +23,10 @@ import { formatDate } from './views/page.js';
 //
 // An item with an open loan keeps its status `available` in the catalogue; this table shows it as on loan, with its due
 // date, and does not count it as available. A copy kept on a hold shelf is shown "Di rak tunggu" and is not counted
-// either. The borrower, and the member a copy is kept for, are never named.
+// either; nor is a copy for use in the library only (`not_for_loan`, or `available` in a collection type that is not
+// lent), shown "Hanya baca di tempat". Each copy's state is core copyShelfState, the one the cards count in SQL, so
+// the page's line under the title and the summary say what the title's card says. The borrower, and the member a copy
+// is kept for, are never named.
 //
 // The items come from a public load (`loadRecordData` with `publicOnly`): no `withdrawn`, `lost` or archived item ever
 // reaches this file. A location is shown only when every level of its chain is public and live (`isPublic`); otherwise
@@ -39,6 +53,9 @@ export interface AvailabilityRow {
   dueOn: string | null;
   /** The copy is kept on a hold shelf for a member. */
   onHold: boolean;
+  // ---- Komunitas (OPAC look) ----
+  /** What the copy allows now (core copyShelfState). */
+  state: CopyShelfState;
 }
 
 /** A shelf map to draw. */
@@ -53,8 +70,12 @@ export interface Availability {
   rows: AvailabilityRow[];
   /** Every item of the public load (the rows may be fewer). */
   total: number;
+  /** The copies that can be taken home from the shelf now (the card's "Tersedia"). */
   available: number;
   maps: AvailabilityMap[];
+  // ---- Komunitas (OPAC look) ----
+  /** What the title's card says (null without copies). */
+  status: ShelfStatus | null;
 }
 
 /** The parts of a location's path, the most specific first (shelf, area, room). */
@@ -82,6 +103,11 @@ export async function loadAvailability(db: Db, d: RecordData, o: { showShelfMap:
     return p !== undefined && p.isPublic ? p : null;
   };
 
+  const stateOf = (i: RecordData['items'][number]): CopyShelfState =>
+    copyShelfState({ status: i.status, collectionLoanable: i.loanable, onLoan: onLoan.has(i.id), kept: kept.has(i.id) });
+  let counts = emptyShelfCounts();
+  for (const i of d.items) counts = addShelfCopy(counts, stateOf(i), onLoan.get(i.id) ?? null);
+
   const rows = shown.map((i): AvailabilityRow => {
     const p = publicPath(i.locationId);
     const parts = p === null ? [] : placeParts(p);
@@ -97,6 +123,7 @@ export async function loadAvailability(db: Db, d: RecordData, o: { showShelfMap:
       status: i.status,
       dueOn: onLoan.get(i.id) ?? null,
       onHold: kept.has(i.id),
+      state: stateOf(i),
     };
   });
 
@@ -125,7 +152,7 @@ export async function loadAvailability(db: Db, d: RecordData, o: { showShelfMap:
     }
   }
 
-  return { rows, total: d.items.length, available: d.items.filter((i) => i.status === 'available' && !onLoan.has(i.id) && !kept.has(i.id)).length, maps };
+  return { rows, total: d.items.length, available: counts.shelf, maps, status: shelfStatusOf(counts) };
 }
 
 /** The colour of a status label (with its text, never the colour alone). */
@@ -147,6 +174,12 @@ function statusClass(status: ItemStatus): string {
 export function AvailabilitySection(props: { availability: Availability; locale: Locale }) {
   const { availability: a, locale } = props;
   const none = '—';
+  const col = {
+    branch: opacText(locale, 'detail.col.branch'),
+    location: opacText(locale, 'detail.col.location'),
+    callNumber: t(locale, 'vocab.field.call_number'),
+    barcode: opacText(locale, 'detail.col.barcode'),
+  };
   return (
     <section class="record-section" aria-labelledby="ketersediaan">
       <h2 id="ketersediaan">{opacText(locale, 'detail.availability')}</h2>
@@ -159,30 +192,32 @@ export function AvailabilitySection(props: { availability: Availability; locale:
             <table class="availability">
               <thead>
                 <tr>
-                  <th scope="col">{opacText(locale, 'detail.col.branch')}</th>
-                  <th scope="col">{opacText(locale, 'detail.col.location')}</th>
-                  <th scope="col">{t(locale, 'vocab.field.call_number')}</th>
-                  <th scope="col">{opacText(locale, 'detail.col.barcode')}</th>
+                  <th scope="col">{col.branch}</th>
+                  <th scope="col">{col.location}</th>
+                  <th scope="col">{col.callNumber}</th>
+                  <th scope="col">{col.barcode}</th>
                   <th scope="col">{opacText(locale, 'detail.col.status')}</th>
                 </tr>
               </thead>
               <tbody>
                 {a.rows.map((r) => (
                   <tr>
-                    <td>{r.branch}</td>
-                    <td>
+                    <td data-label={col.branch}>{r.branch}</td>
+                    <td data-label={col.location}>
                       {r.place ?? none}
                       {r.hint === null ? null : <span class="shelf-hint">{r.hint}</span>}
                     </td>
-                    <td>{r.callNumber ?? none}</td>
-                    <td>{r.barcode}</td>
-                    <td>
-                      {r.dueOn === null && r.onHold ? (
-                        <span class="status status-warn">{opacText(locale, 'detail.on_hold')}</span>
-                      ) : r.dueOn === null ? (
-                        <span class={statusClass(r.status)}>{t(locale, `vocab.item_status.${r.status}`)}</span>
-                      ) : (
+                    <td data-label={col.callNumber}>{r.callNumber ?? none}</td>
+                    <td data-label={col.barcode}>{r.barcode}</td>
+                    <td class="availability-status">
+                      {r.state === 'loan' && r.dueOn !== null ? (
                         <span class="status status-warn">{opacText(locale, 'detail.on_loan', { date: formatDate(locale, Date.parse(`${r.dueOn}T00:00:00Z`), 'UTC') })}</span>
+                      ) : r.state === 'held' ? (
+                        <span class="status status-warn">{opacText(locale, 'detail.on_hold')}</span>
+                      ) : r.state === 'library' ? (
+                        <span class="status status-muted">{opacText(locale, 'search.card.library_use')}</span>
+                      ) : (
+                        <span class={statusClass(r.status)}>{t(locale, `vocab.item_status.${r.status}`)}</span>
                       )}
                     </td>
                   </tr>

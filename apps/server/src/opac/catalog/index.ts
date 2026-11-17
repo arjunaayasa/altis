@@ -1,4 +1,5 @@
 import type { RouteDecl } from '../../http/route.js';
+import { OPAC_ADVANCED_ROUTES } from './advanced-routes.js';
 import { OPAC_DETAIL_ROUTES } from './detail-routes.js';
 import { OAI_ROUTES } from './oai-routes.js';
 import { OPAC_PAGES_ROUTES } from './pages-routes.js';
@@ -15,6 +16,8 @@ export const OPAC_CATALOG_ROUTES: RouteDecl[] = [
   ...OPAC_PAGES_ROUTES,
   ...OPAC_SHELL_ROUTES,
   ...OPAC_SEARCH_ROUTES,
+  // ---- Komunitas (OPAC look) ----
+  ...OPAC_ADVANCED_ROUTES,
   ...OPAC_DETAIL_ROUTES,
   ...OAI_ROUTES,
 ];

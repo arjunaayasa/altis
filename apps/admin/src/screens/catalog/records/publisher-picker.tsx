@@ -1,5 +1,4 @@
 import type { PublisherListResponse } from '@altis/shared/api/catalog/authorities';
-import { XIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useController, type UseFormReturn } from 'react-hook-form';
 import { Badge } from '@/components/form-field';
@@ -41,16 +40,18 @@ export function PublisherPicker({ form, required }: { form: UseFormReturn<Record
 
   return (
     <div className="grid content-start gap-2">
-      <Label id={labelId}>{label}</Label>
+      <Label id={labelId} className="text-meta leading-snug">
+        {label}
+      </Label>
       {chosen === null ? (
         <p className="text-sm text-muted-foreground">{t('catalog.records.publisher.none')}</p>
       ) : (
         <p className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="font-medium">{chosen.name}</span>
+          <span className="font-semibold">{chosen.name}</span>
           {chosen.place !== '' && <span className="text-muted-foreground">{chosen.place}</span>}
-          {chosen.id === null && <Badge tone="info">{t('catalog.records.new_badge')}</Badge>}
-          <Button type="button" variant="ghost" size="icon" className="size-8" aria-label={t('catalog.records.publisher.clear')} onClick={() => field.onChange(null)}>
-            <XIcon aria-hidden="true" />
+          {chosen.id === null && <Badge>{t('catalog.records.new_badge')}</Badge>}
+          <Button type="button" variant="ghost" size="sm" aria-label={t('catalog.records.publisher.clear')} onClick={() => field.onChange(null)}>
+            {t('catalog.records.row.remove')}
           </Button>
         </p>
       )}

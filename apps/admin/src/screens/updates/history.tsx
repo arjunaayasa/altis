@@ -3,12 +3,11 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
 import { useMemo, type ReactNode } from 'react';
 import { DataTable, useDateTime } from '@/components/data-table';
-import { Badge, ProblemAlert } from '@/components/form-field';
+import { ErrorState, SideSection, SkeletonTable, Tag, type TagTone } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT, type Translate } from '@/i18n';
 import { api } from '@/lib/api';
 import { useMe } from '@/lib/me';
-import { SettingsSection } from '@/screens/settings/library';
 
 /**
  * "Riwayat" of Pembaruan (spec §13.3, §9.6 step 7 "catat di `releases_log`"; 1d Task 30): `GET updates/history`, the
@@ -21,14 +20,14 @@ import { SettingsSection } from '@/screens/settings/library';
 export const UPDATES_HISTORY_KEY = ['updates-history'] as const;
 
 /** The `releases_log` statuses (ReleaseLogView.status), each with its badge tone. */
-const STATUS_TONE: Readonly<Record<string, 'neutral' | 'info' | 'warning' | 'danger'>> = Object.freeze({
-  running: 'info',
-  done: 'neutral',
-  aborted: 'warning',
-  rolled_back: 'warning',
-  restored: 'warning',
-  restore_failed: 'danger',
-  failed: 'danger',
+const STATUS_TONE: Readonly<Record<string, TagTone>> = Object.freeze({
+  running: 'neutral',
+  done: 'ok',
+  aborted: 'warn',
+  rolled_back: 'warn',
+  restored: 'warn',
+  restore_failed: 'bad',
+  failed: 'bad',
 });
 
 const ACTIONS: ReadonlySet<string> = new Set(['update', 'rollback']);
@@ -94,7 +93,7 @@ export function UpdateHistory() {
           header: t('updates.history.status'),
           cell: (info) => {
             const status = info.getValue();
-            return <Badge tone={own(STATUS_TONE, status) ? STATUS_TONE[status] : 'neutral'}>{statusText(t, status)}</Badge>;
+            return <Tag tone={own(STATUS_TONE, status) ? STATUS_TONE[status] : 'neutral'}>{statusText(t, status)}</Tag>;
           },
         }),
         column.accessor('finishedAt', {
@@ -132,22 +131,16 @@ export function UpdateHistory() {
   let content: ReactNode;
   if (history.data === undefined) {
     content = history.isError ? (
-      <ProblemAlert error={history.error}>
-        <Button variant="outline" size="sm" className="mt-2" onClick={() => void history.refetch()}>
-          {t('table.retry')}
-        </Button>
-      </ProblemAlert>
+      <ErrorState error={history.error} onRetry={() => void history.refetch()} retrying={history.isFetching} />
     ) : (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('shell.loading')}
-      </p>
+      <SkeletonTable label={t('shell.loading')} columns={6} rows={3} />
     );
   } else {
     content = <DataTable table={table} caption={t('updates.history.caption')} empty={t('updates.history.empty')} />;
   }
 
   return (
-    <SettingsSection title={t('updates.history.title')}>
+    <SideSection title={t('updates.history.title')}>
       {content}
       {history.hasNextPage && (
         <div>
@@ -156,6 +149,6 @@ export function UpdateHistory() {
           </Button>
         </div>
       )}
-    </SettingsSection>
+    </SideSection>
   );
 }

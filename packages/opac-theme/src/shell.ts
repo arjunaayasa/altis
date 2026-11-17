@@ -87,7 +87,10 @@ export const SHELL_CSS: string = [
     'border-radius:var(--radius-sm);color:#fff;font-weight:600;font-size:.9375rem;text-decoration:none}',
   '.site-header .akun-link{padding:0 .625rem;color:#fff;font-size:.9375rem;text-decoration:none}',
   '.site-header .akun-link:hover,.nav-catalog:hover{text-decoration:underline}',
-  '@media (min-width:52rem){.menu{display:block}.nav-catalog{display:none}}',
+  // On a tablet the menu takes a line of its own under the name, the account link and the language switch; on a wide
+  // screen it sits between them, and a long menu wraps within its own box rather than push either onto a line alone.
+  '@media (min-width:52rem){.menu{display:block;flex:1 1 100%;order:1}.nav-catalog{display:none}}',
+  '@media (min-width:64rem){.menu{flex:1 1 0%;min-width:0;order:0}.menu ul{justify-content:flex-end}}',
 
   // The search band under the header bar (the catalogue's pages): the second neutral layer, the search form.
   '.search-band{background:var(--layer);border-bottom:1px solid var(--border);color:var(--text);--focus:var(--accent)}',
@@ -102,6 +105,10 @@ export const SHELL_CSS: string = [
   // The field choice takes a row of its own on a phone, so that the text and its button share the next one.
   '.search-box select{flex:1 1 100%;max-width:100%}',
   '@media (min-width:30rem){.search-box select{flex:0 1 auto}.search-box input[type=search]{flex-basis:12rem}}',
+  // ---- Komunitas (OPAC look) ----
+  // In the search band on a phone the text has a row of its own, so that its example is read whole; the button below.
+  '.search-band .search-row input[type=search]{flex-basis:100%}',
+  '@media (min-width:30rem){.search-band .search-row input[type=search]{flex-basis:12rem}}',
   '.search-box input::placeholder{color:var(--faint);opacity:1}',
   '.search-box button{min-height:2.875rem;padding:0 1.375rem;border:0;border-radius:var(--radius-sm);background:var(--accent);' +
     'color:var(--accent-ink);font:inherit;font-weight:700;cursor:pointer}',
@@ -194,6 +201,19 @@ export const SHELL_CSS: string = [
     'font-size:.75rem;font-weight:600;text-align:left;white-space:nowrap}',
   '.availability td{padding:.625rem .75rem;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}',
   '.availability tbody tr:last-child td{border-bottom:0}',
+  // On a phone each copy is a card: its status first, then each other cell under its column's name (`data-label`), so
+  // the status never hides past the right edge; the header row stays for screen readers only.
+  '@media (max-width:39.99rem){' +
+    '.availability thead{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);' +
+    'white-space:nowrap;border:0}' +
+    '.availability,.availability tbody,.availability td{display:block;width:100%}' +
+    '.availability tr{display:flex;flex-direction:column;padding:.625rem .75rem;border-bottom:1px solid var(--border)}' +
+    '.availability tbody tr:last-child{border-bottom:0}' +
+    '.availability td,.availability tbody tr:last-child td{padding:.125rem 0;border:0;overflow-wrap:anywhere}' +
+    '.availability .availability-status{order:-1;padding-bottom:.375rem}' +
+    '.availability td[data-label]::before{content:attr(data-label);display:inline-block;min-width:7.5rem;margin:0 .5rem 0 0;' +
+    'color:var(--muted);font-size:.875rem;font-weight:600}' +
+    '}',
   '.status{display:inline;font-weight:600}',
   '.status-ok{color:var(--ok)}',
   '.status-warn{color:var(--warn)}',
@@ -231,6 +251,16 @@ export const SHELL_CSS: string = [
   '.foot-grid+.foot-bottom{position:relative;margin-top:2rem}',
   '.foot-grid+.foot-bottom::before{content:"";position:absolute;top:0;left:var(--gutter);right:var(--gutter);border-top:1px solid rgb(255 255 255/.12)}',
   '.foot-bottom p{display:flex;flex-wrap:wrap;align-items:center;gap:0 1rem;margin:0}',
+  // ---- Komunitas (OPAC look): the library's logo beside its name, the published contact as links ----
+  // The logo is a JPEG on a white tile (the setting's), 40 px high; its width follows it, up to four times its height.
+  // With a logo the name wraps rather than push the menu and the language switch onto a line of their own.
+  '.brand-with-logo{gap:.75rem;max-width:22rem}',
+  '.brand-logo{display:block;flex:none;height:2.5rem;width:auto;max-width:10rem;border-radius:var(--radius-sm);background:#fff}',
+  '.brand-name{min-width:0}',
+  '.foot-logo{display:block;height:2.5rem;width:auto;max-width:10rem;margin:0 0 .75rem;border-radius:var(--radius-sm);background:#fff}',
+  '.foot-contact{display:grid;margin:.5rem 0 0;line-height:1.75}',
+  '.site-footer .foot-contact a{display:inline;min-height:0;text-decoration:underline;text-underline-offset:.2em;overflow-wrap:anywhere}',
   '@media (min-width:40rem){.foot-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}',
-  '@media (min-width:60rem){.foot-grid{grid-template-columns:1.2fr 1fr 1fr 1.3fr}}',
+  '@media (min-width:60rem){.foot-grid{grid-template-columns:1.2fr 1fr 1fr 1.3fr}.foot-grid-3{grid-template-columns:1fr 1fr 1.3fr}' +
+    '.foot-grid-2{grid-template-columns:1fr 1.3fr}}',
 ].join('\n');

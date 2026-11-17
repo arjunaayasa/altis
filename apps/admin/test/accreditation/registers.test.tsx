@@ -17,8 +17,8 @@ import { json, problem, type SignedIn } from '../fake-api';
 import { instrumentsAnswer, readerMe, renderWithServer, type RouteHandler } from './register-harness';
 
 // The Register tab of the accreditation workspace: the five registers of the library (activities, staff with their
-// trainings, partnerships, budgets, documents) as sub-tabs, each a list with create and edit in a dialog and archive
-// after a confirmation; a row's dialog also holds its attachments (evidence files linked to the row). Budgets are typed
+// trainings, partnerships, budgets, documents) as sub-tabs, each a list with create and edit in a panel above the
+// table (opened from "Tambah …" or the row's ⋯ menu) and archive after a confirmation; a row's panel also holds its attachments (evidence files linked to the row). Budgets are typed
 // in major units and sent in minor units (two decimals) with their currency; documents of a kind with aspects show one
 // checkbox per aspect. A reader sees everything and changes nothing.
 
@@ -228,9 +228,18 @@ async function openTab(name: string, caption: string): Promise<HTMLElement> {
   return screen.findByRole('table', { name: caption });
 }
 
+/** Chooses `action` in the ⋯ menu of the row named `name` of `table`. */
+async function rowAction(table: HTMLElement, name: string, action: string): Promise<void> {
+  fireEvent.keyDown(within(table).getByRole('button', { name: `Tindakan untuk ${name}` }), { key: 'Enter' });
+  fireEvent.click(await screen.findByRole('menuitem', { name: action }));
+}
+
+/** The open row panel, if any. */
+const rowPanel = (): HTMLElement | null => screen.queryByRole('region', { name: /^(Tambah|Ubah) / });
+
 /** Archives the row named `name` of `table` through its confirmation. */
 async function archive(table: HTMLElement, name: string): Promise<void> {
-  fireEvent.click(within(table).getByRole('button', { name: `Arsipkan ${name}` }));
+  await rowAction(table, name, `Arsipkan ${name}`);
   const confirm = await screen.findByRole('alertdialog', { name: `Arsipkan ${name}?` });
   fireEvent.click(within(confirm).getByRole('button', { name: 'Arsipkan' }));
 }
@@ -255,11 +264,14 @@ describe('the Register tab', () => {
     expect(row.textContent).toContain('120');
   });
 
-  it('activities: creates one with both flags, keeps its dialog open for the attachments, and archives it after a confirmation', async () => {
+  it('activities: creates one with both flags, keeps its panel open for the attachments, and archives it after a confirmation', async () => {
     const { sent, requests } = start();
     await screen.findByRole('table', { name: 'Daftar kegiatan' });
     fireEvent.click(screen.getByRole('button', { name: 'Tambah kegiatan' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah kegiatan' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah kegiatan' });
+    // The register's intro stands above the panel, once: the panel does not say it again.
+    expect(screen.getAllByText(/^Kegiatan perpustakaan: promosi, bimbingan/)).toHaveLength(1);
+    expect(within(dialog).queryByText(/^Kegiatan perpustakaan: promosi, bimbingan/)).toBeNull();
     fireEvent.change(within(dialog).getByLabelText('Jenis kegiatan'), { target: { value: 'reading_guidance' } });
     fireEvent.change(within(dialog).getByLabelText('Judul'), { target: { value: 'Bimbingan membaca kelas 7' } });
     fireEvent.change(within(dialog).getByLabelText('Tanggal pelaksanaan'), { target: { value: '2026-08-12' } });
@@ -280,14 +292,14 @@ describe('the Register tab', () => {
       externalSpeaker: true,
       description: null,
     });
-    const edit = await screen.findByRole('dialog', { name: 'Ubah kegiatan' });
+    const edit = await screen.findByRole('region', { name: 'Ubah kegiatan' });
     expect(await within(edit).findByRole('heading', { name: 'Lampiran bukti' })).toBeTruthy();
     await waitFor(() =>
       expect(requests.some((r) => r.path === 'accreditation/evidence' && r.query.get('entity') === 'library_activities' && r.query.get('entityId') === NEW(1))).toBe(true),
     );
     expect(within(edit).getByRole('button', { name: 'Tambah lampiran' })).toBeTruthy();
     fireEvent.click(within(edit).getByRole('button', { name: 'Batal' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(rowPanel()).toBeNull());
 
     const table = screen.getByRole('table', { name: 'Daftar kegiatan' });
     const row = within(table).getByText('Bimbingan membaca kelas 7').closest('tr')!;
@@ -303,8 +315,8 @@ describe('the Register tab', () => {
   it('activities: an edit sends only what changed, with the row version', async () => {
     const { sent } = start();
     const table = await screen.findByRole('table', { name: 'Daftar kegiatan' });
-    fireEvent.click(within(table).getByRole('button', { name: 'Ubah Pameran buku baru' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah kegiatan' });
+    await rowAction(table, 'Pameran buku baru', 'Ubah Pameran buku baru');
+    const dialog = await screen.findByRole('region', { name: 'Ubah kegiatan' });
     expect((within(dialog).getByLabelText('Judul') as HTMLInputElement).value).toBe('Pameran buku baru');
     fireEvent.change(within(dialog).getByLabelText('Jumlah peserta'), { target: { value: '150' } });
     fireEvent.click(within(dialog).getByLabelText('Narasumber dari luar'));
@@ -312,10 +324,10 @@ describe('the Register tab', () => {
     await waitFor(() => expect(sent('PATCH', `accreditation/activities/${ACT}`)).toHaveLength(1));
     expect(sent('PATCH', `accreditation/activities/${ACT}`)[0]!.body).toEqual({ version: 2, participants: 150, externalSpeaker: true });
     expect(await screen.findByText('Pameran buku baru disimpan.')).toBeTruthy();
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(rowPanel()).toBeNull());
   });
 
-  it("activities: an edit over another librarian's save, read while the dialog was open, is refused as stale instead of undoing it", async () => {
+  it("activities: an edit over another librarian's save, read while the panel was open, is refused as stale instead of undoing it", async () => {
     // The server keeps the row and refuses a write that names an older version, as the real one does.
     let row: ActivityView = { ...ACTIVITY, partner: 'Dinas Perpustakaan' };
     const { sent, queryClient } = renderWithServer(<RegistersTab periodId={PERIOD} />, {
@@ -332,8 +344,8 @@ describe('the Register tab', () => {
       },
     });
     const table = await screen.findByRole('table', { name: 'Daftar kegiatan' });
-    fireEvent.click(within(table).getByRole('button', { name: 'Ubah Pameran buku baru' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah kegiatan' });
+    await rowAction(table, 'Pameran buku baru', 'Ubah Pameran buku baru');
+    const dialog = await screen.findByRole('region', { name: 'Ubah kegiatan' });
     expect((within(dialog).getByLabelText('Mitra') as HTMLInputElement).value).toBe('Dinas Perpustakaan');
 
     // Meanwhile another librarian changes the partner, and this page reads the list again (back from another window).
@@ -355,9 +367,9 @@ describe('the Register tab', () => {
 
     // Opened again, the row shows what is stored now, and the edit goes through without undoing the other one.
     fireEvent.click(within(dialog).getByRole('button', { name: 'Batal' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    fireEvent.click(within(table).getByRole('button', { name: 'Ubah Pameran buku baru' }));
-    const again = await screen.findByRole('dialog', { name: 'Ubah kegiatan' });
+    await waitFor(() => expect(rowPanel()).toBeNull());
+    await rowAction(table, 'Pameran buku baru', 'Ubah Pameran buku baru');
+    const again = await screen.findByRole('region', { name: 'Ubah kegiatan' });
     expect((within(again).getByLabelText('Mitra') as HTMLInputElement).value).toBe('Perpustakaan Nasional');
     fireEvent.change(within(again).getByLabelText('Jumlah peserta'), { target: { value: '150' } });
     fireEvent.click(within(again).getByRole('button', { name: 'Simpan' }));
@@ -374,7 +386,7 @@ describe('the Register tab', () => {
     expect(row.textContent).toContain('Diklat pengelolaan perpustakaan sekolah');
 
     fireEvent.click(screen.getByRole('button', { name: 'Tambah tenaga' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah tenaga' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah tenaga' });
     fireEvent.change(within(dialog).getByLabelText('Nama'), { target: { value: 'Budi Santoso' } });
     fireEvent.change(within(dialog).getByLabelText('Peran'), { target: { value: 'librarian' } });
     fireEvent.click(within(dialog).getByLabelText('Pustakawan fungsional'));
@@ -396,21 +408,21 @@ describe('the Register tab', () => {
       startsOn: '2025-07-14',
       endsOn: null,
     });
-    const edit = await screen.findByRole('dialog', { name: 'Ubah tenaga' });
+    const edit = await screen.findByRole('region', { name: 'Ubah tenaga' });
     expect(within(edit).getByRole('heading', { name: 'Pelatihan dan pengembangan keprofesian (PKB)' })).toBeTruthy();
     fireEvent.click(within(edit).getByRole('button', { name: 'Batal' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(rowPanel()).toBeNull());
 
     await archive(screen.getByRole('table', { name: 'Daftar tenaga perpustakaan' }), 'Siti Rahmawati');
     await waitFor(() => expect(sent('DELETE', `accreditation/staff/${STAFF_ID}`)).toHaveLength(1));
     await waitFor(() => expect(within(screen.getByRole('table', { name: 'Daftar tenaga perpustakaan' })).queryByText('Siti Rahmawati')).toBeNull());
   });
 
-  it('staff: adds a training to a person and archives one, inside the person’s dialog', async () => {
+  it('staff: adds a training to a person and archives one, inside the person’s panel', async () => {
     const { sent } = start();
     const table = await openTab('Tenaga & PKB', 'Daftar tenaga perpustakaan');
-    fireEvent.click(within(table).getByRole('button', { name: 'Ubah Siti Rahmawati' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah tenaga' });
+    await rowAction(table, 'Siti Rahmawati', 'Ubah Siti Rahmawati');
+    const dialog = await screen.findByRole('region', { name: 'Ubah tenaga' });
     const trainings = within(dialog).getByRole('table', { name: 'Pelatihan Siti Rahmawati' });
     expect(within(trainings).getByText('Diklat pengelolaan perpustakaan sekolah').closest('tr')!.textContent).toContain('40');
 
@@ -447,7 +459,7 @@ describe('the Register tab', () => {
     expect(within(row).getByRole('link', { name: 'mou-dinas.pdf' }).getAttribute('href')).toBe(`/files/${FILE_MOU}`);
 
     fireEvent.click(screen.getByRole('button', { name: 'Tambah kerja sama' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah kerja sama' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah kerja sama' });
     fireEvent.change(within(dialog).getByLabelText('Mitra'), { target: { value: 'Puskesmas Kecamatan' } });
     fireEvent.change(within(dialog).getByLabelText('Bentuk kerja sama'), { target: { value: 'pks' } });
     fireEvent.change(within(dialog).getByLabelText('Berlaku mulai'), { target: { value: '2026-01-05' } });
@@ -465,9 +477,9 @@ describe('the Register tab', () => {
       scope: null,
       documentUploadId: UPLOAD,
     });
-    const edit = await screen.findByRole('dialog', { name: 'Ubah kerja sama' });
+    const edit = await screen.findByRole('region', { name: 'Ubah kerja sama' });
     fireEvent.click(within(edit).getByRole('button', { name: 'Batal' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(rowPanel()).toBeNull());
 
     await archive(screen.getByRole('table', { name: 'Daftar kerja sama' }), 'Dinas Perpustakaan Kabupaten');
     await waitFor(() => expect(sent('DELETE', `accreditation/partnerships/${PARTNER}`)).toHaveLength(1));
@@ -481,7 +493,7 @@ describe('the Register tab', () => {
     expect(row.textContent).toMatch(/Rp\s240\.000\.000/);
 
     fireEvent.click(screen.getByRole('button', { name: 'Tambah anggaran' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah anggaran' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah anggaran' });
     expect((within(dialog).getByLabelText('Mata uang') as HTMLInputElement).value).toBe('IDR');
     fireEvent.change(within(dialog).getByLabelText('Tahun anggaran'), { target: { value: '2026' } });
     fireEvent.change(within(dialog).getByLabelText('Anggaran perpustakaan'), { target: { value: 'Rp 6.500.000' } });
@@ -497,10 +509,10 @@ describe('the Register tab', () => {
       currency: 'IDR',
       note: null,
     });
-    const edit = await screen.findByRole('dialog', { name: 'Ubah anggaran' });
+    const edit = await screen.findByRole('region', { name: 'Ubah anggaran' });
     expect((within(edit).getByLabelText('Anggaran perpustakaan') as HTMLInputElement).value).toBe('6.500.000');
     fireEvent.click(within(edit).getByRole('button', { name: 'Batal' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(rowPanel()).toBeNull());
 
     await archive(screen.getByRole('table', { name: 'Daftar anggaran' }), 'Anggaran 2025');
     await waitFor(() => expect(sent('DELETE', `accreditation/budgets/${BUDGET}`)).toHaveLength(1));
@@ -510,7 +522,7 @@ describe('the Register tab', () => {
     const { sent } = start({ budgetTaken: true });
     await openTab('Anggaran', 'Daftar anggaran');
     fireEvent.click(screen.getByRole('button', { name: 'Tambah anggaran' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah anggaran' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah anggaran' });
     fireEvent.change(within(dialog).getByLabelText('Tahun anggaran'), { target: { value: '2025' } });
     fireEvent.change(within(dialog).getByLabelText('Anggaran perpustakaan'), { target: { value: 'enam juta' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan' }));
@@ -531,7 +543,7 @@ describe('the Register tab', () => {
     expect(row.textContent).toContain('3 dari 8 aspek');
 
     fireEvent.click(screen.getByRole('button', { name: 'Tambah dokumen' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah dokumen' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah dokumen' });
     fireEvent.change(within(dialog).getByLabelText('Jenis dokumen'), { target: { value: 'rules' } });
     expect(within(dialog).queryByRole('group', { name: 'Aspek yang dicakup' })).toBeNull();
     expect(within(dialog).queryAllByRole('checkbox')).toHaveLength(0);
@@ -553,9 +565,9 @@ describe('the Register tab', () => {
       aspectCodes: ['a1', 'a2', 'a5'],
       validUntil: null,
     });
-    const edit = await screen.findByRole('dialog', { name: 'Ubah dokumen' });
+    const edit = await screen.findByRole('region', { name: 'Ubah dokumen' });
     fireEvent.click(within(edit).getByRole('button', { name: 'Batal' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(rowPanel()).toBeNull());
 
     await archive(screen.getByRole('table', { name: 'Daftar dokumen' }), 'Kebijakan pengembangan koleksi 2025');
     await waitFor(() => expect(sent('DELETE', `accreditation/documents/${DOC}`)).toHaveLength(1));
@@ -564,8 +576,8 @@ describe('the Register tab', () => {
   it('documents: a kind change drops the aspects the new kind does not have', async () => {
     const { sent } = start();
     const table = await openTab('Dokumen', 'Daftar dokumen');
-    fireEvent.click(within(table).getByRole('button', { name: 'Ubah Kebijakan pengembangan koleksi 2025' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah dokumen' });
+    await rowAction(table, 'Kebijakan pengembangan koleksi 2025', 'Ubah Kebijakan pengembangan koleksi 2025');
+    const dialog = await screen.findByRole('region', { name: 'Ubah dokumen' });
     const aspects = within(dialog).getByRole('group', { name: 'Aspek yang dicakup' });
     expect(within(aspects).getAllByRole('checkbox').filter((c) => (c as HTMLInputElement).checked)).toHaveLength(3);
     fireEvent.change(within(dialog).getByLabelText('Jenis dokumen'), { target: { value: 'head_performance_report' } });
@@ -574,8 +586,8 @@ describe('the Register tab', () => {
     await waitFor(() => expect(sent('PATCH', `accreditation/documents/${DOC}`)).toHaveLength(1));
     expect(sent('PATCH', `accreditation/documents/${DOC}`)[0]!.body).toEqual({ version: 1, kind: 'head_performance_report' });
 
-    fireEvent.click(within(screen.getByRole('table', { name: 'Daftar dokumen' })).getByRole('button', { name: 'Ubah Kebijakan pengembangan koleksi 2025' }));
-    const again = await screen.findByRole('dialog', { name: 'Ubah dokumen' });
+    await rowAction(screen.getByRole('table', { name: 'Daftar dokumen' }), 'Kebijakan pengembangan koleksi 2025', 'Ubah Kebijakan pengembangan koleksi 2025');
+    const again = await screen.findByRole('region', { name: 'Ubah dokumen' });
     fireEvent.change(within(again).getByLabelText('Jenis dokumen'), { target: { value: 'rules' } });
     fireEvent.click(within(again).getByRole('button', { name: 'Simpan' }));
     await waitFor(() => expect(sent('PATCH', `accreditation/documents/${DOC}`)).toHaveLength(2));
@@ -586,28 +598,28 @@ describe('the Register tab', () => {
     vi.mocked(uploadFile).mockResolvedValue({ uploadId: UPLOAD });
     const { sent } = start({ evidence: [NOTES] });
     const table = await openTab('Dokumen', 'Daftar dokumen');
-    fireEvent.click(within(table).getByRole('button', { name: 'Ubah Kebijakan pengembangan koleksi 2025' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah dokumen' });
+    await rowAction(table, 'Kebijakan pengembangan koleksi 2025', 'Ubah Kebijakan pengembangan koleksi 2025');
+    const dialog = await screen.findByRole('region', { name: 'Ubah dokumen' });
     const link = await within(dialog).findByRole('link', { name: 'notulen.pdf' });
     expect(link.getAttribute('href')).toBe(`/files/${FILE_NOTES}`);
     expect(within(dialog).getByText('Notulen rapat penetapan')).toBeTruthy();
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Tambah lampiran' }));
-    const upload = await screen.findByRole('dialog', { name: 'Tambah lampiran' });
+    const upload = await screen.findByRole('form', { name: 'Tambah lampiran' });
     await within(upload).findByText(/paling besar 5 MB/);
     fireEvent.change(within(upload).getByLabelText('Berkas'), { target: { files: [new File([new Uint8Array(10)], 'daftar-hadir.pdf', { type: 'application/pdf' })] } });
     fireEvent.change(within(upload).getByLabelText('Keterangan'), { target: { value: 'Daftar hadir sosialisasi' } });
     fireEvent.click(within(upload).getByRole('button', { name: 'Unggah' }));
     await waitFor(() => expect(sent('POST', 'accreditation/evidence')).toHaveLength(1));
     expect(sent('POST', 'accreditation/evidence')[0]!.body).toEqual({ uploadId: UPLOAD, entity: 'library_documents', entityId: DOC, caption: 'Daftar hadir sosialisasi' });
-    const edit = await screen.findByRole('dialog', { name: 'Ubah dokumen' });
+    const edit = await screen.findByRole('region', { name: 'Ubah dokumen' });
     expect(await within(edit).findByText('Daftar hadir sosialisasi')).toBeTruthy();
 
     fireEvent.click(within(edit).getByRole('button', { name: 'Hapus lampiran notulen.pdf' }));
     const confirm = await screen.findByRole('alertdialog', { name: 'Hapus lampiran notulen.pdf?' });
     fireEvent.click(within(confirm).getByRole('button', { name: 'Hapus' }));
     await waitFor(() => expect(sent('DELETE', `accreditation/evidence/${EVIDENCE}`)).toHaveLength(1));
-    await waitFor(() => expect(within(screen.getByRole('dialog', { name: 'Ubah dokumen' })).queryByText('notulen.pdf')).toBeNull());
+    await waitFor(() => expect(within(screen.getByRole('region', { name: 'Ubah dokumen' })).queryByText('notulen.pdf')).toBeNull());
   });
 
   it('a reader sees the registers and the attachments but cannot add, change or archive anything', async () => {
@@ -616,10 +628,16 @@ describe('the Register tab', () => {
     expect(screen.getByText('Anda dapat melihat register ini, tetapi tidak dapat mengubahnya.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Tambah kegiatan' })).toBeNull();
     expect(within(table).queryByRole('button', { name: /^Arsipkan/ })).toBeNull();
+    // The row's menu offers a look, not an archive.
+    fireEvent.keyDown(within(table).getByRole('button', { name: 'Tindakan untuk Pameran buku baru' }), { key: 'Enter' });
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Lihat']);
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
 
     const documents = await openTab('Dokumen', 'Daftar dokumen');
-    fireEvent.click(within(documents).getByRole('button', { name: 'Lihat Kebijakan pengembangan koleksi 2025' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Dokumen' });
+    await rowAction(documents, 'Kebijakan pengembangan koleksi 2025', 'Lihat Kebijakan pengembangan koleksi 2025');
+    const dialog = await screen.findByRole('region', { name: 'Dokumen' });
     expect(await within(dialog).findByRole('link', { name: 'notulen.pdf' })).toBeTruthy();
     expect((within(dialog).getByLabelText('Judul') as HTMLInputElement).disabled).toBe(true);
     expect(within(dialog).queryByRole('button', { name: 'Simpan' })).toBeNull();

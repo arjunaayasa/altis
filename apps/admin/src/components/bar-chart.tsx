@@ -1,9 +1,10 @@
-import { useId } from 'react';
+import { useId, useRef } from 'react';
+import { useBoxWidth } from '@/lib/box-width';
 import { cn } from '@/lib/utils';
 
 /**
- * A compact bar chart drawn as our own SVG (no chart library): one series, so one hue (the theme's `primary`, which
- * the theme sets for light and for dark) and no legend, the title naming the series. It is a picture of figures a table
+ * A compact bar chart drawn as our own SVG (no chart library): one series, so one hue (the theme's first chart series,
+ * `--series-1`, set for light and for dark) and no legend, the title naming the series. It is a picture of figures a table
  * beside it holds: the SVG is `role="img"` with a `<title>` and a `<desc>` (the number of bars, the highest value, and
  * that the table holds every figure), and each bar's slot carries its label and value as a native tooltip.
  *
@@ -16,6 +17,9 @@ import { cn } from '@/lib/utils';
  * Marks are thin with a 2-unit gap between bars and rounded top ends; the baseline is the only rule; labels are text
  * tokens (all of them up to {@link ALL_LABELS} bars, else the first and the last), and only the highest bar carries its
  * value.
+ *
+ * The drawing is as wide as its box is (measured; {@link WIDTH} before that), one unit a pixel: its labels keep their
+ * size on a phone instead of shrinking with the picture, and a narrow slot clips its label shorter.
  */
 
 export interface ChartBar {
@@ -52,62 +56,66 @@ export function BarChart({
 }) {
   const titleId = useId();
   const descId = useId();
+  const box = useRef<HTMLDivElement>(null);
+  const width = useBoxWidth(box, WIDTH);
   if (bars.length === 0) return null;
   const shown = bars.slice(0, Math.max(1, maxBars));
   const values = shown.map((b) => (Number.isFinite(b.value) && b.value > 0 ? b.value : 0));
   const max = Math.max(0, ...values);
   const top = max > 0 ? max : 1;
   const plot = HEIGHT - TOP - BOTTOM;
-  const slot = WIDTH / shown.length;
+  const slot = width / shown.length;
   const barWidth = Math.max(1, Math.min(MAX_BAR, slot - GAP));
   const highest = values.indexOf(max);
   const labelled = (k: number): boolean => shown.length <= ALL_LABELS || k === 0 || k === shown.length - 1;
   return (
     <figure className={cn('flex flex-col gap-1', className)} data-chart="">
-      <figcaption className="text-xs font-medium text-muted-foreground">{title}</figcaption>
-      <svg
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        role="img"
-        aria-labelledby={`${titleId} ${descId}`}
-        className="h-auto w-full max-w-3xl overflow-visible"
-        preserveAspectRatio="xMidYMid meet">
-        <title id={titleId}>{title}</title>
-        <desc id={descId}>{description}</desc>
-        <line x1={0} x2={WIDTH} y1={TOP + plot} y2={TOP + plot} className="stroke-border" strokeWidth={1} />
-        {shown.map((b, k) => {
-          const h = (values[k]! / top) * plot;
-          const x = k * slot + (slot - barWidth) / 2;
-          const y = TOP + plot - h;
-          const r = Math.min(4, barWidth / 2, h);
-          // A rounded top and a square foot on the baseline.
-          const path =
-            h <= 0
-              ? null
-              : `M${x},${TOP + plot} V${y + r} Q${x},${y} ${x + r},${y} H${x + barWidth - r} Q${x + barWidth},${y} ${x + barWidth},${y + r} V${TOP + plot} Z`;
-          return (
-            <g key={k} data-bar={b.label}>
-              <rect x={k * slot} y={0} width={slot} height={HEIGHT} fill="transparent">
-                <title>{`${b.label}: ${format(b.value)}`}</title>
-              </rect>
-              {path !== null && <path d={path} className="pointer-events-none fill-primary" />}
-              {k === highest && max > 0 && (
-                <text x={x + barWidth / 2} y={y - 4} textAnchor="middle" className="pointer-events-none fill-foreground text-[11px] tabular-nums">
-                  {format(b.value)}
-                </text>
-              )}
-              {labelled(k) && (
-                <text
-                  x={shown.length <= ALL_LABELS ? k * slot + slot / 2 : k === 0 ? 0 : WIDTH}
-                  y={HEIGHT - 6}
-                  textAnchor={shown.length > ALL_LABELS ? (k === 0 ? 'start' : 'end') : 'middle'}
-                  className="pointer-events-none fill-muted-foreground text-[10px]">
-                  {clip(b.label, shown.length > ALL_LABELS ? LABEL_CHARS * 2 : Math.max(4, Math.floor(slot / 6)))}
-                </text>
-              )}
-            </g>
-          );
-        })}
-      </svg>
+      <figcaption className="text-meta font-semibold text-muted-foreground">{title}</figcaption>
+      <div ref={box} className="w-full max-w-3xl">
+        <svg
+          viewBox={`0 0 ${width} ${HEIGHT}`}
+          role="img"
+          aria-labelledby={`${titleId} ${descId}`}
+          className="block h-auto w-full overflow-visible"
+          preserveAspectRatio="xMidYMid meet">
+          <title id={titleId}>{title}</title>
+          <desc id={descId}>{description}</desc>
+          <line x1={0} x2={width} y1={TOP + plot} y2={TOP + plot} className="stroke-border" strokeWidth={1} />
+          {shown.map((b, k) => {
+            const h = (values[k]! / top) * plot;
+            const x = k * slot + (slot - barWidth) / 2;
+            const y = TOP + plot - h;
+            const r = Math.min(4, barWidth / 2, h);
+            // A rounded top and a square foot on the baseline.
+            const path =
+              h <= 0
+                ? null
+                : `M${x},${TOP + plot} V${y + r} Q${x},${y} ${x + r},${y} H${x + barWidth - r} Q${x + barWidth},${y} ${x + barWidth},${y + r} V${TOP + plot} Z`;
+            return (
+              <g key={k} data-bar={b.label}>
+                <rect x={k * slot} y={0} width={slot} height={HEIGHT} fill="transparent">
+                  <title>{`${b.label}: ${format(b.value)}`}</title>
+                </rect>
+                {path !== null && <path d={path} className="pointer-events-none fill-series-1" />}
+                {k === highest && max > 0 && (
+                  <text x={x + barWidth / 2} y={y - 4} textAnchor="middle" className="pointer-events-none fill-foreground text-[11px] tabular-nums">
+                    {format(b.value)}
+                  </text>
+                )}
+                {labelled(k) && (
+                  <text
+                    x={shown.length <= ALL_LABELS ? k * slot + slot / 2 : k === 0 ? 0 : width}
+                    y={HEIGHT - 6}
+                    textAnchor={shown.length > ALL_LABELS ? (k === 0 ? 'start' : 'end') : 'middle'}
+                    className="pointer-events-none fill-faint text-[11px]">
+                    {clip(b.label, shown.length > ALL_LABELS ? LABEL_CHARS * 2 : Math.max(4, Math.floor(slot / 6)))}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
     </figure>
   );
 }

@@ -2,32 +2,29 @@ import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import type { MasterListResponse } from '@altis/shared/api/catalog/masters';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { PlusIcon } from 'lucide-react';
 import { useState, type BaseSyntheticEvent, type ReactNode } from 'react';
 import type { FieldValues, Path, UseFormReturn } from 'react-hook-form';
 import type { z } from 'zod';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { CheckField, Notice } from '@/components/form-field';
-import { useReturnFocus } from '@/components/return-focus';
+import { DenseTable, ErrorState, InlinePanel, SkeletonTable } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useLocale, useT, type TKey } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
-import { FORM_PARSE, ROOT_ERROR, fieldErrorKey, problemText } from '@/lib/form-errors';
+import { FORM_PARSE, ROOT_ERROR, fieldErrorKey } from '@/lib/form-errors';
 import { useApiQuery } from '@/lib/me';
-import { cn } from '@/lib/utils';
 
 /**
  * The parts every tab of Data Induk shares (Phase 2 spec §13, §3.7; plan Task 27; the API of Task 12):
  *
- * - {@link MasterTab}: one master's list (`GET catalog/<kind>`, archived ones on request) as a table, with create and
- *   edit in a dialog (material types: on their own page) and archive after a confirmation. Writes answer only
+ * - {@link MasterTab}: one master's list (`GET catalog/<kind>`, archived ones on request) as a dense table, with create
+ *   and edit in a panel above the table (material types: on their own page) and archive after a confirmation. Writes answer only
  *   `{id, version}` (S15), so the tab reads the list again after each. Archiving sends the row's `{version}` in the
  *   DELETE body. A master that live records or items still use is refused with 409 CATALOG_IN_USE (Review Focus 2):
  *   the tab says how many use it. A problem body carries no `meta`, so the count is read from the bilingual `detail`
  *   (Task 12 writes it there), else the row's own `usage`. A stale version (CONFLICT_STALE) is shown and the list read
  *   again, so confirming again (or the dialog opened again) works on the row as it is now.
- * - {@link useMasterSave}: a dialog form's save: the shared strict contract checks the body first (FORM_PARSE keys),
+ * - {@link useMasterSave}: a panel form's save: the shared strict contract checks the body first (FORM_PARSE keys),
  *   the server's VALIDATION_FAILED lands on the fields, and a screen may give a field error its own message (the codes
  *   without a `form.error.*` text: `duplicate`, `not_allowed`, `invalid_parent`, ...).
  * - Without `catalog.masters.manage` everything is read only: no add or archive, and "Lihat" instead of "Ubah".
@@ -36,7 +33,7 @@ import { cn } from '@/lib/utils';
 /** The masters, by their API path segment (`catalog/<kind>`). */
 export type MasterKind = 'material-types' | 'languages' | 'collection-types' | 'suppliers' | 'custom-fields';
 
-/** The masters edited in a dialog (a material type has its own page). */
+/** The masters edited in a panel of their tab (a material type has its own page). */
 export type DialogKind = Exclude<MasterKind, 'material-types'>;
 
 /** The i18n segment of each master. */
@@ -163,10 +160,10 @@ export function changedFields<T extends Record<string, unknown>>(next: T, before
   return out;
 }
 
-// ---- a dialog form's save ------------------------------------------------------------------------------------------
+// ---- a panel form's save -------------------------------------------------------------------------------------------
 
 /**
- * Saves a dialog form of `kind`: `POST catalog/<kind>` for a new row, else `PATCH catalog/<kind>/:id` with the row's
+ * Saves a panel form of `kind`: `POST catalog/<kind>` for a new row, else `PATCH catalog/<kind>/:id` with the row's
  * version and only the changed fields (`body` answers them; nothing changed → `onUnchanged`). The body is checked with
  * the contract first; field errors land on the fields, any other problem is `problem` (the form's alert).
  */
@@ -226,45 +223,16 @@ export interface MasterColumn<T> {
   header: ReactNode;
   cell(row: T): ReactNode;
   className?: string;
+  /** The header's own classes (alignment). */
+  headClassName?: string;
 }
 
-/** A plain table of master rows with a screen-reader caption (its accessible name) and a row for "nothing here". */
+/**
+ * A table of master rows with a screen-reader caption (its accessible name) and a row for "nothing here": the layout's
+ * dense table, keyed by the rows' ids.
+ */
 export function MasterTable<T extends { id: string }>({ caption, columns, rows, empty }: { caption: string; columns: readonly MasterColumn<T>[]; rows: readonly T[]; empty: string }) {
-  return (
-    <div className="overflow-x-auto rounded-md border">
-      <table className="w-full text-sm">
-        <caption className="sr-only">{caption}</caption>
-        <thead className="bg-muted/50 text-left">
-          <tr>
-            {columns.map((c) => (
-              <th key={c.id} scope="col" className="px-3 py-2 font-medium whitespace-nowrap text-muted-foreground">
-                {c.header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={columns.length} className="px-3 py-6 text-center text-muted-foreground">
-                {empty}
-              </td>
-            </tr>
-          ) : (
-            rows.map((row) => (
-              <tr key={row.id} className="border-t align-top">
-                {columns.map((c) => (
-                  <td key={c.id} className={cn('px-3 py-2', c.className)}>
-                    {c.cell(row)}
-                  </td>
-                ))}
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
+  return <DenseTable caption={caption} columns={columns} rows={rows} rowKey={(row) => row.id} empty={empty} />;
 }
 
 /** A count in the UI language's digits. */
@@ -276,14 +244,31 @@ export function useCount(): (n: number) => string {
 
 // ---- one master's tab ----------------------------------------------------------------------------------------------
 
-/** What a dialog form of a master gets. */
+/** What a panel form of a master gets. */
 export interface MasterFormProps<T> {
   /** Null: a new row. */
   row: T | null;
   canManage: boolean;
-  /** After a save: the row's code (the tab reads the list again, says so and closes the dialog). */
+  /** After a save: the row's code (the tab reads the list again, says so and closes the panel). */
   onSaved(code: string): Promise<void>;
   onCancel(): void;
+}
+
+/** The buttons that end a panel form: Save (for a manager), then Cancel (or Close, read only). */
+export function MasterFormButtons({ canManage, busy, onCancel }: { canManage: boolean; busy: boolean; onCancel(): void }) {
+  const t = useT();
+  return (
+    <div className="flex flex-wrap gap-2">
+      {canManage && (
+        <Button type="submit" size="sm" disabled={busy}>
+          {t(busy ? 'form.saving' : 'form.save')}
+        </Button>
+      )}
+      <Button type="button" size="sm" variant="outline" className="bg-background" onClick={onCancel}>
+        {t(canManage ? 'form.cancel' : 'catalog.masters.close')}
+      </Button>
+    </div>
+  );
 }
 
 /** The sentence of a CATALOG_IN_USE refusal (`{code}`, `{count}`); null for a master that is never in use. */
@@ -304,8 +289,8 @@ function inUseKey(kind: MasterKind): TKey | null {
 type TabNotice = { tone: 'success' | 'error'; text: string };
 
 /**
- * One master: its intro, "Tambah …", the archived switch, the table with each row's actions, the dialog and the
- * archive confirmation. Without a `form` (material types) a row opens its own page instead of a dialog.
+ * One master: its intro, "Tambah …", the archived switch, the form panel (above the table), the table with each row's
+ * actions and the archive confirmation. Without a `form` (material types) a row opens its own page instead.
  */
 export function MasterTab<T extends MasterRow>({
   kind,
@@ -316,12 +301,11 @@ export function MasterTab<T extends MasterRow>({
   kind: MasterKind;
   canManage: boolean;
   columns: readonly MasterColumn<T>[];
-  /** The dialog form; absent for material types, edited on their own page. */
+  /** The panel form; absent for material types, edited on their own page. */
   form?: (props: MasterFormProps<T>) => ReactNode;
 }) {
   const t = useT();
   const queryClient = useQueryClient();
-  const focus = useReturnFocus();
   const segment = MASTER_SEGMENT[kind];
   const [showArchived, setShowArchived] = useState(false);
   const [dialog, setDialog] = useState<{ row: T | null } | null>(null);
@@ -355,12 +339,12 @@ export function MasterTab<T extends MasterRow>({
   const editPage = Form === undefined;
   const actions: MasterColumn<T> = {
     id: 'actions',
-    header: t('catalog.masters.col.actions'),
-    className: 'whitespace-nowrap',
+    header: <span className="sr-only">{t('catalog.masters.col.actions')}</span>,
+    className: 'w-px py-1.5 text-right whitespace-nowrap',
     cell: (row) => (
-      <div className="flex flex-wrap gap-1">
+      <>
         {editPage ? (
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="ghost" size="sm">
             <Link
               to={`/admin/catalog/masters/material-types/${encodeURIComponent(row.id)}`}
               aria-label={t(canManage ? 'catalog.masters.action.edit_named' : 'catalog.masters.action.view_named', { code: row.code })}>
@@ -369,7 +353,7 @@ export function MasterTab<T extends MasterRow>({
           </Button>
         ) : (
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             aria-label={t(canManage ? 'catalog.masters.action.edit_named' : 'catalog.masters.action.view_named', { code: row.code })}
             onClick={() => {
@@ -380,11 +364,11 @@ export function MasterTab<T extends MasterRow>({
           </Button>
         )}
         {canManage && !row.archived && (
-          <Button variant="outline" size="sm" aria-label={t('catalog.masters.action.archive_named', { code: row.code })} onClick={() => setArchiving(row)}>
+          <Button variant="ghost" size="sm" aria-label={t('catalog.masters.action.archive_named', { code: row.code })} onClick={() => setArchiving(row)}>
             {t('catalog.masters.action.archive')}
           </Button>
         )}
-      </div>
+      </>
     ),
   };
 
@@ -395,75 +379,52 @@ export function MasterTab<T extends MasterRow>({
   };
 
   return (
-    <section className="flex flex-col gap-4 pt-2">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="max-w-3xl text-sm text-muted-foreground">{t(`catalog.masters.intro.${segment}`)}</p>
+    <section className="grid gap-5 pt-5">
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+        <p className="max-w-[75ch] text-sm text-muted-foreground">{t(`catalog.masters.intro.${segment}`)}</p>
         {canManage &&
           (editPage ? (
             <Button asChild>
-              <Link to="/admin/catalog/masters/material-types/new">
-                <PlusIcon aria-hidden="true" />
-                {t(`catalog.masters.add.${segment}`)}
-              </Link>
+              <Link to="/admin/catalog/masters/material-types/new">{t(`catalog.masters.add.${segment}`)}</Link>
             </Button>
           ) : (
             <Button
+              aria-expanded={dialog !== null && dialog.row === null}
               onClick={() => {
                 setNotice(null);
                 setDialog({ row: null });
               }}>
-              <PlusIcon aria-hidden="true" />
               {t(`catalog.masters.add.${segment}`)}
             </Button>
           ))}
       </div>
-      <CheckField label={t('catalog.masters.show_archived')} checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
       {notice !== null && <Notice kind={notice.tone}>{notice.text}</Notice>}
-      {list.data === undefined ? (
-        list.isError ? (
-          <Notice
-            kind="error"
-            action={
-              <Button variant="outline" size="sm" onClick={() => void list.refetch()}>
-                {t('table.retry')}
-              </Button>
-            }>
-            {problemText(t, list.error)}
-          </Notice>
+      {Form !== undefined && dialog !== null && (
+        <InlinePanel key={dialog.row?.id ?? 'new'} title={title(dialog.row)} onCancel={() => setDialog(null)}>
+          <Form
+            row={dialog.row}
+            canManage={canManage}
+            onCancel={() => setDialog(null)}
+            onSaved={async (code) => {
+              await refresh();
+              setNotice({ tone: 'success', text: t(`catalog.masters.done.saved.${segment}`, { code }) });
+              setDialog(null);
+            }}
+          />
+        </InlinePanel>
+      )}
+      <div className="grid gap-3">
+        <CheckField label={t('catalog.masters.show_archived')} checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+        {list.data === undefined ? (
+          list.isError ? (
+            <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
+          ) : (
+            <SkeletonTable label={t('shell.loading')} columns={columns.length + 1} rows={4} />
+          )
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
-        )
-      ) : (
-        <MasterTable caption={t(`catalog.masters.caption.${segment}`)} columns={[...columns, actions]} rows={list.data.items} empty={t('catalog.masters.empty')} />
-      )}
-      {Form !== undefined && (
-        <Dialog open={dialog !== null} onOpenChange={(open) => (open ? undefined : setDialog(null))}>
-          {dialog !== null && (
-            <DialogContent
-              closeLabel={t('catalog.masters.close')}
-              onOpenAutoFocus={focus.onOpenAutoFocus}
-              onCloseAutoFocus={focus.onCloseAutoFocus}
-              className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>{title(dialog.row)}</DialogTitle>
-                <DialogDescription>{t(`catalog.masters.intro.${segment}`)}</DialogDescription>
-              </DialogHeader>
-              <Form
-                row={dialog.row}
-                canManage={canManage}
-                onCancel={() => setDialog(null)}
-                onSaved={async (code) => {
-                  await refresh();
-                  setNotice({ tone: 'success', text: t(`catalog.masters.done.saved.${segment}`, { code }) });
-                  setDialog(null);
-                }}
-              />
-            </DialogContent>
-          )}
-        </Dialog>
-      )}
+          <MasterTable caption={t(`catalog.masters.caption.${segment}`)} columns={[...columns, actions]} rows={list.data.items} empty={t('catalog.masters.empty')} />
+        )}
+      </div>
       {archiving !== null && (
         <ConfirmDialog
           open
@@ -478,4 +439,3 @@ export function MasterTab<T extends MasterRow>({
     </section>
   );
 }
-

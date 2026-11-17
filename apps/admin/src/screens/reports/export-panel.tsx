@@ -8,14 +8,15 @@ import {
   type ReportRunView,
 } from '@altis/shared/api/reports';
 import { useQueryClient } from '@tanstack/react-query';
-import { DownloadIcon } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 import { Field, Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
 import { JobProgress, type JobOutcome } from '@/components/job-progress';
+import { LAYER, Section } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useLocale, useT } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
 import { useApiQuery } from '@/lib/me';
+import { cn } from '@/lib/utils';
 import { RunFile, RunNotes, RunStatusBadge, confirmReauth, runsKey } from './run-history';
 
 /**
@@ -87,8 +88,8 @@ function StartedRun({
     enabled: outcome !== null,
   });
   return (
-    <section aria-labelledby={headingId} className="grid gap-3 rounded-md border p-3">
-      <h3 id={headingId} className="text-sm font-semibold">
+    <section aria-labelledby={headingId} className={cn('grid max-w-3xl gap-3 rounded-lg border p-4', LAYER)}>
+      <h3 id={headingId} className="text-sm font-bold">
         {t('reports.export.running', { format: format.toUpperCase() })}
       </h3>
       <JobProgress
@@ -102,9 +103,12 @@ function StartedRun({
       {run.isError && <ProblemAlert error={run.error} />}
       {run.data !== undefined && (
         <div className="grid gap-2">
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <RunStatusBadge status={run.data.status} />
-          </div>
+          {/* The job's progress above already says how it ended: the run's own status only where it says otherwise. */}
+          {run.data.status !== outcome && (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <RunStatusBadge status={run.data.status} />
+            </div>
+          )}
           <RunNotes run={run.data} describe={entry.params.length > 0 ? describe : null} />
           <RunFile run={run.data} />
         </div>
@@ -128,7 +132,6 @@ export function ExportPanel({ entry, collect, markFieldErrors, describe }: Expor
   const t = useT();
   const locale = useLocale();
   const queryClient = useQueryClient();
-  const headingId = useId();
   const startKey = useStartKey();
   const [paper, setPaper] = useState<ReportPaper>('A4');
   const [posting, setPosting] = useState(false);
@@ -174,11 +177,8 @@ export function ExportPanel({ entry, collect, markFieldErrors, describe }: Expor
   };
 
   return (
-    <section aria-labelledby={headingId} className="grid gap-3 rounded-lg border bg-card p-4">
-      <h2 id={headingId} className="text-lg font-semibold">
-        {t('reports.export.title')}
-      </h2>
-      {entry.personal && <p className="text-sm">{t('reports.export.personal_hint')}</p>}
+    <Section title={t('reports.export.title')}>
+      {entry.personal && <p className="max-w-[75ch] text-sm">{t('reports.export.personal_hint')}</p>}
       <div className="flex flex-wrap items-end gap-3">
         {offersPaper && (
           <Field label={t('reports.export.paper')} className="w-48">
@@ -196,7 +196,6 @@ export function ExportPanel({ entry, collect, markFieldErrors, describe }: Expor
         <div className="flex flex-wrap gap-2">
           {formats.map((f) => (
             <Button key={f} type="button" variant="outline" disabled={posting} onClick={() => void start(f)}>
-              <DownloadIcon aria-hidden="true" />
               {t(`reports.export.${f}`)}
             </Button>
           ))}
@@ -204,13 +203,13 @@ export function ExportPanel({ entry, collect, markFieldErrors, describe }: Expor
       </div>
       <p className="text-xs text-muted-foreground">{t('reports.export.hint', { days: REPORT_RUN_TTL_DAYS })}</p>
       {fieldsMarked && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-meta font-semibold text-bad">
           {t('reports.params.check')}
         </p>
       )}
       {tooLarge !== null && <Notice kind="error">{tooLarge}</Notice>}
       <ProblemAlert error={problem} />
       {started !== null && <StartedRun key={started.run.id} entry={entry} started={started.run} format={started.format} describe={describe} />}
-    </section>
+    </Section>
   );
 }

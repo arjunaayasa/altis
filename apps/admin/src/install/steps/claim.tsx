@@ -67,19 +67,19 @@ export function ClaimStep({ onClaimed, cookieLost = false }: { onClaimed(): void
   let problem = null;
   if (error === null && cookieLost) {
     problem = (
-      <p role="alert" className="text-sm text-destructive">
+      <p role="alert" className="text-sm font-semibold text-bad">
         {t('claim.cookie_lost')}
       </p>
     );
   } else if (error instanceof ApiError && error.code === 'INSTALL_CODE_INVALID') {
     problem = (
-      <p role="alert" className="text-sm text-destructive">
+      <p role="alert" className="text-sm font-semibold text-bad">
         {t('claim.invalid')}
       </p>
     );
   } else if (error instanceof ApiError && error.code === 'AUTH_TOO_MANY_ATTEMPTS') {
     problem = (
-      <p role="alert" className="text-sm text-destructive">
+      <p role="alert" className="text-sm font-semibold text-bad">
         {t('claim.too_many', { time: formatWait(locale, error.retryAfterS ?? DEFAULT_WAIT_S) })}
       </p>
     );
@@ -90,8 +90,8 @@ export function ClaimStep({ onClaimed, cookieLost = false }: { onClaimed(): void
   return (
     <div className="space-y-6">
       <StepHeading title={t('claim.title')} intro={t('claim.intro')} />
-      <section className="space-y-2 rounded-md bg-muted p-4 text-sm">
-        <h3 className="font-medium">{t('claim.where.title')}</h3>
+      <section className="grid gap-2 rounded-md border bg-layer px-3.5 py-3 text-sm">
+        <h3 className="font-bold">{t('claim.where.title')}</h3>
         <p>{t('claim.where.file')}</p>
         <p>{t('claim.where.file_manager')}</p>
         <p>{t('claim.where.console')}</p>
@@ -109,7 +109,7 @@ export function ClaimStep({ onClaimed, cookieLost = false }: { onClaimed(): void
             spellCheck={false}
             placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX"
             aria-describedby="install-code-hint"
-            className="font-mono tracking-wider"
+            className="font-mono sm:tracking-wider"
           />
         </Field>
         {problem}

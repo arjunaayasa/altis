@@ -1,7 +1,7 @@
 import { jsonForHtmlScript, type SafeHtml } from '@altis/core';
 import type { DbHandle } from '@altis/db';
 import { DEFAULT_ACCENT, isAccent } from '@altis/opac-theme';
-import { LOCALES, isLocale, resolveLocale, type Locale } from '@altis/shared';
+import { LOCALES, isLocale, localDate, resolveLocale, type Locale } from '@altis/shared';
 import { OPAC_HOME_DEFAULT, opacHomeTextIn, type OpacHomeContent } from '@altis/shared/api/opac-home';
 import type { Context } from 'hono';
 import { raw } from 'hono/html';
@@ -12,7 +12,7 @@ import type { Config } from '../../config.js';
 import { cspHeader, cspNonce } from '../../http/csp.js';
 import type { AppEnv } from '../../http/request-id.js';
 import type { AppServices } from '../../services.js';
-import { Layout, toDocument, type FrameLink, type HeroBand, type PageFrame, type SiteFooter } from '../layout.js';
+import { Layout, toDocument, type FrameLink, type HeroBand, type PageFrame, type SiteFooter, type SiteLogo } from '../layout.js';
 import { opacText } from './messages.js';
 import { hasPublishedNews, navPages, type OpacNavLink } from './queries.js';
 import { absoluteUrl, isLocalPath, withLang } from './urls.js';
@@ -49,6 +49,8 @@ export interface OpacContext {
   // ---- Komunitas (OPAC look) ----
   /** What the site menu and the footer show of the library; absent: the status pages, which read nothing. */
   site?: SiteInfo;
+  /** The year of the request in the library's time zone (the footer's line); absent: the status pages. */
+  year?: number;
 }
 
 /** The library's site as the menu and the footer of every page show it (from the settings and the published news). */
@@ -67,6 +69,12 @@ export interface SiteInfo {
   contact: boolean;
   /** A news post is published: the menu's "Berita". */
   news: boolean;
+  // ---- Komunitas (OPAC look) ----
+  /** The library's logo (header and footer), or null. */
+  logo: SiteLogo | null;
+  /** The published telephone number and e-mail address, each null when there is none. */
+  phone: string | null;
+  email: string | null;
   /** The language of the library's own texts (the address, the hours) when it is not the page's. */
   contentLang?: Locale | undefined;
 }
@@ -77,14 +85,22 @@ export function siteInfo(home: OpacHomeContent, address: string | null, news: bo
   const about = home.about;
   const hasAddress = address !== null && address.trim() !== '';
   const aboutText = opacHomeTextIn(about.text, 'id') ?? opacHomeTextIn(about.text, 'en');
+  // A content saved before the contact and the logo existed reads them as none.
+  const contact: OpacHomeContent['contact'] | undefined = home.contact;
+  const logo: OpacHomeContent['logo'] | undefined = home.logo;
+  const phone = contact?.phone === undefined || contact.phone === null || contact.phone.trim() === '' ? null : contact.phone;
+  const email = contact?.email === undefined || contact.email === null || contact.email.trim() === '' ? null : contact.email;
   return {
     address: hasAddress ? address : null,
     hours: b.visit ? home.hours.map((h) => ({ days: h.days, time: h.time })) : [],
     brand: home.brand ?? null,
     profile: b.about && (aboutText !== null || about.photo !== null || about.founded !== null || about.librarians !== null),
     services: b.services && (home.services.length > 0 || home.facilities.length > 0),
-    contact: b.visit && (hasAddress || home.hours.length > 0),
+    contact: b.visit && (hasAddress || home.hours.length > 0 || phone !== null || email !== null),
     news,
+    logo: logo === undefined || logo === null ? null : { src: `/files/${encodeURIComponent(logo.fileId)}`, alt: logo.alt },
+    phone,
+    email,
   };
 }
 
@@ -170,14 +186,21 @@ export async function opacContext(rc: OpacContextSource): Promise<OpacContext> {
   const handle = rc.db.db;
   const settings = rc.services.settings;
   const now = requestNow(rc.c);
-  const [libraryName, libraryLocale, accent, indexable, site] = await Promise.all([
+  const [libraryName, libraryLocale, accent, indexable, site, timeZone] = await Promise.all([
     settings.get<string>(handle, 'library.name'),
     settings.get<string>(handle, 'library.locale'),
     settings.get<string>(handle, 'opac.accent'),
     settings.get<boolean>(handle, 'opac.indexable'),
     readSiteInfo(settings, handle, now),
+    settings.get<string>(handle, 'library.timezone'),
   ]);
   const locale = resolveLocale(rc.c.req.query('lang'), libraryLocale);
+  let today: string;
+  try {
+    today = localDate(timeZone, now);
+  } catch {
+    today = localDate('UTC', now);
+  }
   return {
     locale,
     libraryName,
@@ -186,6 +209,7 @@ export async function opacContext(rc: OpacContextSource): Promise<OpacContext> {
     indexable: indexable !== false,
     nav: await navPages(handle, now, locale),
     site: { ...site, contentLang: siteContentLang(libraryLocale, locale) },
+    year: Number(today.slice(0, 4)),
   };
 }
 
@@ -325,7 +349,15 @@ export function siteFooter(locale: Locale, site: SiteInfo | undefined, pages: re
   if (site?.news === true) links.push({ href: keep('/berita'), label: opacText(locale, 'shell.menu.news') });
   if (site?.contact === true) links.push({ href: `${keep('/')}#kunjungi`, label: opacText(locale, 'shell.footer.visit') });
   for (const page of pages) links.push({ href: keep(page.href), label: page.label, lang: page.lang });
-  return { address: site?.address ?? null, hours: site?.hours ?? [], contentLang: site?.contentLang, links, search: { lang } };
+  return {
+    address: site?.address ?? null,
+    phone: site?.phone ?? null,
+    email: site?.email ?? null,
+    hours: site?.hours ?? [],
+    contentLang: site?.contentLang,
+    links,
+    search: { lang },
+  };
 }
 
 /**
@@ -333,7 +365,7 @@ export function siteFooter(locale: Locale, site: SiteInfo | undefined, pages: re
  * language from baseUrl (on this site, root-relative, while no baseUrl is known), the brand, the site menu and the
  * footer's links in the page's language when the request named it, and the search form when `o.search`.
  */
-export function pageFrame(c: Context<AppEnv>, ctx: Pick<OpacContext, 'locale' | 'baseUrl' | 'nav' | 'site'>, o: { search: boolean }): PageFrame {
+export function pageFrame(c: Context<AppEnv>, ctx: Pick<OpacContext, 'locale' | 'baseUrl' | 'nav' | 'site' | 'year'>, o: { search: boolean }): PageFrame {
   const url = c.req.url;
   const path = keptPath(url, ctx.baseUrl);
   const here = `${origin(ctx.baseUrl)}${path}`;
@@ -348,6 +380,8 @@ export function pageFrame(c: Context<AppEnv>, ctx: Pick<OpacContext, 'locale' | 
     search: o.search ? { lang } : null,
     footer: siteFooter(ctx.locale, ctx.site, pages, lang),
     brand: ctx.site?.brand ?? null,
+    logo: ctx.site?.logo ?? null,
+    year: ctx.year,
   };
 }
 

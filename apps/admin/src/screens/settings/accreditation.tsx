@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { useForm, useWatch, type UseFormReturn } from 'react-hook-form';
+import { SideSection } from '@/components/layout';
 import { CheckField, Field, Notice, SELECT_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,7 +32,7 @@ import {
   type ChipListName,
   type PageKey,
 } from './accreditation/form';
-import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, saveSettings, type SaveOutcome } from './library';
+import { SettingsFooter, SettingsLoader, SettingsPage, saveSettings, type SaveOutcome } from './library';
 
 /**
  * Pengaturan › Akreditasi, `/admin/settings/accreditation`: the sixteen settings of the `accreditation` group in one
@@ -274,7 +275,7 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
     <form noValidate className="grid gap-6" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
       <p className="text-sm text-muted-foreground">{t('accreditation.settings.description')}</p>
 
-      <SettingsSection title={t('accreditation.settings.section.period')}>
+      <SideSection title={t('accreditation.settings.section.period')}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             label={t('accreditation.settings.school_year_start_month')}
@@ -295,9 +296,9 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
             {(c) => <Input {...c} type="date" className="w-48" {...form.register('liveFrom')} disabled={readOnly} />}
           </Field>
         </div>
-      </SettingsSection>
+      </SideSection>
 
-      <SettingsSection title={t('accreditation.settings.section.collection')} description={t('accreditation.settings.section.collection_hint')}>
+      <SideSection title={t('accreditation.settings.section.collection')} intro={t('accreditation.settings.section.collection_hint')}>
         <div className="grid gap-5 sm:grid-cols-2">
           {COLLECTION_LISTS.map((list) => (
             <ChipListField
@@ -323,9 +324,9 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
             )}
           </Field>
         </div>
-      </SettingsSection>
+      </SideSection>
 
-      <SettingsSection title={t('accreditation.settings.section.thresholds')}>
+      <SideSection title={t('accreditation.settings.section.thresholds')}>
         <div className="grid gap-4 sm:grid-cols-2">
           <NumberField
             form={form}
@@ -344,9 +345,9 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
             readOnly={readOnly}
           />
         </div>
-      </SettingsSection>
+      </SideSection>
 
-      <SettingsSection title={t('accreditation.settings.section.website')} description={t('accreditation.settings.section.website_hint')}>
+      <SideSection title={t('accreditation.settings.section.website')} intro={t('accreditation.settings.section.website_hint')}>
         <div className="grid gap-4 sm:grid-cols-2">
           {PAGE_KEYS.map((key) => (
             <PageField
@@ -369,9 +370,9 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
             mono={false}
           />
         </div>
-      </SettingsSection>
+      </SideSection>
 
-      <SettingsSection title={t('accreditation.settings.section.evidence')}>
+      <SideSection title={t('accreditation.settings.section.evidence')}>
         <div className="grid gap-4 sm:grid-cols-2">
           <NumberField
             form={form}
@@ -390,9 +391,9 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
             readOnly={readOnly}
           />
         </div>
-      </SettingsSection>
+      </SideSection>
 
-      <SettingsSection title={t('accreditation.settings.section.usage')}>
+      <SideSection title={t('accreditation.settings.section.usage')}>
         <div className="grid gap-4">
           <CheckField
             label={t('accreditation.settings.dedupe_legacy')}
@@ -417,7 +418,7 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
             )}
           </Field>
         </div>
-      </SettingsSection>
+      </SideSection>
 
       {newer !== null && (
         <Notice

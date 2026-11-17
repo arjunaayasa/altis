@@ -9,11 +9,11 @@ import {
   type ReportPreviewResponse,
 } from '@altis/shared/api/reports';
 import { useInfiniteQuery, type InfiniteData, type UseInfiniteQueryResult } from '@tanstack/react-query';
-import { PrinterIcon } from 'lucide-react';
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDateTime } from '@/components/data-table';
 import { NoticeAlert, ProblemAlert } from '@/components/form-field';
+import { Section, SkeletonTable, TABLE } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { I18nProvider, useLocale, useT, type TKey } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
@@ -33,7 +33,8 @@ import './print.css';
  * the next page; the totals row (the first page's) closes the table. The columns are the answer's (a definition's
  * columns may depend on its parameters), labelled with the shared report texts; cells are formatted by their column's
  * type (numbers, money in major units, whole percents, `YYYY-MM-DD` dates), text cells keep their own script direction
- * (`dir="auto"`: Arabic titles read right to left).
+ * (`dir="auto"`: Arabic titles read right to left). A wide table scrolls sideways in its frame: a value written as one
+ * word (a month `2026-01`, a code, a number) never breaks inside, and a text of several words keeps a readable width.
  *
  * The table and its printed copy are in the language of the report's output (`reportOutputLocale`), as the server
  * writes the cells and the export: an accreditation annex always in Indonesian, the language of the files handed to the
@@ -87,6 +88,18 @@ export function isExportOnly(e: unknown): boolean {
 
 const NUMERIC: ReadonlySet<ReportColumnType> = new Set<ReportColumnType>(['int', 'money', 'percent']);
 
+/** The longest value of one word that is kept on one line (a longer one, a link say, may break). */
+const ONE_WORD_MAX = 32;
+
+/**
+ * Whether a cell's text stays on one line: a value written as one word (a month `2026-01`, a code, an ISBN, a date
+ * that is one word) would otherwise break at its hyphen when a wide table squeezes its column. An empty cell too, so
+ * that it takes no room.
+ */
+export function keepsOnOneLine(text: string): boolean {
+  return text.length <= ONE_WORD_MAX && !/\s/.test(text);
+}
+
 /** A column's label: the shared report text, or its key when this build has none. */
 function columnLabel(t: ReturnType<typeof useT>, c: ReportColumnView): string {
   return isMessageKey(c.labelKey) ? t(c.labelKey as TKey) : c.key;
@@ -109,24 +122,27 @@ export function ReportTable({
   const t = useT();
   const locale = useLocale();
   const format = useCellFormat();
-  const cellClass = (c: ReportColumnView): string => cn('px-3 py-2', NUMERIC.has(c.type) && 'text-right tabular-nums whitespace-nowrap');
   const cells = (row: readonly ReportCell[], foot: boolean) =>
     columns.map((c, i) => {
-      const value = row[i] ?? null;
+      const text = format(c.type, row[i] ?? null);
+      const numeric = NUMERIC.has(c.type);
       return (
-        <td key={c.key} className={cn(cellClass(c), foot && 'font-semibold')} dir={c.type === 'text' ? 'auto' : undefined}>
-          {format(c.type, value)}
+        <td
+          key={c.key}
+          className={cn(foot ? TABLE.group : TABLE.td, numeric && 'text-right', numeric || keepsOnOneLine(text) ? 'whitespace-nowrap' : 'min-w-40 print:min-w-0', foot && 'font-semibold')}
+          dir={c.type === 'text' ? 'auto' : undefined}>
+          {text}
         </td>
       );
     });
   return (
-    <div className={cn('overflow-x-auto rounded-md border', className)}>
-      <table lang={locale} className="w-full text-sm">
+    <div className={cn(TABLE.wrap, className)}>
+      <table lang={locale} className={TABLE.table}>
         <caption className="sr-only">{caption}</caption>
-        <thead className="bg-muted/50 text-left">
+        <thead>
           <tr>
             {columns.map((c) => (
-              <th key={c.key} scope="col" className={cn('px-3 py-2 font-medium whitespace-nowrap text-muted-foreground', NUMERIC.has(c.type) && 'text-right')}>
+              <th key={c.key} scope="col" className={cn(TABLE.th, NUMERIC.has(c.type) && 'text-right')}>
                 {columnLabel(t, c)}
               </th>
             ))}
@@ -135,20 +151,16 @@ export function ReportTable({
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={Math.max(1, columns.length)} className="px-3 py-6 text-center text-muted-foreground">
+              <td colSpan={Math.max(1, columns.length)} className={TABLE.empty}>
                 {t('reports.preview.empty')}
               </td>
             </tr>
           ) : (
-            rows.map((row, i) => (
-              <tr key={i} className="border-t align-top">
-                {cells(row, false)}
-              </tr>
-            ))
+            rows.map((row, i) => <tr key={i}>{cells(row, false)}</tr>)
           )}
         </tbody>
         {totals !== null && (
-          <tfoot className="border-t-2 bg-muted/30">
+          <tfoot className="border-t">
             <tr>{cells(totals, true)}</tr>
           </tfoot>
         )}
@@ -230,7 +242,6 @@ export function PreviewSection({ entry, query, params }: { entry: ReportCatalogE
   const locale = useLocale();
   const output = reportOutputLocale(entry.module, locale);
   const applied = params !== null;
-  const headingId = useId();
   const number = new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'id-ID');
   const pages = query.data?.pages;
   const rows = useMemo(() => pages?.flatMap((p) => p.rows) ?? [], [pages]);
@@ -258,32 +269,28 @@ export function PreviewSection({ entry, query, params }: { entry: ReportCatalogE
 
   let body;
   if (!applied) {
-    body = <p className="text-sm text-muted-foreground">{t('reports.preview.hint')}</p>;
+    body = <p className="max-w-[75ch] text-sm text-muted-foreground">{t('reports.preview.hint')}</p>;
   } else if (query.isError && first === undefined) {
     body = isExportOnly(query.error) ? (
       <NoticeAlert>{t('report.export_only')}</NoticeAlert>
     ) : serverParamErrors(entry, query.error) !== null ? (
-      <p role="alert" className="text-sm text-destructive">
+      <p role="alert" className="text-meta font-semibold text-bad">
         {t('reports.params.check')}
       </p>
     ) : (
       <ProblemAlert error={query.error} />
     );
   } else if (first === undefined) {
-    body = (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('shell.loading')}
-      </p>
-    );
+    body = <SkeletonTable label={t('shell.loading')} rows={4} />;
   } else {
     body = (
-      <div className="flex flex-col gap-3">
+      <div className="flex min-w-0 flex-col gap-3">
         <I18nProvider locale={output}>
           <PreviewChart entry={entry} columns={columns} rows={rows} totals={totals} />
           <ScreenTable entry={entry} columns={columns} rows={rows} totals={totals} />
         </I18nProvider>
         {query.isFetchNextPageError && (isExportOnly(query.error) ? <NoticeAlert>{t('report.export_only')}</NoticeAlert> : <ProblemAlert error={query.error} />)}
-        <div className="flex flex-wrap items-center gap-3 text-sm">
+        <div className="flex flex-wrap items-center gap-3 text-meta">
           <span className="text-muted-foreground">{t('reports.preview.shown', { count: number.format(rows.length) })}</span>
           {query.hasNextPage ? (
             <Button type="button" variant="outline" size="sm" disabled={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>
@@ -298,22 +305,19 @@ export function PreviewSection({ entry, query, params }: { entry: ReportCatalogE
   }
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id={headingId} className="text-lg font-semibold">
-          {t('reports.preview.title')}
-        </h2>
+    <Section
+      title={t('reports.preview.title')}
+      aside={
         <Button type="button" variant="outline" size="sm" disabled={first === undefined || rows.length === 0} onClick={print} title={t('reports.preview.print_hint')}>
-          <PrinterIcon aria-hidden="true" />
           {t('reports.preview.print')}
         </Button>
-      </div>
+      }>
       {body}
       {printing > 0 && first !== undefined && (
         <I18nProvider locale={output}>
           <PrintCopy entry={entry} params={params} columns={columns} rows={rows} totals={totals} more={query.hasNextPage} />
         </I18nProvider>
       )}
-    </section>
+    </Section>
   );
 }

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { TAG_SHAPE, TAG_TONE, TONE_SURFACE, TONE_TEXT } from '@/components/layout';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { problemText, useInstallLocale, useInstallT } from './i18n';
@@ -10,12 +10,12 @@ import { problemText, useInstallLocale, useInstallT } from './i18n';
 
 /** A native <select> or <textarea> styled like the Input of components/ui. */
 export const CONTROL_CLASS =
-  'flex w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm';
+  'flex w-full min-w-0 rounded-md border border-input bg-background px-2.5 py-1 text-base transition-[border-color,box-shadow] duration-150 ease-out outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-accent-soft disabled:cursor-not-allowed disabled:opacity-50 md:text-sm';
 
 export function StepHeading({ title, intro }: { title: string; intro?: string }) {
   return (
-    <header className="space-y-1">
-      <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+    <header className="grid gap-1">
+      <h2 className="text-xl leading-tight font-bold">{title}</h2>
       {intro === undefined ? null : <p className="text-sm text-muted-foreground">{intro}</p>}
     </header>
   );
@@ -23,8 +23,8 @@ export function StepHeading({ title, intro }: { title: string; intro?: string })
 
 export function Section({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <section className="space-y-3 border-t pt-4">
-      <h3 className="font-medium">{title}</h3>
+    <section className="grid gap-3 border-t pt-4">
+      <h3 className="text-base font-bold">{title}</h3>
       {children}
     </section>
   );
@@ -46,7 +46,9 @@ export function describedBy(id: string, o: { hint?: boolean; error?: string | nu
 export function Field({ id, label, hint, error, children }: { id: string; label: string; hint?: string; error?: string | null; children: ReactNode }) {
   return (
     <div className="grid gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
+      <Label htmlFor={id} className="text-meta leading-snug">
+        {label}
+      </Label>
       {children}
       {hint === undefined ? null : (
         <p id={`${id}-hint`} className="text-xs text-muted-foreground">
@@ -54,7 +56,7 @@ export function Field({ id, label, hint, error, children }: { id: string; label:
         </p>
       )}
       {error === undefined || error === null ? null : (
-        <p id={`${id}-error`} role="alert" className="text-xs text-destructive">
+        <p id={`${id}-error`} role="alert" className="text-meta font-semibold text-bad">
           {error}
         </p>
       )}
@@ -68,14 +70,12 @@ export function ProblemAlert({ error, children }: { error: unknown; children?: R
   const t = useInstallT();
   const problem = problemText(locale, error);
   return (
-    <Alert variant="destructive">
-      <AlertDescription>
-        <p className="font-medium">{problem.message}</p>
-        {problem.detail === null ? null : <p>{problem.detail}</p>}
-        {children}
-        {problem.traceId === null ? null : <p className="text-xs">{t('app.trace', { id: problem.traceId })}</p>}
-      </AlertDescription>
-    </Alert>
+    <div role="alert" className={cn('grid gap-1 rounded-md border px-3.5 py-3 text-sm', TONE_SURFACE.bad)}>
+      <p className={cn('font-bold', TONE_TEXT.bad)}>{problem.message}</p>
+      {problem.detail === null ? null : <p>{problem.detail}</p>}
+      {children}
+      {problem.traceId === null ? null : <p className="text-xs">{t('app.trace', { id: problem.traceId })}</p>}
+    </div>
   );
 }
 
@@ -84,16 +84,7 @@ export type Tone = 'ok' | 'warn' | 'error';
 /** A short status word in its colour. */
 export function Status({ tone, children }: { tone: Tone; children: ReactNode }) {
   return (
-    <span
-      className={cn(
-        'inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium',
-        tone === 'ok' && 'bg-secondary text-secondary-foreground',
-        tone === 'warn' && 'bg-warning text-warning-foreground',
-        tone === 'error' && 'bg-destructive text-destructive-foreground',
-      )}
-    >
-      {children}
-    </span>
+    <span className={cn(TAG_SHAPE, 'shrink-0', TAG_TONE[tone === 'error' ? 'bad' : tone])}>{children}</span>
   );
 }
 

@@ -120,7 +120,7 @@ export function problemText(t: Translate, e: unknown): string {
     if (e.status !== 429 || e.retryAfterS === undefined || e.retryAfterS <= 0) return text;
     const wait =
       e.retryAfterS < SECONDS_SHOWN
-        ? t('form.retry_after_seconds', { seconds: e.retryAfterS })
+        ? t(e.retryAfterS === 1 ? 'form.retry_after_seconds_one' : 'form.retry_after_seconds', { seconds: e.retryAfterS })
         : t('form.retry_after_minutes', { minutes: Math.ceil(e.retryAfterS / 60) });
     return `${text} ${wait}`;
   }

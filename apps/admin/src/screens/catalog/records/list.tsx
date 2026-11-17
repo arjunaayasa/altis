@@ -4,19 +4,18 @@ import type { MasterListResponse, MaterialTypeView } from '@altis/shared/api/cat
 import { RECORD_BULK_MAX, RECORD_SORTS, type RecordListItem, type RecordListResponse, type RecordSort } from '@altis/shared/api/catalog/records';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
-import { BookIcon, DownloadIcon, PencilIcon, PlusIcon, SearchIcon } from 'lucide-react';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AddToPrintQueue } from '@/components/catalog/print-queue';
-import { DataTable, useDateTime } from '@/components/data-table';
-import { Badge, CheckField, Field, Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { useDateTime } from '@/components/data-table';
+import { Badge, CheckField, Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { DenseTable, EmptyState, ErrorState, FilterField, FilterRow, PageHead, SelectionBar, SkeletonTable, type DenseColumn } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
 import { useApiQuery, useMe } from '@/lib/me';
-import { RecordBulkDialog } from './bulk-dialog';
+import { RecordBulkPanel } from './bulk-dialog';
 
 /**
  * Bibliografi, the record list (Phase 2 spec §13, §4.4, §4.5; plan Task 24): `GET catalog/records`.
@@ -33,7 +32,7 @@ import { RecordBulkDialog } from './bulk-dialog';
  *   28 KB) would pass the common URL and header limits, so they never travel in the URL. A storage that is blocked or
  *   full shows a notice instead. The selection belongs to the filters it was made under: another search starts empty.
  * - "Ubah data akreditasi" (for a user who manages records) sets the accreditation fields of the selected records at
- *   once ({@link RecordBulkDialog}, at most {@link RECORD_BULK_MAX}).
+ *   once, in its panel under the selection bar ({@link RecordBulkPanel}, at most {@link RECORD_BULK_MAX}).
  */
 
 /** Where "Ekspor terpilih" leaves the selected ids for Impor/Ekspor (Task 29 reads it once, then clears it). */
@@ -153,8 +152,6 @@ function sortsFor(q: string | undefined): RecordSort[] {
   return q === undefined ? ['changed', 'newest', 'title'] : ['relevance', 'newest', 'title'];
 }
 
-const features = tableFeatures({});
-const column = createColumnHelper<typeof features, RecordListItem>();
 const NO_ROWS: RecordListItem[] = [];
 const NO_SELECTION: ReadonlyMap<string, RecordListItem> = new Map();
 
@@ -163,31 +160,6 @@ function typeName(t: Translate, types: readonly MaterialTypeView[] | undefined, 
   const type = types?.find((m) => m.id === id);
   if (type === undefined) return t('catalog.records.unknown_type');
   return locale === 'en' ? type.nameEn : type.nameId;
-}
-
-/** The search box: its own text until "Cari" puts it in the URL. */
-function SearchBox({ initial, onSearch }: { initial: string; onSearch(q: string): void }) {
-  const t = useT();
-  const [text, setText] = useState(initial);
-  const submit = (e: FormEvent): void => {
-    e.preventDefault();
-    onSearch(text);
-  };
-  return (
-    <form role="search" noValidate className="flex flex-col gap-2" onSubmit={submit}>
-      <Field label={t('catalog.records.list.search_label')} hint={t('catalog.records.list.search_hint')}>
-        {(c) => (
-          <div className="flex gap-2">
-            <Input {...c} type="search" maxLength={Q_MAX} autoComplete="off" spellCheck={false} value={text} onChange={(e) => setText(e.target.value)} />
-            <Button type="submit">
-              <SearchIcon aria-hidden="true" />
-              {t('catalog.records.list.search_button')}
-            </Button>
-          </div>
-        )}
-      </Field>
-    </form>
-  );
 }
 
 /** `/admin/catalog/records`. */
@@ -201,10 +173,15 @@ export function RecordsListScreen() {
   const searchKey = JSON.stringify(search);
   const canManage = holds(me, 'catalog.records.manage');
   const canExport = holds(me, 'catalog.export.run');
+  const canImport = holds(me, 'catalog.import.run');
   const [selection, setSelection] = useState<{ key: string; rows: ReadonlyMap<string, RecordListItem> }>({ key: searchKey, rows: NO_SELECTION });
   const [notice, setNotice] = useState<'too_many' | 'blocked' | null>(null);
-  const [bulkOpen, setBulkOpen] = useState(false);
+  const [panel, setPanel] = useState<string | null>(null);
+  // The search box keeps its own text until "Cari" (or Enter) puts it in the URL; a new URL search starts it afresh.
+  const [typed, setTyped] = useState<{ key: string; text: string }>({ key: search.q ?? '', text: search.q ?? '' });
+  const selectAll = useRef<HTMLInputElement>(null);
   const selected = selection.key === searchKey ? selection.rows : NO_SELECTION;
+  const text = typed.key === (search.q ?? '') ? typed.text : (search.q ?? '');
 
   const types = useApiQuery<MasterListResponse<MaterialTypeView>>({
     queryKey: ['catalog', 'material-types', { includeArchived: true }],
@@ -230,23 +207,27 @@ export function RecordsListScreen() {
     // From the latest search, not this render's: two changes in a row both land.
     void navigate({ to: '/admin/catalog/records', search: (prev: Record<string, unknown>) => compact(parseRecordsSearch({ ...prev, ...patch })) });
   };
+  const clearFilters = (): void => void navigate({ to: '/admin/catalog/records', search: {} });
 
-  const toggle = (row: RecordListItem, on: boolean): void => {
+  const setRows = (next: ReadonlyMap<string, RecordListItem>): void => {
     setNotice(null);
+    if (next.size === 0) setPanel(null);
+    setSelection({ key: searchKey, rows: next });
+  };
+  const toggle = (row: RecordListItem, on: boolean): void => {
     const next = new Map(selected);
     if (on) next.set(row.id, row);
     else next.delete(row.id);
-    setSelection({ key: searchKey, rows: next });
+    setRows(next);
   };
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
   const toggleAll = (on: boolean): void => {
-    setNotice(null);
     const next = new Map(selected);
     for (const r of rows) {
       if (on) next.set(r.id, r);
       else next.delete(r.id);
     }
-    setSelection({ key: searchKey, rows: next });
+    setRows(next);
   };
 
   const exportSelected = (): void => {
@@ -258,137 +239,151 @@ export function RecordsListScreen() {
     void navigate({ to: '/admin/catalog/exchange', search: { export: 'selection' } });
   };
 
-  const columns = useMemo(
-    () =>
-      column.columns([
-        column.display({
-          id: 'select',
-          header: () => (
-            <input
-              type="checkbox"
-              aria-label={t('catalog.records.list.select_all')}
-              className="size-4 accent-primary"
-              checked={allSelected}
-              disabled={rows.length === 0}
-              onChange={(e) => toggleAll(e.target.checked)}
-            />
-          ),
-          cell: (info) => (
-            <input
-              type="checkbox"
-              aria-label={t('catalog.records.list.select_row', { title: info.row.original.title })}
-              className="size-4 accent-primary"
-              checked={selected.has(info.row.original.id)}
-              onChange={(e) => toggle(info.row.original, e.target.checked)}
-            />
-          ),
-        }),
-        column.display({
-          id: 'cover',
-          header: () => <span className="sr-only">{t('catalog.records.col.cover')}</span>,
-          cell: (info) =>
-            info.row.original.coverFileId === null ? (
-              <span className="flex h-12 w-9 items-center justify-center rounded border bg-muted text-muted-foreground" title={t('catalog.records.list.no_cover')}>
-                <BookIcon className="size-4" aria-hidden="true" />
-              </span>
-            ) : (
-              <img
-                src={`/files/${encodeURIComponent(info.row.original.coverFileId)}`}
-                alt=""
-                loading="lazy"
-                width={36}
-                height={48}
-                className="h-12 w-9 rounded border object-cover"
-              />
-            ),
-        }),
-        column.display({
-          id: 'title',
-          header: t('catalog.records.col.title'),
-          cell: (info) => {
-            const r = info.row.original;
-            return (
-              <span className="flex min-w-48 flex-col gap-0.5">
-                <Link to={`/admin/catalog/records/${encodeURIComponent(r.id)}`} className="font-medium text-primary underline-offset-4 hover:underline">
-                  {r.title}
-                </Link>
-                {r.subtitle !== null && <span className="text-muted-foreground">{r.subtitle}</span>}
-                {r.mainAgent !== null && <span className="text-muted-foreground">{r.mainAgent}</span>}
-                {(r.archived || !r.opacVisible) && (
-                  <span className="flex flex-wrap gap-1">
-                    {r.archived && <Badge tone="warning">{t('catalog.records.badge.archived')}</Badge>}
-                    {!r.opacVisible && <Badge>{t('catalog.records.badge.hidden')}</Badge>}
-                  </span>
-                )}
-              </span>
-            );
-          },
-        }),
-        column.display({
-          id: 'type',
-          header: t('catalog.records.col.type'),
-          cell: (info) => <span className="whitespace-nowrap">{typeName(t, types.data?.items, info.row.original.materialTypeId, locale)}</span>,
-        }),
-        column.accessor('year', { header: t('catalog.records.col.year'), cell: (info) => info.getValue() ?? '' }),
-        column.accessor('callNumber', {
-          header: t('catalog.records.col.call_number'),
-          cell: (info) => <span className="font-mono text-xs whitespace-nowrap">{info.getValue() ?? ''}</span>,
-        }),
-        column.accessor('itemCount', {
-          header: t('catalog.records.col.items'),
-          cell: (info) => <span className="tabular-nums">{info.getValue()}</span>,
-        }),
-        column.accessor('changedAt', {
-          header: t('catalog.records.col.changed'),
-          cell: (info) => (
-            <time dateTime={new Date(info.getValue()).toISOString()} className="whitespace-nowrap">
-              {dateTime(info.getValue())}
-            </time>
-          ),
-        }),
-      ]),
-    // toggle and toggleAll read the selection, the rows and the search key: all deps here.
-    [t, dateTime, locale, types.data, selected, rows, allSelected, searchKey],
-  );
-
-  const table = useTable({ features, columns, data: rows, getRowId: (r) => r.id });
+  const columns: DenseColumn<RecordListItem>[] = [
+    {
+      id: 'select',
+      headClassName: 'w-px',
+      header: (
+        <input
+          ref={selectAll}
+          type="checkbox"
+          aria-label={t('catalog.records.list.select_all')}
+          className="size-4 align-middle accent-primary"
+          checked={allSelected}
+          disabled={rows.length === 0}
+          onChange={(e) => toggleAll(e.target.checked)}
+        />
+      ),
+      cell: (r) => (
+        <input
+          type="checkbox"
+          aria-label={t('catalog.records.list.select_row', { title: r.title })}
+          className="size-4 align-middle accent-primary"
+          checked={selected.has(r.id)}
+          onChange={(e) => toggle(r, e.target.checked)}
+        />
+      ),
+    },
+    {
+      id: 'cover',
+      headClassName: 'w-px',
+      header: <span className="sr-only">{t('catalog.records.col.cover')}</span>,
+      cell: (r) =>
+        r.coverFileId === null ? (
+          <span className="block h-12 w-9 rounded border bg-layer-2" title={t('catalog.records.list.no_cover')} />
+        ) : (
+          <img src={`/files/${encodeURIComponent(r.coverFileId)}`} alt="" loading="lazy" width={36} height={48} className="h-12 w-9 rounded border object-cover" />
+        ),
+    },
+    {
+      id: 'title',
+      header: t('catalog.records.col.title'),
+      cell: (r) => (
+        <span className="flex min-w-48 flex-col gap-0.5">
+          <Link to={`/admin/catalog/records/${encodeURIComponent(r.id)}`} className="w-fit font-semibold text-accent-text underline-offset-4 hover:underline">
+            {r.title}
+          </Link>
+          {r.subtitle !== null && <span className="text-muted-foreground">{r.subtitle}</span>}
+          {r.mainAgent !== null && <span className="text-muted-foreground">{r.mainAgent}</span>}
+          {(r.archived || !r.opacVisible) && (
+            <span className="flex flex-wrap gap-1 pt-0.5">
+              {r.archived && <Badge tone="warning">{t('catalog.records.badge.archived')}</Badge>}
+              {!r.opacVisible && <Badge>{t('catalog.records.badge.hidden')}</Badge>}
+            </span>
+          )}
+        </span>
+      ),
+    },
+    { id: 'type', header: t('catalog.records.col.type'), className: 'whitespace-nowrap', cell: (r) => typeName(t, types.data?.items, r.materialTypeId, locale) },
+    { id: 'year', header: t('catalog.records.col.year'), cell: (r) => r.year ?? '' },
+    { id: 'call', header: t('catalog.records.col.call_number'), className: 'whitespace-nowrap', cell: (r) => r.callNumber ?? '' },
+    { id: 'items', header: t('catalog.records.col.items'), className: 'text-right', headClassName: 'text-right', cell: (r) => r.itemCount },
+    {
+      id: 'changed',
+      header: t('catalog.records.col.changed'),
+      cell: (r) => (
+        <time dateTime={new Date(r.changedAt).toISOString()} className="whitespace-nowrap">
+          {dateTime(r.changedAt)}
+        </time>
+      ),
+    },
+  ];
 
   const sorts = sortsFor(search.q);
   const sort = search.sort !== undefined && sorts.includes(search.sort) ? search.sort : sorts[0];
   const number = new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'id-ID');
   const searchMode = first !== undefined && first.page !== null;
   const atPageLimit = searchMode && last !== undefined && last.page === SEARCH_PAGES_MAX && (last.total ?? 0) > SEARCH_PAGES_MAX * PAGE_SIZE;
+  const filtered = Object.keys(search).length > 0;
+  const nothingAtAll = !filtered && list.data !== undefined && rows.length === 0 && !list.hasNextPage;
+  const typeLabel = (m: MaterialTypeView): string => (locale === 'en' ? m.nameEn : m.nameId);
+  const clearButton = (
+    <Button type="button" variant="link" className="h-auto p-0" onClick={clearFilters}>
+      {t('catalog.records.filter.clear')}
+    </Button>
+  );
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">{t('catalog.records.list.title')}</h1>
-        {canManage && (
-          <Button asChild>
-            <Link to="/admin/catalog/records/new">
-              <PlusIcon aria-hidden="true" />
-              {t('catalog.records.list.new')}
-            </Link>
-          </Button>
-        )}
-      </div>
+    <div className="grid gap-6">
+      <PageHead
+        title={t('catalog.records.list.title')}
+        intro={t('catalog.records.list.intro')}
+        actions={
+          canManage || canImport ? (
+            <>
+              {canImport && (
+                <Button asChild variant="outline">
+                  <Link to="/admin/catalog/exchange">{t('catalog.records.list.import')}</Link>
+                </Button>
+              )}
+              {canManage && (
+                <Button asChild>
+                  <Link to="/admin/catalog/records/new">{t('catalog.records.list.new')}</Link>
+                </Button>
+              )}
+            </>
+          ) : undefined
+        }
+      />
 
-      <SearchBox key={search.q ?? ''} initial={search.q ?? ''} onSearch={(q) => update({ q: q.trim() === '' ? undefined : q })} />
-
-      <section aria-label={t('catalog.records.list.filters')} className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label={t('catalog.records.filter.type')}>
+      <FilterRow
+        label={t('catalog.records.list.filters')}
+        onSubmit={(e) => {
+          e.preventDefault();
+          update({ q: text.trim() === '' ? undefined : text });
+        }}
+        actions={filtered ? clearButton : undefined}>
+        <FilterField wide className="basis-full" label={t('catalog.records.list.search_label')} hint={t('catalog.records.list.search_hint')}>
+          {(c) => (
+            <div role="search" className="flex gap-2">
+              <Input
+                {...c}
+                type="search"
+                maxLength={Q_MAX}
+                autoComplete="off"
+                spellCheck={false}
+                value={text}
+                onChange={(e) => setTyped({ key: search.q ?? '', text: e.target.value })}
+              />
+              <Button type="submit" variant="outline">
+                {t('catalog.records.list.search_button')}
+              </Button>
+            </div>
+          )}
+        </FilterField>
+        <FilterField className="flex-[1_1_170px]" label={t('catalog.records.filter.type')}>
           {(c) => (
             <select {...c} className={SELECT_CLASS} value={search.materialTypeId ?? ''} onChange={(e) => update({ materialTypeId: e.target.value === '' ? undefined : e.target.value })}>
               <option value="">{t('catalog.records.filter.type_all')}</option>
               {(types.data?.items ?? []).map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.archived ? t('catalog.records.field.archived_option', { name: locale === 'en' ? m.nameEn : m.nameId }) : locale === 'en' ? m.nameEn : m.nameId}
+                  {m.archived ? t('catalog.records.field.archived_option', { name: typeLabel(m) }) : typeLabel(m)}
                 </option>
               ))}
             </select>
           )}
-        </Field>
-        <Field label={t('catalog.records.filter.hidden')}>
+        </FilterField>
+        <FilterField className="flex-[1_1_190px]" label={t('catalog.records.filter.hidden')}>
           {(c) => (
             <select {...c} className={SELECT_CLASS} value={search.hidden ?? ''} onChange={(e) => update({ hidden: e.target.value === '' ? undefined : e.target.value })}>
               <option value="">{t('catalog.records.filter.hidden_all')}</option>
@@ -396,22 +391,21 @@ export function RecordsListScreen() {
               <option value="exclude">{t('catalog.records.filter.hidden_exclude')}</option>
             </select>
           )}
-        </Field>
-        <Field label={t('catalog.records.filter.items')}>
+        </FilterField>
+        <FilterField className="flex-[1_1_240px]" label={t('catalog.records.filter.items')}>
           {(c) => (
             <select
               {...c}
               className={SELECT_CLASS}
               value={search.hasItems === undefined ? '' : String(search.hasItems)}
-              onChange={(e) => update({ hasItems: e.target.value === '' ? undefined : e.target.value })}
-            >
+              onChange={(e) => update({ hasItems: e.target.value === '' ? undefined : e.target.value })}>
               <option value="">{t('catalog.records.filter.items_all')}</option>
               <option value="true">{t('catalog.records.filter.items_yes')}</option>
               <option value="false">{t('catalog.records.filter.items_no')}</option>
             </select>
           )}
-        </Field>
-        <Field label={t('catalog.records.filter.sort')}>
+        </FilterField>
+        <FilterField className="flex-[1_1_170px]" label={t('catalog.records.filter.sort')}>
           {(c) => (
             <select {...c} className={SELECT_CLASS} value={sort} onChange={(e) => update({ sort: e.target.value === sorts[0] ? undefined : e.target.value })}>
               {sorts.map((s) => (
@@ -421,80 +415,107 @@ export function RecordsListScreen() {
               ))}
             </select>
           )}
-        </Field>
-        <Field label={t('catalog.records.filter.changed_from')}>
+        </FilterField>
+        <FilterField className="flex-[1_1_160px]" label={t('catalog.records.filter.changed_from')}>
           {(c) => <Input {...c} type="date" value={search.changedFrom ?? ''} onChange={(e) => update({ changedFrom: e.target.value === '' ? undefined : e.target.value })} />}
-        </Field>
-        <Field label={t('catalog.records.filter.changed_to')}>
+        </FilterField>
+        <FilterField className="flex-[1_1_160px]" label={t('catalog.records.filter.changed_to')}>
           {(c) => <Input {...c} type="date" value={search.changedTo ?? ''} onChange={(e) => update({ changedTo: e.target.value === '' ? undefined : e.target.value })} />}
-        </Field>
+        </FilterField>
         <CheckField
-          className="self-end"
+          className="min-w-0 flex-[1_1_130px] pb-2"
           label={t('catalog.records.filter.archived')}
           checked={search.archived === true}
           onChange={(e) => update({ archived: e.target.checked ? true : undefined })}
         />
-        {Object.keys(search).length > 0 && (
-          <div className="self-end">
-            <Button type="button" variant="outline" onClick={() => void navigate({ to: '/admin/catalog/records', search: {} })}>
-              {t('catalog.records.filter.clear')}
-            </Button>
-          </div>
-        )}
-      </section>
-
-      {selected.size > 0 && (
-        <section aria-label={t('catalog.records.list.selection_actions')} className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
-          <span className="font-medium">{t('catalog.records.list.selected', { count: number.format(selected.size) })}</span>
-          <AddToPrintQueue entries={[...selected.values()].map((r) => ({ kind: 'record' as const, id: r.id, label: r.title }))} />
-          {canExport && (
-            <Button type="button" size="sm" variant="outline" onClick={exportSelected}>
-              <DownloadIcon aria-hidden="true" />
-              {t('catalog.records.list.export_selected')}
-            </Button>
-          )}
-          {canManage && (
-            <Button type="button" size="sm" variant="outline" disabled={selected.size > RECORD_BULK_MAX} onClick={() => setBulkOpen(true)}>
-              <PencilIcon aria-hidden="true" />
-              {t('catalog.records.list.accred_bulk')}
-            </Button>
-          )}
-          {canManage && selected.size > RECORD_BULK_MAX && (
-            <span className="w-full text-muted-foreground">{t('catalog.records.list.accred_bulk_too_many', { max: number.format(RECORD_BULK_MAX) })}</span>
-          )}
-          <Button type="button" size="sm" variant="ghost" onClick={() => setSelection({ key: searchKey, rows: NO_SELECTION })}>
-            {t('catalog.records.list.clear_selection')}
-          </Button>
-        </section>
-      )}
-      <RecordBulkDialog open={bulkOpen} records={[...selected.values()]} onClose={() => setBulkOpen(false)} />
-      {notice === 'too_many' && <Notice kind="error">{t('catalog.records.list.export_too_many', { max: number.format(EXPORT_SELECTION_MAX) })}</Notice>}
-      {notice === 'blocked' && <Notice kind="error">{t('catalog.records.list.export_blocked')}</Notice>}
+      </FilterRow>
 
       {list.isError && list.data === undefined ? (
-        <ProblemAlert error={list.error} />
+        <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
       ) : list.data === undefined ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
+        <SkeletonTable label={t('shell.loading')} columns={8} />
+      ) : nothingAtAll ? (
+        <EmptyState
+          title={t('catalog.records.list.empty_all')}
+          actions={
+            canManage || canImport ? (
+              <>
+                {canManage && (
+                  <Button asChild>
+                    <Link to="/admin/catalog/records/new">{t('catalog.records.list.new')}</Link>
+                  </Button>
+                )}
+                {canImport && (
+                  <Button asChild variant="outline">
+                    <Link to="/admin/catalog/exchange">{t('catalog.records.list.import')}</Link>
+                  </Button>
+                )}
+              </>
+            ) : undefined
+          }>
+          <p>{t('catalog.records.list.empty_all_hint')}</p>
+        </EmptyState>
       ) : (
-        <div className="flex flex-col gap-3">
-          {searchMode && first.total !== null && (
-            <p className="text-sm text-muted-foreground">
-              {first.total >= TOTAL_CAP
-                ? t('catalog.records.list.total_many', { count: number.format(TOTAL_CAP) })
-                : t('catalog.records.list.total', { count: number.format(first.total) })}
-            </p>
-          )}
-          <DataTable table={table} caption={t('catalog.records.list.caption')} empty={t('catalog.records.list.empty')} />
+        <div className="grid gap-3">
+          <SelectionBar
+            count={selected.size}
+            label={t('catalog.records.list.selected', { count: number.format(selected.size) })}
+            actions={canManage && selected.size <= RECORD_BULK_MAX ? [{ id: 'accred', label: t('catalog.records.list.accred_bulk') }] : []}
+            open={panel}
+            onOpenChange={setPanel}
+            onClear={() => setRows(NO_SELECTION)}
+            clearLabel={t('catalog.records.list.clear_selection')}
+            focusAfter={selectAll}
+            extra={
+              <>
+                <AddToPrintQueue entries={[...selected.values()].map((r) => ({ kind: 'record' as const, id: r.id, label: r.title }))} />
+                {canExport && (
+                  <Button type="button" size="sm" variant="ghost" onClick={exportSelected}>
+                    {t('catalog.records.list.export_selected')}
+                  </Button>
+                )}
+                {canManage && selected.size > RECORD_BULK_MAX && (
+                  <>
+                    <Button type="button" size="sm" variant="ghost" disabled>
+                      {t('catalog.records.list.accred_bulk')}
+                    </Button>
+                    <span className="w-full text-meta text-muted-foreground">{t('catalog.records.list.accred_bulk_too_many', { max: number.format(RECORD_BULK_MAX) })}</span>
+                  </>
+                )}
+              </>
+            }>
+            {panel === 'accred' && <RecordBulkPanel records={[...selected.values()]} onClose={() => setPanel(null)} />}
+            {notice === 'too_many' && <Notice kind="error">{t('catalog.records.list.export_too_many', { max: number.format(EXPORT_SELECTION_MAX) })}</Notice>}
+            {notice === 'blocked' && <Notice kind="error">{t('catalog.records.list.export_blocked')}</Notice>}
+          </SelectionBar>
+          <DenseTable
+            caption={t('catalog.records.list.caption')}
+            columns={columns}
+            rows={rows}
+            rowKey={(r) => r.id}
+            rowClassName={(r) => (selected.has(r.id) ? 'bg-accent-soft' : undefined)}
+            empty={
+              <span className="flex flex-wrap items-center gap-2">
+                {t('catalog.records.list.empty')}
+                {filtered && clearButton}
+              </span>
+            }
+          />
           {list.isFetchNextPageError && <ProblemAlert error={list.error} />}
-          {list.hasNextPage && (
-            <div>
-              <Button type="button" variant="outline" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">
+              {searchMode && first.total !== null
+                ? first.total >= TOTAL_CAP
+                  ? t('catalog.records.list.total_many', { count: number.format(TOTAL_CAP) })
+                  : t('catalog.records.list.total', { count: number.format(first.total) })
+                : t('catalog.records.list.shown', { count: number.format(rows.length) })}
+            </p>
+            {list.hasNextPage && (
+              <Button type="button" variant="outline" size="sm" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
                 {t('catalog.records.list.load_more')}
               </Button>
-            </div>
-          )}
+            )}
+          </div>
           {atPageLimit && <p className="text-sm text-muted-foreground">{t('catalog.records.list.page_limit', { count: number.format(SEARCH_PAGES_MAX * PAGE_SIZE) })}</p>}
         </div>
       )}

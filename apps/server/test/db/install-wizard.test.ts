@@ -364,6 +364,8 @@ describe.skipIf(!engine.available)(`the install wizard [${engineLabel()}]`, () =
         'library.address': 'Jl. Merdeka 1',
         'library.timezone': 'Asia/Jakarta',
         'library.locale': 'id',
+        // A fresh install starts with the design's blue accent.
+        'opac.accent': 'blue',
         'system.probe': expect.objectContaining({ sse: true, methods: { put: true, patch: false, delete: true }, xff: { spoofable: false, suggestedHops: 0 } }),
       });
       // Hops 0 confirmed: the forged entry is never the client IP, whatever the pre-install hops derived.

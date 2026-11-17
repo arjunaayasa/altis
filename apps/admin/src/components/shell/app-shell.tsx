@@ -103,9 +103,11 @@ export function AppShell() {
       onTransportStale: () => inBackground(() => void queryClient.invalidateQueries({ queryKey: ME_KEY })),
     }),
   );
-  const channels = me === null ? '' : shellChannels(me).join(',');
+  // A password that must change first: the server refuses every request but the change, so the client stays off.
+  const usable = me !== null && !me.mustChangePassword;
+  const channels = usable ? shellChannels(me).join(',') : '';
   const transport = me?.client?.realtime;
-  const running = me !== null && !signedOut;
+  const running = usable && !signedOut;
   // Subscribed before the client starts, so that its first read already has the channels.
   useEffect(() => (channels === '' ? undefined : hub.subscribe(channels.split(','), () => {})), [hub, channels]);
   useEffect(() => hub.refresh(), [hub, transport]);

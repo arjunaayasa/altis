@@ -2,10 +2,10 @@ import { vocabKey, type ReportRunStatus } from '@altis/shared';
 import type { ReportCatalogEntry, ReportRunListResponse, ReportRunView } from '@altis/shared/api/reports';
 import { useInfiniteQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
-import { DownloadIcon } from 'lucide-react';
-import { useId, useMemo } from 'react';
+import { useMemo } from 'react';
 import { DataTable, useDateTime } from '@/components/data-table';
-import { Badge, ProblemAlert } from '@/components/form-field';
+import { ProblemAlert } from '@/components/form-field';
+import { ErrorState, Section, SkeletonTable, Tag, type TagTone } from '@/components/layout';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { useLocale, useT, type Translate } from '@/i18n';
 import { api, reauth } from '@/lib/api';
@@ -114,11 +114,11 @@ export function failureText(t: Translate, code: string | null): string {
   return isMessageKey(key) ? t(key) : t('reports.runs.failure.code', { code });
 }
 
-/** The status badge of a run. */
+/** The status tag of a run: green once its file is made, red when it failed, neutral while it waits or runs. */
 export function RunStatusBadge({ status }: { status: ReportRunStatus }) {
   const t = useT();
-  const tone = status === 'failed' ? 'danger' : status === 'running' ? 'warning' : status === 'succeeded' ? 'info' : 'neutral';
-  return <Badge tone={tone}>{t(vocabKey('report_run_status', status))}</Badge>;
+  const tone: TagTone = status === 'failed' ? 'bad' : status === 'succeeded' ? 'ok' : 'neutral';
+  return <Tag tone={tone}>{t(vocabKey('report_run_status', status))}</Tag>;
 }
 
 /** The notes of a run: its filters, its rows of non-Latin text, its warnings, why it failed. */
@@ -131,13 +131,13 @@ export function RunNotes({ run, describe }: { run: ReportRunView; describe: ((pa
       {describe !== null && isRecord(run.params) && <span className="text-muted-foreground">{t('reports.runs.filters', { filters: describe(run.params) })}</span>}
       {(run.nonLatinRows ?? 0) > 0 && <span>{t('reports.runs.non_latin', { count: number.format(run.nonLatinRows ?? 0) })}</span>}
       {run.warnings.length > 0 && (
-        <ul className="list-disc pl-4 text-warning-foreground">
+        <ul className="list-disc pl-4 font-semibold text-warn">
           {run.warnings.map((code, i) => (
             <li key={i}>{warningText(t, locale, code)}</li>
           ))}
         </ul>
       )}
-      {run.status === 'failed' && <span className="text-destructive">{t('reports.runs.failed', { reason: failureText(t, run.errorCode) })}</span>}
+      {run.status === 'failed' && <span className="font-semibold text-bad">{t('reports.runs.failed', { reason: failureText(t, run.errorCode) })}</span>}
     </div>
   );
 }
@@ -162,13 +162,11 @@ export function RunFile({ run }: { run: ReportRunView }) {
   return (
     <div className="grid justify-items-start gap-1">
       {run.personal ? (
-        <Button type="button" size="sm" aria-label={label} onClick={() => void download()}>
-          <DownloadIcon aria-hidden="true" />
+        <Button type="button" size="sm" variant="outline" aria-label={label} onClick={() => void download()}>
           {t('reports.runs.download')}
         </Button>
       ) : (
-        <a href={href} download aria-label={label} className={buttonVariants({ size: 'sm' })}>
-          <DownloadIcon aria-hidden="true" />
+        <a href={href} download aria-label={label} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
           {t('reports.runs.download')}
         </a>
       )}
@@ -205,7 +203,6 @@ export function RunHistory({ entry, describe }: { entry: ReportCatalogEntry; des
   const me = useMe();
   const locale = useLocale();
   const dateTime = useDateTime();
-  const headingId = useId();
   const list = useInfiniteQuery({
     queryKey: [...runsKey(entry.id), 'list'],
     // Read again on its own while a run has work ahead: such reads never keep the session alive.
@@ -242,19 +239,14 @@ export function RunHistory({ entry, describe }: { entry: ReportCatalogEntry; des
   const table = useTable({ features, columns, data: runs, getRowId: (r) => r.id });
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      <h2 id={headingId} className="text-lg font-semibold">
-        {t('reports.runs.title')}
-      </h2>
+    <Section title={t('reports.runs.title')}>
       {list.isError && list.data === undefined ? (
-        <ProblemAlert error={list.error} />
+        <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
       ) : list.data === undefined ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
+        <SkeletonTable label={t('shell.loading')} rows={3} />
       ) : (
         <>
-          <DataTable table={table} caption={t('reports.runs.caption')} empty={t('reports.runs.empty')} />
+          <DataTable table={table} caption={t('reports.runs.caption')} empty={t('reports.runs.empty')} alignRight={['rowCount']} />
           {list.isFetchNextPageError && <ProblemAlert error={list.error} />}
           {list.hasNextPage && (
             <div>
@@ -265,6 +257,6 @@ export function RunHistory({ entry, describe }: { entry: ReportCatalogEntry; des
           )}
         </>
       )}
-    </section>
+    </Section>
   );
 }

@@ -113,7 +113,7 @@ export const INSTALL_ID = {
   'checks.network.suggestion_no_ip': 'Terdeteksi {hops} proxy di depan ALTIS.',
   'checks.network.no_suggestion': 'Uji proxy tidak berhasil; jumlah proxy tidak dapat diusulkan.',
   'checks.network.hops': 'Jumlah proxy tepercaya (hops)',
-  'checks.network.ip_for_hops': 'Dengan {hops} hops, alamat IP Anda terbaca sebagai {ip}.',
+  'checks.network.ip_for_hops': 'Dengan {hops} hop, alamat IP Anda terbaca sebagai {ip}.',
   'checks.network.ip_unknown':
     'Alamat IP untuk nilai ini tidak dapat ditentukan dari uji ini. Pastikan jumlah proxy di depan ALTIS (misalnya Cloudflare atau load balancer penyedia hosting) memang sebanyak ini, lalu konfirmasi.',
   'checks.network.confirm': 'Alamat IP itu memang alamat IP saya.',
@@ -243,6 +243,13 @@ export const INSTALL_ID = {
   'done.body': 'ALTIS siap dipakai. Masuk dengan akun super admin yang baru saja Anda buat.',
   'done.two_factor': 'Setelah masuk, aktifkan verifikasi dua langkah (2FA) untuk akun super admin.',
   'done.login': 'Masuk ke ALTIS',
+  // ---- English singulars of counted texts (`<key>_one`, chosen when the count is 1; Indonesian has one form) ----
+  'claim.minutes_one': '{n} menit',
+  'claim.seconds_one': '{n} detik',
+  'checks.network.suggestion_one': 'Terdeteksi {hops} proxy di depan ALTIS. Dengan nilai ini, alamat IP Anda terbaca sebagai {ip}.',
+  'checks.network.suggestion_no_ip_one': 'Terdeteksi {hops} proxy di depan ALTIS.',
+  'checks.network.ip_for_hops_one': 'Dengan {hops} hop, alamat IP Anda terbaca sebagai {ip}.',
+  'db.result.pool_one': 'Setiap proses ALTIS akan membuka hingga {n} koneksi.',
 } as const;
 
 export type InstallKey = keyof typeof INSTALL_ID;
@@ -464,6 +471,13 @@ export const INSTALL_EN: Readonly<Record<InstallKey, string>> = {
   'done.body': 'ALTIS is ready. Sign in with the super admin account you have just created.',
   'done.two_factor': 'After signing in, turn on two-step verification (2FA) for the super admin account.',
   'done.login': 'Sign in to ALTIS',
+  // ---- English singulars of counted texts ----
+  'claim.minutes_one': '{n} minute',
+  'claim.seconds_one': '{n} second',
+  'checks.network.suggestion_one': '{hops} proxy was detected in front of ALTIS. With this value, your IP address reads as {ip}.',
+  'checks.network.suggestion_no_ip_one': '{hops} proxy was detected in front of ALTIS.',
+  'checks.network.ip_for_hops_one': 'With {hops} hop, your IP address reads as {ip}.',
+  'db.result.pool_one': 'Each ALTIS process will open up to {n} connection.',
 };
 
 export const INSTALL_MESSAGES: Readonly<Record<Locale, Readonly<Record<InstallKey, string>>>> = Object.freeze({
@@ -530,6 +544,10 @@ export function formatBytes(locale: Locale, bytes: number): string {
 
 /** A wait in seconds as minutes (rounded up) from a minute on, else seconds. */
 export function formatWait(locale: Locale, seconds: number): string {
-  if (seconds >= 60) return installT(locale, 'claim.minutes', { n: Math.ceil(seconds / 60) });
-  return installT(locale, 'claim.seconds', { n: Math.max(1, Math.ceil(seconds)) });
+  if (seconds >= 60) {
+    const minutes = Math.ceil(seconds / 60);
+    return installT(locale, minutes === 1 ? 'claim.minutes_one' : 'claim.minutes', { n: minutes });
+  }
+  const n = Math.max(1, Math.ceil(seconds));
+  return installT(locale, n === 1 ? 'claim.seconds_one' : 'claim.seconds', { n });
 }

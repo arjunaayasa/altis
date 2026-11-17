@@ -1,6 +1,7 @@
 import { CATALOG_EN } from './catalog';
 import { KOMUNITAS_EN } from './komunitas';
 import { SHELL_EN } from './shell';
+import { SYSTEM_UI_EN } from './system-ui';
 import type { AdminKey } from './id';
 
 /** The admin SPA's own strings in English, complete: typed against the Indonesian keys (`id.ts`). */
@@ -85,6 +86,8 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'form.refetch_failed': 'The latest data could not be loaded; what is shown is the data loaded earlier.',
   'form.yes': 'Yes',
   'form.no': 'No',
+  'form.file.choose': 'Choose a file',
+  'form.file.none': 'No file chosen yet',
   'form.error.required': 'This field is required.',
   'form.error.taken': 'Already in use. Choose another.',
   'form.error.too_small': 'Too short or not filled in.',
@@ -114,6 +117,10 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'table.prev': 'Previous',
   'table.next': 'Next',
   'table.retry': 'Try again',
+  'table.selected': '{count} selected',
+  'table.clear_selection': 'Clear selection',
+  'table.filter_apply': 'Apply filters',
+  'table.load_failed': 'The data could not be loaded',
 
   'users.add': 'Add user',
   'users.caption': 'Staff users',
@@ -736,6 +743,8 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'jobs.schedule.diagnostics.exposure': 'File exposure test',
   'jobs.schedule.diagnostics.ip_trust': 'IP address trust check',
   'jobs.schedule.diagnostics.usage': 'Storage usage measurement',
+  'jobs.schedule.update.check': 'Update check',
+  'jobs.schedule.privacy.anonymize': 'Archived member anonymisation',
 
   'backups.description':
     'Backups keep a copy of the ALTIS data. Here you can make a backup, prepare its download, upload a backup archive, and restore data from a backup.',
@@ -1088,6 +1097,7 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'updates.history.backup': 'Backup before the update',
   'updates.history.versions': '{from} → {to}',
   'jobs.type.update.check': 'Check for updates',
+  'jobs.type.privacy.anonymize': 'Anonymise archived members past their retention',
   'jobs.type.release.adopt': 'Copy the bundled release into the data folder',
   'jobs.type.release.retention': 'Delete old releases',
   // 1d Task 29: the dashboard's Pembaruan card; Diagnostik's releases
@@ -1183,4 +1193,6 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   ...KOMUNITAS_EN,
   // ---- The shell: module bar, sidebar, user menu and theme (i18n/shell.ts) ----
   ...SHELL_EN,
+  // ---- The Sistem module's screens in the shared layout (i18n/system-ui.ts) ----
+  ...SYSTEM_UI_EN,
 };

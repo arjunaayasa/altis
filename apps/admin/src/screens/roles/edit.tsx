@@ -3,15 +3,15 @@ import { RoleCreateBody, type PermissionListResponse, type RoleItem, type RolePa
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
-import { ArrowLeftIcon, Trash2Icon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import type { z } from 'zod';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { Badge, CheckField, Field, Notice, ProblemAlert, RefetchProblem, TEXTAREA_CLASS } from '@/components/form-field';
+import { CheckField, Field, Notice, NoticeAlert, ProblemAlert, RefetchProblem, TEXTAREA_CLASS } from '@/components/form-field';
+import { BackLink, ErrorState, FORM_FULL, FormBar, FormSection, LoadingState, PageHead, SectionHead, StatusText, Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useT, type Translate } from '@/i18n';
+import { useT } from '@/i18n';
 import { grantable, holds, isSuperAdmin, roleLabel } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
 import { useDirtyGuard } from '@/lib/dirty-forms';
@@ -35,35 +35,18 @@ type RoleInput = z.input<typeof RoleCreateBody>;
 
 const descriptionValue = (v: unknown): unknown => (typeof v === 'string' && v.trim() === '' ? null : v);
 
-const INFO_CLASS = 'rounded-md border bg-muted/50 px-3 py-2 text-sm';
-
 function sameSet(a: readonly string[], b: readonly string[]): boolean {
   const sb = new Set(b);
   return a.length === sb.size && a.every((x) => sb.has(x));
 }
 
-function BackLink({ label }: { label: string }) {
+/** The permissions part of a role's page: its heading, a sentence, the picker. */
+function PermissionsPart({ hint, children, ruled = true }: { hint?: string; children: ReactNode; ruled?: boolean }) {
+  const t = useT();
   return (
-    <Link to="/admin/roles" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-      <ArrowLeftIcon className="size-4" aria-hidden="true" />
-      {label}
-    </Link>
-  );
-}
-
-function Loading({ t }: { t: Translate }) {
-  return (
-    <p role="status" className="text-sm text-muted-foreground">
-      {t('shell.loading')}
-    </p>
-  );
-}
-
-function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-3">
-      <div>
-        <h2 className="text-lg font-semibold">{title}</h2>
+    <section aria-label={t('roles.permissions')} className={ruled ? 'grid gap-3 border-t py-5' : 'grid gap-3'}>
+      <div className="grid max-w-[75ch] gap-1">
+        <SectionHead title={t('roles.permissions')} />
         {hint !== undefined && <p className="text-sm text-muted-foreground">{hint}</p>}
       </div>
       {children}
@@ -141,42 +124,45 @@ function CustomRoleForm({ initial, catalog, readOnly = false }: { initial: RoleI
   return (
     <form noValidate onSubmit={(e) => void submit(e)}>
       {/* Without system.roles.manage (a deep link to "Buat peran") every field is disabled and nothing can be sent. */}
-      <fieldset disabled={readOnly} className="flex min-w-0 flex-col gap-6">
+      <fieldset disabled={readOnly} className="grid min-w-0 gap-4">
         {notice !== null && <Notice kind={notice.kind}>{notice.text}</Notice>}
-        <div className="grid gap-4 rounded-lg border bg-card p-4">
-          <Field label={t('roles.field.name')} error={errors.name}>
-            {(c) => <Input {...c} autoComplete="off" maxLength={100} {...form.register('name')} />}
-          </Field>
-          <Field label={t('roles.field.description')} error={errors.description}>
-            {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={1000} {...form.register('description', { setValueAs: descriptionValue })} />}
-          </Field>
-          <CheckField asSwitch label={t('roles.field.mfa_required')} hint={t('roles.field.mfa_required_hint')} {...form.register('mfaRequired')} />
+        <div>
+          <FormSection title={t('roles.form.about')} intro={t('roles.form.about_intro')}>
+            <Field label={t('roles.field.name')} error={errors.name}>
+              {(c) => <Input {...c} autoComplete="off" maxLength={100} {...form.register('name')} />}
+            </Field>
+            <Field label={t('roles.field.description')} error={errors.description} className={FORM_FULL}>
+              {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={1000} {...form.register('description', { setValueAs: descriptionValue })} />}
+            </Field>
+            <CheckField asSwitch className={FORM_FULL} label={t('roles.field.mfa_required')} hint={t('roles.field.mfa_required_hint')} {...form.register('mfaRequired')} />
+          </FormSection>
+          <PermissionsPart hint={t('roles.permissions_hint')}>
+            <Controller
+              control={form.control}
+              name="permissions"
+              render={({ field }) => <PermissionPicker catalog={catalog} value={field.value as Permission[]} onChange={field.onChange} />}
+            />
+            {errors.permissions !== undefined && <p className="text-meta font-semibold text-bad">{t('form.error.invalid')}</p>}
+          </PermissionsPart>
+          {!readOnly && (
+            <FormBar>
+              <Button type="submit" disabled={isSubmitting}>
+                {t(isSubmitting ? 'form.saving' : 'form.save')}
+              </Button>
+              {role === null ? (
+                <Button asChild variant="outline">
+                  <Link to="/admin/roles">{t('form.cancel')}</Link>
+                </Button>
+              ) : null}
+              {isDirty && <StatusText tone="warn">{t('system.unsaved')}</StatusText>}
+              {role !== null && (
+                <Button type="button" variant="outline" className="ml-auto text-bad" onClick={() => setDeleting(true)}>
+                  {t('roles.delete')}
+                </Button>
+              )}
+            </FormBar>
+          )}
         </div>
-        <Section title={t('roles.permissions')} hint={t('roles.permissions_hint')}>
-          <Controller
-            control={form.control}
-            name="permissions"
-            render={({ field }) => <PermissionPicker catalog={catalog} value={field.value as Permission[]} onChange={field.onChange} />}
-          />
-          {errors.permissions !== undefined && <p className="text-sm text-destructive">{t('form.error.invalid')}</p>}
-        </Section>
-        {!readOnly && (
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={isSubmitting}>
-              {t(isSubmitting ? 'form.saving' : 'form.save')}
-            </Button>
-            {role === null ? (
-              <Button asChild variant="outline">
-                <Link to="/admin/roles">{t('form.cancel')}</Link>
-              </Button>
-            ) : (
-              <Button type="button" variant="outline" className="ml-auto text-destructive" onClick={() => setDeleting(true)}>
-                <Trash2Icon aria-hidden="true" />
-                {t('roles.delete')}
-              </Button>
-            )}
-          </div>
-        )}
       </fieldset>
       {role !== null && (
         <ConfirmDialog
@@ -222,7 +208,7 @@ function SystemRoleMfaForm({ initial }: { initial: RoleItem }) {
   };
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border bg-card p-4">
+    <div className="grid gap-3">
       {notice !== null && <Notice kind={notice.kind}>{notice.text}</Notice>}
       <CheckField
         asSwitch
@@ -246,9 +232,11 @@ export function RoleCreateScreen() {
   const canManage = holds(me, 'system.roles.manage');
   const catalog = useApiQuery<PermissionListResponse>({ queryKey: ['permissions'], path: 'permissions', staleTime: Infinity });
   return (
-    <div className="flex max-w-3xl flex-col gap-4">
-      <BackLink label={t('roles.back')} />
-      <h1 className="text-2xl font-semibold">{t('roles.new.title')}</h1>
+    <div className="grid max-w-5xl gap-6">
+      <div className="grid gap-3">
+        <BackLink to="/admin/roles">{t('roles.back')}</BackLink>
+        <PageHead title={t('roles.new.title')} />
+      </div>
       {/* The server would refuse (and record the refusal): say so before anything is typed. */}
       {!canManage && <ProblemAlert error={new ApiError(403, 'AUTHZ_DENIED')} />}
       {catalog.data !== undefined ? (
@@ -257,9 +245,9 @@ export function RoleCreateScreen() {
           <CustomRoleForm initial={null} catalog={catalog.data.items} readOnly={!canManage} />
         </>
       ) : catalog.isError ? (
-        <Notice kind="error">{problemText(t, catalog.error)}</Notice>
+        <ErrorState title={problemText(t, catalog.error)} error={null} onRetry={() => void catalog.refetch()} retrying={catalog.isFetching} />
       ) : (
-        <Loading t={t} />
+        <LoadingState />
       )}
     </div>
   );
@@ -278,13 +266,13 @@ export function RoleEditScreen() {
   const failed = role.data === undefined && role.isError ? role.error : catalog.data === undefined && catalog.isError ? catalog.error : null;
   if (failed !== null) {
     return (
-      <div className="flex max-w-3xl flex-col gap-4">
-        <BackLink label={t('roles.back')} />
-        <Notice kind="error">{problemText(t, failed)}</Notice>
+      <div className="grid max-w-5xl gap-6">
+        <BackLink to="/admin/roles">{t('roles.back')}</BackLink>
+        <ErrorState title={problemText(t, failed)} error={null} />
       </div>
     );
   }
-  if (role.data === undefined || catalog.data === undefined) return <Loading t={t} />;
+  if (role.data === undefined || catalog.data === undefined) return <LoadingState />;
 
   const r = role.data;
   const canManage = holds(me, 'system.roles.manage');
@@ -293,22 +281,30 @@ export function RoleEditScreen() {
   const mfaText = t('roles.mfa_status', { value: t(r.mfaRequired ? 'form.yes' : 'form.no') });
 
   return (
-    <div className="flex max-w-3xl flex-col gap-4">
-      <BackLink label={t('roles.back')} />
-      <div className="flex flex-col gap-1">
-        <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold">
-          {roleLabel(t, r)}
-          {r.isSystem && <Badge tone="info">{t('roles.system')}</Badge>}
-        </h1>
-        {!editable && r.description !== null && <p className="text-muted-foreground">{r.description}</p>}
-        <p className="text-sm text-muted-foreground">{t('roles.holders_hint', { count: r.holders })}</p>
+    <div className="grid max-w-5xl gap-6">
+      <div className="grid gap-3">
+        <BackLink to="/admin/roles">{t('roles.back')}</BackLink>
+        <PageHead
+          title={
+            <span className="flex flex-wrap items-center gap-2">
+              {roleLabel(t, r)}
+              {r.isSystem && <Tag>{t('roles.system')}</Tag>}
+            </span>
+          }
+          intro={
+            <>
+              {!editable && r.description !== null && <span className="block">{r.description}</span>}
+              <span className="block text-meta">{t(r.holders === 1 ? 'roles.holders_hint_one' : 'roles.holders_hint', { count: r.holders })}</span>
+            </>
+          }
+        />
       </div>
 
       {created && <Notice kind="success">{t('roles.created')}</Notice>}
       <RefetchProblem query={role} />
       <RefetchProblem query={catalog} />
-      {r.isSystem && <p className={INFO_CLASS}>{t('roles.system_readonly')}</p>}
-      {canManage && cannotGrant && <p className={INFO_CLASS}>{t('roles.cannot_edit')}</p>}
+      {r.isSystem && <NoticeAlert>{t('roles.system_readonly')}</NoticeAlert>}
+      {canManage && cannotGrant && <NoticeAlert>{t('roles.cannot_edit')}</NoticeAlert>}
 
       {editable ? (
         <CustomRoleForm key={r.id} initial={r} catalog={catalog.data.items} />
@@ -322,9 +318,9 @@ export function RoleEditScreen() {
               {r.isSystem && <span className="block text-xs text-muted-foreground">{t('roles.system_mfa_super_admin')}</span>}
             </p>
           )}
-          <Section title={t('roles.permissions')}>
+          <PermissionsPart ruled={false}>
             <PermissionPicker catalog={catalog.data.items} value={r.permissions} readOnly />
-          </Section>
+          </PermissionsPart>
         </>
       )}
     </div>

@@ -2,11 +2,11 @@ import { TwoFactorDisableBody, totpCodeField, type RecoveryCodesResponse } from 
 import { passwordField } from '@altis/shared/api/common';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { ShieldCheckIcon, ShieldOffIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Field, NoticeAlert, ProblemAlert, RootError, describedBy } from '@/components/form-field';
+import { SideSection, StatusText } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
@@ -16,7 +16,7 @@ import { FORM_PARSE, applyServerErrors, hasFieldErrors } from '@/lib/form-errors
 import { useMe } from '@/lib/me';
 import { holdMe } from '@/lib/sign-in';
 import { RecoveryCodes, SignInAgainButton, TwoFactorEnrolment, useEnabled } from '@/screens/login/setup-2fa';
-import { ProfilePage, ProfileSection } from './profile';
+import { ProfilePage } from './profile';
 
 /**
  * "Verifikasi dua langkah" of Profil saya, `/admin/profile/2fa` (spec §7.1; Task 28).
@@ -47,27 +47,22 @@ export function ProfileTwoFactorScreen() {
   if (enabledCodes !== null || disabled) {
     return (
       <ProfilePage>
-        <ProfileSection title={t('profile.2fa.title')}>
+        <SideSection title={t('profile.2fa.title')}>
           {enabledCodes !== null && <RecoveryCodes codes={enabledCodes} />}
           <NoticeAlert>{t(enabledCodes !== null ? 'twofa.signed_out' : 'profile.2fa.disabled')}</NoticeAlert>
           <div>
             <SignInAgainButton notice={enabledCodes !== null ? '2fa_enabled' : '2fa_disabled'} />
           </div>
-        </ProfileSection>
+        </SideSection>
       </ProfilePage>
     );
   }
 
   return (
     <ProfilePage>
-      <ProfileSection title={t('profile.2fa.title')}>
-        <p className="flex items-start gap-2 text-sm">
-          {user.totpEnabled ? (
-            <ShieldCheckIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
-          ) : (
-            <ShieldOffIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          )}
-          <span>{t(user.totpEnabled ? 'profile.2fa.on' : 'profile.2fa.off')}</span>
+      <SideSection title={t('profile.2fa.title')}>
+        <p className="text-sm">
+          {user.totpEnabled ? <StatusText tone="ok">{t('profile.2fa.on')}</StatusText> : <span>{t('profile.2fa.off')}</span>}
         </p>
         {!user.totpEnabled && (
           <>
@@ -75,13 +70,13 @@ export function ProfileTwoFactorScreen() {
             <TwoFactorEnrolment onEnabled={enabled} />
           </>
         )}
-      </ProfileSection>
+      </SideSection>
       {user.totpEnabled && (
         <>
           <NewRecoveryCodes />
-          <ProfileSection title={t('profile.2fa.disable_title')} description={user.mfaRequired ? undefined : t('profile.2fa.disable_description')}>
+          <SideSection title={t('profile.2fa.disable_title')} intro={user.mfaRequired ? undefined : t('profile.2fa.disable_description')}>
             {user.mfaRequired ? <p className="text-sm">{t('profile.2fa.required')}</p> : <DisableTwoFactor onDisabled={() => setDisabled(true)} />}
-          </ProfileSection>
+          </SideSection>
         </>
       )}
     </ProfilePage>
@@ -114,7 +109,7 @@ function NewRecoveryCodes() {
   };
 
   return (
-    <ProfileSection title={t('profile.2fa.codes_title')} description={codes === null ? t('profile.2fa.codes_description') : undefined}>
+    <SideSection title={t('profile.2fa.codes_title')} intro={codes === null ? t('profile.2fa.codes_description') : undefined}>
       {codes === null ? (
         <>
           <ProblemAlert error={problem} />
@@ -134,7 +129,7 @@ function NewRecoveryCodes() {
           </div>
         </>
       )}
-    </ProfileSection>
+    </SideSection>
   );
 }
 

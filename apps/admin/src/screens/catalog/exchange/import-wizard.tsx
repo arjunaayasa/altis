@@ -6,13 +6,13 @@ import type { CollectionTypeView, MasterListResponse, MaterialTypeView } from '@
 import type { RunStarted, RunView } from '@altis/shared/api/catalog/runs';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { FlaskConicalIcon, PlayIcon, RotateCcwIcon, SlidersHorizontalIcon, UploadIcon, XIcon } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { JobProgress, type JobOutcome } from '@/components/job-progress';
 import { CheckField, Field, Notice, NoticeAlert, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { FactList, FormSection, LoadingState, Steps } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FileInput } from '@/components/file-input';
 import { useLocale, useT, type TKey } from '@/i18n';
 import { holds, holdsAt, meId } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
@@ -22,7 +22,7 @@ import { useApiQuery, useMe } from '@/lib/me';
 import { uploadFile } from '@/lib/upload';
 import { useBytes } from '@/screens/backups/upload';
 import { ProgressBar } from '@/screens/jobs/list';
-import { RUNS_KEY, SummaryView, runHref, runKey, useRetryKey } from './summary-view';
+import { RUNS_KEY, RUN_LINK, SummaryView, runHref, runKey, useRetryKey } from './summary-view';
 
 /**
  * Impor/Ekspor, the import wizard (Phase 2 spec §5.3, §13; plan Task 29):
@@ -129,18 +129,19 @@ export function StartProblem({ error }: { error: unknown }) {
   return <ProblemAlert error={error} />;
 }
 
+/** The steps of the wizard, in their order. */
+const STEPS = ['file', 'options', 'dry_run', 'run'] as const;
+
 /** The step list: where the wizard is. */
-function Steps({ current }: { current: 0 | 1 | 2 | 3 }) {
+function WizardSteps({ current }: { current: 0 | 1 | 2 | 3 }) {
   const t = useT();
-  const steps = ['file', 'options', 'dry_run', 'run'] as const;
   return (
-    <ol aria-label={t('catalog.exchange.import.steps')} className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-      {steps.map((s, i) => (
-        <li key={s} aria-current={i === current ? 'step' : undefined} className={i === current ? 'font-semibold' : 'text-muted-foreground'}>
-          {i + 1}. {t(`catalog.exchange.import.step.${s}`)}
-        </li>
-      ))}
-    </ol>
+    <Steps
+      steps={STEPS.map((s) => t(`catalog.exchange.import.step.${s}`))}
+      current={current}
+      label={t('catalog.exchange.import.steps')}
+      doneLabel={t('catalog.exchange.import.step_done')}
+    />
   );
 }
 
@@ -193,12 +194,12 @@ function FileStep({ onUploaded }: { onUploaded(source: Source): void }) {
   const pct = upload === null || upload.total === 0 ? 0 : (upload.done / upload.total) * 100;
   const progressLabel = upload === null ? '' : t(upload.kind === 'hashing' ? 'catalog.exchange.import.hashing' : 'catalog.exchange.import.sending');
   return (
-    <form noValidate className="grid gap-3" onSubmit={start}>
-      <div className="grid gap-2">
+    <form noValidate className="grid max-w-xl gap-3" onSubmit={start}>
+      <div className="grid gap-1.5">
         <Label htmlFor={inputId}>{t('catalog.exchange.import.file')}</Label>
-        <Input
+        <FileInput
           id={inputId}
-          type="file"
+          chosen={file?.name ?? null}
           accept=".mrc,.marc,.iso,.dat,.xml,.csv,.txt,application/marc,application/marcxml+xml,application/xml,text/xml,text/csv,text/plain"
           aria-describedby={hintId}
           disabled={upload !== null}
@@ -213,12 +214,10 @@ function FileStep({ onUploaded }: { onUploaded(source: Source): void }) {
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={upload !== null}>
-          <UploadIcon aria-hidden="true" />
           {t('catalog.exchange.import.upload')}
         </Button>
         {upload !== null && (
           <Button type="button" variant="outline" onClick={() => running.current?.abort()}>
-            <XIcon aria-hidden="true" />
             {t('catalog.exchange.import.cancel_upload')}
           </Button>
         )}
@@ -226,7 +225,7 @@ function FileStep({ onUploaded }: { onUploaded(source: Source): void }) {
       {upload !== null && (
         <div className="grid gap-1">
           <div className="flex items-baseline justify-between gap-2 text-sm">
-            <span className="font-medium">{progressLabel}</span>
+            <span className="font-semibold">{progressLabel}</span>
             <span className="tabular-nums">{Math.round(pct)} %</span>
           </div>
           <ProgressBar value={pct} label={progressLabel} />
@@ -344,136 +343,132 @@ function OptionsStep({
     }
   };
 
-  if (!settled) {
-    return (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('shell.loading')}
-      </p>
-    );
-  }
+  if (!settled) return <LoadingState />;
   const listProblem = [branches, types, collections].find((q) => q.isError)?.error ?? null;
   return (
     <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
       <ProblemAlert error={listProblem} />
-      <p className="text-sm">
+      <p className="max-w-[75ch] text-sm">
         {source.kind === 'upload'
           ? t('catalog.exchange.import.source_upload', { name: source.name, size: bytes(source.size) })
           : t('catalog.exchange.import.source_dry_run', { name: source.name })}
       </p>
-      <SelectField label={t('catalog.exchange.import.format')} error={errors.format} value={options.format} onChange={(v) => set('format', v as ImportFormat | '')}>
-        <option value="">{t('catalog.exchange.import.format_auto')}</option>
-        {IMPORT_FORMATS.map((f) => (
-          <option key={f} value={f}>
-            {t(vocabKey('import_format', f))}
-          </option>
-        ))}
-      </SelectField>
-      <fieldset className="grid gap-3 rounded-md border p-3">
-        <legend className="px-1 text-sm font-medium">{t('catalog.exchange.import.matching')}</legend>
-        <SelectField label={t('catalog.exchange.import.match_on')} error={errors.matchOn} value={options.matchOn} onChange={(v) => set('matchOn', v as ImportOptions['matchOn'])}>
-          {IMPORT_MATCH_ON.map((m) => (
-            <option key={m} value={m}>
-              {t(`catalog.exchange.import.match_on.${m}`)}
+      <div className="max-w-sm">
+        <SelectField label={t('catalog.exchange.import.format')} error={errors.format} value={options.format} onChange={(v) => set('format', v as ImportFormat | '')}>
+          <option value="">{t('catalog.exchange.import.format_auto')}</option>
+          {IMPORT_FORMATS.map((f) => (
+            <option key={f} value={f}>
+              {t(vocabKey('import_format', f))}
             </option>
           ))}
         </SelectField>
-        <SelectField
-          label={t('catalog.exchange.import.on_match')}
-          error={errors.onMatch}
-          value={options.onMatch}
-          disabled={options.matchOn === 'none'}
-          onChange={(v) => set('onMatch', v as ImportOptions['onMatch'])}>
-          {IMPORT_ON_MATCH.map((m) => (
-            <option key={m} value={m}>
-              {t(`catalog.exchange.import.on_match.${m}`)}
-            </option>
-          ))}
-        </SelectField>
-        <SelectField
-          label={t('catalog.exchange.import.on_duplicate')}
-          hint={t('catalog.exchange.import.on_duplicate_hint')}
-          error={errors.onDuplicate}
-          value={options.onDuplicate}
-          onChange={(v) => set('onDuplicate', v as ImportOptions['onDuplicate'])}>
-          {IMPORT_ON_DUPLICATE.map((m) => (
-            <option key={m} value={m}>
-              {t(`catalog.exchange.import.on_duplicate.${m}`)}
-            </option>
-          ))}
-        </SelectField>
-      </fieldset>
-      <fieldset className="grid gap-3 rounded-md border p-3">
-        <legend className="px-1 text-sm font-medium">{t('catalog.exchange.import.items')}</legend>
-        <CheckField
-          label={t('catalog.exchange.import.create_items')}
-          hint={t('catalog.exchange.import.create_items_hint')}
-          checked={options.createItems && !noItemBranch}
-          disabled={noItemBranch}
-          onChange={(e) => set('createItems', e.target.checked)}
-        />
-        {noItemBranch ? (
-          // A branch list that could not be read is the alert above, not a lack of rights.
-          !branches.isError && <p className="text-sm text-muted-foreground">{t('catalog.exchange.import.no_branch')}</p>
-        ) : (
-          <SelectField
-            label={t('catalog.exchange.import.branch')}
-            hint={t('catalog.exchange.import.branch_hint')}
-            error={errors.branchId}
-            value={branchId}
-            onChange={(v) => set('branchId', v)}>
-            <option value="">{t('catalog.exchange.import.branch_none')}</option>
-            {itemBranches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name} ({b.code})
+      </div>
+      <div>
+        <FormSection title={t('catalog.exchange.import.matching')}>
+          <SelectField label={t('catalog.exchange.import.match_on')} error={errors.matchOn} value={options.matchOn} onChange={(v) => set('matchOn', v as ImportOptions['matchOn'])}>
+            {IMPORT_MATCH_ON.map((m) => (
+              <option key={m} value={m}>
+                {t(`catalog.exchange.import.match_on.${m}`)}
               </option>
             ))}
           </SelectField>
-        )}
-      </fieldset>
-      <fieldset className="grid gap-3 rounded-md border p-3 sm:grid-cols-2">
-        <legend className="px-1 text-sm font-medium">{t('catalog.exchange.import.defaults')}</legend>
-        <SelectField
-          label={t('catalog.exchange.import.default_type')}
-          hint={t('catalog.exchange.import.default_type_hint')}
-          error={errors.defaultMaterialTypeId}
-          value={options.defaultMaterialTypeId}
-          onChange={(v) => set('defaultMaterialTypeId', v)}>
-          <option value="">{t('catalog.exchange.import.default_setting')}</option>
-          {(types.data?.items ?? [])
-            .filter((m) => !m.archived)
-            .map((m) => (
-              <option key={m.id} value={m.id}>
-                {name(m)} ({m.code})
+          <SelectField
+            label={t('catalog.exchange.import.on_match')}
+            error={errors.onMatch}
+            value={options.onMatch}
+            disabled={options.matchOn === 'none'}
+            onChange={(v) => set('onMatch', v as ImportOptions['onMatch'])}>
+            {IMPORT_ON_MATCH.map((m) => (
+              <option key={m} value={m}>
+                {t(`catalog.exchange.import.on_match.${m}`)}
               </option>
             ))}
-        </SelectField>
-        <SelectField
-          label={t('catalog.exchange.import.default_collection')}
-          hint={t('catalog.exchange.import.default_collection_hint')}
-          error={errors.defaultCollectionTypeId}
-          value={options.defaultCollectionTypeId}
-          onChange={(v) => set('defaultCollectionTypeId', v)}>
-          <option value="">{t('catalog.exchange.import.default_setting')}</option>
-          {(collections.data?.items ?? [])
-            .filter((c) => !c.archived)
-            .map((c) => (
-              <option key={c.id} value={c.id}>
-                {name(c)} ({c.code})
+          </SelectField>
+          <SelectField
+            label={t('catalog.exchange.import.on_duplicate')}
+            hint={t('catalog.exchange.import.on_duplicate_hint')}
+            error={errors.onDuplicate}
+            value={options.onDuplicate}
+            onChange={(v) => set('onDuplicate', v as ImportOptions['onDuplicate'])}>
+            {IMPORT_ON_DUPLICATE.map((m) => (
+              <option key={m} value={m}>
+                {t(`catalog.exchange.import.on_duplicate.${m}`)}
               </option>
             ))}
-        </SelectField>
-      </fieldset>
-      <StartProblem error={problem} />
-      <p className="text-sm text-muted-foreground">{t('catalog.exchange.import.dry_run_hint')}</p>
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={posting}>
-          <FlaskConicalIcon aria-hidden="true" />
-          {t('catalog.exchange.import.dry_run')}
-        </Button>
-        <Button type="button" variant="outline" disabled={posting} onClick={onRestart}>
-          <RotateCcwIcon aria-hidden="true" />
-          {t('catalog.exchange.import.restart')}
-        </Button>
+          </SelectField>
+        </FormSection>
+        <FormSection title={t('catalog.exchange.import.items')}>
+          <CheckField
+            className="sm:col-span-full"
+            label={t('catalog.exchange.import.create_items')}
+            hint={t('catalog.exchange.import.create_items_hint')}
+            checked={options.createItems && !noItemBranch}
+            disabled={noItemBranch}
+            onChange={(e) => set('createItems', e.target.checked)}
+          />
+          {noItemBranch ? (
+            // A branch list that could not be read is the alert above, not a lack of rights.
+            !branches.isError && <p className="text-sm text-muted-foreground sm:col-span-full">{t('catalog.exchange.import.no_branch')}</p>
+          ) : (
+            <SelectField
+              label={t('catalog.exchange.import.branch')}
+              hint={t('catalog.exchange.import.branch_hint')}
+              error={errors.branchId}
+              value={branchId}
+              onChange={(v) => set('branchId', v)}>
+              <option value="">{t('catalog.exchange.import.branch_none')}</option>
+              {itemBranches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name} ({b.code})
+                </option>
+              ))}
+            </SelectField>
+          )}
+        </FormSection>
+        <FormSection title={t('catalog.exchange.import.defaults')}>
+          <SelectField
+            label={t('catalog.exchange.import.default_type')}
+            hint={t('catalog.exchange.import.default_type_hint')}
+            error={errors.defaultMaterialTypeId}
+            value={options.defaultMaterialTypeId}
+            onChange={(v) => set('defaultMaterialTypeId', v)}>
+            <option value="">{t('catalog.exchange.import.default_setting')}</option>
+            {(types.data?.items ?? [])
+              .filter((m) => !m.archived)
+              .map((m) => (
+                <option key={m.id} value={m.id}>
+                  {name(m)} ({m.code})
+                </option>
+              ))}
+          </SelectField>
+          <SelectField
+            label={t('catalog.exchange.import.default_collection')}
+            hint={t('catalog.exchange.import.default_collection_hint')}
+            error={errors.defaultCollectionTypeId}
+            value={options.defaultCollectionTypeId}
+            onChange={(v) => set('defaultCollectionTypeId', v)}>
+            <option value="">{t('catalog.exchange.import.default_setting')}</option>
+            {(collections.data?.items ?? [])
+              .filter((c) => !c.archived)
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {name(c)} ({c.code})
+                </option>
+              ))}
+          </SelectField>
+        </FormSection>
+        <div className="grid gap-3 border-t pt-4">
+          <StartProblem error={problem} />
+          <p className="max-w-[75ch] text-sm text-muted-foreground">{t('catalog.exchange.import.dry_run_hint')}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" disabled={posting}>
+              {t('catalog.exchange.import.dry_run')}
+            </Button>
+            <Button type="button" variant="outline" disabled={posting} onClick={onRestart}>
+              {t('catalog.exchange.import.restart')}
+            </Button>
+          </div>
+        </div>
       </div>
     </form>
   );
@@ -516,16 +511,7 @@ export function OptionsList({ options }: { options: ImportOptions }) {
     ['catalog.exchange.import.create_items', t(options.createItems ? 'form.yes' : 'form.no')],
   ];
   if (options.matchOn !== 'none') rows.splice(2, 0, ['catalog.exchange.import.on_match', t(`catalog.exchange.import.on_match.${options.onMatch}`)]);
-  return (
-    <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
-      {rows.map(([label, value]) => (
-        <div key={label} className="contents">
-          <dt className="text-muted-foreground">{t(label)}</dt>
-          <dd>{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
+  return <FactList className="max-w-xl" items={rows.map(([label, value]) => ({ key: label, label: t(label), value }))} />;
 }
 
 /**
@@ -555,8 +541,8 @@ function RunPanel({
   // "Result" once the run has been read (or could not be): the summary comes with the heading that announces it.
   const read = outcome !== null && (run.data !== undefined || run.isError);
   return (
-    <section aria-labelledby={headingId} className="grid gap-3 rounded-lg border p-4">
-      <h3 id={headingId} className="text-base font-semibold">
+    <section aria-labelledby={headingId} className="grid gap-3 border-t pt-5">
+      <h3 id={headingId} className="text-base font-bold">
         {t(read ? title.done : title.running)}
       </h3>
       <OptionsList options={options} />
@@ -571,7 +557,7 @@ function RunPanel({
       {run.isError && <ProblemAlert error={run.error} />}
       {run.data !== undefined && <SummaryView run={run.data} />}
       {children({ run: run.data, outcome })}
-      <Link to={runHref(started.runId)} className="text-sm text-primary underline-offset-4 hover:underline">
+      <Link to={runHref(started.runId)} className={RUN_LINK}>
         {t('catalog.exchange.open_run')}
       </Link>
     </section>
@@ -623,13 +609,12 @@ export function RealRunAction({ dryRunId, options }: { dryRunId: string; options
   };
 
   return (
-    <section aria-label={t('catalog.exchange.import.run')} className="grid gap-2 rounded-lg border p-4">
-      {!gone && <p className="text-sm text-muted-foreground">{t('catalog.exchange.import.run_hint')}</p>}
+    <section aria-label={t('catalog.exchange.import.run')} className="grid gap-2">
+      {!gone && <p className="max-w-[75ch] text-sm text-muted-foreground">{t('catalog.exchange.import.run_hint')}</p>}
       <StartProblem error={problem} />
       {!gone && (
         <div>
           <Button type="button" disabled={posting} onClick={() => void runIt()}>
-            <PlayIcon aria-hidden="true" />
             {t('catalog.exchange.import.run')}
           </Button>
         </div>
@@ -684,23 +669,20 @@ function DryRunStep({
         return (
           <>
             {outcome !== 'succeeded' && <p className="text-sm">{t('catalog.exchange.import.failed')}</p>}
-            {ok && !gone && <p className="text-sm text-muted-foreground">{t('catalog.exchange.import.run_hint')}</p>}
+            {ok && !gone && <p className="max-w-[75ch] text-sm text-muted-foreground">{t('catalog.exchange.import.run_hint')}</p>}
             <StartProblem error={problem} />
             <div className="flex flex-wrap gap-2">
               {ok && !gone && (
                 <Button type="button" disabled={posting} onClick={() => void runIt()}>
-                  <PlayIcon aria-hidden="true" />
                   {t('catalog.exchange.import.run')}
                 </Button>
               )}
               {ok && !gone && (
                 <Button type="button" variant="outline" disabled={posting} onClick={() => onChangeOptions({ kind: 'dry_run', runId: dryRunId, name })}>
-                  <SlidersHorizontalIcon aria-hidden="true" />
                   {t('catalog.exchange.import.change_options')}
                 </Button>
               )}
               <Button type="button" variant="outline" disabled={posting} onClick={onRestart}>
-                <RotateCcwIcon aria-hidden="true" />
                 {t('catalog.exchange.import.restart')}
               </Button>
             </div>
@@ -721,7 +703,6 @@ function RealRunStep({ options, started, onRestart }: { options: ImportOptions; 
             {outcome !== 'succeeded' && <p className="text-sm">{t('catalog.exchange.import.failed')}</p>}
             <div>
               <Button type="button" variant="outline" onClick={onRestart}>
-                <RotateCcwIcon aria-hidden="true" />
                 {t('catalog.exchange.import.again')}
               </Button>
             </div>
@@ -745,11 +726,11 @@ export function ImportWizard() {
   const step = phase.kind === 'file' ? 0 : phase.kind === 'options' ? 1 : phase.kind === 'dry' ? 2 : 3;
 
   return (
-    <section aria-labelledby={headingId} className="grid gap-4 rounded-lg border bg-card p-4">
-      <h2 id={headingId} className="text-lg font-semibold">
+    <section aria-labelledby={headingId} className="grid gap-5">
+      <h2 id={headingId} className="text-base font-bold">
         {t('catalog.exchange.import.title')}
       </h2>
-      <Steps current={step} />
+      <WizardSteps current={step} />
       {phase.kind === 'file' && <FileStep onUploaded={(source) => setPhase({ kind: 'options', source })} />}
       {phase.kind === 'options' && (
         <OptionsStep

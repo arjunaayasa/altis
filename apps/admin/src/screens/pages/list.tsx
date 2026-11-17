@@ -3,18 +3,16 @@ import type { PageListItem, PageListResponse } from '@altis/shared/api/opac-page
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
-import { PlusIcon } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { DataTable, useDateTime } from '@/components/data-table';
-import { Badge, Notice, ProblemAlert, RefetchProblem, SELECT_CLASS } from '@/components/form-field';
+import { Notice, ProblemAlert, RefetchProblem, SELECT_CLASS } from '@/components/form-field';
+import { ErrorState, FilterField, FilterRow, MoreMenu, MoreMenuItem, MoreMenuRule, PageHead, SkeletonTable, Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
-import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { PAGES_KEY, kindOf, newPageTarget, opacPath, pageHref, pagesListHref } from './shared';
 
@@ -33,12 +31,12 @@ const NO_PAGES: PageListItem[] = [];
 /** The status filter: one status, or every one. */
 type StatusFilter = PageStatus | 'all';
 
-/** The status badge of a row: draft, published, or published but dated in the future (scheduled). */
+/** The status tag of a row: draft, published, or published but dated in the future (scheduled). */
 function StatusBadge({ page, now }: { page: PageListItem; now: number }) {
   const t = useT();
-  if (page.status === 'draft') return <Badge tone="neutral">{t('vocab.page_status.draft')}</Badge>;
-  if (page.publishedAt !== null && page.publishedAt > now) return <Badge tone="warning">{t('pages.scheduled')}</Badge>;
-  return <Badge tone="info">{t('vocab.page_status.published')}</Badge>;
+  if (page.status === 'draft') return <Tag>{t('vocab.page_status.draft')}</Tag>;
+  if (page.publishedAt !== null && page.publishedAt > now) return <Tag tone="warn">{t('pages.scheduled')}</Tag>;
+  return <Tag tone="ok">{t('vocab.page_status.published')}</Tag>;
 }
 
 /** The rows of one kind and status, paged by the server's cursor (a new kind or status starts again: see the key). */
@@ -46,6 +44,7 @@ function PagesTable({ kind, status }: { kind: PageKind; status: StatusFilter }) 
   const t = useT();
   const dateTime = useDateTime();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   /** The cursor of each sheet seen so far (the first has none); the last is the one shown. */
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
   const [archiving, setArchiving] = useState<PageListItem | null>(null);
@@ -71,14 +70,14 @@ function PagesTable({ kind, status }: { kind: PageKind; status: StatusFilter }) 
       column.accessor('title', {
         header: t('pages.col.title'),
         cell: (info) => (
-          <Link to={pageHref(info.row.original.id)} className="font-medium text-primary underline-offset-4 hover:underline">
+          <Link to={pageHref(info.row.original.id)} className="font-semibold text-accent-text underline-offset-4 hover:underline">
             {titleOf(info.row.original)}
           </Link>
         ),
       }),
       column.accessor('slug', {
         header: t('pages.col.address'),
-        cell: (info) => <code className="text-xs break-all">{opacPath(info.row.original.kind, info.getValue())}</code>,
+        cell: (info) => <span className="whitespace-nowrap text-muted-foreground">{opacPath(info.row.original.kind, info.getValue())}</span>,
       }),
       column.accessor('status', { header: t('pages.col.status'), cell: (info) => <StatusBadge page={info.row.original} now={now} /> }),
       column.accessor('publishedAt', {
@@ -92,56 +91,43 @@ function PagesTable({ kind, status }: { kind: PageKind; status: StatusFilter }) 
       column.accessor('hasEnglish', { header: t('pages.col.english'), cell: (info) => yesNo(info.getValue()) }),
       column.display({
         id: 'actions',
-        header: t('table.actions'),
+        header: () => <span className="sr-only">{t('table.actions')}</span>,
         cell: (info) => {
           const page = info.row.original;
           return (
-            <div className="flex flex-wrap gap-1">
-              <Button asChild variant="outline" size="sm">
-                <Link to={pageHref(page.id)} aria-label={t('pages.action.edit_label', { title: titleOf(page) })}>
-                  {t('pages.action.edit')}
-                </Link>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
+            <MoreMenu small label={t('pages.action.more_named', { title: titleOf(page) })}>
+              <MoreMenuItem aria-label={t('pages.action.edit_label', { title: titleOf(page) })} onSelect={() => void navigate({ to: pageHref(page.id) })}>
+                {t('pages.action.edit')}
+              </MoreMenuItem>
+              <MoreMenuRule />
+              <MoreMenuItem
+                danger
                 aria-label={t('pages.action.archive_label', { title: titleOf(page) })}
-                onClick={() => {
+                onSelect={() => {
                   setNotice(null);
                   setArchiving(page);
                 }}>
                 {t('pages.action.archive')}
-              </Button>
-            </div>
+              </MoreMenuItem>
+            </MoreMenu>
           );
         },
       }),
     ]);
-  }, [t, dateTime]);
+  }, [t, dateTime, navigate]);
 
   const table = useTable({ features, columns, data: list.data?.items ?? NO_PAGES, getRowId: (page) => page.id });
   const sheet = cursors.length;
   const next = list.data?.nextCursor ?? null;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="grid gap-3">
       {notice !== null && <Notice kind="success">{notice}</Notice>}
       {list.data === undefined ? (
         list.isError ? (
-          <Notice
-            kind="error"
-            action={
-              <Button variant="outline" size="sm" onClick={() => void list.refetch()}>
-                {t('table.retry')}
-              </Button>
-            }>
-            {problemText(t, list.error)}
-          </Notice>
+          <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <SkeletonTable label={t('shell.loading')} rows={4} />
         )
       ) : (
         <>
@@ -149,7 +135,7 @@ function PagesTable({ kind, status }: { kind: PageKind; status: StatusFilter }) 
           <DataTable table={table} caption={t(`pages.caption.${kind}`)} empty={t(`pages.empty.${kind}`)} />
           {(sheet > 1 || next !== null) && (
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <p className="text-muted-foreground">{t('pages.paging', { page: sheet })}</p>
+              <p className="text-meta text-muted-foreground">{t('pages.paging', { page: sheet })}</p>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" disabled={sheet <= 1} onClick={() => setCursors((c) => c.slice(0, -1))}>
                   {t('table.prev')}
@@ -187,47 +173,43 @@ export function PagesListScreen() {
   const statusId = useId();
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold">{t('nav.opac.pages')}</h1>
-          <p className="text-sm text-muted-foreground">{t('pages.description')}</p>
-        </div>
-        {canManage && (
-          <Button asChild>
-            <Link {...newPageTarget(kind)}>
-              <PlusIcon aria-hidden="true" />
-              {t(`pages.add.${kind}`)}
-            </Link>
-          </Button>
-        )}
-      </div>
+    <div className="grid gap-6">
+      <PageHead
+        title={t('nav.opac.pages')}
+        intro={t('pages.description')}
+        actions={
+          canManage ? (
+            <Button asChild>
+              <Link {...newPageTarget(kind)}>{t(`pages.add.${kind}`)}</Link>
+            </Button>
+          ) : undefined
+        }
+      />
       {/* Every route of the area needs the permission: say so before anything is asked. */}
       {!canManage ? (
         <ProblemAlert error={new ApiError(403, 'AUTHZ_DENIED')} />
       ) : (
-        <Tabs value={kind} onValueChange={(value) => void navigate({ href: pagesListHref(value as PageKind) })}>
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <TabsList aria-label={t('pages.kinds')}>
-              {PAGE_KINDS.map((k) => (
-                <TabsTrigger key={k} value={k}>
-                  {t(`vocab.page_kind.${k}`)}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            <div className="flex items-center gap-2">
-              <Label htmlFor={statusId}>{t('pages.filter.status')}</Label>
-              <select id={statusId} className={`${SELECT_CLASS} w-auto`} value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
-                <option value="all">{t('pages.filter.all')}</option>
-                {PAGE_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {t(`vocab.page_status.${s}`)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <TabsContent value={kind} className="pt-2">
+        <Tabs value={kind} onValueChange={(value) => void navigate({ href: pagesListHref(value as PageKind) })} className="gap-0">
+          <TabsList aria-label={t('pages.kinds')} className={WRAPPING_TABS.list}>
+            {PAGE_KINDS.map((k) => (
+              <TabsTrigger key={k} value={k} className={WRAPPING_TABS.trigger}>
+                {t(`vocab.page_kind.${k}`)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          <TabsContent value={kind} className="grid gap-3 pt-4">
+            <FilterRow label={t('pages.filters')}>
+              <FilterField id={statusId} label={t('pages.filter.status')} className="max-w-60">
+                <select id={statusId} className={SELECT_CLASS} value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
+                  <option value="all">{t('pages.filter.all')}</option>
+                  {PAGE_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {t(`vocab.page_status.${s}`)}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+            </FilterRow>
             <PagesTable key={`${kind}:${status}`} kind={kind} status={status} />
           </TabsContent>
         </Tabs>

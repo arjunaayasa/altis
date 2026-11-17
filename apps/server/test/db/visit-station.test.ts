@@ -141,4 +141,30 @@ describe.skipIf(!ctx.available)(`the guestbook station [${engineLabel()}]`, () =
     expect([gone.status, gone.headers.get('location')]).toEqual([303, '/kunjungan/aktifkan']);
     expect((await device.post('/kunjungan', form({ memberNo: 'TAMU 01', _csrf: stationToken }), FORM)).status).toBe(403);
   });
+
+  it('a station opened in English stays in English through its forms, links and redirects', async () => {
+    const created = await staff.post(`/api/v1/branches/${branchId}/visits/stations`, { name: 'Pintu samping' });
+    expect(created.status, created.text).toBe(201);
+    const { code } = created.json as { code: string };
+    const device = createAgent(app, { peer: '203.0.113.79', headers: { origin: CONFIG.baseUrl } });
+    const away = await device.get('/kunjungan?lang=en', undefined, { accept: 'text/html' });
+    expect([away.status, away.headers.get('location')]).toEqual([303, '/kunjungan/aktifkan?lang=en']);
+    const page = await device.get('/kunjungan/aktifkan?lang=en', undefined, { accept: 'text/html' });
+    expect(page.text).toContain('action="/kunjungan/aktifkan?lang=en"');
+    const token = formToken(page.text);
+    const wrong = await device.post('/kunjungan/aktifkan?lang=en', form({ code: 'AAAAAAAA', _csrf: token }), FORM);
+    expect(wrong.status).toBe(422);
+    expect(wrong.text).toContain('The activation code is wrong');
+    expect(wrong.text).toContain('action="/kunjungan/aktifkan?lang=en"');
+    const ok = await device.post('/kunjungan/aktifkan?lang=en', form({ code, _csrf: formToken(wrong.text) }), FORM);
+    expect([ok.status, ok.headers.get('location')]).toEqual([303, '/kunjungan?lang=en']);
+    const station = await device.get('/kunjungan?lang=en', undefined, { accept: 'text/html' });
+    expect(station.text).toContain('action="/kunjungan?lang=en"');
+    expect(station.text).toContain('href="/kunjungan?tamu=1&amp;lang=en"');
+    const greeted = await device.post('/kunjungan?lang=en', form({ guest: '1', guestName: 'Bu Sari', guestInstitution: 'Taman Kanak-Kanak', _csrf: formToken(station.text) }), FORM);
+    expect(greeted.status).toBe(200);
+    expect(greeted.text).toContain('Welcome, Bu!');
+    expect(greeted.text).toContain('content="4;url=/kunjungan?lang=en"');
+    expect(greeted.text).toContain('href="/kunjungan?lang=en"');
+  });
 });

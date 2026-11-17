@@ -59,6 +59,30 @@ describe('Tabs', () => {
     expect(nama.getAttribute('aria-selected')).toBe('true');
     expect(onValueChange).toHaveBeenLastCalledWith('nama');
   });
+
+  it('a trigger pressed with the pointer draws no focus outline until it loses the focus; one reached by the keys does', async () => {
+    render(
+      <Tabs defaultValue="nama">
+        <TabsList aria-label="Otoritas">
+          <TabsTrigger value="nama">Nama</TabsTrigger>
+          <TabsTrigger value="subjek">Subjek</TabsTrigger>
+        </TabsList>
+        <TabsContent value="nama">Daftar nama</TabsContent>
+        <TabsContent value="subjek">Daftar subjek</TabsContent>
+      </Tabs>,
+    );
+    const [nama, subjek] = screen.getAllByRole('tab') as [HTMLElement, HTMLElement];
+    expect(subjek.className.split(/\s+/)).toEqual(expect.arrayContaining(['focus-visible:outline-2', 'data-pointer:focus-visible:outline-none']));
+    fireEvent.pointerDown(subjek, { button: 0 });
+    fireEvent.mouseDown(subjek, { button: 0 });
+    expect(subjek.hasAttribute('data-pointer')).toBe(true);
+    act(() => subjek.focus());
+    fireEvent.keyDown(subjek, { key: 'ArrowLeft' });
+    await waitFor(() => expect(document.activeElement).toBe(nama));
+    // The pressed trigger lost the focus: its mark is gone; the one the arrow reached was never marked.
+    expect(subjek.hasAttribute('data-pointer')).toBe(false);
+    expect(nama.hasAttribute('data-pointer')).toBe(false);
+  });
 });
 
 describe('Checkbox', () => {

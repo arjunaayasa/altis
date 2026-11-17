@@ -119,15 +119,16 @@ describe('Terlambat & Jatuh Tempo: reminders', () => {
       routes: {
         'GET branches': () => ({ items: [BRANCH_VIEW] }),
         'GET members/types': () => ({ items: [] }),
-        'GET circulation/loans': () => ({ items: [LOAN], nextCursor: null }),
+        'POST circulation/loans/search': () => ({ items: [LOAN], nextCursor: null }),
         'POST branches/:branchId/circulation/notices': () => ({ kind: 'overdue', queued: 1, existing: 0, nothing: 0, refused: [] }),
       },
     });
     const button = await screen.findByRole('button', { name: 'Kirim pengingat' });
     fireEvent.click(button);
     expect(await screen.findByText('Pengingat masuk antrean: 1. Sudah dikirim hari ini: 0. Tidak ada yang perlu diingatkan: 0.')).toBeTruthy();
-    await waitFor(() => expect(app.writes()).toEqual([`POST branches/${BRANCH}/circulation/notices`]));
-    expect(app.requests.find((r) => r.method === 'POST')?.body).toEqual({ memberIds: [MEMBER], kind: 'overdue' });
+    // The list itself is a POST read (the search body); the reminder is the only write.
+    await waitFor(() => expect(app.writes().filter((w) => w !== 'POST circulation/loans/search')).toEqual([`POST branches/${BRANCH}/circulation/notices`]));
+    expect(app.requests.find((r) => r.method === 'POST' && r.path.endsWith('/notices'))?.body).toEqual({ memberIds: [MEMBER], kind: 'overdue' });
     expect(screen.getByRole('button', { name: 'Kirim pengingat ke semua yang tampil' })).toBeTruthy();
   });
 });

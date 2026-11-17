@@ -10,7 +10,7 @@ import {
   type OpacHomePhoto,
 } from '@altis/shared/api/opac-home';
 import type { JSX } from 'hono/jsx/jsx-runtime';
-import type { HeroBand } from '../layout.js';
+import { ContactLines, type HeroBand } from '../layout.js';
 import { BookCover } from './cover.js';
 import { libraryJsonLd, webSiteJsonLd } from './library-json-ld.js';
 import { opacText, type OpacKey } from './messages.js';
@@ -32,7 +32,8 @@ import {
   type SubjectPill,
   type TitleCard,
 } from './queries.js';
-import { OPAC_SEARCH_SCOPES, OPAC_SEARCH_TEXT_MAX } from './search-params.js';
+import { OPAC_ADVANCED_PATH, OPAC_SEARCH_SCOPES, OPAC_SEARCH_TEXT_MAX } from './search-params.js';
+import { ShelfStatusLine, yearOf } from './shelf-status.js';
 import { pagePath, withLang } from './urls.js';
 
 // The OPAC home page (Phase 2 Task 21; spec §9.1, §9.4; S14, M4), `GET /`: the hero with the library's heading and
@@ -81,17 +82,6 @@ function dateText(ms: number, locale: Locale, timeZone: string): string {
   }
 }
 
-/** A title's availability as words (the status colour only repeats them); nothing for a title without copies. */
-function Availability(props: { card: TitleCard; locale: Locale }) {
-  const { card, locale } = props;
-  if (card.availability === null) return null;
-  return card.availability === 'available' ? (
-    <span class="status status-ok card-status">{opacText(locale, 'home.card.available')}</span>
-  ) : (
-    <span class="status status-muted card-status">{opacText(locale, 'home.card.unavailable')}</span>
-  );
-}
-
 /** The subject pills above a list of titles: each links to the search for that subject and says its titles. */
 function SubjectPills(props: { pills: readonly SubjectPill[]; locale: Locale; lang: Locale | null }) {
   const { pills, locale, lang } = props;
@@ -114,10 +104,10 @@ function SubjectPills(props: { pills: readonly SubjectPill[]; locale: Locale; la
 }
 
 /**
- * A title as a book on the shelf: its cover (or substitute cover), title, author and availability, all one link (the
- * year is the record page's).
+ * A title as a book on the shelf: its cover (or substitute cover), title, author and what its copies allow now (never
+ * who holds one), all one link (the year is the record page's).
  */
-function Card(props: { card: TitleCard; locale: Locale; lang: Locale | null }) {
+function Card(props: { card: TitleCard; locale: Locale; lang: Locale | null; year: number }) {
   const { card, locale, lang } = props;
   return (
     <li class="card">
@@ -134,7 +124,7 @@ function Card(props: { card: TitleCard; locale: Locale; lang: Locale | null }) {
           {card.subtitle === null || card.subtitle.trim() === '' ? null : <span class="card-subtitle">: {card.subtitle}</span>}
         </a>
         {card.mainAgent === null ? null : <span class="card-meta">{card.mainAgent}</span>}
-        <Availability card={card} locale={locale} />
+        <ShelfStatusLine status={card.shelf} locale={locale} year={props.year} extraClass="card-status" />
       </span>
     </li>
   );
@@ -167,6 +157,7 @@ function Titles(props: {
   more?: { href: string; label: string };
   locale: Locale;
   lang: Locale | null;
+  year: number;
 }) {
   if (props.cards.length === 0) return null;
   return (
@@ -175,7 +166,7 @@ function Titles(props: {
       {props.pills === undefined ? null : <SubjectPills pills={props.pills} locale={props.locale} lang={props.lang} />}
       <ul class="card-grid">
         {props.cards.map((card) => (
-          <Card card={card} locale={props.locale} lang={props.lang} />
+          <Card card={card} locale={props.locale} lang={props.lang} year={props.year} />
         ))}
       </ul>
     </section>
@@ -251,7 +242,7 @@ function strong(template: string, name: string, value: string): (string | JSX.El
 /**
  * The page's search card, floating at the hero's lower edge: the field to search in (radio buttons, every field first),
  * the text and the button, then the collection's facts (the number of titles, of titles on the shelf now, today's
- * hours or that the library is closed today) and the link to the catalogue's search page with its filters.
+ * hours or that the library is closed today) and the link to the advanced search.
  */
 function SearchCard(props: { locale: Locale; lang: Locale | null; titles: number; available: number; today: readonly OpacHomeHours[]; closed: boolean }) {
   const { locale, lang, titles, today, closed } = props;
@@ -284,7 +275,7 @@ function SearchCard(props: { locale: Locale; lang: Locale | null; titles: number
         ) : today.length > 0 ? (
           <span>{strong(opacText(locale, 'home.search.today'), 'time', today.map((h) => h.time).join(', '))}</span>
         ) : null}
-        <a href={keep('/cari', lang)}>{opacText(locale, 'home.search.browse')}</a>
+        <a href={keep(OPAC_ADVANCED_PATH, lang)}>{opacText(locale, 'search.advanced.link')}</a>
       </p>
     </div>
   );
@@ -395,6 +386,8 @@ function ruleText(rule: PublicLoanRule, locale: Locale): string {
  */
 function Visit(props: {
   address: string | null;
+  phone: string | null;
+  email: string | null;
   home: OpacHomeContent;
   weekday: number | null;
   rules: readonly PublicLoanRule[];
@@ -403,20 +396,26 @@ function Visit(props: {
 }) {
   const { home, weekday, rules, locale, contentLang } = props;
   const address = props.address === null || props.address.trim() === '' ? null : props.address;
-  if (address === null && home.hours.length === 0 && rules.length === 0) return null;
+  const contact = props.phone !== null || props.email !== null;
+  if (address === null && !contact && home.hours.length === 0 && rules.length === 0) return null;
   return (
     <section class="home-section" id="kunjungi" aria-labelledby="kunjungi-judul">
       <h2 id="kunjungi-judul">{opacText(locale, 'home.visit.title')}</h2>
       <div class="visit-grid">
-        {address === null ? null : (
+        {address === null && !contact ? null : (
           <div class="visit-block">
-            <h3>{opacText(locale, 'home.visit.location')}</h3>
-            <p class="visit-address" lang={contentLang}>
-              {address}
-            </p>
-            <a class="map-link" href={mapLink(address)} rel="noopener noreferrer">
-              {opacText(locale, 'home.visit.map')}
-            </a>
+            <h3>{opacText(locale, address === null ? 'home.visit.contact' : 'home.visit.location')}</h3>
+            {address === null ? null : (
+              <p class="visit-address" lang={contentLang}>
+                {address}
+              </p>
+            )}
+            <ContactLines locale={locale} phone={props.phone} email={props.email} class="visit-contact" />
+            {address === null ? null : (
+              <a class="map-link" href={mapLink(address)} rel="noopener noreferrer">
+                {opacText(locale, 'home.visit.map')}
+              </a>
+            )}
           </div>
         )}
         {home.hours.length === 0 ? null : (
@@ -581,6 +580,7 @@ export async function homeResponse(rc: HomeSource): Promise<Response> {
   const closedToday = closedBy(closedDays)(today);
   const weekday = closedToday ? null : isoWeekday(today);
   const todayHours = weekday === null ? [] : home.hours.filter((h) => h.weekdays.includes(weekday));
+  const year = ctx.year ?? yearOf(rc.now);
   return opacPage(rc, ctx, {
     title: `${ctx.libraryName} · ${t(locale, 'opac.home.title')}`,
     description: opacText(locale, 'shell.home.description', { library: ctx.libraryName }),
@@ -612,6 +612,7 @@ export async function homeResponse(rc: HomeSource): Promise<Response> {
             more={{ href: keep('/cari?urut=populer', lang), label: opacText(locale, 'home.popular.all') }}
             locale={locale}
             lang={lang}
+            year={year}
           />
         ) : null}
         <Titles
@@ -622,13 +623,25 @@ export async function homeResponse(rc: HomeSource): Promise<Response> {
           more={{ href: keep('/cari', lang), label: opacText(locale, 'home.new.all') }}
           locale={locale}
           lang={lang}
+          year={year}
         />
-        <Titles id="judul-unggulan" heading={opacText(locale, 'shell.home.promoted')} cards={promoted} locale={locale} lang={lang} />
+        <Titles id="judul-unggulan" heading={opacText(locale, 'shell.home.promoted')} cards={promoted} locale={locale} lang={lang} year={year} />
         {blocks.about ? <About home={home} titles={titles} members={members} locale={locale} contentLang={contentLang} /> : null}
         {blocks.services ? <Services home={home} locale={locale} contentLang={contentLang} /> : null}
         {blocks.readingClasses ? <ReadingClasses classes={classes} locale={locale} /> : null}
         <News news={news} locale={locale} lang={lang} timeZone={timeZone} />
-        {blocks.visit ? <Visit address={address} home={home} weekday={weekday} rules={rules} locale={locale} contentLang={contentLang} /> : null}
+        {blocks.visit ? (
+          <Visit
+            address={address}
+            phone={ctx.site?.phone ?? null}
+            email={ctx.site?.email ?? null}
+            home={home}
+            weekday={weekday}
+            rules={rules}
+            locale={locale}
+            contentLang={contentLang}
+          />
+        ) : null}
       </>
     ),
   });

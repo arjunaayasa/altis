@@ -11,12 +11,11 @@ import {
   type UpdatesView,
 } from '@altis/shared/api/updates';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowUpCircleIcon, ExternalLinkIcon, InfoIcon, RefreshCwIcon, RotateCcwIcon, TerminalIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useDateTime } from '@/components/data-table';
 import { Field, Notice, ProblemAlert, RefetchProblem, SELECT_CLASS } from '@/components/form-field';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Callout, ErrorState, LoadingState, PageHead, SideSection } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT, type AdminKey, type TKey, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
@@ -25,7 +24,7 @@ import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { page } from '@/lib/page';
 import { invalidateRealtimeKeys, useRealtime } from '@/lib/realtime';
-import { SettingsSection } from '@/screens/settings/library';
+
 import { UPDATES_HISTORY_KEY, UpdateHistory } from './history';
 import { PackageUploadPanel, PrecheckList, RefusalAlert, failureText, useReleaseDay } from './upload';
 
@@ -111,7 +110,7 @@ function opWords(t: Translate, op: OpStatusView): { kind: string; state: string 
 function OpsPageLink() {
   const t = useT();
   return (
-    <Button asChild variant="outline" size="sm" className="mt-2">
+    <Button asChild variant="outline" size="sm" className="w-fit bg-background">
       <a href={OPS_PAGE_PATH}>{t('updates.op.open')}</a>
     </Button>
   );
@@ -134,24 +133,20 @@ function OpNotice({ op, canFollow }: { op: OpStatusView | null; canFollow: boole
   const words = opWords(t, op);
   if (!op.terminal && !op.needsAttention) {
     return (
-      <Alert role="status">
-        <InfoIcon aria-hidden="true" />
-        <AlertDescription className="text-foreground">
-          <p>{t('updates.op.running', { kind: words.kind, state: words.state, progress: Math.round(op.progress) })}</p>
-          <OpsPageWay canFollow={canFollow} />
-        </AlertDescription>
-      </Alert>
+      <Callout role="status" title={t('updates.op.running', { kind: words.kind, state: words.state, progress: Math.round(op.progress) })}>
+        <OpsPageWay canFollow={canFollow} />
+      </Callout>
     );
   }
   return (
-    <Alert className="border-warning-foreground/30 bg-warning text-warning-foreground">
-      <TriangleAlertIcon aria-hidden="true" />
-      <AlertDescription className="text-current">
-        <p>{op.needsAttention ? t('updates.op.attention', { kind: words.kind }) : t('updates.op.ended', { kind: words.kind, state: words.state })}</p>
-        {op.error !== null && <p>{errorText(t, op.error.code)}</p>}
-        {op.needsAttention && <OpsPageWay canFollow={canFollow} />}
-      </AlertDescription>
-    </Alert>
+    <Callout tone="warn" title={op.needsAttention ? t('updates.op.attention', { kind: words.kind }) : t('updates.op.ended', { kind: words.kind, state: words.state })}>
+      {op.error === null && !op.needsAttention ? undefined : (
+        <>
+          {op.error !== null && <p>{errorText(t, op.error.code)}</p>}
+          {op.needsAttention && <OpsPageWay canFollow={canFollow} />}
+        </>
+      )}
+    </Callout>
   );
 }
 
@@ -161,25 +156,16 @@ function ReleaseNotices({ view }: { view: UpdatesView }) {
   return (
     <>
       {view.bundledBlocked !== null && (
-        <Alert className="border-warning-foreground/30 bg-warning text-warning-foreground">
-          <TriangleAlertIcon aria-hidden="true" />
-          <AlertDescription className="text-current">
-            <p>{t('updates.bundled_blocked', { version: view.bundledBlocked.version })}</p>
-            <ul className="list-disc pl-5">
-              {view.bundledBlocked.failures.map((failure) => (
-                <li key={failure}>{failureText(t, failure)}</li>
-              ))}
-            </ul>
-          </AlertDescription>
-        </Alert>
+        <Callout tone="warn" title={t('updates.bundled_blocked', { version: view.bundledBlocked.version })}>
+          <ul className="list-disc pl-5">
+            {view.bundledBlocked.failures.map((failure) => (
+              <li key={failure}>{failureText(t, failure)}</li>
+            ))}
+          </ul>
+        </Callout>
       )}
       {view.pinned !== null && (
-        <Alert role="status">
-          <InfoIcon aria-hidden="true" />
-          <AlertDescription className="text-foreground">
-            <p>{t('updates.pinned', { version: view.pinned })}</p>
-          </AlertDescription>
-        </Alert>
+        <Callout role="status" title={t('updates.pinned', { version: view.pinned })} />
       )}
     </>
   );
@@ -221,7 +207,7 @@ function ChannelForm({ channel, onChanged }: { channel: UpdateChannel; onChanged
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-end gap-2">
-        <Field label={t('updates.channel')} hint={t('updates.channel.hint')} className="min-w-48 flex-1">
+        <Field label={t('updates.channel')} hint={t('updates.channel.hint')} className="max-w-md min-w-48 flex-1">
           {(c) => (
             <select {...c} className={SELECT_CLASS} value={chosen} disabled={busy} onChange={(e) => setChosen(e.target.value as UpdateChannel)}>
               {UPDATE_CHANNELS.map((value) => (
@@ -247,7 +233,7 @@ function ChannelForm({ channel, onChanged }: { channel: UpdateChannel; onChanged
 function CurrentSection({ view, canRun, onChanged }: { view: UpdatesView; canRun: boolean; onChanged(): void }) {
   const t = useT();
   return (
-    <SettingsSection title={t('updates.current.title')}>
+    <SideSection title={t('updates.current.title')}>
       <dl className="flex flex-col gap-3">
         <Row label={t('updates.current.version')}>
           <span translate="no" className="font-mono">
@@ -266,7 +252,7 @@ function CurrentSection({ view, canRun, onChanged }: { view: UpdatesView; canRun
         {!canRun && <Row label={t('updates.channel')}>{t(CHANNEL_LABEL[view.channel])}</Row>}
       </dl>
       {canRun && <ChannelForm channel={view.channel} onChanged={onChanged} />}
-    </SettingsSection>
+    </SideSection>
   );
 }
 
@@ -274,12 +260,9 @@ function CurrentSection({ view, canRun, onChanged }: { view: UpdatesView; canRun
 function DockerPull({ only }: { only: boolean }) {
   const t = useT();
   return (
-    <div className="flex flex-col gap-2 text-sm">
-      <p className="flex items-start gap-2">
-        <TerminalIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        <span>{t(only ? 'updates.docker.image' : 'updates.docker.also')}</span>
-      </p>
-      <pre className="overflow-x-auto rounded-md border bg-muted px-3 py-2 text-xs">
+    <div className="grid gap-2 text-sm">
+      <p>{t(only ? 'updates.docker.image' : 'updates.docker.also')}</p>
+      <pre className="overflow-x-auto rounded-md border bg-layer px-3 py-2 text-xs">
         <code translate="no">{DOCKER_PULL}</code>
       </pre>
     </div>
@@ -367,13 +350,12 @@ function ReleaseSection({ view, canRun, onRead }: { view: UpdatesView; canRun: b
   const applyEnabled = precheck !== null && precheck.ok && !isLive(view.op) && !applying;
 
   return (
-    <SettingsSection title={t('updates.check.title')}>
+    <SideSection title={t('updates.check.title')}>
       <div className="flex flex-col gap-2">
         <CheckStatus view={view} checking={checkingFrom !== null} />
         {view.onlineCheck && (
           <div>
             <Button type="button" variant="outline" disabled={checkBusy} onClick={() => void check()}>
-              <RefreshCwIcon aria-hidden="true" />
               {t('updates.check.action')}
             </Button>
           </div>
@@ -384,16 +366,12 @@ function ReleaseSection({ view, canRun, onRead }: { view: UpdatesView; canRun: b
       {available === null ? (
         view.onlineCheck && view.check?.ok === true && <p className="text-sm">{t('updates.check.latest')}</p>
       ) : (
-        <div className="flex flex-col gap-3 rounded-md border p-3">
-          <div className="flex flex-col gap-1">
-            <p className="flex items-start gap-2 text-sm font-medium">
-              <ArrowUpCircleIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-              <span>{t('updates.available', { version: available.version, date: day(available.releasedAt) })}</span>
-            </p>
+        <div className="grid gap-3 rounded-lg border p-4">
+          <div className="grid gap-1">
+            <p className="text-sm font-bold">{t('updates.available', { version: available.version, date: day(available.releasedAt) })}</p>
             {notes !== null && (
-              <a href={notes} target="_blank" rel="noopener noreferrer" className="inline-flex w-fit items-center gap-1 text-sm text-primary underline">
+              <a href={notes} target="_blank" rel="noopener noreferrer" className="w-fit text-sm font-semibold text-accent-text underline underline-offset-4">
                 {t('updates.available.notes', { version: available.version })}
-                <ExternalLinkIcon className="size-3.5" aria-hidden="true" />
               </a>
             )}
           </div>
@@ -420,7 +398,7 @@ function ReleaseSection({ view, canRun, onRead }: { view: UpdatesView; canRun: b
       )}
 
       {view.dockerPull && <DockerPull only={!view.oneClick} />}
-    </SettingsSection>
+    </SideSection>
   );
 }
 
@@ -446,7 +424,7 @@ function RollbackSection({ view, onRead }: { view: UpdatesView; onRead(): void }
   };
 
   return (
-    <SettingsSection title={t('updates.rollback.title')}>
+    <SideSection title={t('updates.rollback.title')}>
       {target !== null && rollback.reason !== 'image' && <p className="text-sm">{t('updates.rollback.body', { version: target })}</p>}
       {reason !== null && (
         <p id={reasonId} className="text-sm text-muted-foreground">
@@ -461,7 +439,6 @@ function RollbackSection({ view, onRead }: { view: UpdatesView; onRead(): void }
           aria-describedby={reason === null ? undefined : reasonId}
           onClick={() => setConfirming(true)}
         >
-          <RotateCcwIcon aria-hidden="true" />
           {t('updates.rollback.action')}
         </Button>
       </div>
@@ -475,7 +452,7 @@ function RollbackSection({ view, onRead }: { view: UpdatesView; onRead(): void }
           onClose={() => setConfirming(false)}
         />
       )}
-    </SettingsSection>
+    </SideSection>
   );
 }
 
@@ -519,27 +496,14 @@ export function UpdatesScreen() {
       </>
     );
   } else if (updates.isError) {
-    content = (
-      <ProblemAlert error={updates.error}>
-        <Button variant="outline" size="sm" className="mt-2" onClick={() => void updates.refetch()}>
-          {t('table.retry')}
-        </Button>
-      </ProblemAlert>
-    );
+    content = <ErrorState error={updates.error} onRetry={() => void updates.refetch()} retrying={updates.isFetching} />;
   } else {
-    content = (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('shell.loading')}
-      </p>
-    );
+    content = <LoadingState />;
   }
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">{t('nav.updates')}</h1>
-        <p className="text-sm text-muted-foreground">{t('updates.description')}</p>
-      </header>
+    <div className="grid max-w-5xl gap-6">
+      <PageHead title={t('nav.updates')} intro={t('updates.description')} />
       {content}
     </div>
   );

@@ -9,6 +9,7 @@ import { uploadContext } from '../../src/files/contexts.js';
 import { acceptChunk, completeUpload, createUpload, uploadOwner } from '../../src/files/uploads.js';
 import { CLASS_MIN_BORROWERS, classActivityStep, refreshClassActivity, topClasses } from '../../src/opac-home/class-activity.js';
 import { readOpacHome, saveOpacHome } from '../../src/opac-home/content.js';
+import { shelfCounts, shelfStatuses } from '../../src/opac-home/shelf-status.js';
 import { POPULAR_MIN_BORROWERS, popularRecordIds, popularTitlesStep, refreshPopularTitles } from '../../src/opac-home/popular.js';
 import { REPORTS_HOUSEKEEPING_STEPS } from '../../src/reports/housekeeping/index.js';
 import { indexRecords } from '../../src/search/index-records.js';
@@ -434,6 +435,156 @@ describe.skipIf(!ctx.available)(`the OPAC home page [${engineLabel()}]`, () => {
         expect(cells).not.toContain(m.id);
         expect(cells.some((c) => c.includes(m.no) || c.includes(m.name))).toBe(false);
       }
+    });
+  });
+
+  // ---- Komunitas (OPAC look) ----
+  describe('the logo and the public contact', () => {
+    it('claims the logo as a public file of the setting like the photos, and releases it when it is dropped', async () => {
+      const logo = await seedFile('opac.home_photo');
+      let state = await readOpacHome(db.h.db);
+      await asStaff((tx) => saveOpacHome(tx, { revision: state.revision, home: { ...state.home, logo: { fileId: logo, alt: 'Logo perpustakaan' } }, welcome: state.welcome }, { keyring: KEYRING }));
+      expect(await fileRow(logo)).toEqual({ owner_type: 'settings', owner_id: 'opac.home', access: 'public' });
+      expect((await readOpacHome(db.h.db)).home.logo).toEqual({ fileId: logo, alt: 'Logo perpustakaan' });
+      state = await readOpacHome(db.h.db);
+      await asStaff((tx) => saveOpacHome(tx, { revision: state.revision, home: { ...state.home, logo: null }, welcome: state.welcome }, { keyring: KEYRING }));
+      expect(await fileRow(logo)).toEqual({ owner_type: null, owner_id: null, access: 'staff' });
+    });
+
+    it("refuses a contact e-mail that is a staff user's or a member's address (any case); takes the library's own", async () => {
+      const staffEmail = 'Pustakawan.Satu@Sekolah.example';
+      await db.h.db.updateTable('staff_users').set({ email_display: staffEmail, email_key: normalizeKey(staffEmail) }).where('id', '=', db.staffId).execute();
+      const member = await seedMember(db.h.db, { no: 'KONTAK-1', name: 'Anggota Kontak' });
+      await db.h.db.updateTable('members').set({ email: 'anggota.kontak@rumah.example' }).where('id', '=', member).execute();
+      try {
+        for (const email of ['pustakawan.satu@sekolah.example', 'ANGGOTA.KONTAK@rumah.example']) {
+          const state = await readOpacHome(db.h.db);
+          const e = await refusal(
+            asStaff((tx) => saveOpacHome(tx, { revision: state.revision, home: { ...state.home, contact: { phone: null, email } }, welcome: state.welcome }, { keyring: KEYRING })),
+          );
+          expect(e.code, email).toBe('VALIDATION_FAILED');
+          expect(e.meta?.['errors']).toEqual([{ path: 'home.contact.email', code: 'personal_email' }]);
+          expect((await readOpacHome(db.h.db)).home.contact.email).toBeNull();
+        }
+        const state = await readOpacHome(db.h.db);
+        const contact = { phone: '(021) 555-0101', email: 'perpustakaan@sekolah.example' };
+        await asStaff((tx) => saveOpacHome(tx, { revision: state.revision, home: { ...state.home, contact }, welcome: state.welcome }, { keyring: KEYRING }));
+        expect((await readOpacHome(db.h.db)).home.contact).toEqual(contact);
+      } finally {
+        await db.h.db.updateTable('staff_users').set({ email_display: null, email_key: null }).where('id', '=', db.staffId).execute();
+        await db.h.db.updateTable('members').set({ email: null }).where('id', '=', member).execute();
+      }
+    });
+  });
+
+  describe("what a card says of a title's copies", () => {
+    let branch: string;
+    let memberId: string;
+    const copies: Record<string, { recordId: string; itemId: string }> = {};
+
+    /** One more copy of `recordId`, with `status` and the collection type `collection`. */
+    async function addCopy(recordId: string, barcode: string, status: string, collection = 'UMUM'): Promise<string> {
+      const id = newId(NOW);
+      await db.h.db
+        .insertInto('items')
+        .values({
+          id,
+          record_id: recordId,
+          branch_id: branch,
+          barcode_display: barcode,
+          barcode_key: normalizeKey(barcode),
+          collection_type_id: await masterId(db.h.db, 'collection_types', collection),
+          status,
+          currency: 'IDR',
+          created_at: NOW,
+          updated_at: NOW,
+        })
+        .execute();
+      return id;
+    }
+
+    beforeAll(async () => {
+      branch = await seedBranch(db.h.db, 'RAK');
+      memberId = await seedMember(db.h.db, { no: 'RAK-7', name: 'Peminjam Rahasia' });
+      for (const [key, title] of [
+        ['all', 'Semua di rak'],
+        ['some', 'Sebagian di rak'],
+        ['out', 'Semua dipinjam'],
+        ['ref', 'Hanya referensi'],
+        ['none', 'Tak satu pun'],
+        ['gone', 'Hanya yang hilang'],
+      ] as const) {
+        copies[key] = await seedCopy(db.h.db, { branchId: branch, title, barcode: `RAK-${key}` });
+      }
+      await addCopy(copies['all']!.recordId, 'RAK-all-2', 'available');
+      // Some: one on the shelf, one on loan, one for use in the library, one withdrawn (not counted at all).
+      const lent = await addCopy(copies['some']!.recordId, 'RAK-some-2', 'available');
+      await seedLoan(db.h.db, { itemId: lent, recordId: copies['some']!.recordId, memberId, branchId: branch, loanedOn: '2026-11-10', dueOn: '2026-11-24' });
+      await addCopy(copies['some']!.recordId, 'RAK-some-3', 'not_for_loan');
+      await addCopy(copies['some']!.recordId, 'RAK-some-4', 'withdrawn');
+      // Out: both copies on loan; the earliest due date is the one said.
+      const second = await addCopy(copies['out']!.recordId, 'RAK-out-2', 'available');
+      await seedLoan(db.h.db, { ...copies['out']!, memberId, branchId: branch, loanedOn: '2026-11-10', dueOn: '2026-11-28' });
+      await seedLoan(db.h.db, { itemId: second, recordId: copies['out']!.recordId, memberId, branchId: branch, loanedOn: '2026-11-11', dueOn: '2026-11-21' });
+      // Ref: a copy available in a collection type that is not lent, and one not for loan.
+      const reference = newId(NOW);
+      await db.h.db
+        .insertInto('collection_types')
+        .values({ id: reference, code_display: 'REFRAK', code_key: 'REFRAK', name_id: 'Referensi rak', name_en: 'Shelf reference', loanable: 0, created_at: NOW, updated_at: NOW })
+        .execute();
+      await db.h.db.updateTable('items').set({ collection_type_id: reference }).where('id', '=', copies['ref']!.itemId).execute();
+      await addCopy(copies['ref']!.recordId, 'RAK-ref-2', 'not_for_loan');
+      // None: under repair; Gone: lost and archived copies only.
+      await db.h.db.updateTable('items').set({ status: 'repair' }).where('id', '=', copies['none']!.itemId).execute();
+      await db.h.db.updateTable('items').set({ status: 'lost' }).where('id', '=', copies['gone']!.itemId).execute();
+      await db.h.db.updateTable('items').set({ archived_at: NOW }).where('id', '=', await addCopy(copies['gone']!.recordId, 'RAK-gone-2', 'available')).execute();
+    });
+
+    it('one grouped read for many titles: each state counted, the earliest due date of the loans, a title without counted copies absent', async () => {
+      const ids = Object.values(copies).map((c) => c.recordId);
+      const counts = await shelfCounts(db.h.db, ids);
+      expect(counts.get(copies['all']!.recordId)).toEqual({ shelf: 2, library: 0, loan: 0, held: 0, other: 0, earliestDue: null });
+      expect(counts.get(copies['some']!.recordId)).toEqual({ shelf: 1, library: 1, loan: 1, held: 0, other: 0, earliestDue: '2026-11-24' });
+      expect(counts.get(copies['out']!.recordId)).toEqual({ shelf: 0, library: 0, loan: 2, held: 0, other: 0, earliestDue: '2026-11-21' });
+      expect(counts.get(copies['ref']!.recordId)).toEqual({ shelf: 0, library: 2, loan: 0, held: 0, other: 0, earliestDue: null });
+      expect(counts.get(copies['none']!.recordId)).toEqual({ shelf: 0, library: 0, loan: 0, held: 0, other: 1, earliestDue: null });
+      expect(counts.has(copies['gone']!.recordId)).toBe(false);
+      const statuses = await shelfStatuses(db.h.db, ids);
+      expect(Object.fromEntries(Object.entries(copies).map(([key, c]) => [key, statuses.get(c.recordId) ?? null]))).toEqual({
+        all: { kind: 'available', shelf: 2, total: 2 },
+        some: { kind: 'available', shelf: 1, total: 3 },
+        out: { kind: 'on_loan', dueOn: '2026-11-21' },
+        ref: { kind: 'library_use' },
+        none: { kind: 'unavailable' },
+        gone: null,
+      });
+      expect(await shelfCounts(db.h.db, [])).toEqual(new Map());
+    });
+  });
+
+  describe('the exact ISBN/ISSN filter of the search', () => {
+    it('matches the stored ISBN in its 10- and 13-digit forms with or without hyphens, an ISSN, and nothing for other text', async () => {
+      const branch = await seedBranch(db.h.db, 'ISBN');
+      const book = await seedCopy(db.h.db, { branchId: branch, title: 'Buku Ber-ISBN', barcode: 'ISBN-1' });
+      const journal = await seedCopy(db.h.db, { branchId: branch, title: 'Jurnal Ber-ISSN', barcode: 'ISSN-1' });
+      // Another title only mentions the ISBN in its notes: a text match, never an exact one.
+      const mention = await seedCopy(db.h.db, { branchId: branch, title: 'Buku Lain', barcode: 'ISBN-2' });
+      await db.h.db.updateTable('records').set({ notes: 'Terjemahan dari 979-3062-79-7' }).where('id', '=', mention.recordId).execute();
+      await db.h.db
+        .insertInto('record_identifiers')
+        .values([
+          { id: newId(NOW), record_id: book.recordId, type: 'isbn', value_display: '978-979-3062-79-2', value_key: '9789793062792' },
+          { id: newId(NOW), record_id: journal.recordId, type: 'issn', value_display: '0317-8471', value_key: '03178471' },
+        ])
+        .execute();
+      await withTx(db.h, (trx) => indexRecords(trx, [book.recordId, journal.recordId, mention.recordId], NOW));
+      const find = async (identifier: string) => (await searchCatalog(db.h.db, { text: '', scope: 'opac', filters: { identifier } }, { now: NOW })).recordIds;
+      for (const typed of ['978-979-3062-79-2', '9789793062792', '979-3062-79-7', '9793062797', 'ISBN 979 3062 79 7']) expect(await find(typed), typed).toEqual([book.recordId]);
+      expect(await find('0317-8471')).toEqual([journal.recordId]);
+      for (const other of ['Buku', '978', '9780000000002', 'x'.repeat(80)]) expect(await find(other), other).toEqual([]);
+      // The text search still finds the mention; the filter narrows a text search to the exact holder.
+      expect((await searchCatalog(db.h.db, { text: '9793062797', scope: 'opac' }, { now: NOW })).recordIds).toContain(book.recordId);
+      expect((await searchCatalog(db.h.db, { text: 'buku', scope: 'opac', filters: { identifier: '9793062797' } }, { now: NOW })).recordIds).toEqual([book.recordId]);
     });
   });
 });

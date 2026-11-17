@@ -1,14 +1,12 @@
 import type { RoleItem, RoleListResponse } from '@altis/shared/api/roles';
 import { Link } from '@tanstack/react-router';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
-import { PlusIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { DataTable } from '@/components/data-table';
-import { Badge, Notice } from '@/components/form-field';
+import { ErrorState, PageHead, SkeletonTable, Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/i18n';
 import { holds, roleLabel } from '@/lib/access';
-import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 
 /**
@@ -36,13 +34,10 @@ export function RolesListScreen() {
             const role = info.row.original;
             return (
               <span className="flex flex-wrap items-center gap-2">
-                <Link
-                  to={`/admin/roles/${encodeURIComponent(role.id)}`}
-                  className="font-medium text-primary underline-offset-4 hover:underline"
-                >
+                <Link to={`/admin/roles/${encodeURIComponent(role.id)}`} className="font-semibold text-accent-text underline-offset-4 hover:underline">
                   {roleLabel(t, role)}
                 </Link>
-                {role.isSystem && <Badge tone="info">{t('roles.system')}</Badge>}
+                {role.isSystem && <Tag>{t('roles.system')}</Tag>}
               </span>
             );
           },
@@ -54,11 +49,11 @@ export function RolesListScreen() {
         column.accessor((role) => role.permissions.length, {
           id: 'permissions',
           header: t('roles.col.permissions'),
-          cell: (info) => <span className="whitespace-nowrap">{t('roles.permission_count', { count: info.getValue() })}</span>,
+          cell: (info) => <span className="whitespace-nowrap">{t(info.getValue() === 1 ? 'roles.permission_count_one' : 'roles.permission_count', { count: info.getValue() })}</span>,
         }),
         column.accessor('holders', {
           header: t('roles.col.holders'),
-          cell: (info) => <span className="whitespace-nowrap">{t('roles.holder_count', { count: info.getValue() })}</span>,
+          cell: (info) => <span className="whitespace-nowrap">{t(info.getValue() === 1 ? 'roles.holder_count_one' : 'roles.holder_count', { count: info.getValue() })}</span>,
         }),
         column.accessor('mfaRequired', {
           header: t('roles.col.mfa'),
@@ -71,33 +66,22 @@ export function RolesListScreen() {
   const table = useTable({ features, columns, data: roles.data?.items ?? NO_ROLES, getRowId: (role) => role.id });
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">{t('nav.roles')}</h1>
-        {canManage && (
-          <Button asChild>
-            <Link to="/admin/roles/new">
-              <PlusIcon aria-hidden="true" />
-              {t('roles.add')}
-            </Link>
-          </Button>
-        )}
-      </div>
-      {roles.isError ? (
-        <Notice
-          kind="error"
-          action={
-            <Button variant="outline" size="sm" onClick={() => void roles.refetch()}>
-              {t('table.retry')}
+    <div className="grid gap-6">
+      <PageHead
+        title={t('nav.roles')}
+        intro={t('roles.intro')}
+        actions={
+          canManage ? (
+            <Button asChild>
+              <Link to="/admin/roles/new">{t('roles.add')}</Link>
             </Button>
-          }
-        >
-          {problemText(t, roles.error)}
-        </Notice>
+          ) : undefined
+        }
+      />
+      {roles.isError && roles.data === undefined ? (
+        <ErrorState error={roles.error} onRetry={() => void roles.refetch()} retrying={roles.isFetching} />
       ) : roles.data === undefined ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
+        <SkeletonTable label={t('shell.loading')} columns={5} rows={4} />
       ) : (
         <DataTable table={table} caption={t('roles.caption')} empty={t('roles.empty')} />
       )}
