@@ -10,12 +10,11 @@ import {
 } from '@altis/shared/api/opac-pages';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ArrowLeftIcon } from 'lucide-react';
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useForm, useWatch, type FieldPath, type UseFormReturn } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { CheckField, Field, Notice, ProblemAlert, RefetchProblem, RootError, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
-import { Callout, ErrorState, FORM_FULL, FormBar, FormSection, LAYER, LoadingState, PageHead } from '@/components/layout';
+import { BackLink, Callout, ErrorState, FORM_FULL, FormBar, FormSection, LAYER, LoadingState, PageHead } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
@@ -382,14 +381,9 @@ function TranslationFields({
   );
 }
 
-function BackLink({ kind }: { kind: PageKind }) {
+function PagesBackLink({ kind }: { kind: PageKind }) {
   const t = useT();
-  return (
-    <Link {...pagesListTarget(kind)} className="inline-flex w-fit items-center gap-1 text-meta font-semibold text-muted-foreground hover:text-foreground">
-      <ArrowLeftIcon className="size-4" aria-hidden="true" />
-      {t('pages.back')}
-    </Link>
-  );
+  return <BackLink {...pagesListTarget(kind)}>{t('pages.back')}</BackLink>;
 }
 
 /** The editor of a new page (`page` null) or of an existing one. */
@@ -594,7 +588,7 @@ export function PageCreateScreen() {
   const kind = kindOf(useSearch({ strict: false }));
   return (
     <div className="grid max-w-5xl gap-6">
-      <BackLink kind={kind} />
+      <PagesBackLink kind={kind} />
       <PageHead title={t(`pages.new.${kind}`)} />
       {/* Every route of the area needs the permission: say so before anything is typed. */}
       {canManage ? <PageEditor key={kind} page={null} kind={kind} /> : <ProblemAlert error={new ApiError(403, 'AUTHZ_DENIED')} />}
@@ -619,7 +613,7 @@ export function PageEditScreen() {
   if (!canManage) {
     return (
       <div className="grid max-w-5xl gap-6">
-        <BackLink kind="page" />
+        <PagesBackLink kind="page" />
         <ProblemAlert error={new ApiError(403, 'AUTHZ_DENIED')} />
       </div>
     );
@@ -627,7 +621,7 @@ export function PageEditScreen() {
   const data = page.data;
   return (
     <div className="grid max-w-5xl gap-6">
-      <BackLink kind={data?.kind ?? 'page'} />
+      <PagesBackLink kind={data?.kind ?? 'page'} />
       {/* The data wins over an error: a failed background refetch keeps the form and what was typed. */}
       {data === undefined ? (
         page.isError ? (

@@ -16,7 +16,6 @@ import { buildSync } from '@/lib/build-sync';
 import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { useScannerInput } from '@/lib/scanner';
-import { cn } from '@/lib/utils';
 
 /**
  * Cetak Label (Phase 2 spec §7, §13; plan Task 30): the print queue (components/catalog/print-queue.tsx) and the
@@ -432,10 +431,10 @@ function PrintPanel({ entries, remove }: { entries: QueueEntry[]; remove(ids: st
             </NoticeAlert>
           )}
           <div className="flex flex-wrap gap-2">
-            <a href={made.url} target="_blank" rel="noopener noreferrer" className={cn(buttonVariants({ variant: 'outline' }))}>
+            <a href={made.url} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: 'outline' })}>
               {t('catalog.labels.print.open')}
             </a>
-            <a href={made.url} download="label.pdf" className={cn(buttonVariants({ variant: 'outline' }))}>
+            <a href={made.url} download="label.pdf" className={buttonVariants({ variant: 'outline' })}>
               {t('catalog.labels.print.download')}
             </a>
             {!made.removed && (

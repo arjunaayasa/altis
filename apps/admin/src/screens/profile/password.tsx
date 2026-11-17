@@ -5,6 +5,7 @@ import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useId, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { SideSection } from '@/components/layout';
 import { Field, NoticeAlert, ProblemAlert, RootError, describedBy } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +15,7 @@ import { useDirtyGuard } from '@/lib/dirty-forms';
 import { FORM_PARSE, applyServerErrors, hasFieldErrors, passwordWeaknessKey } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
 import { refreshMe, validateNextSearch } from '@/lib/sign-in';
-import { ProfilePage, ProfileSection } from './profile';
+import { ProfilePage } from './profile';
 
 /**
  * "Ganti kata sandi", `/admin/profile/password` (spec §7.1; Task 28): the current password and the new one, typed
@@ -73,7 +74,7 @@ export function PasswordScreen() {
   return (
     <ProfilePage>
       {mustChange && <NoticeAlert>{t('error.AUTH_PASSWORD_CHANGE_REQUIRED')}</NoticeAlert>}
-      <ProfileSection title={t('profile.password.title')} description={t('profile.password.description')}>
+      <SideSection title={t('profile.password.title')} intro={t('profile.password.description')}>
         <form noValidate className="grid max-w-md gap-4" onSubmit={(e) => void submit(e)}>
           <Field id={ids.current} label={t('profile.password.current')} error={errors.current?.message}>
             <Input
@@ -114,7 +115,7 @@ export function PasswordScreen() {
             </Button>
           </div>
         </form>
-      </ProfileSection>
+      </SideSection>
     </ProfilePage>
   );
 }

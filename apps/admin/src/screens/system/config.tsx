@@ -17,7 +17,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { CheckField, Field, NoticeAlert, ProblemAlert, RefetchProblem, RootError, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
-import { Callout, ErrorState, FormBar, LoadingState, PageHead, StatusText, Tag } from '@/components/layout';
+import { Callout, ErrorState, FormBar, LoadingState, PageHead, SideSection, StatusText, Tag } from '@/components/layout';
 import { OneTimeSecretDialog } from '@/components/one-time-secret-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,7 +28,7 @@ import { useDirtyGuard } from '@/lib/dirty-forms';
 import { FORM_PARSE, applyServerErrors, hasFieldErrors, problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { holdMe } from '@/lib/sign-in';
-import { SettingsSection, wholeNumberIn } from '@/screens/settings/library';
+import { wholeNumberIn } from '@/screens/settings/library';
 
 /**
  * Konfigurasi Sistem (spec §13.3, §7.6, P13, P15; decisions D17, D27, D42; super admin only: `system.config.manage`).
@@ -246,7 +246,7 @@ function SystemConfigForm({ initial, onSignInAgain }: { initial: SystemConfigVie
   return (
     <>
       <form noValidate className="flex flex-col gap-6" onSubmit={(e) => void submit(e)} onChange={() => setSaved(null)}>
-        <SettingsSection title={t('system.site.title')}>
+        <SideSection title={t('system.site.title')}>
           <Field label={t('system.base_url')} hint={hintOf(t, locked, 'baseUrl', t('system.base_url_hint'))} error={errors.baseUrl}>
             {(c) => (
               <div className="flex flex-wrap items-center gap-2">
@@ -298,9 +298,9 @@ function SystemConfigForm({ initial, onSignInAgain }: { initial: SystemConfigVie
               />
             )}
           </Field>
-        </SettingsSection>
+        </SideSection>
 
-        <SettingsSection title={t('system.smtp.title')} description={t('system.smtp.description')}>
+        <SideSection title={t('system.smtp.title')} intro={t('system.smtp.description')}>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t('system.smtp.host')} error={errors.smtp?.host}>
               {(c) => <Input {...c} autoComplete="off" spellCheck={false} maxLength={HOST_MAX} {...form.register('smtp.host')} />}
@@ -357,7 +357,7 @@ function SystemConfigForm({ initial, onSignInAgain }: { initial: SystemConfigVie
           {passwordWillClear && (
             <Callout role="status" tone="warn" title={t('system.smtp.password_will_clear')} />
           )}
-        </SettingsSection>
+        </SideSection>
 
         <RootError message={errors.root?.['server']?.message} />
         <ConfigProblem error={problem} />
@@ -402,7 +402,7 @@ function EmailTest({ unsaved }: { unsaved: boolean }) {
   });
 
   return (
-    <SettingsSection title={t('system.email_test.title')} description={t('system.email_test.description')}>
+    <SideSection title={t('system.email_test.title')} intro={t('system.email_test.description')}>
       <form noValidate className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
         <div className="flex flex-wrap items-end gap-3">
           <Field label={t('system.email_test.to')} error={errors.to} className="min-w-0 flex-1 basis-64">
@@ -416,7 +416,7 @@ function EmailTest({ unsaved }: { unsaved: boolean }) {
         <ConfigProblem error={problem} />
         {sentTo !== null && <NoticeAlert tone="success">{t('system.email_test.sent', { to: sentTo })}</NoticeAlert>}
       </form>
-    </SettingsSection>
+    </SideSection>
   );
 }
 
@@ -448,7 +448,7 @@ function CronToken() {
   };
 
   return (
-    <SettingsSection title={t('system.cron.title')} description={t('system.cron.description')}>
+    <SideSection title={t('system.cron.title')} intro={t('system.cron.description')}>
       <div>
         <Button type="button" variant="outline" onClick={() => setConfirming(true)}>
           {t('system.cron.rotate')}
@@ -471,7 +471,7 @@ function CronToken() {
         valueClassName="text-sm"
         onClose={() => setToken(null)}
       />
-    </SettingsSection>
+    </SideSection>
   );
 }
 

@@ -14,6 +14,7 @@ import type { RecordDetail } from '@altis/shared/api/catalog/records';
 import { Children, useId, type ReactNode } from 'react';
 import type { FieldPath, UseFieldArrayReturn, UseFormReturn } from 'react-hook-form';
 import { CheckField, Field, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
+import { FormSection } from '@/components/layout';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT, type TKey } from '@/i18n';
 import { AgentPicker, errorAt, useLegend } from './agent-picker';
@@ -64,12 +65,10 @@ type TextName = Extract<
 >;
 
 /**
- * A part of the editor's form, as the layout's `FormSection` draws one: its title (and a sentence) on the left, above on
- * a narrow screen, its content on the right, a thin rule above every part but the first; nothing when it holds no
- * field. The fields go in two columns (the editor keeps a side column for the cover and the duplicate check), as a
- * fieldset named by the title. A part made of one list field (`list`: the agents, the identifiers, the relations, the
- * custom fields) holds that field's own fieldset, named by the same words, instead of a second one. `introId` lets the
- * sentence describe that list.
+ * A part of the editor's form: the layout's `FormSection` with its fields in two columns and a narrower title column
+ * (the editor keeps a side column for the cover and the duplicate check); nothing when it holds no field. A part made
+ * of one list field (`list`: the agents, the identifiers, the relations, the custom fields) holds that field's own
+ * fieldset, named by the same words. `introId` lets the sentence describe that list.
  */
 export function EditorSection({
   title,
@@ -84,32 +83,18 @@ export function EditorSection({
   list?: boolean;
   children: ReactNode;
 }) {
-  const headingId = useId();
   const parts = Children.toArray(children);
   if (parts.length === 0) return null;
   return (
-    <section
-      aria-labelledby={headingId}
-      className="grid gap-x-8 gap-y-4 border-t py-5 first:border-t-0 first:pt-1 md:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)]">
-      <div className="grid content-start gap-1">
-        <h2 id={headingId} className="text-base font-bold">
-          {title}
-        </h2>
-        {intro !== undefined && (
-          <p id={introId} className="text-sm text-muted-foreground">
-            {intro}
-          </p>
-        )}
-      </div>
-      {list ? (
-        <div className="grid min-w-0 content-start gap-4">{parts}</div>
-      ) : (
-        <fieldset className="grid min-w-0 content-start gap-x-5 gap-y-4 sm:grid-cols-2">
-          <legend className="sr-only">{title}</legend>
-          {parts}
-        </fieldset>
-      )}
-    </section>
+    <FormSection
+      title={title}
+      intro={intro}
+      introId={introId}
+      list={list}
+      columns={2}
+      className="md:grid-cols-[180px_minmax(0,1fr)] lg:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)]">
+      {parts}
+    </FormSection>
   );
 }
 

@@ -246,7 +246,7 @@ export function RunHistory({ entry, describe }: { entry: ReportCatalogEntry; des
         <SkeletonTable label={t('shell.loading')} rows={3} />
       ) : (
         <>
-          <DataTable table={table} caption={t('reports.runs.caption')} empty={t('reports.runs.empty')} />
+          <DataTable table={table} caption={t('reports.runs.caption')} empty={t('reports.runs.empty')} alignRight={['rowCount']} />
           {list.isFetchNextPageError && <ProblemAlert error={list.error} />}
           {list.hasNextPage && (
             <div>

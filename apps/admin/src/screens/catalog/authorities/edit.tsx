@@ -3,12 +3,11 @@ import { AgentBody, PublisherBody, SubjectBody, type AgentView, type AuthorityKi
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
-import { ArrowLeftIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useForm, type FieldErrors, type Resolver } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Field, Notice, ProblemAlert, RefetchProblem, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
-import { Callout, FORM_FULL, FormBar, FormSection, LoadingState, PageError, PageHead, Section } from '@/components/layout';
+import { BackLink, Callout, FORM_FULL, FormBar, FormSection, LoadingState, PageError, PageHead, Section } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type AdminKey } from '@/i18n';
@@ -201,17 +200,13 @@ function AuthorityFields({ kind, form, disabled }: { kind: AuthorityKind; form: 
   );
 }
 
-/** The way back to the list of the kind's tab (the layout's back link, with the tab in the search params). */
-function BackLink({ kind }: { kind: AuthorityKind }) {
+/** The way back to the list of the kind's tab. */
+function AuthoritiesBackLink({ kind }: { kind: AuthorityKind }) {
   const t = useT();
   return (
-    <Link
-      to="/admin/catalog/authorities"
-      search={kind === 'agents' ? {} : { kind }}
-      className="inline-flex w-fit items-center gap-1 text-meta font-semibold text-muted-foreground hover:text-foreground">
-      <ArrowLeftIcon className="size-4" aria-hidden="true" />
+    <BackLink to="/admin/catalog/authorities" search={kind === 'agents' ? {} : { kind }}>
       {t('catalog.authorities.back')}
-    </Link>
+    </BackLink>
   );
 }
 
@@ -506,7 +501,7 @@ export function AuthorityEditScreen() {
   const valid = isAuthorityKind(kind) && (id === 'new' || isUlid(id));
   return (
     <div className="grid max-w-5xl gap-6">
-      <BackLink kind={isAuthorityKind(kind) ? kind : 'agents'} />
+      <AuthoritiesBackLink kind={isAuthorityKind(kind) ? kind : 'agents'} />
       {!valid ? (
         <PageError title={t('error.NOT_FOUND')} />
       ) : id === 'new' ? (

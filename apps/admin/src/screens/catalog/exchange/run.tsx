@@ -2,11 +2,10 @@ import { isUlid, vocabKey } from '@altis/shared';
 import type { RunView } from '@altis/shared/api/catalog/runs';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
-import { ArrowLeftIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useDateTime } from '@/components/data-table';
 import { Badge, ProblemAlert } from '@/components/form-field';
-import { FactList, LoadingState, PageError, PageHead, Section } from '@/components/layout';
+import { BackLink, FactList, LoadingState, PageError, PageHead, Section } from '@/components/layout';
 import { JobProgress } from '@/components/job-progress';
 import { useT } from '@/i18n';
 import { ApiError } from '@/lib/api';
@@ -56,13 +55,9 @@ export function RunDetailScreen() {
 
   return (
     <div className="grid max-w-5xl gap-6">
-      <Link
-        to={EXCHANGE_PATH}
-        search={{ tab: 'runs' }}
-        className="inline-flex w-fit items-center gap-1 text-meta font-semibold text-muted-foreground hover:text-foreground">
-        <ArrowLeftIcon className="size-4" aria-hidden="true" />
+      <BackLink to={EXCHANGE_PATH} search={{ tab: 'runs' }}>
         {t('catalog.exchange.run.back')}
-      </Link>
+      </BackLink>
       <PageHead title={t('catalog.exchange.run.title')} intro={r?.dryRun === true ? <Badge>{t('catalog.exchange.runs.dry_run')}</Badge> : undefined} />
       {notFound ? (
         <PageError title={t('catalog.exchange.run.not_found')} />

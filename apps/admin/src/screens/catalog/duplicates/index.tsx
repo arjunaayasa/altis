@@ -12,7 +12,6 @@ import { api } from '@/lib/api';
 import { useApiQuery, useMe } from '@/lib/me';
 import { RUNS_KEY, dedupeSummaryOf, isRunActive, reportHref, runKey } from '../exchange/summary-view';
 import { Compare } from './compare';
-import { cn } from '@/lib/utils';
 
 /**
  * Duplikat (Phase 2 spec §3.3, §13; plan Task 29; `catalog.records.manage`, which the scan and the merge need):
@@ -65,7 +64,7 @@ function ScanResult({ run }: { run: RunView }) {
         {groups.length < total && <p className="text-muted-foreground">{t('catalog.duplicates.preview_note', { shown: number.format(groups.length), total: number.format(total) })}</p>}
         {run.reportFileId !== null && (
           <div>
-            <a href={reportHref(run.id)} download className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
+            <a href={reportHref(run.id)} download className={buttonVariants({ variant: 'outline', size: 'sm' })}>
               {t('catalog.duplicates.report')}
             </a>
           </div>

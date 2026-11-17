@@ -3,7 +3,6 @@ import { ErrorState, LoadingState, TABLE } from '@/components/layout';
 import { buttonVariants } from '@/components/ui/button';
 import { useT } from '@/i18n';
 import { useApiQuery } from '@/lib/me';
-import { cn } from '@/lib/utils';
 
 /**
  * The MARC tab of the record editor (Phase 2 spec §13 "tab MARC (baca saja + unduh)"; plan Task 24, M9): the record
@@ -50,10 +49,10 @@ export function MarcTab({ recordId }: { recordId: string }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-[75ch] text-sm text-muted-foreground">{t('catalog.records.marc.hint')}</p>
         <div className="flex flex-wrap gap-2">
-          <a href={`${base}?format=mrc`} download className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
+          <a href={`${base}?format=mrc`} download className={buttonVariants({ variant: 'outline', size: 'sm' })}>
             {t('catalog.records.marc.download_mrc')}
           </a>
-          <a href={`${base}?format=xml`} download className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
+          <a href={`${base}?format=xml`} download className={buttonVariants({ variant: 'outline', size: 'sm' })}>
             {t('catalog.records.marc.download_xml')}
           </a>
         </div>

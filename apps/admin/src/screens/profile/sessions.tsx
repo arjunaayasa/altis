@@ -2,12 +2,12 @@ import type { SessionItem } from '@altis/shared/api/auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { NoticeAlert, ProblemAlert } from '@/components/form-field';
-import { LoadingState, Tag } from '@/components/layout';
+import { LoadingState, SideSection, Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useLocale, useT, type Translate } from '@/i18n';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/lib/me';
-import { ProfilePage, ProfileSection } from './profile';
+import { ProfilePage } from './profile';
 
 /**
  * "Sesi aktif", `/admin/profile/sessions` (spec §7.1 "Pencabutan", §13.5; Task 28): the user's live sign-ins
@@ -89,7 +89,7 @@ export function SessionsScreen() {
 
   return (
     <ProfilePage>
-      <ProfileSection title={t('profile.sessions.title')} description={t('profile.sessions.description')}>
+      <SideSection title={t('profile.sessions.title')} intro={t('profile.sessions.description')}>
         {sessions.isPending && <LoadingState lines={3} />}
         <ProblemAlert error={sessions.error ?? problem} />
         {ended && <NoticeAlert tone="success">{t('profile.sessions.revoked')}</NoticeAlert>}
@@ -137,7 +137,7 @@ export function SessionsScreen() {
             </Button>
           </div>
         )}
-      </ProfileSection>
+      </SideSection>
     </ProfilePage>
   );
 }

@@ -18,10 +18,13 @@ export function PageHead({ title, intro, actions, titleId }: { title: ReactNode;
   );
 }
 
-/** The way back to the list a detail page belongs to, above its {@link PageHead}: a back arrow and the list's name. */
-export function BackLink({ to, children }: { to: string; children: ReactNode }) {
+/**
+ * The way back to the list a detail page belongs to, above its {@link PageHead}: a back arrow and the list's name.
+ * `search` brings back the list's own view (its tab or kind, `?kind=news`).
+ */
+export function BackLink({ to, search, children }: { to: string; search?: object; children: ReactNode }) {
   return (
-    <Link to={to} className="inline-flex w-fit items-center gap-1 text-meta font-semibold text-muted-foreground hover:text-foreground">
+    <Link to={to} search={search} className="inline-flex w-fit items-center gap-1 text-meta font-semibold text-muted-foreground hover:text-foreground">
       <ArrowLeftIcon className="size-4" aria-hidden="true" />
       {children}
     </Link>

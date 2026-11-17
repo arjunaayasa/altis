@@ -9,10 +9,10 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { DataTable, useDateTime } from '@/components/data-table';
 import { SELECT_CLASS } from '@/components/form-field';
-import { ErrorState, FilterField, FilterRow, PageHead, SkeletonTable, Tag, type TagTone } from '@/components/layout';
+import { ErrorState, FilterField, FilterRow, LinkTabs, PageHead, SkeletonTable, Tag, type TagTone } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useT, type TKey, type Translate } from '@/i18n';
+import { useT, type Translate } from '@/i18n';
 import { holds, meId } from '@/lib/access';
 import { api } from '@/lib/api';
 import { FORM_PARSE, isMessageKey } from '@/lib/form-errors';
@@ -91,36 +91,19 @@ export function hearsJob(me: MeResponse | undefined, job: Pick<JobView, 'created
   return (job.createdBy !== null && job.createdBy === meId(me)) || holds(me, 'system.jobs.read');
 }
 
-/** The two parts of Tugas dan Jadwal, as tabs: the jobs (`/admin/jobs`) and the schedules (`/admin/jobs/schedules`). */
-export function JobsSectionTabs({ current }: { current: 'jobs' | 'schedules' }) {
-  const t = useT();
-  const tab = (to: string, key: TKey, active: boolean) => (
-    <Link
-      to={to}
-      aria-current={active ? 'page' : undefined}
-      className={cn(
-        '-mb-px block border-b-2 px-2.5 py-2 text-sm font-semibold',
-        active ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
-      )}
-    >
-      {t(key)}
-    </Link>
-  );
-  return (
-    <nav aria-label={t('jobs.sections')} className="flex flex-wrap gap-x-1 border-b">
-      {tab('/admin/jobs', 'jobs.tab.jobs', current === 'jobs')}
-      {tab('/admin/jobs/schedules', 'jobs.tab.schedules', current === 'schedules')}
-    </nav>
-  );
-}
-
-/** The heading of both parts. */
-export function JobsHeader({ current, description }: { current: 'jobs' | 'schedules'; description: string }) {
+/** The heading of both parts of Tugas dan Jadwal, with the two as tabs: the jobs (`/admin/jobs`), the schedules. */
+export function JobsHeader({ description }: { description: string }) {
   const t = useT();
   return (
     <div className="grid gap-4">
       <PageHead title={t('nav.jobs')} intro={description} />
-      <JobsSectionTabs current={current} />
+      <LinkTabs
+        label={t('jobs.sections')}
+        items={[
+          { to: '/admin/jobs', label: t('jobs.tab.jobs') },
+          { to: '/admin/jobs/schedules', label: t('jobs.tab.schedules') },
+        ]}
+      />
     </div>
   );
 }
@@ -293,7 +276,7 @@ export function JobsListScreen() {
 
   return (
     <div className="grid gap-6">
-      <JobsHeader current="jobs" description={t('jobs.description')} />
+      <JobsHeader description={t('jobs.description')} />
 
       <div className="grid gap-1.5">
         <FilterRow
