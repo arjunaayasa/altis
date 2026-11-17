@@ -4,11 +4,12 @@ import type { DeskDashboard, DeskHour, LibraryDashboard } from '@altis/shared/ap
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axisScale, shownHours } from '@/screens/dashboard-activity';
-import { adminMe, signedIn, startApp, superMe } from './fake-api';
+import { adminMe, problem, signedIn, startApp, superMe } from './fake-api';
 
 // Beranda's library blocks: the desk's activity per hour (its hours, the empty day, the keyboard tooltip and the
-// table), "Perlu perhatian" (each line with its count and its screen, hidden when nothing needs it), the loans by
-// subject and the most borrowed titles (counts only, a title linked for a catalogue reader), each only for its readers.
+// table), "Perlu perhatian" (each line with its count and its screen, one sentence when nothing needs it), the loans by
+// subject and the most borrowed titles (counts only, a title linked for a catalogue reader; a failed read said with
+// "Coba lagi"), each only for its readers.
 
 beforeEach(() => {
   localStorage.clear();
@@ -194,11 +195,39 @@ describe('Perlu perhatian', () => {
     expect(within(region).getByRole('link', { name: 'Keanggotaan berakhir dalam 14 hari 7' })).toBeTruthy();
   });
 
-  it('is not shown when nothing needs attention, and the chart takes the whole row', async () => {
+  it('says in one sentence that nothing needs attention, once its reads have answered', async () => {
     open();
-    await screen.findByRole('region', { name: 'Aktivitas meja hari ini' });
-    await waitFor(() => expect(document.querySelector('[data-top-title]')).not.toBeNull());
+    const region = await screen.findByRole('region', { name: 'Perlu perhatian' });
+    expect(await within(region).findByText('Tidak ada yang perlu ditangani saat ini.')).toBeTruthy();
+    expect(region.querySelectorAll('[data-attention-item]')).toHaveLength(0);
+  });
+
+  it('is left out for a user who reads none of its sources and has no line', async () => {
+    open({ me: signedIn({ permissions: ['catalog.records.read'] }), library: library({ members: null, loans: null, usage: null }) });
+    await screen.findByRole('heading', { name: 'Beranda', level: 1 });
+    await waitFor(() => expect(document.querySelector('[data-home]')).not.toBeNull());
     expect(screen.queryByRole('region', { name: 'Perlu perhatian' })).toBeNull();
+  });
+
+  it('says the library figures could not be read, with "Coba lagi", instead of claiming nothing needs attention', async () => {
+    let fail = true;
+    startApp({
+      me: adminMe(),
+      path: '/admin',
+      routes: {
+        'GET dashboard': () => SYSTEM,
+        'GET branches': () => ({ items: [BRANCH] }),
+        'GET branches/:branchId/dashboard': () => desk(),
+        'GET dashboard/library': () => (fail ? problem(500, 'INTERNAL') : library({ loans: { longOverdue: 3 } })),
+      },
+    });
+    const region = await screen.findByRole('region', { name: 'Perlu perhatian' });
+    expect(await within(region).findByText('Angka perpustakaan gagal dimuat.', {}, { timeout: 5_000 })).toBeTruthy();
+    expect(within(region).queryByText('Tidak ada yang perlu ditangani saat ini.')).toBeNull();
+    fail = false;
+    fireEvent.click(within(region).getByRole('button', { name: 'Coba lagi' }));
+    await waitFor(() => expect(region.querySelector('[data-attention-item="long_overdue"]')).not.toBeNull());
+    expect(within(region).queryByText('Angka perpustakaan gagal dimuat.')).toBeNull();
   });
 });
 
@@ -207,7 +236,7 @@ describe('the loans of the last 30 days', () => {
     open({ me: superMe() });
     const subjects = await screen.findByRole('region', { name: 'Peminjaman per subjek' });
     expect(within(subjects).getByText('30 hari terakhir')).toBeTruthy();
-    const list = within(subjects).getByRole('list', { name: 'Peminjaman per kelas DDC, 30 hari terakhir' });
+    const list = await within(subjects).findByRole('list', { name: 'Peminjaman per kelas DDC, 30 hari terakhir' });
     expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['800 Kesusastraan142', '500 Sains dan matematika96', 'Lainnya (bukan DDC)3']);
     expect(within(subjects).getByRole('table', { name: 'Peminjaman per kelas DDC, 30 hari terakhir' })).toBeTruthy();
     expect(within(subjects).getByRole('link', { name: 'Laporan lengkap' }).getAttribute('href')).toBe('/admin/reports/circulation.loans_by_class');
@@ -222,6 +251,28 @@ describe('the loans of the last 30 days', () => {
     open({ library: library({ usage: { from: '2026-10-17', to: '2026-11-15', bySubject: [], topTitles: [] } }) });
     expect(await screen.findByText('Belum ada peminjaman dalam 30 hari terakhir.')).toBeTruthy();
     expect(screen.getByText('Belum ada judul yang dipinjam dalam 30 hari terakhir.')).toBeTruthy();
+  });
+
+  it('a failed read keeps both blocks on the page, says so and offers to try again', async () => {
+    let fail = true;
+    startApp({
+      me: superMe(),
+      path: '/admin',
+      routes: {
+        'GET dashboard': () => SYSTEM,
+        'GET branches': () => ({ items: [BRANCH] }),
+        'GET branches/:branchId/dashboard': () => desk(),
+        'GET dashboard/library': () => (fail ? problem(500, 'INTERNAL') : library()),
+      },
+    });
+    const subjects = await screen.findByRole('region', { name: 'Peminjaman per subjek' });
+    const top = screen.getByRole('region', { name: 'Judul paling sering dipinjam' });
+    expect(await within(subjects).findByText('Angka perpustakaan gagal dimuat.', {}, { timeout: 5_000 })).toBeTruthy();
+    expect(within(top).getByText('Angka perpustakaan gagal dimuat.')).toBeTruthy();
+    fail = false;
+    fireEvent.click(within(subjects).getByRole('button', { name: 'Coba lagi' }));
+    expect(await within(subjects).findByRole('list', { name: 'Peminjaman per kelas DDC, 30 hari terakhir' })).toBeTruthy();
+    await waitFor(() => expect(top.querySelectorAll('[data-top-title]')).toHaveLength(2));
   });
 
   it('a desk-only user sees the desk blocks and none of the library ones', async () => {
