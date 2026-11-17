@@ -213,6 +213,15 @@ describe('a session that ends while the shell is open', () => {
     expect(queryClient.getQueryData(['users', 'list', { q: '' }])).toBeUndefined();
     expect(queryClient.getQueryData(ME_KEY)).toMatchObject({ user: { id: 'u2' } });
   });
+
+  it('a session that now owes the second factor (signed in again elsewhere) → /admin/login/2fa, never the error page', async () => {
+    const { router, queryClient, answerMe } = setup(signedIn(), '/admin/profile');
+    await screen.findByLabelText('Nama');
+    answerMe({ ...signedIn({ permissions: [] }), stage: 'mfa' });
+    await returnToTab(queryClient);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/login/2fa'));
+    expect(screen.queryByText('Terjadi kesalahan')).toBeNull();
+  });
 });
 
 describe('CSRF recovery and the identity of the page', () => {
