@@ -2,6 +2,7 @@ import type { ItemEventView } from '@altis/shared/api/catalog/items';
 import type { LocationView } from '@altis/shared/api/catalog/locations';
 import { useId } from 'react';
 import { useDateTime } from '@/components/data-table';
+import { SectionHead } from '@/components/layout';
 import { useT, type TKey, type Translate } from '@/i18n';
 import { locationNames } from './item-form';
 
@@ -83,19 +84,17 @@ export function ItemHistory({ events, locations }: { events: readonly ItemEventV
   const names = locationNames(locations);
   const place = (id: string | null): string => (id === null ? t('catalog.items.no_location') : (names.get(id) ?? t('catalog.items.history.location_unknown')));
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <h2 id={titleId} className="text-base font-semibold">
-        {t('catalog.items.history.title')}
-      </h2>
+    <section aria-labelledby={titleId} className="grid gap-3">
+      <SectionHead id={titleId} title={t('catalog.items.history.title')} />
       {events.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('catalog.items.history.empty')}</p>
       ) : (
-        <ol aria-labelledby={titleId} className="divide-y">
+        <ol aria-labelledby={titleId} className="divide-y rounded-lg border">
           {events.map((e) => {
             const detail = detailOf(t, e, place);
             return (
-              <li key={e.id} className="flex flex-col gap-0.5 py-2">
-                <h3 className="text-sm font-medium">{t(`vocab.item_event.${e.type}`)}</h3>
+              <li key={e.id} className="grid gap-0.5 px-3 py-2.5">
+                <h3 className="text-sm font-semibold">{t(`vocab.item_event.${e.type}`)}</h3>
                 <p className="text-xs text-muted-foreground">
                   {t('catalog.items.history.when', { at: dateTime(e.at), actor: actorLabel(t, e.actorType) })}
                 </p>

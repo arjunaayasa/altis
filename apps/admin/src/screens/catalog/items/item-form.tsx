@@ -9,6 +9,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { Controller, type UseFormReturn } from 'react-hook-form';
 import { Field, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
+import { FORM_FULL, FormSection, LAYER } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT, type TKey, type Translate } from '@/i18n';
@@ -527,10 +528,9 @@ export function ItemFields({
   const liveSuppliers = choices.suppliers.filter((s) => !s.archived || s.id === base.supplierId);
   return (
     <>
-      <fieldset className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <legend className="mb-2 text-base font-semibold">{t('catalog.items.section.main')}</legend>
+      <FormSection title={t('catalog.items.section.main')}>
         <Field label={t('catalog.items.field.barcode')} hint={t('catalog.items.field.barcode_hint')} error={errors.barcode}>
-          {(c) => <Input {...c} autoComplete="off" spellCheck={false} maxLength={200} className="font-mono" {...register('barcode')} />}
+          {(c) => <Input {...c} autoComplete="off" spellCheck={false} maxLength={200} {...register('barcode')} />}
         </Field>
         <Field label={t('catalog.items.field.status')} hint={t('catalog.items.field.status_hint')} error={errors.status}>
           {(c) => (
@@ -564,14 +564,14 @@ export function ItemFields({
             )}
           </Field>
           {locationId === '' && suggestion !== null && (
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm">
-              <span className="font-medium">
+            <div className={`flex flex-wrap items-center gap-2 rounded-md border px-3 py-2.5 text-sm ${LAYER}`}>
+              <span className="font-semibold">
                 {suggestion.shelfHint === null
                   ? t('catalog.items.suggest', { name: suggestion.name })
                   : t('catalog.items.suggest_with_hint', { name: suggestion.name, hint: suggestion.shelfHint })}
               </span>
               <span className="w-full text-xs text-muted-foreground">{t('catalog.items.suggest_note')}</span>
-              <Button type="button" variant="outline" size="sm" onClick={() => setValue('locationId', suggestion.id, { shouldDirty: true })}>
+              <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => setValue('locationId', suggestion.id, { shouldDirty: true })}>
                 {t('catalog.items.suggest_use')}
               </Button>
             </div>
@@ -589,10 +589,9 @@ export function ItemFields({
         <Field label={t('catalog.items.field.status_note')} error={errors.statusNote}>
           {(c) => <Input {...c} autoComplete="off" maxLength={191} {...register('statusNote')} />}
         </Field>
-      </fieldset>
+      </FormSection>
 
-      <fieldset className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <legend className="mb-2 text-base font-semibold">{t('catalog.items.section.acquisition')}</legend>
+      <FormSection title={t('catalog.items.section.acquisition')}>
         <Field label={t('catalog.items.field.acq_source')} error={errors.acqSource}>
           {(c) => (
             <select {...c} className={SELECT_CLASS} {...register('acqSource')}>
@@ -632,7 +631,7 @@ export function ItemFields({
         <Field label={t('catalog.items.field.received_date')} error={errors.receivedDate}>
           {(c) => <Input {...c} type="date" {...register('receivedDate')} />}
         </Field>
-        <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
+        <div className="grid gap-x-5 gap-y-4 sm:col-span-2 sm:grid-cols-[2fr_1fr]">
           <Field label={t('catalog.items.field.price')} hint={t('catalog.items.field.price_hint')} error={errors.price}>
             {(c) => <Input {...c} inputMode="decimal" autoComplete="off" maxLength={16} {...register('price')} />}
           </Field>
@@ -640,27 +639,30 @@ export function ItemFields({
             {(c) => <Input {...c} autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={3} placeholder={choices.currency} {...register('currency')} />}
           </Field>
         </div>
-      </fieldset>
+      </FormSection>
 
-      <Field label={t('catalog.items.field.note')} error={errors.note}>
-        {(c) => <textarea {...c} className={TEXTAREA_CLASS} {...register('note')} />}
-      </Field>
-
-      <Controller
-        control={form.control}
-        name="custom"
-        render={({ field }) => (
-          <CustomFieldInputs
-            defs={choices.customFields}
-            values={field.value}
-            errors={customErrors}
-            onChange={(code, value) => {
-              field.onChange(withCustomValue(field.value, code, value));
-              onCustomChange?.(code);
-            }}
+      <FormSection title={t('catalog.items.section.other')}>
+        <Field label={t('catalog.items.field.note')} error={errors.note} className={FORM_FULL}>
+          {(c) => <textarea {...c} className={TEXTAREA_CLASS} {...register('note')} />}
+        </Field>
+        <div className={FORM_FULL}>
+          <Controller
+            control={form.control}
+            name="custom"
+            render={({ field }) => (
+              <CustomFieldInputs
+                defs={choices.customFields}
+                values={field.value}
+                errors={customErrors}
+                onChange={(code, value) => {
+                  field.onChange(withCustomValue(field.value, code, value));
+                  onCustomChange?.(code);
+                }}
+              />
+            )}
           />
-        )}
-      />
+        </div>
+      </FormSection>
     </>
   );
 }

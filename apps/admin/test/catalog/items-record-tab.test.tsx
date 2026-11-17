@@ -88,7 +88,7 @@ describe('RecordItemsTab', () => {
     const quick = screen.getByRole('form', { name: 'Tambah eksemplar' });
     expect(optionTexts(within(quick).getByRole('combobox', { name: 'Cabang' }))).toEqual(['PUSAT · Perpustakaan Pusat']);
     fireEvent.click(screen.getByRole('button', { name: 'Tambah banyak dengan pola barkod' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah eksemplar dengan pola barkod' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah eksemplar dengan pola barkod' });
     expect(optionTexts(within(dialog).getByRole('combobox', { name: 'Cabang' }))).toEqual(['PUSAT · Perpustakaan Pusat']);
   });
 
@@ -105,7 +105,7 @@ describe('RecordItemsTab', () => {
     const quick = screen.getByRole('form', { name: 'Tambah eksemplar' });
     await waitFor(() => expect(optionTexts(within(quick).getByRole('combobox', { name: 'Cabang' }))).toEqual(['PUSAT · Perpustakaan Pusat']));
     fireEvent.click(screen.getByRole('button', { name: 'Tambah banyak dengan pola barkod' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah eksemplar dengan pola barkod' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah eksemplar dengan pola barkod' });
     expect(optionTexts(within(dialog).getByRole('combobox', { name: 'Cabang' }))).toEqual(['PUSAT · Perpustakaan Pusat']);
   });
 
@@ -212,7 +212,7 @@ describe('RecordItemsTab: the template default collection type (C22)', () => {
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]).toMatchObject({ collectionTypeId: TK_REF });
     fireEvent.click(screen.getByRole('button', { name: 'Tambah banyak dengan pola barkod' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah eksemplar dengan pola barkod' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah eksemplar dengan pola barkod' });
     expect((within(dialog).getByRole('combobox', { name: 'Tipe koleksi' }) as HTMLSelectElement).value).toBe(TK_REF);
   });
 
@@ -299,7 +299,7 @@ describe('RecordItemsTab: item custom fields', () => {
     });
     await screen.findByText('B0000001', undefined, FIRST);
     fireEvent.click(screen.getByRole('button', { name: 'Tambah banyak dengan pola barkod' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah eksemplar dengan pola barkod' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah eksemplar dengan pola barkod' });
     const source = await within(dialog).findByRole('textbox', { name: 'Sumber dana (wajib)' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Buat eksemplar' }));
     await waitFor(() => expect(source.getAttribute('aria-invalid')).toBe('true'));
@@ -322,7 +322,7 @@ describe('BatchDialog', () => {
     });
     await screen.findByText('B0000001', undefined, FIRST);
     fireEvent.click(screen.getByRole('button', { name: 'Tambah banyak dengan pola barkod' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah eksemplar dengan pola barkod' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah eksemplar dengan pola barkod' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Buat eksemplar' }));
     expect(await within(dialog).findByText('Cantuman ini sudah diarsipkan. Pulihkan cantumannya dulu untuk menambah eksemplar.')).toBeTruthy();
   });
@@ -347,7 +347,7 @@ describe('BatchDialog', () => {
     });
     await screen.findByText('B0000001', undefined, FIRST);
     fireEvent.click(screen.getByRole('button', { name: 'Tambah banyak dengan pola barkod' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah eksemplar dengan pola barkod' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah eksemplar dengan pola barkod' });
     const pattern = within(dialog).getByRole('combobox', { name: 'Pola barkod' });
     expect(optionTexts(pattern)).toEqual(['Umum (B0000001)', 'Referensi (R00001X)']);
     fireEvent.change(pattern, { target: { value: 'ref' } });
@@ -379,7 +379,7 @@ describe('BatchDialog', () => {
     const fetchMock = vi.mocked(fetch);
     await screen.findByText('B0000001', undefined, FIRST);
     fireEvent.click(screen.getByRole('button', { name: 'Tambah banyak dengan pola barkod' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah eksemplar dengan pola barkod' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah eksemplar dengan pola barkod' });
     fireEvent.change(within(dialog).getByRole('spinbutton', { name: 'Jumlah eksemplar' }), { target: { value: '1' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Buat eksemplar' }));
     expect(await within(dialog).findByText('Server tidak dapat dihubungi. Periksa koneksi Anda, lalu coba lagi.')).toBeTruthy();
@@ -399,7 +399,7 @@ describe('BatchDialog', () => {
     });
     await screen.findByText('B0000001', undefined, FIRST);
     fireEvent.click(screen.getByRole('button', { name: 'Tambah banyak dengan pola barkod' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah eksemplar dengan pola barkod' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah eksemplar dengan pola barkod' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Buat eksemplar' }));
     expect(await within(dialog).findByText('Nomor pola barkod ini sudah habis. Pilih pola lain atau tambah digitnya di Pengaturan › Katalog.')).toBeTruthy();
     expect(within(dialog).getByRole('combobox', { name: 'Pola barkod' }).getAttribute('aria-invalid')).toBe('true');
@@ -409,7 +409,7 @@ describe('BatchDialog', () => {
     const { writes } = renderTab(adminMe());
     await screen.findByText('B0000001', undefined, FIRST);
     fireEvent.click(screen.getByRole('button', { name: 'Tambah banyak dengan pola barkod' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah eksemplar dengan pola barkod' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah eksemplar dengan pola barkod' });
     fireEvent.change(within(dialog).getByRole('spinbutton', { name: 'Jumlah eksemplar' }), { target: { value: '101' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Buat eksemplar' }));
     expect(await within(dialog).findByText('Isi angka 1 sampai 100.')).toBeTruthy();
