@@ -3,6 +3,7 @@ import { useId, useRef, useState, type ChangeEvent } from 'react';
 import { Notice } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { FileInput } from '@/components/file-input';
 import { useT } from '@/i18n';
 import { api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
@@ -115,14 +116,12 @@ export function CoverField({
           <Label htmlFor={inputId} className="text-meta leading-snug">
             {t('catalog.records.cover.choose')}
           </Label>
-          <input
+          <FileInput
             ref={input}
             id={inputId}
-            type="file"
             accept="image/jpeg,image/png,image/webp"
             aria-describedby={hintId}
             disabled={busy}
-            className="w-full min-w-0 text-meta file:mr-2 file:h-8 file:rounded-md file:border file:border-input file:bg-background file:px-2.5 file:text-meta file:font-semibold file:text-foreground"
             onChange={(e) => void choose(e)}
           />
           <p id={hintId} className="text-xs text-muted-foreground">

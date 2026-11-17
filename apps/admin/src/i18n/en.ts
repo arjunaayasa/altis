@@ -86,6 +86,8 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'form.refetch_failed': 'The latest data could not be loaded; what is shown is the data loaded earlier.',
   'form.yes': 'Yes',
   'form.no': 'No',
+  'form.file.choose': 'Choose a file',
+  'form.file.none': 'No file chosen yet',
   'form.error.required': 'This field is required.',
   'form.error.taken': 'Already in use. Choose another.',
   'form.error.too_small': 'Too short or not filled in.',

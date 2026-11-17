@@ -3,6 +3,7 @@ import { useId, useRef, useState } from 'react';
 import { CheckField, Field, Notice } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { FileInput } from '@/components/file-input';
 import { useLocale, useT, type TKey } from '@/i18n';
 import { api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
@@ -295,7 +296,7 @@ export function SourceForm({
         <Field label={t('catalog.migration.dump.file')} error={errors.dump}>
           {(c) => (
             <div className="grid gap-1">
-              <Input {...c} type="file" accept=".sql,.gz,application/sql,application/gzip" onChange={(e) => onChange({ ...value, dump: e.target.files?.[0] ?? null })} />
+              <FileInput {...c} accept=".sql,.gz,application/sql,application/gzip" onChange={(e) => onChange({ ...value, dump: e.target.files?.[0] ?? null })} />
               {value.dump !== null && (
                 <p className="text-xs text-muted-foreground">{t('catalog.migration.file.chosen', { name: value.dump.name, size: bytes(value.dump.size) })}</p>
               )}

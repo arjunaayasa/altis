@@ -24,6 +24,7 @@ import { Callout, ErrorState, FORM_FULL, FormBar, FormSection, LoadingState, Pag
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FileInput } from '@/components/file-input';
 import { useLocale, useT, type TKey } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
@@ -213,12 +214,10 @@ function PhotoUpload({ label, size, onUploaded }: { label: string; size: { width
         <Label htmlFor={id} className="text-meta">
           {label}
         </Label>
-        <input
+        <FileInput
           ref={input}
           id={id}
-          type="file"
           accept={PHOTO_SOURCE_TYPES.join(',')}
-          className="text-meta"
           aria-describedby={error === null ? undefined : `${id}-error`}
           onChange={(e) => void choose(e)}
         />
@@ -278,12 +277,10 @@ function LogoUpload({ label, onUploaded }: { label: string; onUploaded(fileId: s
       <Label htmlFor={id} className="text-meta">
         {label}
       </Label>
-      <input
+      <FileInput
         ref={input}
         id={id}
-        type="file"
         accept={PHOTO_SOURCE_TYPES.join(',')}
-        className="text-meta"
         disabled={busy}
         aria-describedby={error === null ? undefined : `${id}-error`}
         onChange={(e) => void choose(e)}

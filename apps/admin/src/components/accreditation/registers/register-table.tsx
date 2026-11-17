@@ -20,6 +20,7 @@ import { DataTable } from '@/components/data-table';
 import { CheckField, Notice, SELECT_CLASS } from '@/components/form-field';
 import { ErrorState, InlinePanel, MoreMenu, MoreMenuItem, MoreMenuRule, SkeletonTable } from '@/components/layout';
 import { Button } from '@/components/ui/button';
+import { FileInput } from '@/components/file-input';
 import { useLocale, useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
@@ -217,14 +218,13 @@ export function RegisterFileField({
       )}
       {!disabled && (
         <>
-          <input
+          <FileInput
             ref={input}
             id={id}
-            type="file"
+            chosen={choice.kind === 'new' ? choice.file.name : null}
             accept={EVIDENCE_ACCEPT}
             aria-invalid={error === null ? undefined : true}
             aria-describedby={`${id}-hint${error === null ? '' : ` ${id}-error`}`}
-            className="text-sm file:mr-2 file:rounded-md file:border file:bg-background file:px-2 file:py-1"
             onChange={(e) => {
               const file = e.target.files?.[0];
               onChoice(file === undefined ? KEEP_FILE : { kind: 'new', file });
