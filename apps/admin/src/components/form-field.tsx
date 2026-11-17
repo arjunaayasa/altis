@@ -127,11 +127,11 @@ export function CheckField({
 
 /** The look of `ui/input`, for a native `<select>`. */
 export const SELECT_CLASS =
-  'flex h-8.5 w-full min-w-0 rounded-md border border-input bg-background px-2.5 py-1 text-base transition-[border-color,box-shadow] duration-150 ease-out outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-accent-soft disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-bad-bg md:text-sm';
+  'flex h-8.5 w-full min-w-0 rounded-md border border-input bg-background px-2.5 py-1 text-base transition-[border-color,box-shadow] duration-150 ease-out outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-accent-soft disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-bad-bg aria-invalid:focus-visible:border-ring aria-invalid:focus-visible:ring-accent-soft md:text-sm';
 
 /** The look of `ui/input`, for a `<textarea>`. */
 export const TEXTAREA_CLASS =
-  'flex min-h-18 w-full min-w-0 rounded-md border border-input bg-background px-2.5 py-2 text-base leading-snug transition-[border-color,box-shadow] duration-150 ease-out outline-none placeholder:text-faint focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-accent-soft disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-bad-bg md:text-sm';
+  'flex min-h-18 w-full min-w-0 rounded-md border border-input bg-background px-2.5 py-2 text-base leading-snug transition-[border-color,box-shadow] duration-150 ease-out outline-none placeholder:text-faint focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-accent-soft disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-bad-bg aria-invalid:focus-visible:border-ring aria-invalid:focus-visible:ring-accent-soft md:text-sm';
 
 const BADGE_TONES = {
   neutral: 'bg-layer-2 text-muted-foreground',
