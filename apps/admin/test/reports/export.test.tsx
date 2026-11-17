@@ -67,6 +67,8 @@ describe('the exports of a report', { timeout: 20_000 }, () => {
     const link = await within(panel).findByRole('link', { name: /Unduh/ }, FIRST);
     expect(link.getAttribute('href')).toBe(`/api/v1/reports/runs/${RUN_ID}/download`);
     await waitFor(() => expect(requests.filter((r) => r.method === 'GET' && r.path === 'reports/runs').length).toBeGreaterThanOrEqual(2));
+    // How it ended is said once: by the job's progress, the run agreeing with it.
+    expect(within(panel).getAllByText('Berhasil')).toHaveLength(1);
   });
 
   it('a report holding personal data asks for the password first, then posts to reports/runs/personal', async () => {

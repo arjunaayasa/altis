@@ -103,9 +103,12 @@ function StartedRun({
       {run.isError && <ProblemAlert error={run.error} />}
       {run.data !== undefined && (
         <div className="grid gap-2">
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <RunStatusBadge status={run.data.status} />
-          </div>
+          {/* The job's progress above already says how it ended: the run's own status only where it says otherwise. */}
+          {run.data.status !== outcome && (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <RunStatusBadge status={run.data.status} />
+            </div>
+          )}
           <RunNotes run={run.data} describe={entry.params.length > 0 ? describe : null} />
           <RunFile run={run.data} />
         </div>
