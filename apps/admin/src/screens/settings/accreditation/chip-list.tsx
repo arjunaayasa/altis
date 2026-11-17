@@ -1,4 +1,3 @@
-import { XIcon } from 'lucide-react';
 import { useId, useState, type KeyboardEvent } from 'react';
 import { useController, type Control, type FieldErrors } from 'react-hook-form';
 import { describedBy } from '@/components/form-field';
@@ -87,20 +86,20 @@ export function ChipListField({
             // A list stored by another client may hold an entry twice: the position keeps the keys apart.
             key={`${i}:${entry}`}
             data-chip={entry}
-            className={cn('inline-flex max-w-full items-center gap-1 rounded-full border bg-muted px-2.5 py-0.5 text-sm break-all', mono && 'font-mono')}
+            className={cn('inline-flex max-w-full items-center gap-1.5 rounded border bg-layer px-2 py-0.5 text-sm break-all', mono && 'font-mono')}
           >
             {entry}
             {!readOnly && (
               <button
                 type="button"
                 aria-label={t('accreditation.settings.chips.remove', { value: entry, label })}
-                className="rounded-full p-0.5 text-muted-foreground hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                className="rounded px-1 text-xs font-semibold text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 onClick={() => {
                   setProblem(undefined);
                   field.onChange(value.filter((_, j) => j !== i));
                 }}
               >
-                <XIcon className="size-3.5" aria-hidden="true" />
+                {t('system.remove')}
               </button>
             )}
           </li>
@@ -137,7 +136,7 @@ export function ChipListField({
         )}
       </div>
       {error !== undefined && (
-        <p id={`${id}-error`} className="text-sm text-destructive">
+        <p id={`${id}-error`} className="text-meta font-semibold text-bad">
           {error}
         </p>
       )}

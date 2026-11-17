@@ -25,6 +25,10 @@ export const SYSTEM_UI_ID = {
   'branches.more_named': 'Tindakan untuk {name}',
   'branches.form.about': 'Cabang',
   'branches.form.about_intro': 'Kode dan nama dipakai di semua layar; zona waktu menentukan jam buka dan jatuh tempo.',
+  'settings.intro': 'Profil perpustakaan dan aturan yang berlaku di admin, OPAC, dan e-mail. Tiap bagian disimpan sendiri.',
+  'settings.load_failed': 'Pengaturan gagal dimuat',
+  'system.remove': 'Hapus',
+  'auditlog.actor.filter_short': 'Saring',
 } as const;
 
 export const SYSTEM_UI_EN: Record<keyof typeof SYSTEM_UI_ID, string> = {
@@ -50,4 +54,8 @@ export const SYSTEM_UI_EN: Record<keyof typeof SYSTEM_UI_ID, string> = {
   'branches.more_named': 'Actions for {name}',
   'branches.form.about': 'Branch',
   'branches.form.about_intro': 'The code and name show on every screen; the time zone sets opening hours and due dates.',
+  'settings.intro': 'The library\'s profile and the rules of the admin, the OPAC and the e-mail. Each part is saved on its own.',
+  'settings.load_failed': 'The settings could not be loaded',
+  'system.remove': 'Remove',
+  'auditlog.actor.filter_short': 'Filter',
 };

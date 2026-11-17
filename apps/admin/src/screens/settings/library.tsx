@@ -15,6 +15,7 @@ import { useId, useMemo, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Field, NoticeAlert, ProblemAlert, RefetchProblem, RootError, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
+import { ErrorState, FORM_FULL, FormBar, LoadingState, PageHead } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type AdminKey } from '@/i18n';
@@ -56,21 +57,24 @@ const SECTIONS: readonly { to: string; labelKey: AdminKey }[] = [
   { to: '/admin/settings/privasi', labelKey: 'visits.settings.privacy_tab' },
 ];
 
-/** The frame of the settings pages: the title and the links between the groups. */
+/**
+ * The frame of the settings pages: the page head, the links between the groups (one line of links under the head, the
+ * current group marked; they wrap on a narrow screen) and the page's parts.
+ */
 export function SettingsPage({ children }: { children: ReactNode }) {
   const t = useT();
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
-      <header className="flex flex-col gap-4">
-        <h1 className="text-2xl font-semibold">{t('nav.settings')}</h1>
+    <div className="grid max-w-5xl gap-6">
+      <div className="grid gap-4">
+        <PageHead title={t('nav.settings')} intro={t('settings.intro')} />
         <nav aria-label={t('settings.sections')}>
-          <ul className="flex flex-wrap gap-1 border-b">
+          <ul className="flex flex-wrap gap-x-1 border-b">
             {SECTIONS.map((section) => (
               <li key={section.to}>
                 <Link
                   to={section.to}
                   activeOptions={{ exact: true }}
-                  className="-mb-px block border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:font-medium data-[status=active]:text-foreground"
+                  className="-mb-px block border-b-2 border-transparent px-2.5 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-foreground"
                 >
                   {t(section.labelKey)}
                 </Link>
@@ -78,24 +82,30 @@ export function SettingsPage({ children }: { children: ReactNode }) {
             ))}
           </ul>
         </nav>
-      </header>
-      {children}
+      </div>
+      <div className="grid min-w-0 gap-6">{children}</div>
     </div>
   );
 }
 
-/** A titled part of a settings page. */
+/**
+ * A titled part of a settings page, laid out like a form section: its title and a sentence on the left (above on a
+ * narrow screen), its form or list on the right; a thin rule between two parts. Never a card.
+ */
 export function SettingsSection({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-4 rounded-lg border bg-card p-5 text-card-foreground">
-      <header className="flex flex-col gap-1">
-        <h2 id={id} className="text-lg font-semibold">
+    <section
+      aria-labelledby={id}
+      className="grid min-w-0 gap-x-8 gap-y-4 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1fr)] [*+&]:border-t [*+&]:pt-6"
+    >
+      <header className="grid content-start gap-1">
+        <h2 id={id} className="text-base font-bold">
           {title}
         </h2>
         {description !== undefined && <p className="text-sm text-muted-foreground">{description}</p>}
       </header>
-      {children}
+      <div className="grid min-w-0 content-start gap-4">{children}</div>
     </section>
   );
 }
@@ -138,26 +148,14 @@ export function SettingsLoader<G extends SettingsGroupName>({
   const query = useApiQuery<SettingsView[G]>({ queryKey: [...settingsKey(group)], path: `settings/${group}` });
   // The data wins over an error: a failed background refetch keeps the form and what was typed (RefetchProblem).
   if (query.data === undefined) {
-    if (query.isError) {
-      return (
-        <ProblemAlert error={query.error}>
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => void query.refetch()}>
-            {t('table.retry')}
-          </Button>
-        </ProblemAlert>
-      );
-    }
-    return (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('shell.loading')}
-      </p>
-    );
+    if (query.isError) return <ErrorState title={t('settings.load_failed')} error={query.error} onRetry={() => void query.refetch()} retrying={query.isFetching} />;
+    return <LoadingState />;
   }
   const canManage = holds(me, 'system.settings.manage');
   return (
     <>
       <RefetchProblem query={query} />
-      {!canManage && <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{t('settings.read_only')}</p>}
+      {!canManage && <NoticeAlert>{t('settings.read_only')}</NoticeAlert>}
       {children(query.data, canManage)}
     </>
   );
@@ -193,12 +191,12 @@ export function SettingsFooter({
       {outcome === 'saved' && <NoticeAlert tone="success">{t('form.saved')}</NoticeAlert>}
       {outcome === 'unchanged' && <NoticeAlert>{t('settings.unchanged')}</NoticeAlert>}
       {canManage && (
-        <div className="flex flex-wrap items-center gap-3">
+        <FormBar>
           <Button type="submit" disabled={busy}>
             {t(busy ? 'form.saving' : 'form.save')}
           </Button>
           {note !== undefined && <p className="text-xs text-muted-foreground">{note}</p>}
-        </div>
+        </FormBar>
       )}
     </>
   );
@@ -300,7 +298,7 @@ function LibrarySettingsForm({ initial, canManage }: { initial: LibrarySettings;
   return (
     <SettingsSection title={t('settings.tab.library')} description={t('settings.library.description')}>
       <form noValidate className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
-        <Field label={t('settings.library.name')} error={errors.name} className="sm:col-span-2">
+        <Field label={t('settings.library.name')} error={errors.name} className={FORM_FULL}>
           {(c) => <Input {...c} autoComplete="organization" maxLength={191} {...form.register('name')} disabled={readOnly} />}
         </Field>
         <Field label={t('settings.library.type')} error={errors.type}>
@@ -326,10 +324,10 @@ function LibrarySettingsForm({ initial, canManage }: { initial: LibrarySettings;
             </select>
           )}
         </Field>
-        <Field label={t('settings.library.address')} error={errors.address} className="sm:col-span-2">
+        <Field label={t('settings.library.address')} error={errors.address} className={FORM_FULL}>
           {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={1000} {...form.register('address')} disabled={readOnly} />}
         </Field>
-        <Field label={t('settings.library.timezone')} hint={t('branches.field.timezone_hint')} error={errors.timezone} className="sm:col-span-2">
+        <Field label={t('settings.library.timezone')} hint={t('branches.field.timezone_hint')} error={errors.timezone} className={FORM_FULL}>
           {(c) => (
             <>
               <Input {...c} list={zonesId} autoComplete="off" spellCheck={false} maxLength={64} {...form.register('timezone')} disabled={readOnly} />
@@ -341,7 +339,7 @@ function LibrarySettingsForm({ initial, canManage }: { initial: LibrarySettings;
             </>
           )}
         </Field>
-        <div className="grid gap-4 sm:col-span-2">
+        <div className={`grid gap-4 ${FORM_FULL}`}>
           <SettingsFooter
             canManage={canManage}
             busy={isSubmitting}
