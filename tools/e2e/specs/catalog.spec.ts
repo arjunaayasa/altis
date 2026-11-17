@@ -7,6 +7,7 @@ import type { RoleItem } from '@altis/shared/api/roles';
 import { createStaff } from '../lib/api.js';
 import type { CspRecorder } from '../lib/csp.js';
 import { T, expect, signIn, test } from '../fixtures.js';
+import { openNavPage } from '../lib/nav.js';
 
 // K10 (Phase 2 spec §15; plan Task 39): the admin's catalogue flows as a librarian does them, in a real browser, with
 // the 1b CSP guard of fixtures.ts on every page: catalogue a record in Bibliografi (with a new author made in the
@@ -101,10 +102,9 @@ test('a librarian catalogues a record, adds its item and prints their labels; th
     await signIn(page, librarian);
   });
 
-  const mainNav = page.getByRole('navigation', { name: T('shell.nav_label') });
   let recordId = '';
   await clean(csp, 'Bibliografi: a new record with a new author, saved', async () => {
-    await mainNav.getByRole('link', { name: T('nav.catalog.records'), exact: true }).click();
+    await openNavPage(page, '/admin/catalog/records');
     await expect(page).toHaveURL(/\/admin\/catalog\/records$/);
     await expect(page.getByRole('heading', { level: 1, name: T('catalog.records.list.title'), exact: true })).toBeVisible();
     await page.getByRole('link', { name: T('catalog.records.list.new'), exact: true }).click();
@@ -147,7 +147,7 @@ test('a librarian catalogues a record, adds its item and prints their labels; th
   });
 
   await clean(csp, 'Bibliografi list: the search finds the record; its row joins the print queue', async () => {
-    await mainNav.getByRole('link', { name: T('nav.catalog.records'), exact: true }).click();
+    await openNavPage(page, '/admin/catalog/records');
     await page.getByLabel(T('catalog.records.list.search_label'), { exact: true }).fill(word);
     await page.getByRole('button', { name: T('catalog.records.list.search_button'), exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`[?&]q=${word}(&|$)`));

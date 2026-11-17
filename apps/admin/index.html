@@ -7,6 +7,15 @@
     <meta name="robots" content="noindex, nofollow" />
     <title>ALTIS Admin</title>
     <link rel="icon" href="data:," />
+    <!-- The colour theme chosen in this browser (src/lib/theme.ts), applied before the first paint. -->
+    <script nonce="__CSP_NONCE__">
+      (function () {
+        try {
+          var choice = window.localStorage.getItem('altis.admin.theme');
+          if (choice === 'light' || choice === 'dark') document.documentElement.setAttribute('data-theme', choice);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
