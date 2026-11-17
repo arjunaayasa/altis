@@ -28,15 +28,15 @@ const esc = (s: string): string => s.replace(/[&<>'"]/g, (ch) => ({ '&': '&amp;'
 
 const render = (el: unknown): string => String((el as { toString(): string }).toString());
 
-const BOOK: CoverSource = { title: 'Laskar <Pelangi>', author: 'Andrea Hirata', callNumber: '899.221 3 HIR l', classification: '899.221', coverFileId: null };
+const BOOK: CoverSource = { title: 'Rumah di <Ujung> Sawah', author: 'Larasati Wibowo', callNumber: '899.221 3 WIB r', classification: '899.221', coverFileId: null };
 
 describe('the substitute cover', () => {
   it('its class: the DDC main class of the classification, else of the call number; 2X is the 200s; anything else x', () => {
     expect(coverClass('899.221', null)).toBe('8');
     expect(coverClass('005.133', 'R 899 ABC')).toBe('0');
-    expect(coverClass(null, '899.221 3 HIR l')).toBe('8');
+    expect(coverClass(null, '899.221 3 WIB r')).toBe('8');
     expect(coverClass('', 'R 297.1 ABC')).toBe('2');
-    expect(coverClass(null, 'FIK HIR l')).toBe('x');
+    expect(coverClass(null, 'FIK WIB r')).toBe('x');
     expect(coverClass('2X4.3', null)).toBe('2');
     expect(coverClass('Novel', null)).toBe('x');
     expect(coverClass(null, null)).toBe('x');
@@ -44,10 +44,10 @@ describe('the substitute cover', () => {
   });
 
   it('its spine label: each part of the call number on its own line, a number after a number kept on its line', () => {
-    expect(spineLabelLines('899.221 3 HIR l')).toEqual(['899.221 3', 'HIR', 'l']);
-    expect(spineLabelLines('R 899.221 HIR l')).toEqual(['R', '899.221', 'HIR', 'l']);
-    expect(spineLabelLines('  530   HAL  f ')).toEqual(['530', 'HAL', 'f']);
-    expect(spineLabelLines('FIK HIR l')).toEqual(['FIK', 'HIR', 'l']);
+    expect(spineLabelLines('899.221 3 WIB r')).toEqual(['899.221 3', 'WIB', 'r']);
+    expect(spineLabelLines('R 899.221 WIB r')).toEqual(['R', '899.221', 'WIB', 'r']);
+    expect(spineLabelLines('  530   TIM  f ')).toEqual(['530', 'TIM', 'f']);
+    expect(spineLabelLines('FIK WIB r')).toEqual(['FIK', 'WIB', 'r']);
     expect(spineLabelLines('a b c d e f g')).toHaveLength(SPINE_LABEL_LINES_MAX);
     expect(spineLabelLines('')).toEqual([]);
     expect(spineLabelLines(null)).toEqual([]);
@@ -61,13 +61,13 @@ describe('the substitute cover', () => {
   it('without one: the cloth of its class, the title and author escaped, the stacked spine label; aria-hidden', () => {
     const html = render(jsx(BookCover as never, { book: BOOK, size: 'card', imgClass: 'card-cover', width: 120, height: 180 }));
     expect(html).toBe(
-      '<span class="book-cover cover-8" aria-hidden="true"><span class="cover-text"><span class="cover-title">Laskar &lt;Pelangi&gt;</span>' +
-        '<span class="cover-author">Andrea Hirata</span></span>' +
-        '<span class="spine-label"><span>899.221 3</span><span>HIR</span><span>l</span></span></span>',
+      '<span class="book-cover cover-8" aria-hidden="true"><span class="cover-text"><span class="cover-title">Rumah di &lt;Ujung&gt; Sawah</span>' +
+        '<span class="cover-author">Larasati Wibowo</span></span>' +
+        '<span class="spine-label"><span>899.221 3</span><span>WIB</span><span>r</span></span></span>',
     );
     // No author, no call number: the title alone, the grey of "no class".
     const bare = render(jsx(BookCover as never, { book: { ...BOOK, author: null, callNumber: null, classification: null }, size: 'detail', imgClass: 'record-cover', width: 200, height: 300 }));
-    expect(bare).toBe('<span class="book-cover cover-x book-cover-lg" aria-hidden="true"><span class="cover-text"><span class="cover-title">Laskar &lt;Pelangi&gt;</span></span></span>');
+    expect(bare).toBe('<span class="book-cover cover-x book-cover-lg" aria-hidden="true"><span class="cover-text"><span class="cover-title">Rumah di &lt;Ujung&gt; Sawah</span></span></span>');
     // A result row: the cloth strip only.
     expect(render(jsx(BookCover as never, { book: BOOK, size: 'list', imgClass: 'card-cover', width: 120, height: 180 }))).toBe(
       '<span class="book-cover cover-8 book-cover-sm" aria-hidden="true"></span>',
@@ -142,8 +142,8 @@ const HOME: OpacHomeContent = {
 describe('the site menu and the footer', () => {
   it('siteInfo: each of Profil, Layanan and Kontak only with its home block switched on and with content', () => {
     expect(siteInfo(OPAC_HOME_DEFAULT, null, false)).toEqual({ address: null, hours: [], brand: null, profile: false, services: false, contact: false, news: false });
-    expect(siteInfo(HOME, 'Jl. Pendidikan 1', true)).toEqual({
-      address: 'Jl. Pendidikan 1',
+    expect(siteInfo(HOME, 'Jl. Kenari 12', true)).toEqual({
+      address: 'Jl. Kenari 12',
       hours: [
         { days: 'Senin–Jumat', time: '07.00–15.00' },
         { days: 'Sabtu', time: '08.00–12.00' },
@@ -159,9 +159,9 @@ describe('the site menu and the footer', () => {
   });
 
   it('siteMenu: the site entries with content, then the pages; the language kept; the current section marked', () => {
-    const site = siteInfo(HOME, 'Jl. Pendidikan 1', true);
+    const site = siteInfo(HOME, 'Jl. Kenari 12', true);
     const pages = [{ href: '/halaman/sejarah', label: 'Sejarah' }];
-    expect(siteMenu('id', site, pages, null, '/katalog/01JZ/laskar')).toEqual([
+    expect(siteMenu('id', site, pages, null, '/katalog/01JZ/rumah')).toEqual([
       { href: '/', label: opacText('id', 'shell.menu.home'), current: false },
       { href: '/cari', label: opacText('id', 'shell.menu.catalog'), current: true },
       { href: '/#tentang', label: opacText('id', 'shell.menu.profile'), current: false },
@@ -187,9 +187,9 @@ describe('the site menu and the footer', () => {
   const frameWith = (footer: PageFrame['footer']): PageFrame => ({ homeHref: '/', langHrefs: { id: '/x?lang=id', en: '/x?lang=en' }, nav: [], search: null, footer });
 
   it('the footer with every block: the library and its address, the links, the hours, the search field, then the bottom line', () => {
-    const site = siteInfo(HOME, 'Jl. Pendidikan 1\nKota Contoh', true);
+    const site = siteInfo(HOME, 'Jl. Kenari 12\nLembah Hijau', true);
     const footer = footerOf(frameWith(siteFooter('id', site, [{ href: '/halaman/sejarah', label: 'Sejarah' }], null)));
-    expect(footer).toContain('<div class="foot-block"><h2>Perpustakaan &lt;SMA&gt;</h2><p class="foot-address">Jl. Pendidikan 1\nKota Contoh</p></div>');
+    expect(footer).toContain('<div class="foot-block"><h2>Perpustakaan &lt;SMA&gt;</h2><p class="foot-address">Jl. Kenari 12\nLembah Hijau</p></div>');
     const links = /<ul class="foot-links">([\s\S]*?)<\/ul>/.exec(footer)![1]!;
     expect([...links.matchAll(/href="([^"]*)"/g)].map((m) => m[1])).toEqual(['/cari', '/#tentang', '/#layanan', '/berita', '/#kunjungi', '/halaman/sejarah']);
     expect(footer).toContain('<tr><th scope="row">Senin–Jumat</th><td>07.00–15.00</td></tr>');
@@ -221,23 +221,23 @@ describe('the site menu and the footer', () => {
 
 describe('the field a search is limited to', () => {
   it('scopedText: every word and phrase in the field; fields, operators and an unbalanced quote as typed; semua as it is', () => {
-    expect(scopedText('laskar pelangi', 'judul')).toBe('judul:laskar judul:pelangi');
-    expect(scopedText('"bumi manusia" -toer', 'judul')).toBe('judul:"bumi manusia" -judul:toer');
-    expect(scopedText('hirata ATAU fuadi', 'pengarang')).toBe('pengarang:hirata ATAU pengarang:fuadi');
-    expect(scopedText('judul:laskar pengarang:"andrea hirata" novel', 'subjek')).toBe('judul:laskar pengarang:"andrea hirata" subjek:novel');
+    expect(scopedText('rumah sawah', 'judul')).toBe('judul:rumah judul:sawah');
+    expect(scopedText('"ujung sawah" -kota', 'judul')).toBe('judul:"ujung sawah" -judul:kota');
+    expect(scopedText('wibowo ATAU kusuma', 'pengarang')).toBe('pengarang:wibowo ATAU pengarang:kusuma');
+    expect(scopedText('judul:rumah pengarang:"larasati wibowo" novel', 'subjek')).toBe('judul:rumah pengarang:"larasati wibowo" subjek:novel');
     expect(scopedText('"tanpa akhir', 'judul')).toBe('" judul:tanpa judul:akhir');
-    expect(scopedText('laskar pelangi', 'semua')).toBe('laskar pelangi');
+    expect(scopedText('rumah sawah', 'semua')).toBe('rumah sawah');
   });
 
   it('unscopedText: the field taken off again, for the spelling line', () => {
-    expect(unscopedText('judul:laskar -judul:pelangi', 'judul')).toBe('laskar -pelangi');
-    expect(unscopedText(scopedText('laskar pelangi', 'pengarang'), 'pengarang')).toBe('laskar pelangi');
-    expect(unscopedText('judul:laskar', 'semua')).toBe('judul:laskar');
+    expect(unscopedText('judul:rumah -judul:sawah', 'judul')).toBe('rumah -sawah');
+    expect(unscopedText(scopedText('rumah sawah', 'pengarang'), 'pengarang')).toBe('rumah sawah');
+    expect(unscopedText('judul:rumah', 'semua')).toBe('judul:rumah');
   });
 });
 
 describe('the map link of the visit block', () => {
   it('a search for the address on one line, nothing embedded', () => {
-    expect(mapLink('Jl. Pendidikan 1\nKota Contoh')).toBe('https://www.openstreetmap.org/search?query=Jl.%20Pendidikan%201%20Kota%20Contoh');
+    expect(mapLink('Jl. Kenari 12\nLembah Hijau')).toBe('https://www.openstreetmap.org/search?query=Jl.%20Kenari%2012%20Lembah%20Hijau');
   });
 });

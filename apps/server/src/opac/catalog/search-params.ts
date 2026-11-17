@@ -77,8 +77,8 @@ export type OpacSearchScope = (typeof OPAC_SEARCH_SCOPES)[number];
 const FIELDED = /^-?[A-Za-z]+:/;
 
 /**
- * `text` with every word and quoted phrase searched in the field `scope` (`laskar "bumi manusia"` → `judul:laskar
- * judul:"bumi manusia"`): a word or phrase that already names a field, the operators `ATAU`/`OR` and an unbalanced quote
+ * `text` with every word and quoted phrase searched in the field `scope` (`rumah "ujung sawah"` → `judul:rumah
+ * judul:"ujung sawah"`): a word or phrase that already names a field, the operators `ATAU`/`OR` and an unbalanced quote
  * stay as typed, an excluding `-` stays in front. The text is returned as it is for `semua`.
  */
 export function scopedText(text: string, scope: OpacSearchScope): string {
