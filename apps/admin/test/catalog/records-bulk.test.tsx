@@ -75,7 +75,7 @@ async function openDialog(): Promise<HTMLElement> {
   await screen.findByRole('link', { name: 'Dongeng Kancil' }, { timeout: 10_000 });
   fireEvent.click(screen.getByRole('checkbox', { name: 'Pilih semua yang tampil' }));
   fireEvent.click(screen.getByRole('button', { name: 'Ubah data akreditasi' }));
-  return screen.findByRole('dialog', { name: 'Ubah data akreditasi cantuman' });
+  return screen.findByRole('form', { name: 'Ubah data akreditasi cantuman' });
 }
 
 afterEach(() => {

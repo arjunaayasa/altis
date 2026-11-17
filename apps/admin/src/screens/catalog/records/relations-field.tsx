@@ -6,6 +6,7 @@ import { useFieldArray, type UseFormReturn } from 'react-hook-form';
 import { SELECT_CLASS } from '@/components/form-field';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import { useT } from '@/i18n';
+import { cn } from '@/lib/utils';
 import { ErrorText, RowButtons, errorAt, usePickerSearch } from './agent-picker';
 import type { RecordFormValues } from './draft-to-form';
 
@@ -44,22 +45,23 @@ export function RelationsField({
 
   return (
     <fieldset className="grid min-w-0 gap-3">
-      <legend className="mb-1 text-sm font-medium">{t('catalog.records.section.relations')}</legend>
+      {/* The editor's part "Relasi" shows the same words as its heading. */}
+      <legend className="sr-only">{t('catalog.records.section.relations')}</legend>
       {fields.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('catalog.records.relations.none')}</p>
       ) : (
         <ul className="grid gap-2">
           {fields.map((field, i) => (
-            <li key={field.id} className="grid gap-1 rounded-md border p-2">
+            <li key={field.id} className="grid gap-1 rounded-md border px-3 py-2.5">
               <div className="flex flex-wrap items-center gap-2">
-                <select className={`${SELECT_CLASS} w-auto`} aria-label={t('catalog.records.relations.type', { title: field.title })} {...register(`relations.${i}.type`)}>
+                <select className={cn(SELECT_CLASS, 'w-auto')} aria-label={t('catalog.records.relations.type', { title: field.title })} {...register(`relations.${i}.type`)}>
                   {RELATION_TYPES.map((type) => (
                     <option key={type} value={type}>
                       {t(vocabKey('relation_type', type))}
                     </option>
                   ))}
                 </select>
-                <Link to={`/admin/catalog/records/${encodeURIComponent(field.relatedId)}`} className="text-primary underline-offset-4 hover:underline">
+                <Link to={`/admin/catalog/records/${encodeURIComponent(field.relatedId)}`} className="font-semibold text-accent-text underline-offset-4 hover:underline">
                   {field.title}
                 </Link>
                 <span className="ml-auto">
@@ -86,12 +88,12 @@ export function RelationsField({
       />
       {incoming.length > 0 && (
         <div className="grid gap-1">
-          <p className="text-sm font-medium">{t('catalog.records.relations.incoming')}</p>
+          <p className="text-meta font-semibold">{t('catalog.records.relations.incoming')}</p>
           <ul className="grid gap-1 text-sm">
             {incoming.map((r) => (
               <li key={`${r.type}:${r.recordId}`} className="flex flex-wrap gap-2">
                 <span className="text-muted-foreground">{t(vocabKey('relation_type', r.type))}</span>
-                <Link to={`/admin/catalog/records/${encodeURIComponent(r.recordId)}`} className="text-primary underline-offset-4 hover:underline">
+                <Link to={`/admin/catalog/records/${encodeURIComponent(r.recordId)}`} className="font-semibold text-accent-text underline-offset-4 hover:underline">
                   {r.title}
                 </Link>
               </li>

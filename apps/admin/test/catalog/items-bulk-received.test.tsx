@@ -37,7 +37,7 @@ async function openDialog(): Promise<HTMLElement> {
   await screen.findByText('B0000001', undefined, FIRST);
   fireEvent.click(screen.getByRole('checkbox', { name: 'Pilih semua eksemplar yang tampil' }));
   fireEvent.click(screen.getByRole('button', { name: 'Ubah massal' }));
-  return screen.findByRole('dialog', { name: 'Ubah massal eksemplar' });
+  return screen.findByRole('form', { name: 'Ubah massal eksemplar' });
 }
 
 const SYNC_NOTE = /tidak lagi mengikuti penyelarasan ulang dari SLiMS/;

@@ -195,6 +195,10 @@ export const ITEMS_ID = {
   'catalog.items.batch.skipped_hint': 'Barkod ini ternyata sudah dipakai saat eksemplar dibuat, jadi nomor berikutnya yang dipakai.',
   'catalog.items.batch.done': 'Selesai',
   'catalog.items.batch.close': 'Tutup',
+  // ---- the layout of the item page ----
+  'catalog.items.more': 'Tindakan lain untuk eksemplar ini',
+  'catalog.items.section.other': 'Catatan dan ruas tambahan',
+  'catalog.items.unsaved': 'Ada perubahan yang belum disimpan.',
 } as const;
 
 export const ITEMS_EN: Record<keyof typeof ITEMS_ID, string> = {
@@ -378,4 +382,8 @@ export const ITEMS_EN: Record<keyof typeof ITEMS_ID, string> = {
   'catalog.items.batch.skipped_hint': 'These barcodes turned out to be in use when the items were made, so the next numbers were used.',
   'catalog.items.batch.done': 'Done',
   'catalog.items.batch.close': 'Close',
+  // ---- the layout of the item page ----
+  'catalog.items.more': 'More actions for this item',
+  'catalog.items.section.other': 'Note and extra fields',
+  'catalog.items.unsaved': 'There are unsaved changes.',
 };
