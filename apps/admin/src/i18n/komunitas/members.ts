@@ -118,6 +118,7 @@ export const MEMBERS_ID = {
   'members.reactivate.body': 'Anggota dapat meminjam lagi dan catatan penangguhan dihapus.',
   'members.archive.title': 'Arsipkan {name}?',
   'members.archive.body': 'Anggota tidak lagi tampil di daftar dan tidak dapat meminjam. Datanya tetap disimpan. Anggota yang masih punya pinjaman terbuka tidak dapat diarsipkan.',
+  'members.archive.done': '{name} diarsipkan.',
   'members.types.intro':
     'Tipe anggota menentukan batas jumlah pinjaman dan masa keanggotaan. Lama pinjam dan batas perpanjangan diatur di Aturan Peminjaman.',
   'members.types.add': 'Tambah tipe anggota',
@@ -318,6 +319,7 @@ export const MEMBERS_EN: Record<keyof typeof MEMBERS_ID, string> = {
   'members.reactivate.body': 'The member can borrow again and the suspension note is cleared.',
   'members.archive.title': 'Archive {name}?',
   'members.archive.body': 'The member leaves the list and can’t borrow. The data is kept. A member with open loans can’t be archived.',
+  'members.archive.done': '{name} archived.',
   'members.types.intro': 'A member type sets the loan limit and the membership period. Loan periods and renewal limits are set in Loan Rules.',
   'members.types.add': 'Add member type',
   'members.types.caption': 'Member types',
