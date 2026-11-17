@@ -256,6 +256,24 @@ describe('Meja Layanan: keys and scanner', () => {
     await waitFor(() => expect(screen.getByRole('tab', { name: /^Dipinjam/ }).getAttribute('aria-selected')).toBe('true'));
   });
 
+  it('Enter on the empty box takes a "Paksa pinjam" offer and leaves the focus in the reason field, not in the box', async () => {
+    const member = deskMember();
+    start({
+      'POST branches/:branchId/circulation/members/lookup': () => member,
+      'GET branches/:branchId/circulation/members/:memberId': () => member,
+      'POST branches/:branchId/circulation/loans': () => problem(409, 'CIRC_NOT_LOANABLE', { reason: 'policy' }),
+    });
+    await scan('A001');
+    await title('Anggota dimuat: Budi Santoso');
+    await scan('REF-1');
+    await screen.findByRole('button', { name: 'Paksa pinjam (Enter)' });
+    await scan('');
+    const reason = await screen.findByLabelText('Alasan memaksa (Aturan melarang pinjaman)');
+    // Two frames: the one that focuses the reason field and any later one that would take the focus back to the box.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await waitFor(() => expect(document.activeElement).toBe(reason));
+  });
+
   it('a click on the page’s empty space gives the box its focus back, never one on a control', async () => {
     start({});
     const input = await box();
