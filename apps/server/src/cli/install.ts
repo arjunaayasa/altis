@@ -11,6 +11,7 @@ import {
   type TxCtx,
 } from '@altis/core';
 import { parseStrictJson } from '@altis/crypto';
+import { FRESH_INSTALL_ACCENT } from '@altis/opac-theme';
 import {
   checkServer,
   connect,
@@ -785,6 +786,16 @@ export async function seedLibrary(
     // settings.value holds JSON text (R54); these rows are library data (scope data), not secrets.
     const row = { value: JSON.stringify(value), is_secret: 0, scope: 'data', updated_at: now, updated_by: null };
     await upsert(trx, 'settings', { key }, row, row);
+  }
+  // ---- Komunitas (OPAC look) ----
+  // A fresh install starts with the design's blue accent. Only an absent row is written: an accent already stored (a
+  // resumed install after the library chose one) is never changed.
+  const accent = await trx.selectFrom('settings').select('key').where('key', '=', 'opac.accent').executeTakeFirst();
+  if (accent === undefined) {
+    await trx
+      .insertInto('settings')
+      .values({ key: 'opac.accent', value: JSON.stringify(FRESH_INSTALL_ACCENT), is_secret: 0, scope: 'data', updated_at: now, updated_by: null })
+      .execute();
   }
 }
 
