@@ -1,6 +1,6 @@
 // The `home` module of @altis/opac-theme (S16), the OPAC home page as the library's profile site: the hero band around
 // the header, the search card floating at its lower edge (the field choice, the text, the collection's facts), the
-// subject pills and availability of the title lists, the numbered popular titles, the "about" block with its facts,
+// subject pills and availability of the title lists (the popular and the new titles), the "about" block with its facts,
 // the services and facility photos, the loans per class, and the visit block (location, opening hours with today's
 // marked, the loan rules per member type). Mobile first, every colour from base.ts's tokens or the hero's own (always
 // dark, white text), no url() and no @import.
@@ -63,17 +63,6 @@ export const HOME_CSS: string = [
   // Availability on a title: coloured words (the status colour only repeats them).
   '.card-status{font-size:.8125rem}',
   '.status-muted{color:var(--muted)}',
-
-  // The popular titles: a numbered list, the rank in its own column, the availability on the right.
-  '.popular-list{margin:0;padding:0;list-style:none;counter-reset:rank;border-top:1px solid var(--border)}',
-  '.popular-list li{counter-increment:rank;display:grid;grid-template-columns:2rem minmax(0,1fr);gap:.125rem .75rem;align-items:baseline;' +
-    'padding:.625rem 0;border-bottom:1px solid var(--border)}',
-  '.popular-list li::before{content:counter(rank);grid-row:span 3;color:var(--faint);font-weight:700;font-variant-numeric:tabular-nums}',
-  '.popular-list a{color:var(--text);font-weight:700;text-decoration:none;overflow-wrap:anywhere}',
-  '.popular-list a:hover{color:var(--accent);text-decoration:underline}',
-  '.popular-list .card-meta{font-size:.875rem}',
-  '@media (min-width:40rem){.popular-list li{grid-template-columns:2rem minmax(0,1fr) auto}.popular-list li::before{grid-row:span 2}' +
-    '.popular-list .card-status{grid-column:3;grid-row:1}}',
 
   // About: a photo beside the text and the facts.
   '.about-grid{display:grid;gap:1.5rem;align-items:center}',
