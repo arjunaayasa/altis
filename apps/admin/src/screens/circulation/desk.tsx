@@ -18,7 +18,7 @@ import type {
 } from '@altis/shared/api/circulation';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { CircleAlertIcon, CircleCheckIcon, InfoIcon, TriangleAlertIcon } from 'lucide-react';
+import { CircleCheckIcon, CircleXIcon, InfoIcon, TriangleAlertIcon } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Notice, SELECT_CLASS } from '@/components/form-field';
 import { Callout, FactList, Kbd, LAYER, MemberPhoto, StatusText, TABLE, TONE_SURFACE, TONE_TEXT, Tag, type StatusTone } from '@/components/layout';
@@ -1601,7 +1601,7 @@ function ToneIcon({ tone }: { tone: Tone }) {
   const cls = cn('mt-0.5 size-6 shrink-0 [stroke-width:2.2]', status === null ? 'text-muted-foreground' : TONE_TEXT[status]);
   if (tone === 'success') return <CircleCheckIcon className={cls} aria-hidden="true" />;
   if (tone === 'warning') return <TriangleAlertIcon className={cls} aria-hidden="true" />;
-  if (tone === 'error') return <CircleAlertIcon className={cls} aria-hidden="true" />;
+  if (tone === 'error') return <CircleXIcon className={cls} aria-hidden="true" />;
   return <InfoIcon className={cls} aria-hidden="true" />;
 }
 
