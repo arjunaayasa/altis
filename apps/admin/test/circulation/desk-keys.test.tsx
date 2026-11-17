@@ -274,6 +274,19 @@ describe('Meja Layanan: keys and scanner', () => {
     await waitFor(() => expect(document.activeElement).toBe(reason));
   });
 
+  it('opened from another screen, the desk keeps the focus in its scan box, not on its heading', async () => {
+    const app = start({}, '/admin/layanan/kembali');
+    await box();
+    const link = screen.getByRole('link', { name: 'Meja Layanan' });
+    link.focus();
+    fireEvent.click(link);
+    await waitFor(() => expect(app.router.state.location.pathname).toBe('/admin/layanan'));
+    const scanBox = await screen.findByLabelText(/^Pindai kartu atau ketik/);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await waitFor(() => expect(document.activeElement).toBe(scanBox));
+    expect(document.activeElement?.tagName).not.toBe('H1');
+  });
+
   it('a click on the page’s empty space gives the box its focus back, never one on a control', async () => {
     start({});
     const input = await box();

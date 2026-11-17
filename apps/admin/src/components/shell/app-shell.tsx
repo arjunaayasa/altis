@@ -7,6 +7,7 @@ import { Banners } from '@/components/banners';
 import { CommandPalette, logout } from '@/components/command-palette';
 import { ShellFrame } from '@/components/shell/frame';
 import { Pending } from '@/components/shell/route-pages';
+import { useScreenFocus } from '@/components/shell/screen-focus';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/i18n';
@@ -14,12 +15,16 @@ import { holds } from '@/lib/access';
 import { inBackground, isSignInPath, sessionEndedHref } from '@/lib/api';
 import { dirtyForms } from '@/lib/dirty-forms';
 import { ME_KEY, ShellMeContext, gateTarget, useMe } from '@/lib/me';
+import { activeNavPath, visibleNav } from '@/lib/nav';
 import { REALTIME_RESYNC_KEYS, RealtimeContext, createRealtimeHub, invalidateRealtimeKeys, realtimeQueryKeys } from '@/lib/realtime';
 import { useShortcuts } from '@/lib/shortcuts';
 
 export { paletteShortcut } from '@/components/shell/frame';
 
 type SignedIn = Extract<MeResponse, { authenticated: true }>;
+
+/** The page's main region, where each screen is drawn. */
+const mainRegion = (): HTMLElement | null => document.getElementById('main');
 
 /**
  * The channels the shell reads for every screen (§10.7): the user's own (`user.<id>`: their notifications), every
@@ -49,6 +54,8 @@ export function shellChannels(me: SignedIn): string[] {
  * forgotten the other user's data); nothing typed before is kept. Any other place the gate now sends to (a password
  * that must change first) is followed at once.
  *
+ * A change of screen moves the focus to the new screen's heading and names the page in the tab's title (screen-focus.ts).
+ *
  * The frame owns the tab's realtime client (lib/realtime.ts; 1c Task 28): one per tab, started while the session lasts,
  * reading {@link shellChannels} plus the screens' own (useRealtime, through RealtimeContext), by SSE when
  * `me.client.realtime` says so and the browser has EventSource, else by polling. Each batch of events makes the queries
@@ -72,6 +79,12 @@ export function AppShell() {
   const signedOut = live !== undefined && !live.authenticated;
   const keep = signedOut && dirtyForms.count() > 0;
   const me = last.current;
+
+  // The page in the tab's title: the navigation item the path belongs to (never a record's own name).
+  const navItems = visibleNav(me ?? undefined);
+  const navPath = activeNavPath(navItems, pathname);
+  const navItem = navItems.find((item) => item.to === navPath);
+  useScreenFocus(mainRegion, pathname, navItem === undefined ? null : t(navItem.labelKey));
 
   // The tab's realtime client: what it reads is what the frame shows (a ref, read at each poll or stream).
   const shown = useRef(me);
