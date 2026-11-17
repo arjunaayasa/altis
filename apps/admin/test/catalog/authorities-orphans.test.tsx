@@ -48,20 +48,40 @@ describe('Otoritas: the orphans view', () => {
       }),
     });
     await screen.findByText('Yatim 1', undefined, FIRST);
-    const archive = screen.getByRole('button', { name: 'Arsipkan terpilih' });
-    expect(archive.hasAttribute('disabled')).toBe(true);
+    // The selection bar shows only while something is selected.
+    expect(screen.queryByRole('button', { name: 'Arsipkan terpilih' })).toBeNull();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pilih Yatim 1' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pilih Yatim 3' }));
     expect(screen.getByText('2 dipilih')).toBeTruthy();
-    fireEvent.click(archive);
-    const dialog = await screen.findByRole('alertdialog', { name: 'Arsipkan 2 otoritas yatim?' });
+    fireEvent.click(screen.getByRole('button', { name: 'Arsipkan terpilih' }));
+    // The question is asked in words in a panel under the bar, not in a dialog.
+    const panel = await screen.findByRole('form', { name: 'Arsipkan 2 otoritas yatim?' });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(writes()).toEqual([]);
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Arsipkan' }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Arsipkan' }));
     await waitFor(() => expect(writes()).toEqual(['POST catalog/orphans/archive']));
     expect(posted).toEqual([{ kind: 'agents', ids: [THREE[0]!.id, THREE[2]!.id] }]);
     expect(await screen.findByText('1 diarsipkan, 1 dilewati karena masih dipakai.')).toBeTruthy();
     // The selection is cleared and the list is read again.
     expect(screen.queryByText('2 dipilih')).toBeNull();
+    expect(screen.queryByRole('form', { name: 'Arsipkan 2 otoritas yatim?' })).toBeNull();
+  });
+
+  it('Batal closes the archive panel without posting; Batal pilih empties the selection', async () => {
+    const { writes } = startApp({ me: adminMe(), path: '/admin/catalog/authorities?view=orphans', routes: orphanRoutes() });
+    await screen.findByText('Yatim 1', undefined, FIRST);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Pilih Yatim 2' }));
+    const open = screen.getByRole('button', { name: 'Arsipkan terpilih' });
+    open.focus();
+    fireEvent.click(open);
+    const panel = await screen.findByRole('form', { name: 'Arsipkan 1 otoritas yatim?' });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Batal' }));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Arsipkan 1 otoritas yatim?' })).toBeNull());
+    expect(document.activeElement).toBe(open);
+    fireEvent.click(screen.getByRole('button', { name: 'Batal pilih' }));
+    await waitFor(() => expect(screen.queryByText('1 dipilih')).toBeNull());
+    expect((screen.getByRole('checkbox', { name: 'Pilih Yatim 2' }) as HTMLInputElement).checked).toBe(false);
+    expect(writes()).toEqual([]);
   });
 
   it('selects at most 500 at once: "Pilih semua" over 600 loaded orphans posts 500 ids', async () => {
@@ -97,8 +117,8 @@ describe('Otoritas: the orphans view', () => {
     expect(box501.checked).toBe(false);
     expect(box501.disabled).toBe(true);
     fireEvent.click(screen.getByText('Arsipkan terpilih'));
-    const dialog = (await screen.findByText('Arsipkan 500 otoritas yatim?', undefined, { timeout: 4000 })).closest<HTMLElement>('[role="alertdialog"]')!;
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Arsipkan' }));
+    const panel = (await screen.findByText('Arsipkan 500 otoritas yatim?', undefined, { timeout: 4000 })).closest<HTMLElement>('form')!;
+    fireEvent.click(within(panel).getByText('Arsipkan'));
     await waitFor(() => expect(posted).toHaveLength(1), { timeout: 4000 });
     expect(posted[0]!.kind).toBe('agents');
     expect(posted[0]!.ids).toHaveLength(500);
