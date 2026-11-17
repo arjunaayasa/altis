@@ -9,29 +9,39 @@ import {
   type OpacHomeHours,
   type OpacHomePhoto,
 } from '@altis/shared/api/opac-home';
-import { SearchForm, type HeroBand } from '../layout.js';
+import type { JSX } from 'hono/jsx/jsx-runtime';
+import type { HeroBand } from '../layout.js';
+import { BookCover } from './cover.js';
 import { libraryJsonLd, webSiteJsonLd } from './library-json-ld.js';
 import { opacText, type OpacKey } from './messages.js';
 import { opacContext, opacPage, requestLang, type OpacContextSource } from './page.js';
 import {
+  CLASS_DIGITS,
   activeMemberCount,
+  cachedCatalogueFacts,
   latestNews,
   newTitles,
   popularTitles,
   promotedTitles,
+  publicLoanRules,
   publicRecordCount,
   subjectPills,
+  type CatalogueFacts,
   type NewsTeaser,
+  type PublicLoanRule,
   type SubjectPill,
   type TitleCard,
 } from './queries.js';
+import { OPAC_SEARCH_SCOPES, OPAC_SEARCH_TEXT_MAX } from './search-params.js';
 import { pagePath, withLang } from './urls.js';
 
-// The OPAC home page (Phase 2 Task 21; spec §9.1, §9.4; S14, M4), `GET /`: the library's name and welcome text, a
-// large search box, the new titles (`opac.newTitlesCount`, newest first from search_doc), the promoted titles, the
-// three latest news posts, the ten DDC classes linking to the `cl` facet (`/cari?kelas=N`), and the JSON-LD `Library`
-// + `WebSite` with its SearchAction. Every link keeps the page's `?lang=` when the request named one. The 1b "coming
-// soon" notice is gone.
+// The OPAC home page (Phase 2 Task 21; spec §9.1, §9.4; S14, M4), `GET /`: the hero with the library's heading and
+// welcome text, the search card floating at its edge (the field to search in, the text, the number of titles, of
+// titles on the shelf and today's hours), the ten DDC classes with their number of titles linking to the `cl` facet
+// (`/cari?kelas=N`), the popular titles, the new titles (`opac.newTitlesCount`, newest first from search_doc) and the
+// promoted titles as covers (a substitute cover for a title without one), the profile blocks, the three latest news
+// posts, the visit block, and the JSON-LD `Library` + `WebSite` with its SearchAction. Every link keeps the page's
+// `?lang=` when the request named one. The 1b "coming soon" notice is gone.
 
 /** At most this many promoted titles. */
 export const PROMOTED_MAX = 12;
@@ -103,15 +113,18 @@ function SubjectPills(props: { pills: readonly SubjectPill[]; locale: Locale; la
   );
 }
 
+/** A title as a book on the shelf: its cover (or substitute cover), title, author and availability; all one link. */
 function Card(props: { card: TitleCard; locale: Locale; lang: Locale | null }) {
   const { card, locale, lang } = props;
   return (
     <li class="card">
-      {card.coverFileId === null ? (
-        <span class="card-cover" aria-hidden="true"></span>
-      ) : (
-        <img class="card-cover" src={`/files/${encodeURIComponent(card.coverFileId)}`} alt="" loading="lazy" decoding="async" width={120} height={180} />
-      )}
+      <BookCover
+        book={{ title: card.title, author: card.mainAgent, callNumber: card.callNumber, classification: card.classification, coverFileId: card.coverFileId }}
+        size="card"
+        imgClass="card-cover"
+        width={120}
+        height={180}
+      />
       <span class="card-body">
         <a class="card-title" href={keep(recordUrlPath(card.id, card.title), lang)}>
           {card.title}
@@ -125,11 +138,36 @@ function Card(props: { card: TitleCard; locale: Locale; lang: Locale | null }) {
   );
 }
 
-function Titles(props: { id: string; heading: string; cards: readonly TitleCard[]; pills?: readonly SubjectPill[]; locale: Locale; lang: Locale | null }) {
+/** A section's head: its heading (and a line under it) on the left, a "see all" link on the right. */
+function SectionHead(props: { id: string; heading: string; sub?: string | undefined; more?: { href: string; label: string } | undefined }) {
+  return (
+    <div class="section-head">
+      <div>
+        <h2 id={props.id}>{props.heading}</h2>
+        {props.sub === undefined ? null : <p class="section-sub">{props.sub}</p>}
+      </div>
+      {props.more === undefined ? null : (
+        <a class="section-link" href={props.more.href}>
+          {props.more.label}
+        </a>
+      )}
+    </div>
+  );
+}
+
+function Titles(props: {
+  id: string;
+  heading: string;
+  cards: readonly TitleCard[];
+  pills?: readonly SubjectPill[];
+  more?: { href: string; label: string };
+  locale: Locale;
+  lang: Locale | null;
+}) {
   if (props.cards.length === 0) return null;
   return (
     <section class="home-section" aria-labelledby={props.id}>
-      <h2 id={props.id}>{props.heading}</h2>
+      <SectionHead id={props.id} heading={props.heading} more={props.more} />
       {props.pills === undefined ? null : <SubjectPills pills={props.pills} locale={props.locale} lang={props.lang} />}
       <ul class="card-grid">
         {props.cards.map((card) => (
@@ -145,41 +183,42 @@ function News(props: { news: readonly NewsTeaser[]; locale: Locale; lang: Locale
   if (news.length === 0) return null;
   return (
     <section class="home-section" aria-labelledby="berita-terbaru">
-      <h2 id="berita-terbaru">{opacText(locale, 'shell.home.news')}</h2>
+      <SectionHead id="berita-terbaru" heading={opacText(locale, 'shell.home.news')} more={{ href: keep('/berita', lang), label: opacText(locale, 'shell.home.news_all') }} />
       <ul class="news-list">
         {news.map((n) => (
           <li lang={n.lang ?? undefined}>
             <article>
+              <time datetime={new Date(n.publishedAt).toISOString()}>{dateText(n.publishedAt, locale, props.timeZone)}</time>
               <h3>
                 <a href={keep(pagePath('news', n.slug), lang)}>{n.title}</a>
               </h3>
-              <time datetime={new Date(n.publishedAt).toISOString()}>{dateText(n.publishedAt, locale, props.timeZone)}</time>
               {n.summary === null || n.summary.trim() === '' ? null : <p>{cut(n.summary, SUMMARY_MAX)}</p>}
             </article>
           </li>
         ))}
       </ul>
-      <p class="more">
-        <a href={keep('/berita', lang)}>{opacText(locale, 'shell.home.news_all')}</a>
-      </p>
     </section>
   );
 }
 
-/** The ten DDC main classes, `0`-`9`. */
-const CLASSES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
-
-function Classes(props: { locale: Locale; lang: Locale | null }) {
-  const { locale, lang } = props;
+/**
+ * "Jelajahi menurut subjek": the ten DDC main classes, each with its number of public titles (the search index's `cl`
+ * facet, what the linked search finds), each a link to the search for that class, an empty one included.
+ */
+function Classes(props: { locale: Locale; lang: Locale | null; counts: CatalogueFacts['classes'] }) {
+  const { locale, lang, counts } = props;
   return (
     <section class="home-section" aria-labelledby="jelajah-kelas">
-      <h2 id="jelajah-kelas">{opacText(locale, 'shell.home.classes')}</h2>
+      <SectionHead id="jelajah-kelas" heading={opacText(locale, 'shell.home.classes')} sub={opacText(locale, 'home.subjects.scheme')} />
       <ul class="class-grid">
-        {CLASSES.map((n) => (
+        {CLASS_DIGITS.map((n) => (
           <li>
             <a href={keep(`/cari?kelas=${n}`, lang)}>
               <span class="class-code">{`${n}00`}</span>
               <span class="class-name">{opacText(locale, `shell.home.class.${n}` as OpacKey)}</span>
+              <span class="class-count">
+                {opacText(locale, counts[n] === 1 ? 'home.subjects.count_one' : 'home.subjects.count', { count: countText(counts[n], locale) })}
+              </span>
             </a>
           </li>
         ))}
@@ -198,26 +237,51 @@ function countText(n: number, locale: Locale): string {
 /** The local path of a stored photo. */
 const fileSrc = (fileId: string): string => `/files/${encodeURIComponent(fileId)}`;
 
+/** `template` with its `{name}` replaced by `value` in bold (the copy keeps the placeholder where the language puts it). */
+function strong(template: string, name: string, value: string): (string | JSX.Element)[] {
+  const at = template.indexOf(`{${name}}`);
+  if (at === -1) return [template, ' ', <strong>{value}</strong>];
+  return [template.slice(0, at), <strong>{value}</strong>, template.slice(at + name.length + 2)];
+}
+
 /**
- * The page's search card, floating at the hero's lower edge: the search form, the number of titles and today's hours,
- * or that the library is closed today (`closed`: a closed day of the library calendar).
+ * The page's search card, floating at the hero's lower edge: the field to search in (radio buttons, every field first),
+ * the text and the button, then the collection's facts (the number of titles, of titles on the shelf now, today's
+ * hours or that the library is closed today) and the link to the catalogue's search page with its filters.
  */
-function SearchCard(props: { locale: Locale; lang: Locale | null; titles: number; today: readonly OpacHomeHours[]; closed: boolean }) {
+function SearchCard(props: { locale: Locale; lang: Locale | null; titles: number; available: number; today: readonly OpacHomeHours[]; closed: boolean }) {
   const { locale, lang, titles, today, closed } = props;
-  const facts: string[] = [];
-  if (titles > 0) facts.push(opacText(locale, 'home.search.titles', { count: countText(titles, locale) }));
-  if (closed) facts.push(opacText(locale, 'home.search.closed_today'));
-  else if (today.length > 0) facts.push(opacText(locale, 'home.search.today', { time: today.map((h) => h.time).join(', ') }));
   return (
     <div class="home-search">
-      <SearchForm locale={locale} lang={lang} id="cari-beranda" hero />
-      {facts.length === 0 ? null : (
-        <p class="home-search-meta">
-          {facts.map((f) => (
-            <span>{f}</span>
+      <form class="search-box search-hero" role="search" method="get" action="/cari">
+        <fieldset class="scope">
+          <legend class="visually-hidden">{opacText(locale, 'search.scope.label')}</legend>
+          {OPAC_SEARCH_SCOPES.map((s) => (
+            <label>
+              <input type="radio" name="ruas" value={s} checked={s === 'semua'} />
+              <span>{opacText(locale, `search.scope.${s}`)}</span>
+            </label>
           ))}
-        </p>
-      )}
+        </fieldset>
+        <label for="cari-beranda" class="visually-hidden">
+          {opacText(locale, 'shell.search.label')}
+        </label>
+        <span class="search-row">
+          <input id="cari-beranda" type="search" name="q" maxlength={OPAC_SEARCH_TEXT_MAX} placeholder={opacText(locale, 'shell.search.placeholder')} />
+          {lang === null ? null : <input type="hidden" name="lang" value={lang} />}
+          <button type="submit">{opacText(locale, 'shell.search.submit')}</button>
+        </span>
+      </form>
+      <p class="home-search-meta">
+        {titles > 0 ? <span>{strong(opacText(locale, 'home.search.titles'), 'count', countText(titles, locale))}</span> : null}
+        {titles > 0 ? <span>{strong(opacText(locale, 'home.search.available'), 'count', countText(props.available, locale))}</span> : null}
+        {closed ? (
+          <span>{opacText(locale, 'home.search.closed_today')}</span>
+        ) : today.length > 0 ? (
+          <span>{strong(opacText(locale, 'home.search.today'), 'time', today.map((h) => h.time).join(', '))}</span>
+        ) : null}
+        <a href={keep('/cari', lang)}>{opacText(locale, 'home.search.browse')}</a>
+      </p>
     </div>
   );
 }
@@ -228,10 +292,15 @@ function Popular(props: { cards: readonly TitleCard[]; pills: readonly SubjectPi
   if (cards.length === 0) return null;
   return (
     <section class="home-section" aria-labelledby="judul-populer">
-      <h2 id="judul-populer">{opacText(locale, 'home.popular.title')}</h2>
-      <p class="section-note">{opacText(locale, 'home.popular.note')}</p>
+      <SectionHead
+        id="judul-populer"
+        heading={opacText(locale, 'home.popular.title')}
+        sub={opacText(locale, 'home.popular.note')}
+        more={{ href: keep('/cari?urut=populer', lang), label: opacText(locale, 'home.popular.all') }}
+      />
       <SubjectPills pills={props.pills} locale={locale} lang={lang} />
-      <ol class="popular-list">
+      {/* The rank is drawn by the theme (list-style none); role=list keeps the list a list for every screen reader. */}
+      <ol class="popular-list" role="list">
         {cards.map((card) => (
           <li>
             <a href={keep(recordUrlPath(card.id, card.title), lang)}>
@@ -243,9 +312,6 @@ function Popular(props: { cards: readonly TitleCard[]; pills: readonly SubjectPi
           </li>
         ))}
       </ol>
-      <p class="more">
-        <a href={keep('/cari?urut=populer', lang)}>{opacText(locale, 'home.popular.all')}</a>
-      </p>
     </section>
   );
 }
@@ -332,14 +398,38 @@ function Services(props: { home: OpacHomeContent; locale: Locale; contentLang: L
   );
 }
 
+/** A link that opens `address` in the visitor's map app or site: a search for it, nothing embedded on the page. */
+export function mapLink(address: string): string {
+  return `https://www.openstreetmap.org/search?query=${encodeURIComponent(address.replace(/\s+/gu, ' ').trim())}`;
+}
+
+/** A member type's loan terms in words (`3 buku, 7 hari`). */
+function ruleText(rule: PublicLoanRule, locale: Locale): string {
+  const limit =
+    rule.limit === null
+      ? opacText(locale, 'home.rules.no_limit')
+      : opacText(locale, rule.limit === 1 ? 'home.rules.items_one' : 'home.rules.items', { count: countText(rule.limit, locale) });
+  const days =
+    rule.days === 0 ? opacText(locale, 'home.rules.same_day') : opacText(locale, rule.days === 1 ? 'home.rules.days_one' : 'home.rules.days', { count: countText(rule.days, locale) });
+  return `${limit}, ${days}`;
+}
+
 /**
- * The visit block: the library's address and its opening hours, today's row (by its weekdays) in bold and named so; on
- * a day the library calendar closes (`weekday` null), no row is today's and the block says the library is closed.
+ * The visit block: the library's address with a link to open it in a map app, its opening hours (today's row, by its
+ * weekdays, in bold and named so; on a day the library calendar closes, `weekday` null, no row is today's and the block
+ * says the library is closed), and the loan terms per member type. Each part only with content.
  */
-function Visit(props: { address: string | null; home: OpacHomeContent; weekday: number | null; locale: Locale; contentLang: Locale | undefined }) {
-  const { home, weekday, locale, contentLang } = props;
+function Visit(props: {
+  address: string | null;
+  home: OpacHomeContent;
+  weekday: number | null;
+  rules: readonly PublicLoanRule[];
+  locale: Locale;
+  contentLang: Locale | undefined;
+}) {
+  const { home, weekday, rules, locale, contentLang } = props;
   const address = props.address === null || props.address.trim() === '' ? null : props.address;
-  if (address === null && home.hours.length === 0) return null;
+  if (address === null && home.hours.length === 0 && rules.length === 0) return null;
   return (
     <section class="home-section" id="kunjungi" aria-labelledby="kunjungi-judul">
       <h2 id="kunjungi-judul">{opacText(locale, 'home.visit.title')}</h2>
@@ -350,6 +440,9 @@ function Visit(props: { address: string | null; home: OpacHomeContent; weekday: 
             <p class="visit-address" lang={contentLang}>
               {address}
             </p>
+            <a class="map-link" href={mapLink(address)} rel="noopener noreferrer">
+              {opacText(locale, 'home.visit.map')}
+            </a>
           </div>
         )}
         {home.hours.length === 0 ? null : (
@@ -379,6 +472,29 @@ function Visit(props: { address: string | null; home: OpacHomeContent; weekday: 
                     </tr>
                   ),
                 )}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {rules.length === 0 ? null : (
+          <div class="visit-block">
+            <h3 id="aturan-pinjam">{opacText(locale, 'home.rules.title')}</h3>
+            <table class="hours" aria-labelledby="aturan-pinjam">
+              <thead class="visually-hidden">
+                <tr>
+                  <th scope="col">{opacText(locale, 'home.rules.type')}</th>
+                  <th scope="col">{opacText(locale, 'home.rules.terms')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rules.map((r) => (
+                  <tr>
+                    <th scope="row" lang={r.lang}>
+                      {r.name}
+                    </th>
+                    <td>{ruleText(r, locale)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -468,7 +584,7 @@ export async function homeResponse(rc: HomeSource): Promise<Response> {
   } catch {
     today = localDate('UTC', rc.now);
   }
-  const [fresh, promoted, news, popular, titles, members, classes, closedDays] = await Promise.all([
+  const [fresh, promoted, news, popular, titles, members, classes, closedDays, facts, rules] = await Promise.all([
     blocks.newTitles ? newTitles(handle, newCount) : [],
     blocks.promoted ? promotedTitles(handle, PROMOTED_MAX) : [],
     blocks.news ? latestNews(handle, rc.now, locale, HOME_NEWS) : [],
@@ -477,6 +593,8 @@ export async function homeResponse(rc: HomeSource): Promise<Response> {
     blocks.about ? activeMemberCount(handle, today) : 0,
     blocks.readingClasses ? topClasses(handle, HOME_CLASSES) : [],
     blocks.visit ? loadClosedDayRules(handle, null) : [],
+    cachedCatalogueFacts(handle),
+    blocks.visit ? publicLoanRules(handle, locale) : [],
   ]);
   const [popularPills, freshPills] = await subjectPills(
     handle,
@@ -500,16 +618,31 @@ export async function homeResponse(rc: HomeSource): Promise<Response> {
     jsonLd: [libraryJsonLd({ name: ctx.libraryName, address, baseUrl: ctx.baseUrl }), webSiteJsonLd({ name: ctx.libraryName, baseUrl: ctx.baseUrl, locale })],
     body: () => (
       <>
-        <SearchCard locale={locale} lang={lang} titles={titles} today={blocks.visit ? todayHours : []} closed={blocks.visit && closedToday} />
-        {blocks.classes ? <Classes locale={locale} lang={lang} /> : null}
+        <SearchCard
+          locale={locale}
+          lang={lang}
+          titles={titles}
+          available={facts.available}
+          today={blocks.visit ? todayHours : []}
+          closed={blocks.visit && closedToday}
+        />
+        {blocks.classes ? <Classes locale={locale} lang={lang} counts={facts.classes} /> : null}
         {blocks.popular ? <Popular cards={popular} pills={popularPills ?? []} locale={locale} lang={lang} /> : null}
-        <Titles id="judul-baru" heading={opacText(locale, 'shell.home.new_titles')} cards={fresh} pills={freshPills ?? []} locale={locale} lang={lang} />
+        <Titles
+          id="judul-baru"
+          heading={opacText(locale, 'shell.home.new_titles')}
+          cards={fresh}
+          pills={freshPills ?? []}
+          more={{ href: keep('/cari', lang), label: opacText(locale, 'home.new.all') }}
+          locale={locale}
+          lang={lang}
+        />
         <Titles id="judul-unggulan" heading={opacText(locale, 'shell.home.promoted')} cards={promoted} locale={locale} lang={lang} />
         {blocks.about ? <About home={home} titles={titles} members={members} locale={locale} contentLang={contentLang} /> : null}
         {blocks.services ? <Services home={home} locale={locale} contentLang={contentLang} /> : null}
         {blocks.readingClasses ? <ReadingClasses classes={classes} locale={locale} /> : null}
         <News news={news} locale={locale} lang={lang} timeZone={timeZone} />
-        {blocks.visit ? <Visit address={address} home={home} weekday={weekday} locale={locale} contentLang={contentLang} /> : null}
+        {blocks.visit ? <Visit address={address} home={home} weekday={weekday} rules={rules} locale={locale} contentLang={contentLang} /> : null}
       </>
     ),
   });

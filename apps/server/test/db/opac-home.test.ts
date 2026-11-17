@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
 import { createApp } from '../../src/app.js';
 import { opacText } from '../../src/opac/catalog/messages.js';
+import { CATALOGUE_FACTS_TTL_MS, cachedCatalogueFacts, catalogueFacts, publicLoanRules } from '../../src/opac/catalog/queries.js';
 import { createAgent, type AgentReply } from '../agent.js';
 import { recordingLogger, sampleConfig } from '../support.js';
 
@@ -25,6 +26,9 @@ const NOW = Date.UTC(2026, 10, 15, 5, 0, 0);
 const DAY = 86_400_000;
 const CONFIG = sampleConfig();
 const HTML = { Accept: 'text/html' };
+
+/** `template` escaped, its `{name}` the bold `value` (the search card's facts). */
+const bold = (template: string, name: string, value: string): string => esc(template).replace(`{${name}}`, `<strong>${esc(value)}</strong>`);
 
 const esc = (s: string): string => s.replace(/[&<>'"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[ch]!);
 
@@ -187,11 +191,121 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     expect(html).toContain('<h1>Perpustakaan SMA 1</h1>');
     expect(html).toContain('<p class="hero-lead">Cari buku &lt;di&gt; katalog.</p>');
     expect(html).toContain('<div class="home-search">');
-    expect(html).toContain(esc(opacText('id', 'home.search.titles', { count: '2' })));
+    expect(html).toContain(`<span>${bold(opacText('id', 'home.search.titles'), 'count', '2')}</span>`);
     for (const id of ['tentang-judul', 'layanan-judul']) expect(section(html, id), id).toBeUndefined();
     // The visit block shows the library's address alone.
     expect(section(html, 'kunjungi-judul')).toContain('<p class="visit-address">Jl. Pendidikan 1\nKota Contoh</p>');
     expect(html).not.toContain('style=');
+  });
+
+  it('the ten DDC classes with their public titles from the search index, one read; each class links to its search, an empty one too', async () => {
+    const zero = { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0, '5': 0, '6': 0, '7': 0, '8': 0, '9': 0 };
+    expect(await catalogueFacts(h.db)).toEqual({ classes: zero, available: 2 });
+    const classify = async (values: (string | null)[]): Promise<void> => {
+      for (const [i, value] of values.entries()) await h.db.updateTable('records').set({ classification: value }).where('id', '=', records[i]!).execute();
+      await withTx(h, (trx) => indexRecords(trx, records, NOW));
+    };
+    await classify(['899.221 3', '305.4']);
+    try {
+      expect(await catalogueFacts(h.db)).toEqual({ classes: { ...zero, '3': 1, '8': 1 }, available: 2 });
+      // The count is what the class's search finds.
+      expect((await get('/cari?kelas=8')).text).toContain(esc(opacText('id', 'search.count_one')));
+
+      // Kept a minute per database (a Kysely of its own here, so that the page's reads do not share the entry).
+      let at = 1_000;
+      const own = h.db.withoutPlugins();
+      const first = await cachedCatalogueFacts(own, () => at);
+      await classify(['899.221 3', '512']);
+      at += CATALOGUE_FACTS_TTL_MS - 1;
+      expect(await cachedCatalogueFacts(own, () => at)).toEqual(first);
+      at += 1;
+      expect((await cachedCatalogueFacts(own, () => at)).classes).toEqual({ ...zero, '5': 1, '8': 1 });
+
+      // The page: ten links to /cari?kelas=N, each with its number of titles in words.
+      const block = section((await get('/')).text, 'jelajah-kelas')!;
+      expect([...block.matchAll(/href="([^"]*)"/g)].map((m) => m[1])).toEqual(Array.from({ length: 10 }, (_, n) => `/cari?kelas=${n}`));
+      expect([...block.matchAll(/<span class="class-count">([^<]*)<\/span>/g)]).toHaveLength(10);
+      expect(block).toContain(esc(opacText('id', 'home.subjects.scheme')));
+    } finally {
+      await classify([null, null]);
+    }
+  });
+
+  it('the loan rules per member type of the visit block: each type that may borrow, its limit and the period of its rule; no member', async () => {
+    expect(await publicLoanRules(h.db, 'id')).toEqual([
+      { name: 'Siswa', limit: 3, days: 7 },
+      { name: 'Guru', limit: 10, days: 7 },
+      { name: 'Tenaga kependidikan', limit: 5, days: 7 },
+      { name: 'Umum', limit: 2, days: 7 },
+    ]);
+    // A type that may not borrow is left out; a rule of its own wins over the general one.
+    const umum = (await h.db.selectFrom('member_types').select('id').where('code_key', '=', 'UMUM').executeTakeFirstOrThrow()).id;
+    const policy = newId(NOW);
+    await h.db.updateTable('member_types').set({ loan_limit: 0 }).where('id', '=', umum).execute();
+    await h.db.updateTable('member_types').set({ loan_limit: null }).where('id', '=', siswa).execute();
+    await h.db
+      .insertInto('policies')
+      .values({
+        id: policy,
+        code_display: 'SISWA14',
+        code_key: 'SISWA14',
+        name: 'Siswa',
+        member_type_id: siswa,
+        collection_type_id: null,
+        material_type_id: null,
+        branch_id: null,
+        scope_key: `${siswa}/*/*/*`,
+        loanable: 1,
+        loan_days: 14,
+        loan_limit: null,
+        renew_limit: 1,
+        fine_per_day_minor: 0,
+        fine_cap_minor: null,
+        grace_days: 0,
+        currency: 'IDR',
+        archived_at: null,
+        version: 0,
+        created_at: NOW,
+        created_by: null,
+        updated_at: NOW,
+        updated_by: null,
+      })
+      .execute();
+    try {
+      const en = await publicLoanRules(h.db, 'en');
+      expect(en.map((r) => [r.name, r.limit, r.days])).toEqual([
+        ['Pupil', null, 14],
+        ['Teacher', 10, 7],
+        ['Education staff', 5, 7],
+      ]);
+      const visit = section((await get('/?lang=en')).text, 'kunjungi-judul')!;
+      expect(visit).toContain(`<h3 id="aturan-pinjam">${esc(opacText('en', 'home.rules.title'))}</h3>`);
+      expect(visit).toContain(`<tr><th scope="row">Pupil</th><td>${esc(opacText('en', 'home.rules.no_limit'))}, ${esc(opacText('en', 'home.rules.days', { count: '14' }))}</td></tr>`);
+      expect(visit).toContain(`<tr><th scope="row">Teacher</th><td>${esc(opacText('en', 'home.rules.items', { count: '10' }))}, ${esc(opacText('en', 'home.rules.days', { count: '7' }))}</td></tr>`);
+      expect(visit).not.toContain('General public');
+      // The location: the address and a link that opens it in a map app; nothing of a third party on the page.
+      expect(visit).toContain(`<a class="map-link" href="https://www.openstreetmap.org/search?query=Jl.%20Pendidikan%201%20Kota%20Contoh" rel="noopener noreferrer">`);
+      for (const b of borrowers) expect(visit).not.toContain(b.name);
+    } finally {
+      await h.db.deleteFrom('policies').where('id', '=', policy).execute();
+      await h.db.updateTable('member_types').set({ loan_limit: 2 }).where('id', '=', umum).execute();
+      await h.db.updateTable('member_types').set({ loan_limit: 3 }).where('id', '=', siswa).execute();
+    }
+  });
+
+  it('the dark footer of every public page: the library and its address, the links with content, the search field, the source', async () => {
+    for (const path of ['/', '/cari', `/katalog/${records[0]!}/laskar-pelangi`]) {
+      const html = (await get(path)).text;
+      const footer = /<footer class="site-footer">([\s\S]*?)<\/footer>/.exec(html)?.[1];
+      expect(footer, path).toBeDefined();
+      expect(footer, path).toContain('<h2>Perpustakaan SMA 1</h2><p class="foot-address">Jl. Pendidikan 1\nKota Contoh</p>');
+      expect(footer, path).toContain('href="/#kunjungi"');
+      expect(footer, path).toContain('id="cari-kaki"');
+      expect(footer, path).toContain('href="https://github.com/arjunaayasa/altis" rel="noopener"');
+      expect(footer, path).toContain('href="/admin/login"');
+      // No hours set up yet: no hours block and no placeholder.
+      expect(footer, path).not.toContain('foot-hours');
+    }
   });
 
   it('with a profile: the photo under the overlay with its alt text and position, the heading, about with its facts, the services and photos, the hours; texts escaped', async () => {
@@ -230,7 +344,7 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     expect(visit).toContain('<tr><th scope="row">Senin–Jumat</th><td>07.00–15.00</td></tr>');
     // Today's row in bold (its class) and named so in words.
     expect(visit).toContain(`<tr class="today"><th scope="row">Minggu <span lang="id">(${opacText('id', 'home.visit.today')})</span></th><td>Tutup</td></tr>`);
-    expect(html).toContain(`<span>${esc(opacText('id', 'home.search.today', { time: 'Tutup' }))}</span>`);
+    expect(html).toContain(`<span>${bold(opacText('id', 'home.search.today'), 'time', 'Tutup')}</span>`);
     expect(html).not.toContain('<untuk>');
     expect(html).not.toContain('<buku>');
     expect(html).not.toContain('style=');
@@ -256,7 +370,7 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
       ],
     });
     const open = (await get('/')).text;
-    expect(open).toContain(esc(opacText('id', 'home.search.today', { time: '08.00–12.00' })));
+    expect(open).toContain(bold(opacText('id', 'home.search.today'), 'time', '08.00–12.00'));
     expect(open).not.toContain(esc(opacText('id', 'home.search.closed_today')));
     // A holiday covering NOW (Sunday 15 November 2026 in the library's time zone).
     const holiday = newId(NOW);
@@ -267,7 +381,7 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     try {
       for (const locale of ['id', 'en'] as const) {
         const html = (await get(locale === 'id' ? '/' : '/?lang=en')).text;
-        expect(html, locale).not.toContain(esc(opacText(locale, 'home.search.today', { time: '08.00–12.00' })));
+        expect(html, locale).not.toContain(bold(opacText(locale, 'home.search.today'), 'time', '08.00–12.00'));
         expect(html, locale).toContain(`<span>${esc(opacText(locale, 'home.search.closed_today'))}</span>`);
         const visit = section(html, 'kunjungi-judul')!;
         expect(visit, locale).not.toContain('class="today"');
@@ -295,7 +409,7 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
       html = reply.text;
       const nonce = /<meta name="csp-nonce" content="([^"]+)"/.exec(html)?.[1];
       expect(nonce).toBeDefined();
-      expect(html).toContain(`<style nonce="${nonce}">.hero-band{--hero-bg:#1e3a8a}</style>`);
+      expect(html).toContain(`<style nonce="${nonce}">.site-header{--hero-bg:#1e3a8a}</style>`);
       expect(reply.headers.get('content-security-policy')).toContain(`style-src 'self' 'nonce-${nonce}'`);
       expect(html).not.toContain('style=');
 
@@ -349,7 +463,7 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
   it('the popular titles: a numbered list linking the most borrowed search; no borrower and no count on the page or in that search', async () => {
     const html = (await get('/')).text;
     const popular = section(html, 'judul-populer')!;
-    expect(popular).toContain('<ol class="popular-list">');
+    expect(popular).toContain('<ol class="popular-list" role="list">');
     expect(popular).toContain('Bumi Manusia');
     expect(popular).toMatch(/href="\/katalog\/[0-9A-Z]{26}\/bumi-manusia"/);
     expect(popular).not.toContain('Laskar Pelangi');
