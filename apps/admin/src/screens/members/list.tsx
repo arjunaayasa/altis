@@ -152,26 +152,13 @@ export function MembersListScreen() {
       className: 'w-px py-1.5 text-right',
       cell: (r) => (
         <MoreMenu small label={t('members.action.more_named', { name: r.name })}>
-          {(close) => (
-            <>
-              <MoreMenuItem
-                onClick={() => {
-                  close();
-                  void navigate({ href: `/admin/anggota/${encodeURIComponent(r.id)}` });
-                }}>
-                {t(canManage ? 'members.action.view_edit' : 'members.action.view')}
-              </MoreMenuItem>
-              {canServe && (
-                <MoreMenuItem
-                  aria-label={t('members.action.serve_named', { name: r.name })}
-                  onClick={() => {
-                    close();
-                    void navigate({ href: `/admin/layanan?member=${encodeURIComponent(r.id)}` });
-                  }}>
-                  {t('members.action.serve_desk')}
-                </MoreMenuItem>
-              )}
-            </>
+          <MoreMenuItem onSelect={() => void navigate({ href: `/admin/anggota/${encodeURIComponent(r.id)}` })}>
+            {t(canManage ? 'members.action.view_edit' : 'members.action.view')}
+          </MoreMenuItem>
+          {canServe && (
+            <MoreMenuItem aria-label={t('members.action.serve_named', { name: r.name })} onSelect={() => void navigate({ href: `/admin/layanan?member=${encodeURIComponent(r.id)}` })}>
+              {t('members.action.serve_desk')}
+            </MoreMenuItem>
           )}
         </MoreMenu>
       ),
