@@ -9,6 +9,7 @@ import { useLocale, useT, type Translate } from '@/i18n';
 import { holdsAt } from '@/lib/access';
 import { isWritableBranch } from '@/lib/branches';
 import { useApiQuery, useMe } from '@/lib/me';
+import { StatusText, Tag, type TagTone } from './parts';
 
 /**
  * What the circulation and member screens share: the desk branch (chosen once, kept per browser), calendar dates in the
@@ -124,7 +125,6 @@ export function dueState(t: Translate, dueOn: string, daysLate: number, today: s
   return { text: t('circulation.due.left', { count: left }), tone: 'neutral' };
 }
 
-/** The badge of {@link dueState}. */
 /**
  * An item's status as the catalogue shows it: "Dipinjam, kembali <tanggal>" while it is out on loan (a lent item keeps
  * the status `available`), else its status.
@@ -137,26 +137,28 @@ export function ItemStatusBadge({ status, circulation }: { status: ItemStatus; c
   return <Badge tone={status === 'available' ? 'info' : 'neutral'}>{t(`vocab.item_status.${status}`)}</Badge>;
 }
 
+/** {@link dueState} as text in its colour: red when late, amber when due today, muted otherwise (the words say it). */
 export function DueBadge({ dueOn, daysLate }: { dueOn: string; daysLate: number }) {
   const t = useT();
   const state = dueState(t, dueOn, daysLate);
-  return <Badge tone={state.tone === 'neutral' ? 'neutral' : state.tone}>{state.text}</Badge>;
+  if (state.tone === 'neutral') return <span className="text-muted-foreground">{state.text}</span>;
+  return <StatusText tone={state.tone === 'danger' ? 'bad' : 'warn'}>{state.text}</StatusText>;
 }
 
 // ---- members -------------------------------------------------------------------------------------------------------
 
-const STATUS_TONES: Readonly<Record<MemberStatus, 'info' | 'warning' | 'danger' | 'neutral'>> = {
-  active: 'info',
-  expired: 'danger',
-  suspended: 'warning',
+const STATUS_TONES: Readonly<Record<MemberStatus, TagTone>> = {
+  active: 'ok',
+  expired: 'bad',
+  suspended: 'warn',
   archived: 'neutral',
   anonymized: 'neutral',
 };
 
-/** A member's shown status as a labelled badge. */
+/** A member's shown status as a labelled tag (green active, red expired, amber suspended; the word always says it). */
 export function MemberStatusBadge({ status }: { status: MemberStatus }) {
   const t = useT();
-  return <Badge tone={STATUS_TONES[status]}>{t(`vocab.member_status.${status}`)}</Badge>;
+  return <Tag tone={STATUS_TONES[status]}>{t(`vocab.member_status.${status}`)}</Tag>;
 }
 
 /** The member types (live ones; archived too on request), read once a minute at most. */

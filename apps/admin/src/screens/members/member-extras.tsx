@@ -358,16 +358,22 @@ export function MemberPrivacyPanel({ member, onDone }: { member: MemberView; onD
   };
 
   return (
-    <section className="grid gap-2 border-t pt-3" aria-label={t('members.tools.privacy.title')}>
-      <h2 className="text-sm font-semibold">{t('members.tools.privacy.title')}</h2>
-      <p className="text-xs text-muted-foreground">{t('members.tools.privacy.intro')}</p>
-      <Button size="sm" variant="outline" onClick={() => void download()}>
-        {t('members.tools.privacy.export')}
-      </Button>
-      <Button size="sm" variant="outline" className="text-destructive" onClick={() => setOpen(true)}>
-        {t('members.tools.privacy.anonymize')}
-      </Button>
-      {!open && <ProblemAlert error={problem} />}
+    <section className="grid gap-x-8 gap-y-3 border-t pt-5 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1fr)]" aria-label={t('members.tools.privacy.title')}>
+      <div className="grid content-start gap-1">
+        <h2 className="text-base font-bold">{t('members.tools.privacy.title')}</h2>
+        <p className="text-sm text-muted-foreground">{t('members.tools.privacy.intro')}</p>
+      </div>
+      <div className="grid content-start gap-3">
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => void download()}>
+            {t('members.tools.privacy.export')}
+          </Button>
+          <Button size="sm" variant="outline" className="text-destructive" onClick={() => setOpen(true)}>
+            {t('members.tools.privacy.anonymize')}
+          </Button>
+        </div>
+        {!open && <ProblemAlert error={problem} />}
+      </div>
       {open && (
         <Dialog open onOpenChange={(next) => (next || busy ? undefined : setOpen(false))}>
           <DialogContent closeLabel={t('form.cancel')} onOpenAutoFocus={focus.onOpenAutoFocus} onCloseAutoFocus={focus.onCloseAutoFocus}>
