@@ -2,7 +2,7 @@ import type { BranchView } from '@altis/shared/api/branches';
 import type { LoanListItem } from '@altis/shared/api/circulation';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { adminMe, startApp } from '../fake-api';
+import { adminMe, signedIn, startApp } from '../fake-api';
 
 // Terlambat & Jatuh Tempo: the list comes a page at a time and the API gives no total, so the summary must not pass
 // the loaded rows off as the whole count. The search and the class go in the body of a POST read, never in a URL; the
@@ -97,5 +97,21 @@ describe('Terlambat & Jatuh Tempo', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Jatuh tempo dalam 3 hari' }));
     expect(await screen.findByText('Tidak ada pinjaman jatuh tempo yang cocok dengan saringan ini.')).toBeTruthy();
     expect(app.requests.filter((r) => r.path === 'circulation/loans/search').at(-1)!.body).toMatchObject({ tab: 'due_soon', q: 'Ana', className: 'X-1' });
+  });
+
+  it('a user who may not read member records gets the list without asking for the member types, and no type filter', async () => {
+    const app = startApp({
+      me: signedIn({ permissions: ['circulation.records.read'] }),
+      path: '/admin/layanan/terlambat',
+      routes: {
+        'GET branches': () => ({ items: [BRANCH_VIEW] }),
+        'GET circulation/loans/classes': () => ({ items: ['X-1'] }),
+        'POST circulation/loans/search': () => ({ items: [overdueLoan(1, 4)], nextCursor: null }),
+      },
+    });
+    expect(await screen.findByText('Anggota 1')).toBeTruthy();
+    expect(screen.getByLabelText('Kelas')).toBeTruthy();
+    expect(screen.queryByLabelText('Tipe anggota')).toBeNull();
+    expect(app.requests.some((r) => r.path === 'members/types')).toBe(false);
   });
 });

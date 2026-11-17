@@ -162,11 +162,12 @@ export function MemberStatusBadge({ status }: { status: MemberStatus }) {
 }
 
 /** The member types (live ones; archived too on request), read once a minute at most. */
-export function useMemberTypes(includeArchived = false) {
+export function useMemberTypes(includeArchived = false, enabled = true) {
   return useApiQuery<MemberTypeListResponse>({
     queryKey: ['members', 'types', { includeArchived }],
     path: includeArchived ? 'members/types?includeArchived=true' : 'members/types',
     staleTime: 60_000,
+    enabled,
   });
 }
 

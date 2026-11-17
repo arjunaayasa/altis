@@ -23,8 +23,9 @@ import { SendRemindersButton } from './notices';
 /**
  * Terlambat & Jatuh Tempo (`/admin/layanan/terlambat`), two tabs over the open loans: **Terlambat** (past their due date)
  * and **Jatuh tempo** (due from today to three days ahead), each in its own branch's calendar. The labelled filters sit
- * in one row: Cari (the member's number or name), Kelas (for a class teacher), Tipe, Cabang (with more than one) and, on
- * the overdue tab, the fewest days late; the lists apply at once, the typed ones a moment after the last key or with
+ * in one row: Cari (the member's number or name), Kelas (for a class teacher), Tipe (for a user who may read member
+ * records, whose permission the member types need), Cabang (with more than one) and, on the overdue tab, the fewest days
+ * late; the lists apply at once, the typed ones a moment after the last key or with
  * Enter. The list is read on the server a page at a time, through a POST read (a name never goes in a URL), grouped by
  * member: a head row with the name, number, type and class, the phone for a user who may also read member records, and
  * "Layani", which opens the member at the desk; the member with the oldest due date first, then one row per item:
@@ -65,7 +66,9 @@ export function OverdueScreen() {
   const money = useMoney();
   const typeName = useTypeName();
   const ids = useId();
-  const types = useMemberTypes(true);
+  // The types are read with the member records' permission: without it, no type names and no type filter.
+  const canOpenMember = holds(me, 'members.records.read');
+  const types = useMemberTypes(true, canOpenMember);
   const branches = useApiQuery<BranchListResponse>({ queryKey: ['branches', { includeArchived: false }], path: 'branches', staleTime: 60_000 });
   const classes = useApiQuery<LoanClassesResponse>({ queryKey: ['circulation', 'loans', 'classes'], path: 'circulation/loans/classes', staleTime: 60_000 });
   // Beranda's "due within two days" line opens the second tab (`?tab=due_soon`).
@@ -74,7 +77,6 @@ export function OverdueScreen() {
   const [draft, setDraft] = useState<Filters>(NO_FILTERS);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const canServe = holds(me, 'circulation.desk.use') || Object.values(me?.authenticated === true ? me.branchPermissions : {}).some((p) => p.includes('circulation.desk.use'));
-  const canOpenMember = holds(me, 'members.records.read');
   const overdue = tab === 'overdue';
 
   // The typed filters apply a moment after the last key; the lists at once (see `pick`).
@@ -244,16 +246,18 @@ export function OverdueScreen() {
             ))}
           </select>
         </FilterField>
-        <FilterField id={`${ids}-type`} label={t('circulation.overdue.type')}>
-          <select id={`${ids}-type`} className={SELECT_CLASS} value={draft.memberTypeId} onChange={(e) => pick({ ...draft, memberTypeId: e.target.value })}>
-            <option value="">{t('circulation.overdue.all_types')}</option>
-            {(types.data?.items ?? []).map((type) => (
-              <option key={type.id} value={type.id}>
-                {typeName(type)}
-              </option>
-            ))}
-          </select>
-        </FilterField>
+        {canOpenMember && (
+          <FilterField id={`${ids}-type`} label={t('circulation.overdue.type')}>
+            <select id={`${ids}-type`} className={SELECT_CLASS} value={draft.memberTypeId} onChange={(e) => pick({ ...draft, memberTypeId: e.target.value })}>
+              <option value="">{t('circulation.overdue.all_types')}</option>
+              {(types.data?.items ?? []).map((type) => (
+                <option key={type.id} value={type.id}>
+                  {typeName(type)}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+        )}
         {(branches.data?.items.length ?? 0) > 1 && (
           <FilterField id={`${ids}-branch`} label={t('circulation.overdue.branch')}>
             <select id={`${ids}-branch`} className={SELECT_CLASS} value={draft.branchId} onChange={(e) => pick({ ...draft, branchId: e.target.value })}>
