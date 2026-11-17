@@ -148,13 +148,13 @@ function PopulationForm({ ctx, saving }: { ctx: TabContext; saving: PeriodSaving
   };
 
   return (
-    <form noValidate onSubmit={submit} className="flex max-w-3xl flex-col gap-6">
+    <form noValidate onSubmit={submit} className="grid max-w-5xl">
       <ReadOnlyNote ctx={ctx} />
       <StaleNote values={form} />
       <FormSection title={t('accreditation.workspace.population.section.population')} hint={t('accreditation.workspace.population.section.population_hint')}>
         {POPULATION.map(number)}
         <CheckField
-          className="sm:col-span-2"
+          className="sm:col-span-full"
           label={t('accreditation.workspace.population.all_registered')}
           hint={t('accreditation.workspace.population.all_registered_hint')}
           checked={values.allRegisteredConfirmed}
@@ -164,7 +164,7 @@ function PopulationForm({ ctx, saving }: { ctx: TabContext; saving: PeriodSaving
       </FormSection>
       <FormSection title={t('accreditation.workspace.population.section.facilities')}>{FACILITIES.map(number)}</FormSection>
       <FormSection title={t('accreditation.workspace.population.section.services')}>
-        <div role="group" aria-label={t('accreditation.workspace.population.services')} className="grid gap-2 sm:col-span-2 sm:grid-cols-2">
+        <div role="group" aria-label={t('accreditation.workspace.population.services')} className="grid gap-2 sm:col-span-full sm:grid-cols-2">
           {SERVICE_CODES.map((code) => (
             <CheckField
               key={code}
@@ -177,7 +177,7 @@ function PopulationForm({ ctx, saving }: { ctx: TabContext; saving: PeriodSaving
             />
           ))}
         </div>
-        {errorOf('services') !== undefined && <p className="text-sm text-destructive sm:col-span-2">{t(errorOf('services') as TKey)}</p>}
+        {errorOf('services') !== undefined && <p className="text-meta font-semibold text-bad sm:col-span-full">{t(errorOf('services') as TKey)}</p>}
         <TextField
           type="url"
           label={t('accreditation.workspace.population.external_url')}

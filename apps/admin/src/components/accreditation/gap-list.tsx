@@ -16,18 +16,18 @@ export function GapList({ gaps }: { gaps: ScoreView['gaps'] }): JSX.Element {
   const titleId = useId();
   const shown = gaps.slice(0, GAPS_SHOWN);
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3">
-      <h3 id={titleId} className="font-semibold">
+    <section aria-labelledby={titleId} className="grid gap-3">
+      <h3 id={titleId} className="text-base font-bold">
         {t('accreditation.workspace.gaps.title')}
       </h3>
       {shown.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('accreditation.workspace.gaps.none')}</p>
       ) : (
-        <ol className="grid gap-2">
+        <ol className="grid border-t">
           {shown.map((g) => (
-            <li key={g.code} className="grid gap-0.5 rounded-md border px-3 py-2 text-sm">
+            <li key={g.code} className="grid gap-0.5 border-b py-2 text-sm">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="font-medium">{officialLabel(t, g.officialNo, g.component)}</span>
+                <span className="font-semibold">{officialLabel(t, g.officialNo, g.component)}</span>
                 <span className="text-muted-foreground tabular-nums">
                   {t('accreditation.workspace.gaps.points', { gap: f.decimal(roundGap(g.gap)) })}
                 </span>

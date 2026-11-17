@@ -2,7 +2,6 @@ import { TrainingBody, TrainingPatchBody, type StaffView, type TrainingView } fr
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import { useQueryClient } from '@tanstack/react-query';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
-import { PlusIcon } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -28,7 +27,7 @@ import {
 } from './register-table';
 
 /**
- * The trainings of one staff member (continuing professional development), inside that person's dialog: a table, an
+ * The trainings of one staff member (continuing professional development), inside that person's panel: a table, an
  * inline form to add or edit one (`POST accreditation/staff/:id/trainings`, `PATCH accreditation/trainings/:id`) with
  * its certificate, and archive after a confirmation (`DELETE accreditation/trainings/:id`). The trainings come
  * embedded in the staff list, so every write reads that list again.
@@ -90,11 +89,11 @@ function TrainingForm({
     <form
       noValidate
       aria-label={t(training === null ? 'accreditation.registers.trainings.add' : 'accreditation.registers.trainings.edit')}
-      className="grid gap-4 rounded-md border bg-muted/30 p-4"
+      className="grid gap-4 rounded-lg border bg-layer p-4"
       onSubmit={(e) => void submit(e)}>
       <ProblemAlert error={problem} />
       <RootError message={errors.root?.['server']?.message} />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
         <Field label={t('accreditation.registers.trainings.field.title')} error={errors.title} className="sm:col-span-2">
           {(c) => <Input {...c} autoComplete="off" maxLength={191} {...form.register('title')} />}
         </Field>
@@ -116,12 +115,12 @@ function TrainingForm({
         error={fileError}
         disabled={false}
       />
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <Button type="button" variant="outline" onClick={onCancel}>
-          {t('form.cancel')}
-        </Button>
-        <Button type="submit" disabled={isSubmitting}>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" size="sm" disabled={isSubmitting}>
           {isSubmitting ? t('form.saving') : t('accreditation.registers.trainings.save')}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+          {t('form.cancel')}
         </Button>
       </div>
     </form>
@@ -131,7 +130,7 @@ function TrainingForm({
 const features = tableFeatures({});
 const column = createColumnHelper<typeof features, TrainingView>();
 
-/** The trainings of `staff` (its dialog): the table, the inline form, the archive confirmation. */
+/** The trainings of `staff` (in its panel): the table, the inline form, the archive confirmation. */
 export function TrainingsPanel({ staff, canManage }: { staff: StaffView; canManage: boolean }) {
   const t = useT();
   const queryClient = useQueryClient();
@@ -164,7 +163,7 @@ export function TrainingsPanel({ staff, canManage }: { staff: StaffView; canMana
         header: t('accreditation.registers.trainings.col.title'),
         cell: (info) => (
           <span className="grid">
-            <span className="font-medium">{info.row.original.title}</span>
+            <span className="font-semibold">{info.row.original.title}</span>
             {info.row.original.organizer !== null && <span className="text-muted-foreground">{info.row.original.organizer}</span>}
           </span>
         ),
@@ -191,7 +190,7 @@ export function TrainingsPanel({ staff, canManage }: { staff: StaffView; canMana
           <span className="flex flex-wrap gap-1 whitespace-nowrap">
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               aria-label={t('accreditation.registers.trainings.action.edit_named', { name: info.row.original.title })}
               onClick={() => {
@@ -202,7 +201,7 @@ export function TrainingsPanel({ staff, canManage }: { staff: StaffView; canMana
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               aria-label={t('accreditation.registers.trainings.action.archive_named', { name: info.row.original.title })}
               onClick={() => setArchiving(info.row.original)}>
@@ -221,7 +220,7 @@ export function TrainingsPanel({ staff, canManage }: { staff: StaffView; canMana
     <section aria-labelledby={headingId} className="grid gap-3 border-t pt-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="grid gap-1">
-          <h3 id={headingId} className="text-base font-semibold">
+          <h3 id={headingId} className="text-base font-bold">
             {t('accreditation.registers.trainings.title')}
           </h3>
           <p className="text-sm text-muted-foreground">{t('accreditation.registers.trainings.intro', { name: staff.name })}</p>
@@ -235,7 +234,6 @@ export function TrainingsPanel({ staff, canManage }: { staff: StaffView; canMana
               setNotice(null);
               setEditing({ id: null });
             }}>
-            <PlusIcon aria-hidden="true" />
             {t('accreditation.registers.trainings.add')}
           </Button>
         )}

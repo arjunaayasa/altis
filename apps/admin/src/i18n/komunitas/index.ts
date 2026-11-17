@@ -33,6 +33,8 @@ import { DESK_MEMBERS_UI_EN, DESK_MEMBERS_UI_ID } from './desk-members-ui';
 import { STAFF_DATA_UI_EN, STAFF_DATA_UI_ID } from './staff-data-ui';
 // ---- Komunitas (the remaining Layanan and Anggota screens' layout) ----
 import { SERVICES_UI_EN, SERVICES_UI_ID } from './services-ui';
+// ---- Komunitas (report, accreditation and page screens' layout) ----
+import { REPORTS_UI_EN, REPORTS_UI_ID } from './reports-ui';
 
 // The admin copy of reports and accreditation, members and circulation: one file per area, each owned by the task that builds its screens,
 // joined here and spread once into ADMIN_ID/ADMIN_EN (i18n/id.ts, i18n/en.ts), so that no later task edits those
@@ -120,6 +122,8 @@ export const KOMUNITAS_AREAS_ID = Object.freeze({
   staffDataUi: STAFF_DATA_UI_ID,
   // ---- Komunitas (the remaining Layanan and Anggota screens' layout) ----
   servicesUi: SERVICES_UI_ID,
+  // ---- Komunitas (report, accreditation and page screens' layout) ----
+  reportsUi: REPORTS_UI_ID,
 });
 
 /** Every area's English copy, in the same order. */
@@ -160,6 +164,8 @@ export const KOMUNITAS_AREAS_EN: { readonly [A in keyof typeof KOMUNITAS_AREAS_I
   staffDataUi: STAFF_DATA_UI_EN,
   // ---- Komunitas (the remaining Layanan and Anggota screens' layout) ----
   servicesUi: SERVICES_UI_EN,
+  // ---- Komunitas (report, accreditation and page screens' layout) ----
+  reportsUi: REPORTS_UI_EN,
 });
 
 /** The Indonesian copy of reports and accreditation, spread into ADMIN_ID. */
@@ -188,6 +194,7 @@ export const KOMUNITAS_ID = {
   ...DESK_MEMBERS_UI_ID,
   ...STAFF_DATA_UI_ID,
   ...SERVICES_UI_ID,
+  ...REPORTS_UI_ID,
 } as const;
 
 /** The English copy of reports and accreditation, spread into ADMIN_EN (typed against {@link KOMUNITAS_ID}). */
@@ -216,4 +223,5 @@ export const KOMUNITAS_EN: Record<keyof typeof KOMUNITAS_ID, string> = {
   ...DESK_MEMBERS_UI_EN,
   ...STAFF_DATA_UI_EN,
   ...SERVICES_UI_EN,
+  ...REPORTS_UI_EN,
 };

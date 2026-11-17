@@ -1,12 +1,10 @@
 import type { EvidenceMinutesListResponse } from '@altis/shared/api/accreditation';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import { useQueryClient } from '@tanstack/react-query';
-import { FileCheckIcon } from 'lucide-react';
 import { useId, useState, type FormEvent, type JSX } from 'react';
 import { Field, SELECT_CLASS } from '@/components/form-field';
-import { useReturnFocus } from '@/components/return-focus';
+import { InlinePanel } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT } from '@/i18n';
 import { holds } from '@/lib/access';
@@ -27,41 +25,32 @@ const MINUTES_PATH = 'accreditation/evidence/stocktake-minutes';
 export function EvidenceMinutes({ periodId, indicatorCode, onDone }: { periodId: string; indicatorCode: string; onDone(): void }): JSX.Element {
   const t = useT();
   const me = useMe();
-  const focus = useReturnFocus();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   if (!holds(me, 'accreditation.workspace.manage')) return <></>;
   return (
     <>
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <FileCheckIcon aria-hidden="true" />
+      <Button type="button" variant="outline" size="sm" aria-expanded={open} onClick={() => (busy ? undefined : setOpen((o) => !o))}>
         {t('accreditation.workspace.evidence.minutes.open')}
       </Button>
-      <Dialog open={open} onOpenChange={(next) => (next || busy ? undefined : setOpen(false))}>
-        {open && (
-          <DialogContent
-            closeLabel={t('accreditation.registers.close')}
-            onOpenAutoFocus={focus.onOpenAutoFocus}
-            onCloseAutoFocus={focus.onCloseAutoFocus}
-            className="sm:max-w-lg">
-            <MinutesForm
-              periodId={periodId}
-              indicatorCode={indicatorCode}
-              onBusy={setBusy}
-              onCancel={() => setOpen(false)}
-              onStored={() => {
-                setOpen(false);
-                onDone();
-              }}
-            />
-          </DialogContent>
-        )}
-      </Dialog>
+      {open && (
+        <MinutesForm
+          periodId={periodId}
+          indicatorCode={indicatorCode}
+          busy={busy}
+          onBusy={setBusy}
+          onCancel={() => setOpen(false)}
+          onStored={() => {
+            setOpen(false);
+            onDone();
+          }}
+        />
+      )}
     </>
   );
 }
 
-function MinutesForm(props: { periodId: string; indicatorCode: string; onBusy(busy: boolean): void; onCancel(): void; onStored(): void }) {
+function MinutesForm(props: { periodId: string; indicatorCode: string; busy: boolean; onBusy(busy: boolean): void; onCancel(): void; onStored(): void }) {
   const t = useT();
   const locale = useLocale();
   const queryClient = useQueryClient();
@@ -101,12 +90,12 @@ function MinutesForm(props: { periodId: string; indicatorCode: string; onBusy(bu
   };
 
   return (
-    <>
-      <DialogHeader>
-        <DialogTitle>{t('accreditation.workspace.evidence.minutes.title')}</DialogTitle>
-        <DialogDescription>{t('accreditation.workspace.evidence.minutes.hint')}</DialogDescription>
-      </DialogHeader>
-      <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
+    <InlinePanel
+      title={t('accreditation.workspace.evidence.minutes.title')}
+      onSubmit={(e) => void submit(e)}
+      {...(props.busy ? {} : { onCancel: props.onCancel })}
+      className="w-full max-w-xl basis-full">
+      <p className="text-sm text-muted-foreground">{t('accreditation.workspace.evidence.minutes.hint')}</p>
         {sessions.isSuccess && items.length === 0 ? (
           <p role="status" className="text-sm text-muted-foreground">
             {t('accreditation.workspace.evidence.minutes.none')}
@@ -139,24 +128,23 @@ function MinutesForm(props: { periodId: string; indicatorCode: string; onBusy(bu
           {(c) => <Input {...c} autoComplete="off" maxLength={CAPTION_MAX} disabled={saving} value={caption} onChange={(e) => setCaption(e.target.value)} />}
         </Field>
         {sessions.isError && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-meta font-semibold text-bad">
             {problemText(t, sessions.error)}
           </p>
         )}
         {error !== null && (
-          <p id={errorId} role="alert" className="text-sm text-destructive">
+          <p id={errorId} role="alert" className="text-meta font-semibold text-bad">
             {error}
           </p>
         )}
-        <DialogFooter>
-          <Button type="button" variant="outline" disabled={saving} onClick={props.onCancel}>
-            {t('form.cancel')}
-          </Button>
-          <Button type="submit" disabled={saving || items.length === 0}>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" size="sm" disabled={saving || items.length === 0}>
             {t('accreditation.workspace.evidence.minutes.submit')}
           </Button>
-        </DialogFooter>
-      </form>
-    </>
+          <Button type="button" size="sm" variant="outline" disabled={saving} onClick={props.onCancel}>
+            {t('form.cancel')}
+          </Button>
+        </div>
+    </InlinePanel>
   );
 }

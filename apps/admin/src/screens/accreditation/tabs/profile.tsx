@@ -5,7 +5,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent, type JSX } from 'react';
 import { EvidenceUpload } from '@/components/accreditation/evidence-upload';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { Badge, CheckField, ProblemAlert } from '@/components/form-field';
+import { CheckField, ProblemAlert } from '@/components/form-field';
+import { Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT, type TKey } from '@/i18n';
 import { api } from '@/lib/api';
@@ -49,7 +50,7 @@ export function ProfileTab(props: { periodId: string }): JSX.Element {
 function ProfilePanel({ ctx }: { ctx: TabContext }) {
   const saving = usePeriodSave();
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <div className="grid max-w-5xl gap-6">
       <ProfileForm key={ctx.period.id} ctx={ctx} saving={saving} />
       <ProfilePhotos ctx={ctx} saving={saving} />
     </div>
@@ -257,7 +258,7 @@ function ProfileForm({ ctx, saving }: { ctx: TabContext; saving: PeriodSaving })
   );
 
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-6">
+    <form noValidate onSubmit={submit} className="grid">
       <ReadOnlyNote ctx={ctx} />
       <StaleNote values={form} />
       <FormSection title={t('accreditation.workspace.profile.section.period')}>
@@ -316,7 +317,7 @@ function ProfileForm({ ctx, saving }: { ctx: TabContext; saving: PeriodSaving })
         {text('profileVideoUrl')}
       </FormSection>
       <FormSection title={t('accreditation.workspace.profile.section.website')} hint={t('accreditation.workspace.profile.features_hint')}>
-        <div role="group" aria-label={t('accreditation.workspace.profile.features')} className="grid gap-2 sm:col-span-2 sm:grid-cols-2">
+        <div role="group" aria-label={t('accreditation.workspace.profile.features')} className="grid gap-2 sm:col-span-full sm:grid-cols-2">
           {L12_FEATURES.map((feature) => (
             <CheckField
               key={feature}
@@ -418,26 +419,26 @@ function ProfilePhotos({ ctx, saving }: { ctx: TabContext; saving: PeriodSaving 
   };
 
   return (
-    <section aria-label={t('accreditation.workspace.profile.section.photos')} className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground">
-      <h3 className="text-base font-semibold">{t('accreditation.workspace.profile.section.photos')}</h3>
-      <p className="text-sm text-muted-foreground">{t('accreditation.workspace.profile.photo_hint')}</p>
-      <ul className="grid gap-3 sm:grid-cols-2">
+    <section aria-label={t('accreditation.workspace.profile.section.photos')} className="grid gap-3 border-t pt-5">
+      <h3 className="text-base font-bold">{t('accreditation.workspace.profile.section.photos')}</h3>
+      <p className="max-w-[75ch] text-sm text-muted-foreground">{t('accreditation.workspace.profile.photo_hint')}</p>
+      <ul className="grid gap-x-8 border-t sm:grid-cols-2">
         {PHOTOS.map(({ slot, code, label }) => {
           const fileId = photos[slot] ?? null;
           const files = (evidence.data?.evidence ?? []).filter((e) => e.evidenceCode === code);
           const current = files.find((e) => e.fileId === fileId);
           const unused = files.filter((e) => e.fileId !== fileId);
           return (
-            <li key={slot} className="grid gap-2 rounded-md border px-3 py-2 text-sm">
+            <li key={slot} className="grid content-start gap-2 border-b py-3 text-sm">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium">{t(label)}</span>
-                <Badge tone={fileId === null ? 'warning' : 'info'}>
+                <span className="font-semibold">{t(label)}</span>
+                <Tag tone={fileId === null ? 'warn' : 'ok'}>
                   {t(fileId === null ? 'accreditation.workspace.evidence.absent' : 'accreditation.workspace.evidence.present')}
-                </Badge>
+                </Tag>
               </div>
               {fileId !== null && (
                 <div className="flex flex-wrap items-center gap-2">
-                  <a href={`/files/${encodeURIComponent(fileId)}`} className="text-primary underline-offset-4 hover:underline">
+                  <a href={`/files/${encodeURIComponent(fileId)}`} className="font-semibold text-accent-text underline-offset-4 hover:underline">
                     {current?.fileName ?? fileId}
                   </a>
                   {current !== undefined && deleteButton(current)}
@@ -448,7 +449,7 @@ function ProfilePhotos({ ctx, saving }: { ctx: TabContext; saving: PeriodSaving 
                   {unused.map((file) => (
                     <li key={file.id} className="grid gap-1">
                       <span className="flex flex-wrap items-center gap-2">
-                        <a href={`/files/${encodeURIComponent(file.fileId)}`} className="text-primary underline-offset-4 hover:underline">
+                        <a href={`/files/${encodeURIComponent(file.fileId)}`} className="font-semibold text-accent-text underline-offset-4 hover:underline">
                           {file.fileName}
                         </a>
                         {deleteButton(file)}

@@ -3,7 +3,7 @@ import { useId, type JSX } from 'react';
 import { Disclaimer } from '@/components/accreditation/disclaimer';
 import { GapList } from '@/components/accreditation/gap-list';
 import { ScoreBars } from '@/components/accreditation/score-bars';
-import { Badge, ProblemAlert } from '@/components/form-field';
+import { ErrorState, LoadingState, StatusText, Tag } from '@/components/layout';
 import { useT } from '@/i18n';
 import { componentLabel, keyText, useFormats, useResults } from '../data';
 import { TabState } from '../tab-state';
@@ -31,20 +31,14 @@ function Summary({ periodId, scored }: { periodId: string; scored: boolean }) {
   const results = useResults(periodId);
   const r = results.data;
   if (r === undefined) {
-    return results.isError ? (
-      <ProblemAlert error={results.error} />
-    ) : (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('shell.loading')}
-      </p>
-    );
+    return results.isError ? <ErrorState error={results.error} onRetry={() => void results.refetch()} retrying={results.isFetching} /> : <LoadingState />;
   }
   if (r.computedAt === null && r.prerequisites === null) {
     const running = r.status === 'queued' || r.status === 'running';
     return <p className="text-sm">{t(running ? 'accreditation.workspace.summary.running' : 'accreditation.workspace.summary.missing')}</p>;
   }
   return (
-    <div className="flex flex-col gap-6">
+    <div className="grid max-w-5xl gap-6">
       <ResultsState results={r} />
       {r.prerequisites !== null && <Prerequisites prerequisites={r.prerequisites} />}
       {!scored || r.score === null ? (
@@ -72,7 +66,13 @@ function ResultsState({ results }: { results: ResultsView }) {
       </p>
     );
   }
-  if (results.status === 'failed') return <p className="text-sm text-destructive">{t('accreditation.workspace.summary.failed')}</p>;
+  if (results.status === 'failed') {
+    return (
+      <p className="text-sm">
+        <StatusText tone="bad">{t('accreditation.workspace.summary.failed')}</StatusText>
+      </p>
+    );
+  }
   return null;
 }
 
@@ -86,16 +86,20 @@ function Prerequisites({ prerequisites: p }: { prerequisites: PrerequisitesView 
     { key: 'founding_decree', text: t('accred.prereq.founding_decree'), pass: p.foundingDecree.pass },
   ];
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground">
-      <h3 id={titleId} className="font-semibold">
+    <section aria-labelledby={titleId} className="grid gap-3">
+      <h3 id={titleId} className="text-base font-bold">
         {t('accreditation.workspace.prereq.title')}
       </h3>
-      {!p.met && <p className="font-medium text-destructive">{t('accred.prereq.failed')}</p>}
-      <ul className="grid gap-2 text-sm">
+      {!p.met && (
+        <p className="text-sm">
+          <StatusText tone="bad">{t('accred.prereq.failed')}</StatusText>
+        </p>
+      )}
+      <ul className="grid border-t text-sm">
         {checks.map((c) => (
-          <li key={c.key} className="flex flex-wrap items-center justify-between gap-2">
+          <li key={c.key} className="flex flex-wrap items-center justify-between gap-2 border-b py-2">
             <span>{c.text}</span>
-            <Badge tone={c.pass ? 'info' : 'danger'}>{t(c.pass ? 'accreditation.workspace.prereq.pass' : 'accreditation.workspace.prereq.fail')}</Badge>
+            <Tag tone={c.pass ? 'ok' : 'bad'}>{t(c.pass ? 'accreditation.workspace.prereq.pass' : 'accreditation.workspace.prereq.fail')}</Tag>
           </li>
         ))}
       </ul>
@@ -114,14 +118,14 @@ function Estimate({ score, met }: { score: ScoreView; met: boolean }) {
   const titleId = useId();
   const kind = score.na === null ? 'range' : met ? 'single' : 'exercise';
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-2">
-      <h3 id={titleId} className="font-semibold">
+    <section aria-labelledby={titleId} className="grid gap-2">
+      <h3 id={titleId} className="text-base font-bold">
         {t('accreditation.workspace.score.title')}
       </h3>
-      <div data-score={kind} className="flex flex-col gap-1 rounded-lg border bg-card p-4 text-card-foreground">
+      <div data-score={kind} className="grid gap-1">
         {kind === 'range' && (
           <>
-            <p className="text-2xl font-semibold tabular-nums">
+            <p className="text-2xl font-bold tabular-nums">
               {t('accreditation.workspace.score.range', { low: f.decimal(score.naLow), high: f.decimal(score.naHigh) })}
             </p>
             <p className="text-sm">{t('accreditation.workspace.score.answered', { answered: score.answered, total: score.total })}</p>
@@ -130,9 +134,9 @@ function Estimate({ score, met }: { score: ScoreView; met: boolean }) {
         )}
         {kind === 'single' && score.na !== null && (
           <>
-            <p className="text-2xl font-semibold tabular-nums">{t('accreditation.workspace.score.single', { na: f.decimal(score.na) })}</p>
+            <p className="text-2xl font-bold tabular-nums">{t('accreditation.workspace.score.single', { na: f.decimal(score.na) })}</p>
             {score.grade !== null && (
-              <p className="text-sm font-medium">
+              <p className="text-sm font-semibold">
                 {t('accreditation.workspace.score.grade', { grade: score.grade, label: t(`accred.predicate.${score.grade}`) })}
               </p>
             )}
@@ -140,8 +144,8 @@ function Estimate({ score, met }: { score: ScoreView; met: boolean }) {
         )}
         {kind === 'exercise' && score.na !== null && (
           <>
-            <p className="text-sm font-medium">{t('accred.na.exercise')}</p>
-            <p className="text-2xl font-semibold tabular-nums">{f.decimal(score.na)}</p>
+            <p className="text-sm font-semibold">{t('accred.na.exercise')}</p>
+            <p className="text-2xl font-bold tabular-nums">{f.decimal(score.na)}</p>
           </>
         )}
       </div>
@@ -154,8 +158,8 @@ function MissingEvidence({ missing }: { missing: ResultsView['missingEvidence'] 
   const titleId = useId();
   const groups = missing.filter((g) => g.items.length > 0);
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3">
-      <h3 id={titleId} className="font-semibold">
+    <section aria-labelledby={titleId} className="grid gap-3">
+      <h3 id={titleId} className="text-base font-bold">
         {t('accreditation.workspace.evidence_missing.title')}
       </h3>
       {groups.length === 0 ? (
@@ -164,7 +168,7 @@ function MissingEvidence({ missing }: { missing: ResultsView['missingEvidence'] 
         <div className="grid gap-3">
           {groups.map((g) => (
             <div key={g.component} className="grid gap-1 text-sm">
-              <h4 className="font-medium">{componentLabel(t, g.component)}</h4>
+              <h4 className="font-semibold">{componentLabel(t, g.component)}</h4>
               <ul className="grid list-disc gap-0.5 pl-5">
                 {g.items.map((item) => (
                   <li key={`${item.indicatorCode}.${item.evidenceCode}`}>

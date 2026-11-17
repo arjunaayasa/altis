@@ -1,7 +1,6 @@
 import type { PeriodSummaryView } from '@altis/shared/api/accreditation';
 import { useId, type JSX } from 'react';
-import { SELECT_CLASS } from '@/components/form-field';
-import { Label } from '@/components/ui/label';
+import { Field, SELECT_CLASS } from '@/components/form-field';
 import { useT } from '@/i18n';
 import { useFormats } from '@/screens/accreditation/data';
 
@@ -22,9 +21,8 @@ export function PeriodPicker({
   const f = useFormats();
   const id = useId();
   return (
-    <div className="grid gap-1">
-      <Label htmlFor={id}>{t('accreditation.picker.label')}</Label>
-      <select id={id} className={`${SELECT_CLASS} sm:w-96`} value={value} onChange={(e) => onChange(e.target.value)}>
+    <Field id={id} label={t('accreditation.picker.label')} className="max-w-md">
+      <select id={id} className={SELECT_CLASS} value={value} onChange={(e) => onChange(e.target.value)}>
         {periods.map((p) => {
           const label = t('accreditation.picker.option', { name: p.name, from: f.day(p.startsOn), to: f.day(p.endsOn) });
           return (
@@ -34,6 +32,6 @@ export function PeriodPicker({
           );
         })}
       </select>
-    </div>
+    </Field>
   );
 }

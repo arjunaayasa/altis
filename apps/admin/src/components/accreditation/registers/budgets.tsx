@@ -208,13 +208,13 @@ function BudgetForm({ row, canManage, onSaved, onCancel }: RegisterFormProps<Bud
     <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
       <ProblemAlert error={problem} />
       <RootError message={errors.root?.['server']?.message} />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
         <Field label={t('accreditation.registers.budgets.field.year')} error={errors.year}>
           {(c) => <Input {...c} type="number" inputMode="numeric" min={1900} max={2100} step={1} disabled={disabled} {...form.register('year')} />}
         </Field>
         <Field label={t('accreditation.registers.budgets.field.currency')} hint={t('accreditation.registers.budgets.field.currency_hint')} error={errors.currency}>
           {(c) => (
-            <Input {...c} className="w-24 font-mono uppercase" maxLength={3} autoComplete="off" spellCheck={false} disabled={disabled} {...form.register('currency')} />
+            <Input {...c} className="w-24 uppercase" maxLength={3} autoComplete="off" spellCheck={false} disabled={disabled} {...form.register('currency')} />
           )}
         </Field>
         {AMOUNT_FIELDS.map((f) => (
@@ -237,7 +237,7 @@ export function BudgetsRegister() {
   const locale = useLocale();
   const money = (r: BudgetView, minor: number | null) => <span className="whitespace-nowrap tabular-nums">{formatMoney(minor, r.currency, locale)}</span>;
   const columns: RegisterColumn<BudgetView>[] = [
-    { id: 'year', header: t('accreditation.registers.budgets.col.year'), cell: (r) => <span className="font-medium tabular-nums">{r.year}</span> },
+    { id: 'year', header: t('accreditation.registers.budgets.col.year'), cell: (r) => <span className="font-semibold tabular-nums">{r.year}</span> },
     { id: 'library', header: t('accreditation.registers.budgets.col.library'), cell: (r) => money(r, r.libraryMinor) },
     { id: 'parent', header: t('accreditation.registers.budgets.col.parent'), cell: (r) => money(r, r.parentMinor) },
     { id: 'parentNonpersonnel', header: t('accreditation.registers.budgets.col.parent_nonpersonnel'), cell: (r) => money(r, r.parentNonpersonnelMinor) },

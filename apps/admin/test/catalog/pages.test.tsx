@@ -113,7 +113,9 @@ describe('the list of pages and news', () => {
     expect(within(news.closest('tr')!).getByText('/berita/lomba')).toBeTruthy();
     expect(screen.getByRole('link', { name: t('pages.add.news') }).getAttribute('href')).toBe('/admin/opac/pages/new?kind=news');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Arsipkan Lomba menulis' }));
+    // The row's actions are in its ⋯ menu.
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Tindakan untuk Lomba menulis' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Arsipkan Lomba menulis' }));
     const dialog = await screen.findByRole('alertdialog');
     fireEvent.click(within(dialog).getByRole('button', { name: t('pages.action.archive') }));
     await screen.findByText('“Lomba menulis” diarsipkan.');

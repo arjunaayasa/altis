@@ -2,20 +2,20 @@ import { vocabKey } from '@altis/shared';
 import type { InstrumentView, PeriodView } from '@altis/shared/api/accreditation';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { PlusIcon } from 'lucide-react';
 import type { ComponentType, JSX } from 'react';
 import { PeriodPicker } from '@/components/accreditation/period-picker';
 import { StatusLine } from '@/components/accreditation/status-line';
 import { UnsavedChangesDialog } from '@/components/accreditation/unsaved-changes';
-import { Badge, ProblemAlert } from '@/components/form-field';
+import { EmptyState, ErrorState, LoadingState, PageHead, Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
 import { useT, type TKey } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError } from '@/lib/api';
 import { useUnsavedNavigationQuestion } from '@/lib/dirty-navigation';
 import { useMe } from '@/lib/me';
 import { useRealtime } from '@/lib/realtime';
+import { cn } from '@/lib/utils';
 import { accreditationEventKeys, instrumentOf, useFormats, useInstruments, usePeriod, usePeriods } from './data';
 import { ACCREDITATION_TABS, isAccreditationTab, validateAccreditationSearch, type AccreditationTab } from './search';
 import { HistoryTab } from './tabs/history';
@@ -45,7 +45,7 @@ import { UsageTab } from './tabs/usage';
  *
  * A tab shows only while it is open, so another tab, another period or a link out of the workspace unmounts what it
  * holds. While one of its forms has unsaved changes (Profil, Populasi & Sarana, the usage grid, an open register
- * dialog), such a navigation first asks "Perubahan belum disimpan" (lib/dirty-navigation.ts).
+ * panel), such a navigation first asks "Perubahan belum disimpan" (lib/dirty-navigation.ts).
  */
 
 const BASE = '/admin/accreditation';
@@ -102,40 +102,27 @@ export function AccreditationScreen(): JSX.Element {
   };
 
   const header = (
-    <header className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold">{t('accreditation.title')}</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">{t('accreditation.description')}</p>
-        </div>
-        {canManage && (list?.length ?? 0) > 0 && (
-          <Button asChild variant="outline">
-            <Link to={`${BASE}/new`}>
-              <PlusIcon aria-hidden="true" />
-              {t('accreditation.new_period')}
-            </Link>
-          </Button>
-        )}
-      </div>
+    <>
+      <PageHead
+        title={t('accreditation.title')}
+        intro={t('accreditation.description')}
+        actions={
+          canManage && (list?.length ?? 0) > 0 ? (
+            <Button asChild variant="outline">
+              <Link to={`${BASE}/new`}>{t('accreditation.new_period')}</Link>
+            </Button>
+          ) : undefined
+        }
+      />
       {list !== undefined && list.length > 0 && <PeriodPicker periods={list} value={periodId} onChange={(id) => open(id, search.tab)} />}
-    </header>
+    </>
   );
 
   if (list === undefined) {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="grid gap-6">
         {header}
-        {periods.isError ? (
-          <ProblemAlert error={periods.error}>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => void periods.refetch()}>
-              {t('table.retry')}
-            </Button>
-          </ProblemAlert>
-        ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
-        )}
+        {periods.isError ? <ErrorState error={periods.error} onRetry={() => void periods.refetch()} retrying={periods.isFetching} /> : <LoadingState />}
         {unsavedDialog}
       </div>
     );
@@ -143,20 +130,19 @@ export function AccreditationScreen(): JSX.Element {
 
   if (list.length === 0 && given === undefined) {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="grid gap-6">
         {header}
-        <div className="flex max-w-xl flex-col items-start gap-3 rounded-lg border bg-card p-6 text-card-foreground">
-          <h2 className="text-lg font-semibold">{t('accreditation.empty.title')}</h2>
-          <p className="text-sm text-muted-foreground">{t(canManage ? 'accreditation.empty.text' : 'accreditation.empty.read_only')}</p>
-          {canManage && (
-            <Button asChild>
-              <Link to={`${BASE}/new`}>
-                <PlusIcon aria-hidden="true" />
-                {t('accreditation.new_period')}
-              </Link>
-            </Button>
-          )}
-        </div>
+        <EmptyState
+          title={t('accreditation.empty.title')}
+          actions={
+            canManage ? (
+              <Button asChild>
+                <Link to={`${BASE}/new`}>{t('accreditation.new_period')}</Link>
+              </Button>
+            ) : undefined
+          }>
+          <p>{t(canManage ? 'accreditation.empty.text' : 'accreditation.empty.read_only')}</p>
+        </EmptyState>
         {unsavedDialog}
       </div>
     );
@@ -167,13 +153,11 @@ export function AccreditationScreen(): JSX.Element {
   if (p === undefined) {
     const missing = period.error instanceof ApiError && period.error.code === 'NOT_FOUND';
     body = missing ? (
-      <p className="text-sm">{t('accreditation.not_found')}</p>
+      <EmptyState title={t('accreditation.not_found')} />
     ) : period.isError ? (
-      <ProblemAlert error={period.error} />
+      <ErrorState error={period.error} onRetry={() => void period.refetch()} retrying={period.isFetching} />
     ) : (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('shell.loading')}
-      </p>
+      <LoadingState />
     );
   } else {
     body = (
@@ -183,9 +167,9 @@ export function AccreditationScreen(): JSX.Element {
         {/* Manual activation: a tab opens on a click or Enter/Space, not when it merely gets the focus (an arrow key,
             or the focus coming back to it when "Perubahan belum disimpan" is answered with Batal). */}
         <Tabs value={tab} activationMode="manual" onValueChange={(value) => isAccreditationTab(value) && value !== tab && open(p.id, value)}>
-          <TabsList aria-label={t('accreditation.tabs')} className="h-auto flex-wrap justify-start">
+          <TabsList aria-label={t('accreditation.tabs')} className={WRAPPING_TABS.list}>
             {ACCREDITATION_TABS.map((k) => (
-              <TabsTrigger key={k} value={k} className="flex-none">
+              <TabsTrigger key={k} value={k} className={cn('flex-none', WRAPPING_TABS.trigger)}>
                 {t(TAB_LABELS[k])}
               </TabsTrigger>
             ))}
@@ -193,7 +177,7 @@ export function AccreditationScreen(): JSX.Element {
           {ACCREDITATION_TABS.map((k) => {
             const Screen = TAB_SCREENS[k];
             return (
-              <TabsContent key={k} value={k} className="pt-2">
+              <TabsContent key={k} value={k} className="pt-4">
                 {k === tab && <Screen periodId={p.id} />}
               </TabsContent>
             );
@@ -204,7 +188,7 @@ export function AccreditationScreen(): JSX.Element {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="grid gap-6">
       {header}
       {body}
       {unsavedDialog}
@@ -217,19 +201,19 @@ function PeriodHeader({ period, instrument }: { period: PeriodView; instrument: 
   const t = useT();
   const f = useFormats();
   return (
-    <div className="flex flex-col gap-1 text-sm">
+    <div className="grid gap-1 text-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-lg font-semibold">{period.name}</h2>
-        <Badge tone={period.status === 'frozen' ? 'warning' : 'neutral'}>{t(vocabKey('period_status', period.status))}</Badge>
+        <h2 className="text-base font-bold">{period.name}</h2>
+        <Tag tone={period.status === 'frozen' ? 'warn' : 'neutral'}>{t(vocabKey('period_status', period.status))}</Tag>
       </div>
       {instrument === undefined ? (
         <p>{t('accreditation.instrument.unknown', { id: period.instrumentId })}</p>
       ) : (
         <p className="flex flex-wrap items-center gap-2">
           <span>{t('accreditation.instrument.line', { decree: instrument.decree, date: f.day(instrument.effectiveFrom) })}</span>
-          {instrument.sourceStatus === 'P-copy' && <Badge>{t('accred.source.copy')}</Badge>}
-          {instrument.sourceStatus === 'U' && <Badge>{t('accreditation.source.unverified')}</Badge>}
-          {!instrument.scored && <Badge>{t('accreditation.instrument.unscored')}</Badge>}
+          {instrument.sourceStatus === 'P-copy' && <Tag>{t('accred.source.copy')}</Tag>}
+          {instrument.sourceStatus === 'U' && <Tag>{t('accreditation.source.unverified')}</Tag>}
+          {!instrument.scored && <Tag>{t('accreditation.instrument.unscored')}</Tag>}
         </p>
       )}
       <p className="text-muted-foreground">
