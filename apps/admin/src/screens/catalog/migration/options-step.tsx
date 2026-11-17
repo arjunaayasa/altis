@@ -194,13 +194,10 @@ export function OptionsStep({
   }, [branches.data, active, fallback, value, onChange]);
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-4 rounded-lg border bg-card p-4">
-      <div className="flex flex-col gap-1">
-        <p className="text-xs text-muted-foreground">{t('catalog.migration.step', { n: 2 })}</p>
-        <h2 id={titleId} className="text-base font-semibold">
-          {t('catalog.migration.options.title')}
-        </h2>
-      </div>
+    <section aria-labelledby={titleId} className="grid max-w-4xl gap-4">
+      <h2 id={titleId} className="text-base font-bold">
+        {t('catalog.migration.options.title')}
+      </h2>
       {branches.isError && <ProblemAlert error={branches.error} />}
       <div className="grid gap-4 md:grid-cols-2">
         <Field label={t('catalog.migration.options.branch')} hint={t('catalog.migration.options.branch_hint')} error={errors.branchId}>
@@ -228,7 +225,7 @@ export function OptionsStep({
         </Field>
       </div>
       <fieldset className="grid gap-2">
-        <legend className="mb-1 text-sm font-medium">{t('catalog.migration.options.price')}</legend>
+        <legend className="mb-1 text-sm font-bold">{t('catalog.migration.options.price')}</legend>
         {PRICE_MODES.map((mode) => {
           const id = `${priceName}-${mode}`;
           return (
@@ -250,7 +247,7 @@ export function OptionsStep({
         })}
       </fieldset>
       <fieldset className="grid gap-2">
-        <legend className="mb-1 text-sm font-medium">{t('catalog.migration.options.catalog_mode')}</legend>
+        <legend className="mb-1 text-sm font-bold">{t('catalog.migration.options.catalog_mode')}</legend>
         {CATALOG_MODES.map((mode) => {
           const id = `${modeName}-${mode}`;
           return (
