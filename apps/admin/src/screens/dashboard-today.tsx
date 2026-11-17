@@ -92,17 +92,17 @@ function FigureCell({ figure }: { figure: Figure }) {
   const count = useCount();
   const body = (
     <>
-      <dt className="order-2 text-[13px] text-muted-foreground">{figure.label}</dt>
+      <dt className="order-2 text-meta text-muted-foreground">{figure.label}</dt>
       <dd className="order-1 text-2xl leading-tight font-bold tabular-nums">
         {figure.value === undefined ? (
-          <span className="inline-block h-6 w-12 animate-pulse rounded bg-muted align-middle motion-reduce:animate-none" aria-hidden="true" />
+          <span className="inline-block h-6 w-12 animate-pulse rounded bg-layer-2 align-middle motion-reduce:animate-none" aria-hidden="true" />
         ) : figure.value === null ? (
           '—'
         ) : (
           count(figure.value)
         )}
       </dd>
-      {figure.note !== null && <dd className="order-3 text-xs text-muted-foreground">{figure.note}</dd>}
+      {figure.note !== null && <dd className="order-3 text-xs text-faint">{figure.note}</dd>}
     </>
   );
   const cell = 'flex h-full flex-col gap-0.5 px-4 py-3.5';
@@ -113,7 +113,7 @@ function FigureCell({ figure }: { figure: Figure }) {
   ) : (
     <Link
       to={figure.to}
-      className={cn(cell, 'outline-none hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset')}
+      className={cn(cell, 'outline-none hover:bg-layer focus-visible:bg-layer focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset')}
       data-figure={figure.key}>
       {body}
     </Link>

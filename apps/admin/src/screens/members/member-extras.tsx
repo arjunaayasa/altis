@@ -239,7 +239,7 @@ export function MemberPhotoPanel({ member, canManage, onDone }: { member: Member
   return (
     <section className="grid gap-2" aria-label={t('members.tools.photo.title')}>
       {member.photoFileId === null ? (
-        <div className="flex aspect-[3/4] w-32 items-center justify-center rounded border bg-muted text-muted-foreground">
+        <div className="flex aspect-[3/4] w-32 items-center justify-center rounded border bg-layer-2 text-muted-foreground">
           <ImageIcon className="size-6" aria-hidden="true" />
           <span className="sr-only">{t('members.tools.photo.none')}</span>
         </div>
@@ -272,7 +272,7 @@ export function MemberPhotoPanel({ member, canManage, onDone }: { member: Member
         </div>
       )}
       {error !== null && (
-        <p role="alert" className="text-xs text-destructive">
+        <p role="alert" className="text-xs text-bad">
           {error}
         </p>
       )}
@@ -368,7 +368,7 @@ export function MemberPrivacyPanel({ member, onDone }: { member: MemberView; onD
           <Button size="sm" variant="outline" onClick={() => void download()}>
             {t('members.tools.privacy.export')}
           </Button>
-          <Button size="sm" variant="outline" className="text-destructive" onClick={() => setOpen(true)}>
+          <Button size="sm" variant="outline" className="text-bad" onClick={() => setOpen(true)}>
             {t('members.tools.privacy.anonymize')}
           </Button>
         </div>

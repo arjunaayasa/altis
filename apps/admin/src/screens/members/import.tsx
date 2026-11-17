@@ -124,7 +124,7 @@ function RunView({ run }: { run: MemberImportView | undefined }) {
     return (
       <div role="status" aria-busy="true" className="grid gap-1.5">
         <p className="text-sm">{t(run?.status === 'running' ? 'members.import.running' : 'members.import.queued')}</p>
-        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div className="h-1.5 overflow-hidden rounded-full bg-layer-2">
           <div className="h-full w-1/3 animate-pulse rounded-full bg-primary motion-reduce:animate-none" />
         </div>
       </div>
@@ -323,7 +323,7 @@ export function MemberImportScreen() {
             onDrop={onDrop}
             className={cn(
               'grid cursor-pointer justify-items-center gap-1.5 rounded-lg border border-dashed px-4 py-8 text-center has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring',
-              over ? 'border-primary bg-primary/10' : 'border-input bg-muted/50 hover:border-primary hover:bg-primary/10',
+              over ? 'border-primary bg-accent-soft' : 'border-input bg-layer hover:border-primary hover:bg-accent-soft',
               (!canRun || busy) && 'cursor-not-allowed opacity-60',
             )}>
             <strong>{t('members.import.drop')}</strong>

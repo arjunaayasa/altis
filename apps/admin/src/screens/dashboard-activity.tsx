@@ -2,6 +2,7 @@ import type { DeskHour } from '@altis/shared/api/dashboard-home';
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { useLocale, useT } from '@/i18n';
+import { cn } from '@/lib/utils';
 import { useCount, useDeskToday } from '@/screens/dashboard-today';
 
 /**
@@ -14,11 +15,8 @@ import { useCount, useDeskToday } from '@/screens/dashboard-today';
  * - The chart is drawn in the pixels of its box (measured), so its text stays legible on a phone.
  * - Keyboard: the hours are one tab stop; the left and right arrow keys (Home, End) move between them, and the tooltip
  *   shows the hour that has focus. Each hour is labelled for a screen reader, and the table holds every figure.
- * - Colours: the two chart series of the theme (`--series-1`, `--series-2`), with fallbacks.
+ * - Colours: the two chart series of the theme (`--series-1`, `--series-2`, as `fill-series-*` / `bg-series-*`).
  */
-
-const SERIES_LOANS = 'var(--series-1, #2a78d6)';
-const SERIES_RETURNS = 'var(--series-2, #eb6834)';
 
 const HEIGHT = 220;
 const TOP = 10;
@@ -124,7 +122,7 @@ function ActivityChart({ hours }: { hours: readonly DeskHour[] }) {
         {ticks.map((v) => (
           <g key={v} aria-hidden="true">
             <line x1={LEFT} x2={width - RIGHT} y1={y(v)} y2={y(v)} className="stroke-border" strokeWidth={1} />
-            <text x={LEFT - 8} y={y(v) + 4} textAnchor="end" className="fill-muted-foreground text-[11px] tabular-nums">
+            <text x={LEFT - 8} y={y(v) + 4} textAnchor="end" className="fill-faint text-[11px] tabular-nums">
               {count(v)}
             </text>
           </g>
@@ -157,14 +155,14 @@ function ActivityChart({ hours }: { hours: readonly DeskHour[] }) {
                 setActive(null);
               }}
               onKeyDown={(e) => onKey(e, k)}>
-              <rect x={LEFT + slot * k} y={TOP} width={slot} height={plot} className={active === k ? 'fill-muted' : 'fill-transparent'} />
+              <rect x={LEFT + slot * k} y={TOP} width={slot} height={plot} className={active === k ? 'fill-layer-2' : 'fill-transparent'} />
               {focused && focusAt === k && (
                 <rect x={LEFT + slot * k + 1} y={TOP + 1} width={slot - 2} height={plot - 2} rx={4} className="fill-none stroke-ring" strokeWidth={2} />
               )}
-              {loans !== null && <path d={loans} style={{ fill: SERIES_LOANS }} />}
-              {returns !== null && <path d={returns} style={{ fill: SERIES_RETURNS }} />}
+              {loans !== null && <path d={loans} className="fill-series-1" />}
+              {returns !== null && <path d={returns} className="fill-series-2" />}
               {(everyLabel || k % 2 === 0) && (
-                <text x={cx} y={HEIGHT - 6} textAnchor="middle" className="fill-muted-foreground text-[11px] tabular-nums" aria-hidden="true">
+                <text x={cx} y={HEIGHT - 6} textAnchor="middle" className="fill-faint text-[11px] tabular-nums" aria-hidden="true">
                   {clock(h.hour)}
                 </text>
               )}
@@ -175,7 +173,7 @@ function ActivityChart({ hours }: { hours: readonly DeskHour[] }) {
       {shown !== null && shown !== undefined && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute top-0 z-10 rounded-md border bg-popover px-2.5 py-2 text-xs text-popover-foreground shadow-md"
+          className="pointer-events-none absolute top-0 z-10 rounded-md border bg-popover px-2.5 py-2 text-xs text-popover-foreground shadow-pop"
           style={{ left: tipLeft, width: TIP_WIDTH }}
           data-activity-tip="">
           <b className="block font-semibold">{t('dashboard.home.activity.hour', { from: clock(shown.hour), to: clock(shown.hour + 1) })}</b>
@@ -198,7 +196,7 @@ function ActivityTable({ hours }: { hours: readonly DeskHour[] }) {
         <table className="w-full border-collapse tabular-nums">
           <caption className="sr-only">{t('dashboard.home.activity.chart')}</caption>
           <thead>
-            <tr className="bg-muted/60 text-xs text-muted-foreground">
+            <tr className="bg-layer text-xs text-muted-foreground">
               <th scope="col" className="border-b px-3 py-2 text-left font-semibold">
                 {t('dashboard.home.table.hour')}
               </th>
@@ -230,15 +228,15 @@ function ActivityTable({ hours }: { hours: readonly DeskHour[] }) {
 /** The legend of the two series. */
 function Legend() {
   const t = useT();
-  const swatch = (color: string) => <i aria-hidden="true" className="mr-1.5 inline-block size-2.5 rounded-[2px] align-[-1px]" style={{ background: color }} />;
+  const swatch = (color: string) => <i aria-hidden="true" className={cn('mr-1.5 inline-block size-2.5 rounded-[2px] align-[-1px]', color)} />;
   return (
-    <p className="flex gap-4 text-[13px] text-muted-foreground" data-legend="">
+    <p className="flex gap-4 text-meta text-muted-foreground" data-legend="">
       <span>
-        {swatch(SERIES_LOANS)}
+        {swatch('bg-series-1')}
         {t('dashboard.home.activity.loans')}
       </span>
       <span>
-        {swatch(SERIES_RETURNS)}
+        {swatch('bg-series-2')}
         {t('dashboard.home.activity.returns')}
       </span>
     </p>
@@ -263,14 +261,14 @@ export function DeskActivity() {
       </div>
       {data === undefined ? (
         query.isError ? (
-          <div role="alert" className="flex flex-col items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3.5 py-3 text-sm">
-            <span className="font-bold text-destructive">{t('dashboard.home.activity.failed')}</span>
+          <div role="alert" className="flex flex-col items-start gap-2 rounded-md border border-bad-line bg-bad-bg px-3.5 py-3 text-sm">
+            <span className="font-bold text-bad">{t('dashboard.home.activity.failed')}</span>
             <Button variant="outline" size="sm" onClick={() => void query.refetch()}>
               {t('table.retry')}
             </Button>
           </div>
         ) : (
-          <div className="h-[220px] animate-pulse rounded-lg bg-muted motion-reduce:animate-none" aria-hidden="true" />
+          <div className="h-[220px] animate-pulse rounded-lg bg-layer-2 motion-reduce:animate-none" aria-hidden="true" />
         )
       ) : empty ? (
         <p className="text-sm text-muted-foreground">{t('dashboard.home.activity.empty')}</p>

@@ -81,10 +81,10 @@ describe('Impor Anggota: four numbered steps', () => {
     expect(within(mapping).getByText('Tipe anggota')).toBeTruthy();
     // An unknown type code and an unreadable date are marked in the preview (in words and colour).
     const preview = screen.getByRole('table', { name: 'Pratinjau 2 baris pertama' });
-    expect(within(preview).getByText('GURU').className).toContain('text-destructive');
-    expect(within(preview).getByText('kemarin').className).toContain('text-destructive');
-    expect(within(preview).getByText('2027-07-01').className).not.toContain('text-destructive');
-    expect(within(preview).getByText('SISWA').className).not.toContain('text-destructive');
+    expect(within(preview).getByText('GURU').className).toContain('text-bad');
+    expect(within(preview).getByText('kemarin').className).toContain('text-bad');
+    expect(within(preview).getByText('2027-07-01').className).not.toContain('text-bad');
+    expect(within(preview).getByText('SISWA').className).not.toContain('text-bad');
     expect((screen.getByRole('button', { name: 'Uji kering' }) as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.click(screen.getByRole('button', { name: 'Kembali' }));

@@ -196,7 +196,7 @@ export function BulkBar({ selected, onClear, canManage }: { selected: MemberList
           )}
         </div>
         {error !== null && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-sm text-bad">
             {error}
           </p>
         )}
@@ -247,8 +247,8 @@ export function BulkBar({ selected, onClear, canManage }: { selected: MemberList
 
   return (
     <div className="grid gap-3">
-      <section aria-label={t('members.tools.selected', { count })} className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-lg border border-primary bg-primary/10 px-3 py-2">
-        <p className="mr-1.5 text-sm font-bold text-primary" role="status">
+      <section aria-label={t('members.tools.selected', { count })} className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-lg border border-primary bg-accent-soft px-3 py-2">
+        <p className="mr-1.5 text-sm font-bold text-accent-text" role="status">
           {t('members.tools.selected', { count })}
         </p>
         {canManage &&

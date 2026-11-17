@@ -11,14 +11,12 @@ import { useCount, useLibraryToday } from '@/screens/dashboard-today';
  * `usage`), every branch, voided loans not counted:
  *
  * - "Peminjaman per subjek": one bar per DDC main class with a loan (the class the loan kept when it was lent), named
- *   with its number and its name, most first, in one colour (`--series-1`); the same figures as a table;
+ *   with its number and its name, most first, in one colour (the theme's `--series-1`); the same figures as a table;
  * - "Judul paling sering dipinjam": the five most borrowed titles, numbered, each with its count; never a borrower. A
  *   title links to its record for a catalogue reader.
  *
  * Each block links to its full report (the loans by class, the most borrowed titles), which the same permission opens.
  */
-
-const SERIES = 'var(--series-1, #2a78d6)';
 
 /** The name of a DDC main class with its number (`800 Kesusastraan`), `NON` by its name only. */
 function subjectName(t: Translate, s: SubjectLoans): string {
@@ -35,7 +33,7 @@ function Block({ title, aside, children, data }: { title: string; aside: ReactNo
         <h2 id={id} className="text-base font-bold">
           {title}
         </h2>
-        <span className="flex flex-wrap items-baseline gap-x-3 text-[13px] text-muted-foreground">{aside}</span>
+        <span className="flex flex-wrap items-baseline gap-x-3 text-meta text-muted-foreground">{aside}</span>
       </div>
       {children}
     </section>
@@ -45,7 +43,7 @@ function Block({ title, aside, children, data }: { title: string; aside: ReactNo
 function ReportLink({ id }: { id: string }) {
   const t = useT();
   return (
-    <Link to={`/admin/reports/${encodeURIComponent(id)}`} className="text-primary underline-offset-4 hover:underline">
+    <Link to={`/admin/reports/${encodeURIComponent(id)}`} className="font-semibold text-accent-text underline-offset-4 hover:underline">
       {t('dashboard.home.report')}
     </Link>
   );
@@ -72,12 +70,12 @@ function Subjects({ subjects }: { subjects: readonly SubjectLoans[] }) {
         <>
           <ul className="flex flex-col" aria-label={t('dashboard.home.subjects.caption', { days: DASHBOARD_USAGE_DAYS })}>
             {subjects.map((s) => (
-              <li key={s.main} className="grid grid-cols-[minmax(7rem,11rem)_minmax(0,1fr)_2.5rem] items-center gap-2.5 py-[5px] text-[13px] xl:grid-cols-[minmax(8rem,14rem)_minmax(0,1fr)_2.5rem]" data-subject={s.main}>
+              <li key={s.main} className="grid grid-cols-[minmax(7rem,11rem)_minmax(0,1fr)_2.5rem] items-center gap-2.5 py-[5px] text-meta xl:grid-cols-[minmax(8rem,14rem)_minmax(0,1fr)_2.5rem]" data-subject={s.main}>
                 <span className="truncate text-muted-foreground" title={subjectName(t, s)}>
                   {subjectName(t, s)}
                 </span>
                 <span className="h-2.5" aria-hidden="true">
-                  <span className="block h-full rounded-r-[3px]" style={{ width: `${(s.loans / max) * 100}%`, background: SERIES }} />
+                  <span className="block h-full rounded-r-[3px] bg-series-1" style={{ width: `${(s.loans / max) * 100}%` }} />
                 </span>
                 <span className="text-right tabular-nums">{count(s.loans)}</span>
               </li>
@@ -89,7 +87,7 @@ function Subjects({ subjects }: { subjects: readonly SubjectLoans[] }) {
               <table className="w-full border-collapse tabular-nums">
                 <caption className="sr-only">{t('dashboard.home.subjects.caption', { days: DASHBOARD_USAGE_DAYS })}</caption>
                 <thead>
-                  <tr className="bg-muted/60 text-xs text-muted-foreground">
+                  <tr className="bg-layer text-xs text-muted-foreground">
                     <th scope="col" className="border-b px-3 py-2 text-left font-semibold">
                       {t('dashboard.home.subjects.class')}
                     </th>
@@ -138,10 +136,10 @@ function TopTitles({ titles }: { titles: readonly TopTitle[] }) {
         <ol className="border-t">
           {titles.map((title, k) => (
             <li key={title.recordId} className="flex items-baseline gap-3 border-b py-2.5" data-top-title="">
-              <span className="w-5 shrink-0 text-right text-[13px] text-muted-foreground tabular-nums">{count(k + 1)}</span>
+              <span className="w-5 shrink-0 text-right font-bold text-faint tabular-nums">{count(k + 1)}</span>
               <span className="min-w-0 flex-1 font-semibold break-words">
                 {readsCatalog ? (
-                  <Link to={`/admin/catalog/records/${encodeURIComponent(title.recordId)}`} className="text-foreground underline-offset-4 hover:text-primary hover:underline">
+                  <Link to={`/admin/catalog/records/${encodeURIComponent(title.recordId)}`} className="text-foreground underline-offset-4 hover:text-accent-text hover:underline">
                     {title.title}
                   </Link>
                 ) : (
@@ -166,7 +164,7 @@ export function UsageBlocks() {
   const usage = library.data?.usage;
   if (usage === undefined || usage === null) return null;
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+    <div className="grid gap-8 min-[1060px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
       <Subjects subjects={usage.bySubject} />
       <TopTitles titles={usage.topTitles} />
     </div>

@@ -1038,7 +1038,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
               </Label>
               <select
                 id={`${ids}-branch`}
-                className={cn(SELECT_CLASS, 'h-8 w-auto max-w-56')}
+                className={cn(SELECT_CLASS, 'h-7.5 w-auto max-w-56 md:text-meta')}
                 value={branchId ?? ''}
                 onChange={(e) => {
                   desk.choose(e.target.value);
@@ -1090,7 +1090,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
                 <div
                   data-tone={idle ? undefined : feedback.tone}
                   className={cn(
-                    'flex h-13 min-w-0 flex-[1_1_320px] items-center rounded-lg border-2 bg-background px-3.5 focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/20 motion-safe:transition-[border-color,box-shadow,background-color] motion-safe:duration-500',
+                    'flex h-13 min-w-0 flex-[1_1_320px] items-center rounded-lg border-2 bg-background px-3.5 focus-within:border-primary focus-within:ring-3 focus-within:ring-accent-soft motion-safe:transition-[border-color,box-shadow,background-color] motion-safe:duration-500',
                     tone === null ? 'border-input' : BOX_TONE[tone],
                     flash !== 'idle' && tone !== null && FLASH_TONE[tone],
                   )}>
@@ -1134,14 +1134,14 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
                     id={listboxId}
                     role="listbox"
                     aria-label={t('circulation.scan.suggestions')}
-                    className="absolute top-full right-0 left-0 z-30 mt-1 max-h-90 overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
+                    className="absolute top-full right-0 left-0 z-30 mt-1 max-h-90 overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-pop">
                     {options.map((o, i) => (
                       <li
                         key={o.id}
                         id={`${listboxId}-${i}`}
                         role="option"
                         aria-selected={i === active}
-                        className={cn('flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-2', i === active && 'bg-primary/10')}
+                        className={cn('flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-2', i === active && 'bg-accent-soft')}
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => {
                           setValue('');
@@ -1240,7 +1240,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
                     }}>
                     <div className="grid min-w-0 flex-[1_1_16rem] gap-1">
                       <Label htmlFor={`${ids}-force`}>{t('circulation.override.note', { reasons: forcing.reasons.map((r) => t(`vocab.override_reason.${r}`)).join(', ') })}</Label>
-                      <Input id={`${ids}-force`} ref={forceInput} maxLength={191} autoComplete="off" value={forceNote} onChange={(e) => setForceNote(e.target.value)} className="h-8 bg-background" />
+                      <Input id={`${ids}-force`} ref={forceInput} maxLength={191} autoComplete="off" value={forceNote} onChange={(e) => setForceNote(e.target.value)} className="h-7.5 bg-background md:text-meta" />
                     </div>
                     <Button type="submit" size="sm" disabled={forceNote.trim() === ''}>
                       {t('circulation.override.submit')}
@@ -1368,7 +1368,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
                                   <td className={TABLE.td}>
                                     {state.tone === 'neutral' ? <span className="text-muted-foreground">{state.text}</span> : <StatusText tone={state.tone === 'danger' ? 'bad' : 'warn'}>{state.text}</StatusText>}
                                     {loan.finePreview !== null && (
-                                      <span className="mt-0.5 block text-xs text-destructive">
+                                      <span className="mt-0.5 block text-xs text-bad">
                                         {t('charges.fine_preview', { amount: money(loan.finePreview.amount, loan.finePreview.currency), days: loan.finePreview.days })}
                                       </span>
                                     )}
@@ -1513,16 +1513,16 @@ const FEEDBACK_TONE: Readonly<Record<Tone, StatusTone | null>> = { idle: null, i
 
 /** The scan box's edge after a scan: the outcome's colour. */
 const BOX_TONE: Readonly<Record<StatusTone, string>> = {
-  ok: 'border-success/60',
-  warn: 'border-warning-foreground/50',
-  bad: 'border-destructive/60',
+  ok: 'border-ok-line',
+  warn: 'border-warn-line',
+  bad: 'border-bad-line',
 };
 
 /** The short flash of the scan box (gone after 0.9 s; without movement when the system asks for less motion). */
 const FLASH_TONE: Readonly<Record<StatusTone, string>> = {
-  ok: 'bg-success-soft',
-  warn: 'bg-warning',
-  bad: 'bg-destructive/10',
+  ok: 'bg-ok-bg',
+  warn: 'bg-warn-bg',
+  bad: 'bg-bad-bg',
 };
 
 function ToneIcon({ tone }: { tone: Tone }) {
@@ -1561,7 +1561,7 @@ function ModeSwitch({ mode, onSwitch }: { mode: Mode; onSwitch(mode: Mode): void
           onClick={() => onSwitch(m.mode)}
           className={cn(
             '-mr-px -mb-px inline-flex h-8 flex-auto items-center justify-center gap-2 border-r border-b border-input px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
-            mode === m.mode ? 'bg-primary/10 text-primary' : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
+            mode === m.mode ? 'bg-accent-soft text-accent-text' : 'bg-background text-muted-foreground hover:bg-layer-2 hover:text-foreground',
           )}>
           {t(m.label)}
           <Kbd hidden>{m.key}</Kbd>
@@ -1613,10 +1613,10 @@ function MemberPanel({
     return (
       <aside aria-busy="true" aria-label={t('circulation.member.loading')} className={box}>
         <div className="flex items-start gap-3">
-          <span className="h-20 w-15 shrink-0 rounded border bg-muted" />
+          <span className="h-20 w-15 shrink-0 rounded border bg-layer-2" />
           <div className="grid flex-1 gap-2 pt-1">
-            <span className="h-3 w-4/5 animate-pulse rounded bg-muted motion-reduce:animate-none" />
-            <span className="h-3 w-2/5 animate-pulse rounded bg-muted motion-reduce:animate-none" />
+            <span className="h-3 w-4/5 animate-pulse rounded bg-layer-2 motion-reduce:animate-none" />
+            <span className="h-3 w-2/5 animate-pulse rounded bg-layer-2 motion-reduce:animate-none" />
           </div>
         </div>
       </aside>
@@ -1735,7 +1735,7 @@ function MemberPanel({
           {t('circulation.member.done')}
         </Button>
         {canOpen && (
-          <Link to={`/admin/anggota/${encodeURIComponent(member.id)}`} className="text-sm font-semibold text-primary underline-offset-4 hover:underline">
+          <Link to={`/admin/anggota/${encodeURIComponent(member.id)}`} className="text-sm font-semibold text-accent-text underline-offset-4 hover:underline">
             {t('circulation.member.open')}
           </Link>
         )}
@@ -1907,7 +1907,7 @@ function ReturnsTable({ rows }: { rows: readonly ReturnRow[] }) {
               </tr>
             ) : (
               rows.map((row) => (
-                <tr key={row.seq} className={cn(row.daysLate > 0 && 'bg-destructive/5')}>
+                <tr key={row.seq} className={cn(row.daysLate > 0 && 'bg-bad-bg')}>
                   <td className={cn(TABLE.td, 'whitespace-nowrap text-muted-foreground')}>{row.time}</td>
                   <td className={cn(TABLE.td, 'font-semibold tracking-wide whitespace-nowrap')}>{row.barcode}</td>
                   <td className={TABLE.td}>{row.title}</td>

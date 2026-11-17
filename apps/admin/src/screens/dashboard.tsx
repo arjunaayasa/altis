@@ -136,7 +136,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 /** The link at the bottom of a card. */
 function CardLink({ to, children }: { to: string; children: ReactNode }) {
   return (
-    <PageLink to={to} className="mt-auto self-start text-sm text-primary underline-offset-4 hover:underline">
+    <PageLink to={to} className="mt-auto self-start text-sm font-semibold text-accent-text underline-offset-4 hover:underline">
       {children}
     </PageLink>
   );
@@ -182,7 +182,7 @@ function UpdateCard({ update }: { update: NonNullable<DashboardResponse['version
       </dl>
       {available?.steppingStone === true && <p className="text-sm text-muted-foreground">{t('update.precheck.stepping_stone')}</p>}
       {!update.entitled && (
-        <p className="text-sm text-destructive">{t(available === null ? 'dashboard.update.ended' : 'dashboard.update.not_entitled')}</p>
+        <p className="text-sm text-bad">{t(available === null ? 'dashboard.update.ended' : 'dashboard.update.not_entitled')}</p>
       )}
       {!update.oneClick && <p className="text-sm text-muted-foreground">{t('dashboard.update.image')}</p>}
       <CardLink to="/admin/updates">{t('dashboard.update.open')}</CardLink>
@@ -201,7 +201,7 @@ function BackupCard({ backup, nextAt }: { backup: BackupItem | null; nextAt: num
       ) : (
         <dl className="flex flex-col gap-2">
           <Row label={t('dashboard.backup.status')}>
-            <span className={backup.status === 'failed' ? 'text-destructive' : undefined}>{t(`dashboard.backup.status.${backup.status}`)}</span>
+            <span className={backup.status === 'failed' ? 'text-bad' : undefined}>{t(`dashboard.backup.status.${backup.status}`)}</span>
           </Row>
           <Row label={t('dashboard.backup.kind')}>{t(`dashboard.backup.kind.${backup.kind}`)}</Row>
           <Row label={t('dashboard.backup.created')}>{dateTime(backup.createdAt)}</Row>
@@ -229,7 +229,7 @@ function QueueCard({ queue }: { queue: NonNullable<DashboardResponse['queue']> }
       <dl className="grid grid-cols-3 gap-2">
         {stat(t('dashboard.queue.queued'), queue.queued)}
         {stat(t('dashboard.queue.running'), queue.running)}
-        {stat(t('dashboard.queue.dead'), queue.dead, queue.dead > 0 ? 'text-destructive' : undefined)}
+        {stat(t('dashboard.queue.dead'), queue.dead, queue.dead > 0 ? 'text-bad' : undefined)}
       </dl>
       {queue.oldestQueuedMs !== null && (
         <p className="text-sm text-muted-foreground">{t('dashboard.queue.oldest', { duration: duration(t, queue.oldestQueuedMs) })}</p>
