@@ -18,6 +18,8 @@ export const DETAIL_CSS: string = [
   '.record-heading h1{margin:0;font-size:clamp(1.5rem,1.3rem + .8vw,1.75rem);line-height:1.2;overflow-wrap:anywhere}',
   '.record-subtitle{font-weight:400}',
   '.record-type{margin:0;color:var(--muted);font-size:.9375rem}',
+  // What the copies allow now, in the words of the title's card.
+  '.record-shelf{margin:.25rem 0 0;font-size:1rem}',
   '.record-responsibility{margin:0;font-size:1.0625rem}',
   '.record-agents{display:flex;flex-wrap:wrap;gap:0 1rem;margin:0;padding:0;list-style:none}',
   '.record-agents li{display:inline-flex;align-items:center;flex-wrap:wrap;min-height:2.75rem}',

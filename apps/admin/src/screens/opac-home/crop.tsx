@@ -1,9 +1,8 @@
-import { OPAC_HOME_PHOTO_MAX_BYTES } from '@altis/shared/api/opac-home';
-import { useEffect, useState, type FormEvent } from 'react';
+import { OPAC_HOME_LOGO_SIZE, OPAC_HOME_PHOTO_MAX_BYTES } from '@altis/shared/api/opac-home';
+import { useEffect, useState } from 'react';
 import { Field, ProblemAlert } from '@/components/form-field';
-import { useReturnFocus } from '@/components/return-focus';
+import { InlinePanel, StatusText } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useT } from '@/i18n';
 
 /**
@@ -11,6 +10,8 @@ import { useT } from '@/i18n';
  * cover a canvas of the target size (the hero 1600 × 900, the other photos 1200 × 900) at the zoom and offset the admin
  * picks, and encoded as a JPEG of at most 500 KB (the quality lowered step by step), which is what gets uploaded. The
  * canvas re-encoding leaves no metadata behind; the server strips it anyway and checks the type and the size again.
+ * The crop opens as a panel under the control that chose the photo (not a dialog). The logo is not cropped: it is
+ * fitted whole onto a white tile (`fitLogo`).
  */
 
 /** The largest file the browser is asked to decode. */
@@ -58,7 +59,7 @@ function drawCrop(canvas: HTMLCanvasElement, img: PhotoSource, zoom: number, dx:
 }
 
 /** The canvas as a JPEG of at most 500 KB; null when even the lowest quality is larger. */
-async function jpegOf(canvas: HTMLCanvasElement): Promise<Blob | null> {
+export async function jpegOf(canvas: HTMLCanvasElement): Promise<Blob | null> {
   for (const quality of [0.85, 0.78, 0.7, 0.6, 0.5, 0.4]) {
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
     if (blob !== null && blob.size <= OPAC_HOME_PHOTO_MAX_BYTES) return blob;
@@ -66,8 +67,33 @@ async function jpegOf(canvas: HTMLCanvasElement): Promise<Blob | null> {
   return null;
 }
 
-/** The crop dialog: the framed preview, zoom and offsets, then the JPEG handed to `onSave`. */
-export function PhotoCropDialog({
+/** The size of the logo's tile for an image of `width` × `height`: 240 px high, as wide as the logo (square to 4:1). */
+export function logoTileSize(width: number, height: number): { width: number; height: number } {
+  const { height: h, minWidth, maxWidth } = OPAC_HOME_LOGO_SIZE;
+  const wide = Math.round((h * width) / Math.max(1, height));
+  return { width: Math.min(maxWidth, Math.max(minWidth, wide)), height: h };
+}
+
+/** The logo fitted whole and centred on a white tile of {@link logoTileSize} (a JPEG has no transparency). */
+export function fitLogo(img: PhotoSource): HTMLCanvasElement {
+  const size = logoTileSize(img.width, img.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = size.width;
+  canvas.height = size.height;
+  const ctx = canvas.getContext('2d');
+  if (ctx === null) return canvas;
+  const scale = Math.min(size.width / img.width, size.height / img.height);
+  const w = img.width * scale;
+  const h = img.height * scale;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, size.width, size.height);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, (size.width - w) / 2, (size.height - h) / 2, w, h);
+  return canvas;
+}
+
+/** The crop panel: the framed preview, zoom and offsets, then the JPEG handed to `onSave`. */
+export function PhotoCropPanel({
   source,
   width,
   height,
@@ -81,9 +107,8 @@ export function PhotoCropDialog({
   onSave(jpeg: Blob): Promise<void>;
 }) {
   const t = useT();
-  const focus = useReturnFocus();
-  // The dialog's content mounts in a portal after this component's own first render, so the canvas is kept as state
-  // (a callback ref): drawing waits until it exists, and draws again whenever the crop changes.
+  // The canvas is kept as state (a callback ref): drawing waits until it exists, and draws again whenever the crop
+  // changes.
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
   const [zoom, setZoom] = useState(1);
   const [dx, setDx] = useState(0);
@@ -96,10 +121,7 @@ export function PhotoCropDialog({
     if (canvas !== null) drawCrop(canvas, source, zoom, dx, dy);
   }, [canvas, source, zoom, dx, dy]);
 
-  const save = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault();
-    // The dialog sits in a portal, but React events still bubble to the page's form around it.
-    event.stopPropagation();
+  const save = async (): Promise<void> => {
     if (canvas === null) return;
     setBusy(true);
     setProblem(null);
@@ -119,41 +141,36 @@ export function PhotoCropDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(next) => (next || busy ? undefined : onCancel())}>
-      <DialogContent closeLabel={t('opacHome.crop.cancel')} onOpenAutoFocus={focus.onOpenAutoFocus} onCloseAutoFocus={focus.onCloseAutoFocus}>
-        <DialogHeader>
-          <DialogTitle>{t('opacHome.crop.title')}</DialogTitle>
-          <DialogDescription>{t('opacHome.crop.hint')}</DialogDescription>
-        </DialogHeader>
-        <form noValidate className="grid gap-3" onSubmit={(e) => void save(e)}>
-          <canvas ref={setCanvas} width={width} height={height} className="w-full rounded border" style={{ aspectRatio: `${width} / ${height}` }} />
-          {(
-            [
-              ['opacHome.crop.zoom', zoom, setZoom, 1, 3],
-              ['opacHome.crop.x', dx, setDx, -1, 1],
-              ['opacHome.crop.y', dy, setDy, -1, 1],
-            ] as const
-          ).map(([key, value, set, min, max]) => (
-            <Field key={key} label={t(key)}>
-              {(c) => <input {...c} type="range" min={min} max={max} step={0.01} value={value} onChange={(e) => set(Number(e.target.value))} />}
-            </Field>
-          ))}
-          {tooLarge && (
-            <p role="alert" className="text-sm text-destructive">
-              {t('opacHome.crop.too_large')}
-            </p>
-          )}
-          <ProblemAlert error={problem} />
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
-              {t('opacHome.crop.cancel')}
-            </Button>
-            <Button type="submit" disabled={busy}>
-              {t(busy ? 'opacHome.photo.uploading' : 'opacHome.crop.use')}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <InlinePanel title={t('opacHome.crop.title')} onCancel={busy ? undefined : onCancel} className="max-w-xl">
+      <p className="text-sm text-muted-foreground">{t('opacHome.crop.hint')}</p>
+      <canvas ref={setCanvas} width={width} height={height} className="w-full rounded border bg-background" style={{ aspectRatio: `${width} / ${height}` }} />
+      <div className="grid gap-x-5 gap-y-3 sm:grid-cols-3">
+        {(
+          [
+            ['opacHome.crop.zoom', zoom, setZoom, 1, 3],
+            ['opacHome.crop.x', dx, setDx, -1, 1],
+            ['opacHome.crop.y', dy, setDy, -1, 1],
+          ] as const
+        ).map(([key, value, set, min, max]) => (
+          <Field key={key} label={t(key)}>
+            {(c) => <input {...c} type="range" min={min} max={max} step={0.01} value={value} onChange={(e) => set(Number(e.target.value))} />}
+          </Field>
+        ))}
+      </div>
+      {tooLarge && (
+        <p role="alert">
+          <StatusText tone="bad">{t('opacHome.crop.too_large')}</StatusText>
+        </p>
+      )}
+      <ProblemAlert error={problem} />
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" disabled={busy} onClick={() => void save()}>
+          {t(busy ? 'opacHome.photo.uploading' : 'opacHome.crop.use')}
+        </Button>
+        <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onCancel}>
+          {t('opacHome.crop.cancel')}
+        </Button>
+      </div>
+    </InlinePanel>
   );
 }

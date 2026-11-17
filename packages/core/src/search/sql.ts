@@ -8,6 +8,7 @@ import {
   type FullTextField,
 } from '@altis/db';
 import { sql, type Expression, type Kysely, type SelectQueryBuilder, type SqlBool, type Transaction } from 'kysely';
+import { identifierQuery } from '../catalog/lib/identifiers.js';
 import { INNODB_STOPWORDS, SEARCH_TOKEN_MAX, SEARCH_TOKEN_PREFIX, encodeSearchToken } from './tokenize.js';
 import type { ParsedClause, ParsedQuery, ParsedTerm, SearchField } from './query-parse.js';
 import type { CatalogSearchQuery, FacetName } from './types.js';
@@ -113,6 +114,9 @@ function facetIn(facet: FacetName, values: readonly string[]): Expression<SqlBoo
   return sql<SqlBool>`${sql.ref('search_doc.record_id')} IN (SELECT ${sql.ref('sf.record_id')} FROM ${sql.table('search_facet')} AS ${sql.id('sf')} WHERE ${sql.ref('sf.facet')} = ${facet} AND ${sql.ref('sf.value_key')} IN (${sql.join(values)}))`;
 }
 
+/** The longest identifier text the `identifier` filter reads (an ISBN with a label and spaces is far shorter). */
+const IDENTIFIER_TEXT_MAX = 64;
+
 /** The predicates of the scope and the filters (each one AND). */
 export function scopeAndFilters(q: CatalogSearchQuery): Expression<SqlBool>[] {
   const where: Expression<SqlBool>[] = [];
@@ -153,8 +157,15 @@ export function scopeAndFilters(q: CatalogSearchQuery): Expression<SqlBool>[] {
   const to = intIn(f.yearTo, 0, 9999);
   if (from !== null) where.push(sql<SqlBool>`${sql.ref('search_doc.year')} >= ${from}`);
   if (to !== null) where.push(sql<SqlBool>`${sql.ref('search_doc.year')} <= ${to}`);
+  // ---- Komunitas (OPAC look): the exact ISBN/ISSN of the OPAC's ISBN field ----
+  if (typeof f.identifier === 'string') {
+    const id = f.identifier.length <= IDENTIFIER_TEXT_MAX ? identifierQuery(f.identifier) : null;
+    // A text that is no ISBN or ISSN matches nothing (record_id is never null).
+    where.push(id === null ? sql<SqlBool>`${sql.ref('search_doc.record_id')} IS NULL` : identifierIn(id));
+  }
   return where;
 }
+
 
 /** `search_doc.record_id IN (the records holding this identifier)`: the ISBN/ISSN-first match (§4.4). */
 export function identifierIn(id: { type: 'isbn' | 'issn'; key: string }): Expression<SqlBool> {

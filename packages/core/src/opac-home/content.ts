@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { upsert, type DB } from '@altis/db';
-import { DomainError } from '@altis/shared';
+import { DomainError, normalizeKey } from '@altis/shared';
 import type { OpacHomeContent, OpacHomePutBody } from '@altis/shared/api/opac-home';
 import type { Kysely, Transaction } from 'kysely';
 import type { TxCtx } from '../context.js';
@@ -21,6 +21,8 @@ import { readSettings, writeSettings } from '../settings/service.js';
 //   later as orphan uploads, and nobody fetches them meanwhile. A file id that is not such an upload (or is held by
 //   something else) is a VALIDATION_FAILED at its place in the body.
 // - One audit entry `opac.home.update` with the settings that changed (names only).
+// - The contact e-mail is published on every page, so it must be the library's own: an address a staff user or a member
+//   has (compared as their keys are, case and width folded) is a VALIDATION_FAILED `personal_email` at its place.
 
 /** The setting that holds the page's content, and the owner id of its photos. */
 export const OPAC_HOME_KEY = 'opac.home';
@@ -63,6 +65,7 @@ const welcomeValue = (text: string | null): string | null => (text === null || t
 function photoPaths(home: OpacHomeContent): Map<string, string> {
   const paths = new Map<string, string>();
   if (home.hero !== null) paths.set(home.hero.fileId, 'home.hero.fileId');
+  if (home.logo !== null) paths.set(home.logo.fileId, 'home.logo.fileId');
   if (home.about.photo !== null) paths.set(home.about.photo.fileId, 'home.about.photo.fileId');
   home.facilities.forEach((f, i) => paths.set(f.fileId, `home.facilities.${i}.fileId`));
   return paths;
@@ -107,6 +110,34 @@ async function claimPhotos(trx: Transaction<DB>, home: OpacHomeContent): Promise
   await release.execute();
 }
 
+// ---- Komunitas (OPAC look) ----
+/**
+ * Refuses a contact e-mail that is a person's: the address of a staff user (their `email_key`) or of a member (any
+ * case).
+ *
+ * @throws DomainError VALIDATION_FAILED `personal_email` at `home.contact.email`
+ */
+async function checkContactEmail(trx: Transaction<DB>, home: OpacHomeContent): Promise<void> {
+  const email = home.contact.email;
+  if (email === null) return;
+  const key = normalizeKey(email);
+  const [staff, member] = await Promise.all([
+    trx.selectFrom('staff_users').select('id').where('email_key', '=', key).limit(1).executeTakeFirst(),
+    trx
+      .selectFrom('members')
+      .select('id')
+      .where((eb) => eb(eb.fn<string>('upper', [eb.ref('email')]), '=', key))
+      .limit(1)
+      .executeTakeFirst(),
+  ]);
+  if (staff !== undefined || member !== undefined) {
+    throw new DomainError('VALIDATION_FAILED', {
+      detail: 'E-mail kontak tidak boleh alamat pengguna atau anggota / The contact e-mail may not be a user\'s or a member\'s address',
+      meta: { errors: [{ path: 'home.contact.email', code: 'personal_email' }] },
+    });
+  }
+}
+
 /**
  * Saves the home page (see the top of this file) in `tx`: the content and both welcome texts of `body`, if `body.revision`
  * is the stored one. Answers the new revision and the settings that changed (in registry order).
@@ -135,6 +166,7 @@ export async function saveOpacHome(
       detail: 'Halaman awal sudah diubah orang lain; muat ulang lalu ulangi perubahan Anda / The home page was changed by someone else; reload it and make your changes again',
     });
   }
+  await checkContactEmail(trx, body.home);
   await claimPhotos(trx, body.home);
   const changed = await writeSettings(
     trx,
