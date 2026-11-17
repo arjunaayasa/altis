@@ -1,11 +1,12 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { checkMemberCsvHeader, readCsvHead } from '@/screens/members/import-head';
+import { checkMemberCsvHeader, initialMapping, missingFields, readCsvHead, remap, slimsHead } from '@/screens/members/import-head';
 import { adminMe, startApp } from '../fake-api';
 
 // Impor Anggota: the browser reads the file's head before anything is sent, so the mapping step can say what the
-// server will make of it (the separator, the encoding, the rows, each column's field) and stop a file the server would
-// refuse whole (a required column missing, an unknown one).
+// server will make of it (the separator, the encoding, the rows, each column's field); the admin can change which
+// column feeds which field (a SLiMS member export starts from its fixed order), a required field left out stops the
+// dry run, and the dry run and the import send that mapping.
 
 beforeAll(async () => {
   await import('@/screens/members/import');
@@ -64,6 +65,22 @@ describe('checkMemberCsvHeader', () => {
   });
 });
 
+describe('the mapping', () => {
+  it('starts from the header names (unknown and repeated ones ignored) or the SLiMS order; a field moves to the column chosen last', () => {
+    expect(initialMapping('csv-members', ['member_no', 'nama', 'NAME', 'name', 'member_type'])).toEqual(['member_no', null, 'name', null, 'member_type']);
+    const mapping = initialMapping('csv-members', ['nomor', 'nama', 'tipe']);
+    expect(missingFields(mapping)).toEqual(['member_no', 'name', 'member_type']);
+    const mapped = remap(remap(remap(mapping, 0, 'member_no'), 1, 'name'), 2, 'member_type');
+    expect([mapped, missingFields(mapped)]).toEqual([['member_no', 'name', 'member_type'], []]);
+    expect(remap(mapped, 2, 'name')).toEqual(['member_no', null, 'name']);
+    const bare = slimsHead(readCsvHead(bytes('S-1,Rina,1,Siswa\nS-2,Doni,0,Guru\n')));
+    expect([bare.header.slice(0, 4), bare.rows.map((r) => r[0]), bare.lines, bare.total]).toEqual([['member_id', 'member_name', 'gender', 'member_type_name'], ['S-1', 'S-2'], [1, 2], 2]);
+    expect(initialMapping('slims-members', bare.header).slice(0, 4)).toEqual(['member_no', 'name', null, 'member_type']);
+    const named = slimsHead(readCsvHead(bytes('member_id,member_name\nS-1,Rina\n')));
+    expect([named.header, named.total]).toEqual([['member_id', 'member_name'], 1]);
+  });
+});
+
 describe('Impor Anggota: four numbered steps', () => {
   const TYPES = { items: [{ id: '01JZ0000000000000000000T01', code: 'SISWA', nameId: 'Siswa', nameEn: null, accredGroup: 'student', membershipDays: 365, loanLimit: 3, holdsAllowed: true, holdsLimit: 2, onlineRenewal: true, sortOrder: 0, memberCount: 0, archived: false, version: 1 }] };
 
@@ -78,7 +95,7 @@ describe('Impor Anggota: four numbered steps', () => {
     expect(await screen.findByRole('heading', { name: 'Pemetaan & pratinjau' })).toBeTruthy();
     expect(screen.getByText('anggota.csv: pemisah titik koma, UTF-8, 2 baris, 5 kolom')).toBeTruthy();
     const mapping = screen.getByRole('table', { name: 'Pemetaan kolom' });
-    expect(within(mapping).getByText('Tipe anggota')).toBeTruthy();
+    expect((within(mapping).getByRole('combobox', { name: 'Ruas untuk kolom member_type' }) as HTMLSelectElement).value).toBe('member_type');
     // An unknown type code and an unreadable date (the row refused) and an unreadable gender (only warned of) are
     // marked in the preview in colour and in words, with a count of each under the table.
     const preview = screen.getByRole('table', { name: 'Pratinjau 2 baris pertama' });
@@ -97,8 +114,12 @@ describe('Impor Anggota: four numbered steps', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Kembali' }));
     const missing = new File(['member_no,nama\nS-1,Rina\n'], 'salah.csv', { type: 'text/csv' });
     fireEvent.change(await screen.findByLabelText(/Pilih berkas CSV/), { target: { files: [missing] } });
-    expect(await screen.findByText('Kolom wajib belum ada: name, member_type')).toBeTruthy();
+    expect(await screen.findByText('Ruas wajib belum dipetakan: Nama, Tipe anggota')).toBeTruthy();
     await waitFor(() => expect((screen.getByRole('button', { name: 'Uji kering' }) as HTMLButtonElement).disabled).toBe(true));
+    // The admin maps the column "nama" to the name: only the type is missing now.
+    fireEvent.change(screen.getByRole('combobox', { name: 'Ruas untuk kolom nama' }), { target: { value: 'name' } });
+    expect(await screen.findByText('Ruas wajib belum dipetakan: Tipe anggota')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Uji kering' }) as HTMLButtonElement).disabled).toBe(true);
     expect(app.writes()).toEqual([]);
   });
 });

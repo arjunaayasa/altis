@@ -4,14 +4,18 @@ import {
   isCalendarDate,
   isDomainError,
   normalizeKey,
+  type MemberImportFormat,
   type MemberImportMode,
   type MemberImportRefusal,
   type MemberImportWarning,
   type RunStatus,
 } from '@altis/shared';
 import {
+  MEMBER_IMPORT_COLUMNS,
+  MEMBER_IMPORT_REQUIRED_COLUMNS,
   MemberBody,
   MemberPatchBody,
+  SLIMS_MEMBER_EXPORT_COLUMNS,
   type MemberImportCounts,
   type MemberImportSampleRow,
   type MemberImportView,
@@ -42,6 +46,10 @@ import { createMember, updateMember } from './members.js';
 //   unique index refuses the insert) is rolled back to it and refused `exists`, and the import goes on: without the
 //   savepoint that failed statement would abort the whole transaction on PostgreSQL.
 // - Dates are `YYYY-MM-DD`, or `DD/MM/YYYY` (also with `-` or `.`), the day first as Indonesian spreadsheets write it.
+// - A mapping (`columns`) names the field each column feeds by position, in place of the header's names; the header
+//   row is then skipped unread. The `slims-members` format is a SLiMS member export: 18 columns in a fixed order
+//   (SLIMS_MEMBER_EXPORT_COLUMNS, its default mapping), a first row of column names only when SLiMS was asked for one,
+//   the member type by its name (or its code), `0000-00-00` for no date, and the gender as 1 (male) or 0 (female).
 // - Counts: rows, inserted, updated, unchanged (an upsert row whose cells change nothing), refused (per reason) and
 //   warnings. The refused rows (line, member number, reason) are handed back for the run's report file.
 
@@ -52,30 +60,17 @@ export const MEMBER_IMPORT_MAX_ROWS = 5_000;
 export const MEMBER_IMPORT_SAMPLE_ROWS = 20;
 
 /** The columns of the `csv-members` format. */
-export const MEMBER_CSV_COLUMNS = Object.freeze([
-  'member_no',
-  'name',
-  'member_type',
-  'class_name',
-  'identity_no',
-  'gender',
-  'birth_date',
-  'email',
-  'phone',
-  'address',
-  'postal_code',
-  'mailing_address',
-  'institution',
-  'joined_on',
-  'expires_on',
-  'home_branch',
-  'notes',
-  'locale',
-] as const);
+export const MEMBER_CSV_COLUMNS = MEMBER_IMPORT_COLUMNS;
 
 export type MemberCsvColumn = (typeof MEMBER_CSV_COLUMNS)[number];
 
-const REQUIRED_COLUMNS: readonly MemberCsvColumn[] = ['member_no', 'name', 'member_type'];
+const REQUIRED_COLUMNS: readonly MemberCsvColumn[] = MEMBER_IMPORT_REQUIRED_COLUMNS;
+
+/** How a file is read: its format and, when the admin mapped them, the field of each column by position. */
+export interface MemberCsvLayout {
+  format?: MemberImportFormat;
+  columns?: readonly (MemberCsvColumn | null)[];
+}
 
 /** One data row of the file, by column (absent columns are empty). */
 export interface MemberCsvRow {
@@ -104,31 +99,47 @@ function formatError(reason: MemberImportFormatReason): DomainError {
  *
  * @throws DomainError MEMBER_IMPORT_FORMAT `{reason}`: `empty`, `header`, `unreadable`, `too_many_rows`
  */
-export function readMemberCsv(bytes: Uint8Array, o: { limit?: number } = {}): MemberCsvRow[] {
+export function readMemberCsv(bytes: Uint8Array, o: { limit?: number } & MemberCsvLayout = {}): MemberCsvRow[] {
   const reader = createCsvReader();
   const raw: CsvRow[] = [...reader.push(bytes), ...reader.end()];
   const header = raw[0];
   if (header === undefined || header.error !== undefined) throw formatError(header === undefined ? 'empty' : 'unreadable');
-  const columns: (MemberCsvColumn | null)[] = [];
-  for (const cell of header.cells) {
-    const name = cell.trim().toLowerCase();
-    if (name === '') {
-      columns.push(null);
-      continue;
+  const slims = o.format === 'slims-members';
+  // A SLiMS export has its column names in the first row only when SLiMS was asked for them.
+  const hasHeader = !slims || header.cells[0]?.trim().toLowerCase() === SLIMS_MEMBER_EXPORT_COLUMNS[0]![0];
+  let columns: (MemberCsvColumn | null)[] = [];
+  if (o.columns !== undefined) {
+    const named = o.columns.filter((c): c is MemberCsvColumn => c !== null);
+    if (new Set(named).size !== named.length || named.some((c) => !(MEMBER_CSV_COLUMNS as readonly string[]).includes(c))) throw formatError('header');
+    columns = [...o.columns];
+  } else if (slims) {
+    columns = SLIMS_MEMBER_EXPORT_COLUMNS.map(([, field]) => field);
+  } else {
+    for (const cell of header.cells) {
+      const name = cell.trim().toLowerCase();
+      if (name === '') {
+        columns.push(null);
+        continue;
+      }
+      if (!(MEMBER_CSV_COLUMNS as readonly string[]).includes(name) || columns.includes(name as MemberCsvColumn)) throw formatError('header');
+      columns.push(name as MemberCsvColumn);
     }
-    if (!(MEMBER_CSV_COLUMNS as readonly string[]).includes(name) || columns.includes(name as MemberCsvColumn)) throw formatError('header');
-    columns.push(name as MemberCsvColumn);
   }
   if (REQUIRED_COLUMNS.some((c) => !columns.includes(c))) throw formatError('header');
   const rows: MemberCsvRow[] = [];
-  for (const r of raw.slice(1)) {
+  for (const r of raw.slice(hasHeader ? 1 : 0)) {
     if (r.error !== undefined) throw formatError('unreadable');
     if (r.cells.every((c) => c.trim() === '')) continue;
     if (o.limit !== undefined && rows.length >= o.limit) break;
     if (rows.length >= MEMBER_IMPORT_MAX_ROWS) throw formatError('too_many_rows');
     const cells: Partial<Record<MemberCsvColumn, string>> = {};
     columns.forEach((c, i) => {
-      if (c !== null) cells[c] = (r.cells[i] ?? '').trim();
+      if (c === null) return;
+      const v = (r.cells[i] ?? '').trim();
+      // SLiMS writes "no date" as 0000-00-00 and the gender as 1 or 0.
+      if (slims && (c === 'birth_date' || c === 'joined_on' || c === 'expires_on') && /^0{4}-0{2}-0{2}$/.test(v)) cells[c] = '';
+      else if (slims && c === 'gender' && (v === '1' || v === '0')) cells[c] = v === '1' ? 'male' : 'female';
+      else cells[c] = v;
     });
     rows.push({ line: r.line, cells });
   }
@@ -189,10 +200,18 @@ const TEXT_COLUMNS = Object.freeze({
  * The plan of every row (see the top of this file): the member types and branches by code, the members the numbers
  * name, then each row checked in file order. Reads only.
  */
-export async function planMemberRows(db: Db, rows: readonly MemberCsvRow[], o: { mode: MemberImportMode; today: string }): Promise<PlannedRow[]> {
-  const types = new Map(
-    (await db.selectFrom('member_types').select(['id', 'code_key']).where('archived_at', 'is', null).execute()).map((t) => [t.code_key, t.id]),
-  );
+export async function planMemberRows(db: Db, rows: readonly MemberCsvRow[], o: { mode: MemberImportMode; today: string; format?: MemberImportFormat }): Promise<PlannedRow[]> {
+  const typeRows = await db.selectFrom('member_types').select(['id', 'code_key', 'name_id', 'name_en']).where('archived_at', 'is', null).execute();
+  const types = new Map(typeRows.map((t) => [t.code_key, t.id]));
+  // A SLiMS export names the type: its name (Indonesian or English) when no type has that code.
+  if (o.format === 'slims-members') {
+    for (const t of typeRows) {
+      for (const name of [t.name_id, t.name_en]) {
+        const k = name === null ? '' : normalizeKey(name);
+        if (k !== '' && !types.has(k)) types.set(k, t.id);
+      }
+    }
+  }
   const branches = new Map(
     (await db.selectFrom('branches').select(['id', 'code_key']).where('archived_at', 'is', null).execute()).map((b) => [b.code_key, b.id]),
   );
@@ -330,12 +349,24 @@ export const MEMBER_IMPORT_REPORT_HEADER = Object.freeze(['line', 'member_no', '
  *
  * @throws DomainError MEMBER_IMPORT_FORMAT `{reason}` when the file cannot be read (nothing written)
  */
-export async function runMemberImport(tx: TxCtx, input: { bytes: Uint8Array; mode: MemberImportMode; dryRun: boolean }): Promise<MemberImportResult> {
-  const rows = readMemberCsv(input.bytes);
-  const runId = await createRun(tx, { kind: 'member_import', dryRun: input.dryRun, format: 'csv-members', options: { mode: input.mode } });
-  await tx.audit({ action: 'members.import.start', entity: 'catalog_runs', entityId: runId, meta: { dryRun: input.dryRun, mode: input.mode, format: 'csv-members' } });
+export async function runMemberImport(
+  tx: TxCtx,
+  input: { bytes: Uint8Array; mode: MemberImportMode; dryRun: boolean } & MemberCsvLayout,
+): Promise<MemberImportResult> {
+  const format: MemberImportFormat = input.format ?? 'csv-members';
+  const layout: MemberCsvLayout = { format, ...(input.columns === undefined ? {} : { columns: input.columns }) };
+  const rows = readMemberCsv(input.bytes, layout);
+  // The run keeps the mode and the mapping (field names only): a dry run's sample is read again with them.
+  const options = { mode: input.mode, ...(input.columns === undefined ? {} : { columns: [...input.columns] }) };
+  const runId = await createRun(tx, { kind: 'member_import', dryRun: input.dryRun, format, options });
+  await tx.audit({
+    action: 'members.import.start',
+    entity: 'catalog_runs',
+    entityId: runId,
+    meta: { dryRun: input.dryRun, mode: input.mode, format, ...(input.columns === undefined ? {} : { mapped: true }) },
+  });
   const today = await libraryToday(tx.trx, tx.now);
-  const plan = await planMemberRows(tx.trx, rows, { mode: input.mode, today });
+  const plan = await planMemberRows(tx.trx, rows, { mode: input.mode, today, format });
   if (!input.dryRun) {
     const source = `import:${runId}`;
     for (const p of plan) {
@@ -375,21 +406,25 @@ function numberTaken(error: DomainError): boolean {
 export async function getMemberImport(db: Db, id: string, o: { file: Uint8Array | null; now: number }): Promise<MemberImportView> {
   const run = await getRun(db, id);
   if (run === null || run.kind !== 'member_import') throw new DomainError('NOT_FOUND', { detail: 'Impor anggota tidak ditemukan / Member import not found' });
-  let options: { mode?: unknown } = {};
+  let options: { mode?: unknown; columns?: unknown } = {};
   let summary: { counts?: unknown } = {};
   try {
-    options = JSON.parse(run.options) as { mode?: unknown };
+    options = JSON.parse(run.options) as { mode?: unknown; columns?: unknown };
     summary = JSON.parse(run.summary) as { counts?: unknown };
   } catch {
     // A run row written by this code always holds JSON objects.
   }
   const mode: MemberImportMode = options.mode === 'upsert' ? 'upsert' : 'create_only';
+  const format: MemberImportFormat = run.format === 'slims-members' ? 'slims-members' : 'csv-members';
+  const columns = Array.isArray(options.columns)
+    ? options.columns.map((c) => (typeof c === 'string' && (MEMBER_CSV_COLUMNS as readonly string[]).includes(c) ? (c as MemberCsvColumn) : null))
+    : undefined;
   const dryRun = Number(run.dry_run) === 1;
   let sample: MemberImportSampleRow[] = [];
   if (dryRun && o.file !== null) {
     try {
-      const rows = readMemberCsv(o.file, { limit: MEMBER_IMPORT_SAMPLE_ROWS });
-      const plan = await planMemberRows(db, rows, { mode, today: await libraryToday(db, o.now) });
+      const rows = readMemberCsv(o.file, { limit: MEMBER_IMPORT_SAMPLE_ROWS, format, ...(columns === undefined ? {} : { columns }) });
+      const plan = await planMemberRows(db, rows, { mode, today: await libraryToday(db, o.now), format });
       sample = plan.map((p) => ({ line: p.line, memberNo: p.memberNo, name: p.name, memberType: p.memberType, className: p.className, refusal: p.refusal, warnings: p.warnings }));
     } catch {
       sample = [];
@@ -399,7 +434,7 @@ export async function getMemberImport(db: Db, id: string, o: { file: Uint8Array 
   return {
     id: run.id,
     status: run.status as RunStatus,
-    format: 'csv-members',
+    format,
     mode,
     dryRun,
     counts,

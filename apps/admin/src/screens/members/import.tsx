@@ -1,9 +1,9 @@
-import { MEMBER_IMPORT_MODES, type MemberImportMode, type MemberImportRefusal, type MemberImportWarning } from '@altis/shared';
+import { MEMBER_IMPORT_FORMATS, MEMBER_IMPORT_MODES, type MemberImportFormat, type MemberImportMode, type MemberImportRefusal, type MemberImportWarning } from '@altis/shared';
 import type { MemberImportCounts, MemberImportStartResponse, MemberImportView } from '@altis/shared/api/members';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useId, useRef, useState, type DragEvent, type ReactNode } from 'react';
-import { Notice, ProblemAlert } from '@/components/form-field';
+import { Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
 import { Callout, DenseTable, StatStrip, StatusText, Steps, TABLE, Tag, type DenseColumn } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT, type TKey, type Translate } from '@/i18n';
@@ -13,20 +13,23 @@ import { useMe } from '@/lib/me';
 import { uploadFile } from '@/lib/upload';
 import { cn } from '@/lib/utils';
 import { newTransactionKey, useMemberTypes } from '@/screens/circulation/common';
-import { MEMBER_CSV_COLUMNS, checkMemberCsvHeader, readCsvHead, type CsvHead, type MemberCsvColumn } from './import-head';
+import { MEMBER_CSV_COLUMNS, initialMapping, missingFields, readCsvHead, remap, slimsHead, type CsvHead, type MemberCsvColumn } from './import-head';
 
 /**
  * Impor Anggota (`/admin/anggota/impor`), a wizard of four numbered steps:
  *
- * 1. **Unggah berkas:** a CSV with a header row (`member_no`, `name`, `member_type` required; the other columns
- *    optional, in any order), `,` or `;` as separator, UTF-8 or the Windows encoding Excel uses in Indonesia, chosen or
- *    dropped on the page. The template can be downloaded.
+ * 1. **Unggah berkas:** the format, then the file: the ALTIS CSV (a header row naming the columns, `member_no`, `name`,
+ *    `member_type` required, the others optional, in any order) or a SLiMS member export (its 18 columns in their
+ *    fixed order, the type by its name), `,` or `;` as separator, UTF-8 or the Windows encoding Excel uses in
+ *    Indonesia, chosen or dropped on the page. The template can be downloaded.
  * 2. **Pemetaan & pratinjau:** the browser reads the file's head (import-head.ts; nothing is sent yet): the separator,
- *    the encoding and the rows, each column of the file and the ALTIS field it fills (a required one missing, or a
- *    column the import does not know, stops here: the server would refuse the whole file), the first 5 rows with the
- *    cells that will not pass marked in colour and in words (why, and a count of the ones that refuse their row and the
- *    ones only warned of), and the mode: create new members only (a number that exists is skipped) or also
- *    update the ones that exist (an empty cell keeps the stored value).
+ *    the encoding and the rows, then each column of the file with a sample value and the ALTIS field it feeds, which the
+ *    admin can change ("Abaikan kolom ini" leaves it out; a field chosen for another column moves there); it starts
+ *    from the header's names or the SLiMS order. A required field no column feeds stops here. The first 5 rows show
+ *    under the fields they feed, the cells that will not pass marked in colour and in words (why, and a count of the
+ *    ones that refuse their row and the ones only warned of), and the mode: create new members only (a number that
+ *    exists is skipped) or also update the ones that exist (an empty cell keeps the stored value). The dry run and
+ *    the import read the file with that mapping.
  * 3. **Uji kering:** the file goes up (the staged context `members.import`) and a dry run reads and checks every row
  *    without writing: the counts (will create, will update, unchanged, refused per reason), the warnings and the first
  *    20 rows as the import reads them. A member type the file names but the library does not have refuses the row; it
@@ -191,6 +194,9 @@ export function MemberImportScreen() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [head, setHead] = useState<CsvHead | null>(null);
+  // ---- Komunitas (staff screens' data): the format and the field each column feeds ----
+  const [format, setFormat] = useState<MemberImportFormat>('csv-members');
+  const [mapping, setMapping] = useState<(MemberCsvColumn | null)[]>([]);
   const [mode, setMode] = useState<MemberImportMode>('create_only');
   const [step, setStep] = useState<Step>('file');
   const [dryRunId, setDryRunId] = useState<string | null>(null);
@@ -211,8 +217,10 @@ export function MemberImportScreen() {
     setHead(null);
     if (next === null) return;
     try {
-      const read = readCsvHead(new Uint8Array(await next.arrayBuffer()));
+      const raw = readCsvHead(new Uint8Array(await next.arrayBuffer()));
+      const read = format === 'slims-members' ? slimsHead(raw) : raw;
       setHead(read);
+      setMapping(initialMapping(format, read.header));
       setStep('mapping');
     } catch {
       setFileError(t('members.import.unreadable'));
@@ -228,7 +236,12 @@ export function MemberImportScreen() {
     setProgress(0);
     try {
       const { uploadId } = await uploadFile(file, { context: 'members.import', onProgress: (sent, total) => setProgress(total === 0 ? 100 : Math.round((sent / total) * 100)) });
-      const started = await api<MemberImportStartResponse>('POST', 'members/imports', { uploadId, format: 'csv-members', mode, dryRun: dry }, { idempotencyKey: newTransactionKey('member-import') });
+      const started = await api<MemberImportStartResponse>(
+        'POST',
+        'members/imports',
+        { uploadId, format, mode, dryRun: dry, columns: mapping },
+        { idempotencyKey: newTransactionKey('member-import') },
+      );
       return started.id;
     } catch (e) {
       if (e instanceof ApiError && e.code === 'MEMBER_IMPORT_FORMAT') {
@@ -268,6 +281,7 @@ export function MemberImportScreen() {
     setStep('file');
     setFile(null);
     setHead(null);
+    setMapping([]);
     setDryRunId(null);
     setRealRunId(null);
     setProblem(null);
@@ -285,16 +299,19 @@ export function MemberImportScreen() {
 
   const dryDone = dryRun.data !== undefined && dryRun.data.status === 'succeeded';
   const realDone = realRun.data !== undefined && TERMINAL.has(realRun.data.status);
-  const check = head === null ? null : checkMemberCsvHeader(head.header);
-  const typeCodes = new Set((types.data?.items ?? []).map((x) => x.code.toLowerCase()));
+  const missing = missingFields(mapping);
+  // A SLiMS export names the type: its name (Indonesian or English) is known as well as its code.
+  const typeCodes = new Set(
+    (types.data?.items ?? []).flatMap((x) => [x.code.toLowerCase(), ...(format === 'slims-members' ? [x.nameId.toLowerCase(), ...(x.nameEn === null ? [] : [x.nameEn.toLowerCase()])] : [])]),
+  );
   // The preview's rows, each cell with how it will fare (null: a column the preview does not show, or a fine value).
   const previewFlags =
-    head === null || check === null
+    head === null
       ? []
       : head.rows.slice(0, 5).map((row) =>
           head.header.map((_, i) => {
-            const c = check.columns[i];
-            return typeof c === 'string' && c !== 'unknown' && c !== 'duplicate' ? cellFlag(c, row[i] ?? '', typeCodes) : null;
+            const c = mapping[i] ?? null;
+            return c === null ? null : cellFlag(c, row[i] ?? '', typeCodes, format);
           }),
         );
   const flagged = previewFlags.flat().filter((f): f is CellFlag => f !== null);
@@ -326,6 +343,18 @@ export function MemberImportScreen() {
             </Callout>
           )}
           <p className="text-sm text-muted-foreground">{t('members.import.intro')}</p>
+          <fieldset className="grid gap-2" disabled={!canRun || busy}>
+            <legend className="mb-1 text-meta font-semibold">{t('members.import.format')}</legend>
+            {MEMBER_IMPORT_FORMATS.map((f) => (
+              <label key={f} className="flex items-start gap-2 text-sm">
+                <input type="radio" name={`${ids}-format`} value={f} checked={format === f} onChange={() => setFormat(f)} className="mt-0.5 size-4 accent-primary" />
+                <span>
+                  <span className="font-semibold">{t(`members.import.format.${f}`)}</span>
+                  <span className="block text-xs text-muted-foreground">{t(`members.import.format_hint.${f}`)}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
           <label
             htmlFor={`${ids}-file`}
             onDragOver={(e) => {
@@ -361,7 +390,7 @@ export function MemberImportScreen() {
         </section>
       )}
 
-      {step === 'mapping' && head !== null && check !== null && (
+      {step === 'mapping' && head !== null && (
         <section aria-labelledby={`${ids}-h`} className="grid gap-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 id={`${ids}-h`} className="text-base font-bold">
@@ -385,16 +414,24 @@ export function MemberImportScreen() {
               {
                 id: 'field',
                 header: t('members.import.col.field'),
+                className: 'min-w-[220px]',
                 cell: (i: number) => {
-                  const c = check.columns[i];
-                  if (c === null || c === undefined) return <span className="text-muted-foreground">{t('members.import.ignored')}</span>;
-                  if (c === 'unknown') return <StatusText tone="bad">{t('members.import.unknown_column')}</StatusText>;
-                  if (c === 'duplicate') return <StatusText tone="bad">{t('members.import.duplicate_column')}</StatusText>;
+                  const c = mapping[i] ?? null;
+                  const label = head.header[i] === '' ? t('members.import.column_n', { n: i + 1 }) : head.header[i]!;
                   return (
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      {t(FIELD_LABEL[c])}
-                      {REQUIRED.has(c) && <Tag tone="accent">{t('members.import.required')}</Tag>}
-                    </span>
+                    <select
+                        aria-label={t('members.import.field_for', { column: label })}
+                        className={cn(SELECT_CLASS, 'h-8 w-auto min-w-[180px] text-meta')}
+                        disabled={!canRun || busy}
+                        value={c ?? ''}
+                        onChange={(e) => setMapping((m) => remap(m, i, e.target.value === '' ? null : (e.target.value as MemberCsvColumn)))}>
+                        {MEMBER_CSV_COLUMNS.map((f) => (
+                          <option key={f} value={f}>
+                            {REQUIRED.has(f) ? t('members.import.field_required', { field: t(FIELD_LABEL[f]) }) : t(FIELD_LABEL[f])}
+                          </option>
+                        ))}
+                        <option value="">{t('members.import.ignore')}</option>
+                    </select>
                   );
                 },
               },
@@ -403,14 +440,10 @@ export function MemberImportScreen() {
             rowKey={(i) => String(i)}
             empty="—"
           />
-          {check.missing.length > 0 && (
-            <Callout tone="bad" role="alert" title={t('members.import.missing', { columns: check.missing.join(', ') })}>
-              <p>{t('members.import.fix_header')}</p>
-            </Callout>
-          )}
-          {check.missing.length === 0 && (check.unknown.length > 0 || check.duplicate.length > 0) && (
-            <Callout tone="bad" role="alert" title={t('members.import.unknown', { columns: [...check.unknown, ...check.duplicate].join(', ') })}>
-              <p>{t('members.import.fix_header')}</p>
+          <p className="text-meta text-muted-foreground">{t('members.import.mapping_note')}</p>
+          {missing.length > 0 && (
+            <Callout tone="bad" role="alert" title={t('members.import.unmapped', { fields: missing.map((f) => t(FIELD_LABEL[f])).join(', ') })}>
+              <p>{t('members.import.fix_mapping')}</p>
             </Callout>
           )}
           <fieldset className="grid gap-2" disabled={!canRun || busy}>
@@ -434,9 +467,9 @@ export function MemberImportScreen() {
                   <th scope="col" className={TABLE.th}>
                     {t('members.import.col.line')}
                   </th>
-                  {head.header.map((h, i) => {
-                    const c = check.columns[i];
-                    return typeof c === 'string' && c !== 'unknown' && c !== 'duplicate' ? (
+                  {head.header.map((_, i) => {
+                    const c = mapping[i] ?? null;
+                    return c !== null ? (
                       <th key={i} scope="col" className={TABLE.th}>
                         {t(FIELD_LABEL[c])}
                       </th>
@@ -449,8 +482,8 @@ export function MemberImportScreen() {
                   <tr key={r}>
                     <td className={cn(TABLE.td, 'text-muted-foreground')}>{head.lines[r]}</td>
                     {head.header.map((_, i) => {
-                      const c = check.columns[i];
-                      if (typeof c !== 'string' || c === 'unknown' || c === 'duplicate') return null;
+                      const c = mapping[i] ?? null;
+                      if (c === null) return null;
                       const v = row[i] ?? '';
                       const flag = previewFlags[r]?.[i] ?? null;
                       return (
@@ -483,7 +516,7 @@ export function MemberImportScreen() {
             <Button type="button" variant="outline" disabled={busy} onClick={restart}>
               {t('members.import.back')}
             </Button>
-            <Button type="button" disabled={busy || !canRun || !check.ok} onClick={() => void runDry()}>
+            <Button type="button" disabled={busy || !canRun || missing.length > 0} onClick={() => void runDry()}>
               {t('members.import.dry_run')}
             </Button>
             <span className="text-sm text-muted-foreground">{t('members.import.dry_run_saves_nothing')}</span>
@@ -572,13 +605,15 @@ interface CellFlag {
 }
 
 /** See {@link CellFlag}; null for a value the import takes as it is. */
-function cellFlag(column: MemberCsvColumn, value: string, typeCodes: ReadonlySet<string>): CellFlag | null {
+function cellFlag(column: MemberCsvColumn, value: string, typeCodes: ReadonlySet<string>, format: MemberImportFormat): CellFlag | null {
   const v = value.trim();
   if (v === '') return null;
+  const slims = format === 'slims-members';
   if (column === 'member_type') return typeCodes.size > 0 && !typeCodes.has(v.toLowerCase()) ? { tone: 'bad', problem: 'unknown_type' } : null;
   if (column === 'birth_date' || column === 'joined_on' || column === 'expires_on') {
+    if (slims && v === '0000-00-00') return null;
     return /^\d{4}-\d{2}-\d{2}$|^\d{1,2}[/.-]\d{1,2}[/.-]\d{4}$/.test(v) ? null : { tone: 'bad', problem: 'unreadable_date' };
   }
-  if (column === 'gender') return /^(l|p|m|f|male|female|laki-laki|perempuan)$/i.test(v) ? null : { tone: 'warn', problem: 'gender_unknown' };
+  if (column === 'gender') return /^(l|p|m|f|male|female|laki-laki|perempuan)$/i.test(v) || (slims && (v === '0' || v === '1')) ? null : { tone: 'warn', problem: 'gender_unknown' };
   return null;
 }
