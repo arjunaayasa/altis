@@ -72,7 +72,7 @@ function Subjects({ subjects }: { subjects: readonly SubjectLoans[] }) {
         <>
           <ul className="flex flex-col" aria-label={t('dashboard.home.subjects.caption', { days: DASHBOARD_USAGE_DAYS })}>
             {subjects.map((s) => (
-              <li key={s.main} className="grid grid-cols-[minmax(7rem,11rem)_minmax(0,1fr)_2.5rem] items-center gap-2.5 py-[5px] text-[13px]" data-subject={s.main}>
+              <li key={s.main} className="grid grid-cols-[minmax(7rem,11rem)_minmax(0,1fr)_2.5rem] items-center gap-2.5 py-[5px] text-[13px] xl:grid-cols-[minmax(8rem,14rem)_minmax(0,1fr)_2.5rem]" data-subject={s.main}>
                 <span className="truncate text-muted-foreground" title={subjectName(t, s)}>
                   {subjectName(t, s)}
                 </span>
