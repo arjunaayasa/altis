@@ -196,7 +196,7 @@ describe('ItemsListScreen: bulk change', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pilih semua eksemplar yang tampil' }));
     expect(screen.getByText('3 eksemplar dipilih')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Ubah massal' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah massal eksemplar' });
+    const dialog = await screen.findByRole('form', { name: 'Ubah massal eksemplar' });
     fireEvent.change(within(dialog).getByRole('combobox', { name: 'Ubah status ke' }), { target: { value: 'repair' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Terapkan' }));
     expect(await within(dialog).findByText('1 eksemplar diubah.')).toBeTruthy();
@@ -230,7 +230,7 @@ describe('ItemsListScreen: bulk change', () => {
     await screen.findByText('B0000001', undefined, FIRST);
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pilih semua eksemplar yang tampil' }));
     fireEvent.click(screen.getByRole('button', { name: 'Ubah massal' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah massal eksemplar' });
+    const dialog = await screen.findByRole('form', { name: 'Ubah massal eksemplar' });
     expect(within(dialog).getByText('1 eksemplar terpilih ada di cabang yang tidak Anda kelola dan tidak ikut diubah.')).toBeTruthy();
     // One branch: the location may change, to a location of that branch.
     const location = within(dialog).getByRole('combobox', { name: 'Pindahkan ke lokasi' }) as HTMLSelectElement;
@@ -260,7 +260,7 @@ describe('ItemsListScreen: bulk change', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pilih B0000001' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pilih U0000001' }));
     fireEvent.click(screen.getByRole('button', { name: 'Ubah massal' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah massal eksemplar' });
+    const dialog = await screen.findByRole('form', { name: 'Ubah massal eksemplar' });
     expect((within(dialog).getByRole('combobox', { name: 'Pindahkan ke lokasi' }) as HTMLSelectElement).disabled).toBe(true);
     expect(within(dialog).getByText('Pindah lokasi hanya dapat dilakukan untuk eksemplar dari satu cabang.')).toBeTruthy();
     fireEvent.change(within(dialog).getByRole('combobox', { name: 'Ubah tipe koleksi ke' }), { target: { value: TK_REF } });
@@ -287,7 +287,7 @@ describe('ItemsListScreen: bulk change', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pilih B0000001' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pilih U0000001' }));
     fireEvent.click(screen.getByRole('button', { name: 'Ubah massal' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah massal eksemplar' });
+    const dialog = await screen.findByRole('form', { name: 'Ubah massal eksemplar' });
     expect(await within(dialog).findByText('1 eksemplar terpilih ada di cabang yang tidak aktif dan tidak ikut diubah.')).toBeTruthy();
     fireEvent.change(within(dialog).getByRole('combobox', { name: 'Ubah tipe koleksi ke' }), { target: { value: TK_REF } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Terapkan' }));
@@ -312,7 +312,7 @@ describe('ItemsListScreen: bulk change', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pilih B0000001' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pilih U0000001' }));
     fireEvent.click(screen.getByRole('button', { name: 'Ubah massal' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah massal eksemplar' });
+    const dialog = await screen.findByRole('form', { name: 'Ubah massal eksemplar' });
     fireEvent.change(within(dialog).getByRole('combobox', { name: 'Ubah tipe koleksi ke' }), { target: { value: TK_REF } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Terapkan' }));
     expect(await within(dialog).findByText('1 eksemplar diubah.')).toBeTruthy();
@@ -325,7 +325,7 @@ describe('ItemsListScreen: bulk change', () => {
     await screen.findByText('B0000001', undefined, FIRST);
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pilih B0000001' }));
     fireEvent.click(screen.getByRole('button', { name: 'Ubah massal' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah massal eksemplar' });
+    const dialog = await screen.findByRole('form', { name: 'Ubah massal eksemplar' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Terapkan' }));
     expect(await within(dialog).findByText('Pilih sedikitnya satu perubahan.')).toBeTruthy();
     expect(writes()).toEqual([]);

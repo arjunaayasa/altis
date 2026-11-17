@@ -109,7 +109,7 @@ describe('SruCopyDialog', () => {
       'GET catalog/sru/search': () => page([{ draft: LASKAR, duplicate: null }, { draft: PEMIMPI, duplicate: { recordId: DUP, score: 92 } }], 2),
     });
     const { onPick } = open();
-    const dialog = await screen.findByRole('dialog', { name: 'Salin dari SRU' });
+    const dialog = await screen.findByRole('region', { name: 'Salin dari SRU' });
     // Only the enabled servers are offered, the first one chosen.
     const server = (await within(dialog).findByLabelText('Server')) as HTMLSelectElement;
     expect([...server.options].map((o) => o.textContent)).toEqual(['Perpustakaan Nasional RI', 'Perpustakaan Kampus']);
@@ -138,7 +138,7 @@ describe('SruCopyDialog', () => {
   it('with "Tambah eksemplar sekarang" ticked, "Pilih" → onPick({draft, source, addItemNow: true}) (M13)', async () => {
     stubApi({ 'GET catalog/config': () => CONFIG, 'GET catalog/sru/search': () => page([{ draft: LASKAR, duplicate: null }]) });
     const { onPick } = open();
-    const dialog = await screen.findByRole('dialog', { name: 'Salin dari SRU' });
+    const dialog = await screen.findByRole('region', { name: 'Salin dari SRU' });
     fireEvent.change(await within(dialog).findByLabelText('Kata pencarian'), { target: { value: 'laskar' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cari' }));
     const box = (await within(dialog).findByLabelText('Tambah eksemplar sekarang')) as HTMLInputElement;
@@ -151,7 +151,7 @@ describe('SruCopyDialog', () => {
   it('opened with the editor\'s ISBN: searched at once by ISBN on the first enabled server', async () => {
     const api = stubApi({ 'GET catalog/config': () => CONFIG, 'GET catalog/sru/search': () => page([{ draft: LASKAR, duplicate: null }]) });
     open({ initialIsbn: ' 978-602-03-3295-6 ' });
-    const dialog = await screen.findByRole('dialog', { name: 'Salin dari SRU' });
+    const dialog = await screen.findByRole('region', { name: 'Salin dari SRU' });
     expect(await within(dialog).findByText('Laskar pelangi')).toBeTruthy();
     expect(api.searches()).toEqual([{ server: 'perpusnas', index: 'isbn', q: '978-602-03-3295-6', start: '1' }]);
     expect((within(dialog).getByLabelText('Cari berdasarkan') as HTMLSelectElement).value).toBe('isbn');
@@ -160,7 +160,7 @@ describe('SruCopyDialog', () => {
   it('a scan while the dialog is open searches the ISBN it read', async () => {
     const api = stubApi({ 'GET catalog/config': () => CONFIG, 'GET catalog/sru/search': () => page([{ draft: LASKAR, duplicate: null }]) });
     open();
-    const dialog = await screen.findByRole('dialog', { name: 'Salin dari SRU' });
+    const dialog = await screen.findByRole('region', { name: 'Salin dari SRU' });
     await within(dialog).findByLabelText('Kata pencarian');
     for (const key of '9786020332956') fireEvent.keyDown(dialog, { key });
     fireEvent.keyDown(dialog, { key: 'Enter' });
@@ -174,7 +174,7 @@ describe('SruCopyDialog', () => {
       'GET catalog/sru/search': (q) => page([{ draft: q.get('start') === '1' ? LASKAR : PEMIMPI, duplicate: null }], 25, Number(q.get('start'))),
     });
     open();
-    const dialog = await screen.findByRole('dialog', { name: 'Salin dari SRU' });
+    const dialog = await screen.findByRole('region', { name: 'Salin dari SRU' });
     fireEvent.change(await within(dialog).findByLabelText('Kata pencarian'), { target: { value: 'hirata' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cari' }));
     await within(dialog).findByText('Laskar pelangi');
@@ -195,7 +195,7 @@ describe('SruCopyDialog', () => {
   it('a failed search shows the problem (CATALOG_SRU_INVALID); an empty term is refused before anything is sent', async () => {
     const api = stubApi({ 'GET catalog/config': () => CONFIG, 'GET catalog/sru/search': () => problem(502, 'CATALOG_SRU_INVALID') });
     open();
-    const dialog = await screen.findByRole('dialog', { name: 'Salin dari SRU' });
+    const dialog = await screen.findByRole('region', { name: 'Salin dari SRU' });
     fireEvent.change(await within(dialog).findByLabelText('Kata pencarian'), { target: { value: '   ' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cari' }));
     expect(await within(dialog).findByText('Isi kata pencarian.')).toBeTruthy();
@@ -212,7 +212,7 @@ describe('SruCopyDialog', () => {
       'GET catalog/sru/search': () => problem(502, 'CATALOG_SRU_INVALID', { detail: 'Unsupported index: dc.title' }),
     });
     open();
-    const dialog = await screen.findByRole('dialog', { name: 'Salin dari SRU' });
+    const dialog = await screen.findByRole('region', { name: 'Salin dari SRU' });
     fireEvent.change(await within(dialog).findByLabelText('Kata pencarian'), { target: { value: 'laskar' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cari' }));
     expect(await within(dialog).findByText('Server SRU menolak pencarian ini: Unsupported index: dc.title')).toBeTruthy();
@@ -222,7 +222,7 @@ describe('SruCopyDialog', () => {
   it('without an enabled server it says so and searches nothing, even with an ISBN', async () => {
     const api = stubApi({ 'GET catalog/config': () => ({ ...CONFIG, sruServers: [{ id: 'loc', name: 'Library of Congress', enabled: false }] }) });
     open({ initialIsbn: '9786020332956' });
-    const dialog = await screen.findByRole('dialog', { name: 'Salin dari SRU' });
+    const dialog = await screen.findByRole('region', { name: 'Salin dari SRU' });
     expect(await within(dialog).findByText(/Belum ada server SRU yang aktif/)).toBeTruthy();
     expect(api.searches()).toEqual([]);
   });
@@ -255,7 +255,7 @@ describe('IsbnLookupButton', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cari ISBN' }));
     await waitFor(() => expect(onExisting).toHaveBeenCalledWith(DUP));
     expect(api.calls.filter((c) => c.path.startsWith('catalog/lookup/isbn/'))).toHaveLength(1);
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('region', { name: /^Hasil pencarian ISBN/ })).toBeNull();
     expect(onPick).not.toHaveBeenCalled();
   });
 
@@ -263,7 +263,7 @@ describe('IsbnLookupButton', () => {
     stubApi({ 'GET catalog/config': () => CONFIG, 'GET catalog/lookup/isbn/9786020332956': () => FOUND });
     const { onPick, onExisting } = renderButton('9786020332956');
     fireEvent.click(screen.getByRole('button', { name: 'Cari ISBN' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Hasil pencarian ISBN 9786020332956' });
+    const dialog = await screen.findByRole('region', { name: 'Hasil pencarian ISBN 9786020332956' });
     const list = within(dialog).getByRole('list', { name: 'Hasil pencarian ISBN 9786020332956' });
     const first = within(list).getByText('Laskar pelangi').closest('li')!;
     expect(await within(first).findByText('Sumber: Perpustakaan Nasional RI')).toBeTruthy();
@@ -277,14 +277,14 @@ describe('IsbnLookupButton', () => {
     fireEvent.click(within(first).getByRole('button', { name: 'Pilih Laskar pelangi' }));
     expect(onPick.mock.calls[0]![0]).toStrictEqual({ draft: LASKAR, source: 'sru:perpusnas', addItemNow: true });
     expect(onExisting).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('region', { name: /^Hasil pencarian ISBN/ })).toBeNull());
   });
 
   it('"Pilih" without the box → onPick({draft, source}) only', async () => {
     stubApi({ 'GET catalog/config': () => CONFIG, 'GET catalog/lookup/isbn/9786020332956': () => FOUND });
     const { onPick } = renderButton('9786020332956');
     fireEvent.click(screen.getByRole('button', { name: 'Cari ISBN' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Hasil pencarian ISBN 9786020332956' });
+    const dialog = await screen.findByRole('region', { name: 'Hasil pencarian ISBN 9786020332956' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Pilih Laskar pelangi (cetakan baru)' }));
     expect(onPick.mock.calls[0]![0]).toStrictEqual({ draft: FOUND.candidates[1]!.draft, source: 'isbn:arsya' });
   });
@@ -294,7 +294,7 @@ describe('IsbnLookupButton', () => {
     stubApi({ 'GET catalog/config': () => ({ ...CONFIG, sruServers: [], arsyaEnabled: false }), 'GET catalog/lookup/isbn/9786020332956': () => none });
     renderButton('9786020332956');
     fireEvent.click(screen.getByRole('button', { name: 'Cari ISBN' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Hasil pencarian ISBN 9786020332956' });
+    const dialog = await screen.findByRole('region', { name: 'Hasil pencarian ISBN 9786020332956' });
     expect(await within(dialog).findByText(/^Belum ada sumber salin katalog yang aktif/)).toBeTruthy();
   });
 
@@ -303,7 +303,7 @@ describe('IsbnLookupButton', () => {
     stubApi({ 'GET catalog/config': () => ({ ...CONFIG, sruServers: [], arsyaEnabled: true }), 'GET catalog/lookup/isbn/9786020332956': () => none });
     renderButton('9786020332956');
     fireEvent.click(screen.getByRole('button', { name: 'Cari ISBN' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Hasil pencarian ISBN 9786020332956' });
+    const dialog = await screen.findByRole('region', { name: 'Hasil pencarian ISBN 9786020332956' });
     expect(await within(dialog).findByText(/^Belum ada sumber salin katalog yang aktif/)).toBeTruthy();
   });
 
@@ -324,7 +324,7 @@ describe('IsbnLookupButton', () => {
     renderWithApp(<IsbnLookupButton isbn="9786020332956" onPick={vi.fn()} onExisting={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Cari ISBN' }));
     expect((await screen.findByRole('alert')).textContent).toMatch(/42 detik/);
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('region', { name: /^Hasil pencarian ISBN/ })).toBeNull();
   });
 
   it('an empty ISBN field: the button is disabled and nothing is asked', () => {
@@ -381,14 +381,14 @@ describe('the record editor with the real copy dialog (M13)', () => {
     // The editor is a lazy chunk: its first load in a file can take a while on a busy machine.
     await screen.findByLabelText('Judul (wajib)', undefined, { timeout: 15_000 });
     fireEvent.click(await screen.findByRole('button', { name: 'Salin dari SRU' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Salin dari SRU' });
+    const dialog = await screen.findByRole('region', { name: 'Salin dari SRU' });
     fireEvent.change(await within(dialog).findByLabelText('Kata pencarian'), { target: { value: 'laskar' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cari' }));
     fireEvent.click(await within(dialog).findByLabelText('Tambah eksemplar sekarang'));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Pilih Laskar pelangi' }));
 
     await waitFor(() => expect((screen.getByLabelText('Judul (wajib)') as HTMLInputElement).value).toBe('Laskar pelangi'));
-    expect(screen.queryByRole('dialog', { name: 'Salin dari SRU' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Salin dari SRU' })).toBeNull();
     expect(screen.getByText(/Formulir diisi dari salinan \(Perpustakaan Nasional RI\)\..*tab Eksemplar akan dibuka/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Simpan' }));

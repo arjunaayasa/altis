@@ -1,11 +1,12 @@
 import { IDENTIFIER_TYPES, vocabKey } from '@altis/shared';
-import { PlusIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { useId } from 'react';
 import { useWatch, type UseFieldArrayReturn, type UseFormReturn } from 'react-hook-form';
 import { SELECT_CLASS } from '@/components/form-field';
+import { StatusText } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type TKey } from '@/i18n';
+import { cn } from '@/lib/utils';
 import { ErrorText, errorAt, useLegend } from './agent-picker';
 import type { RecordFormValues } from './draft-to-form';
 
@@ -16,22 +17,26 @@ import type { RecordFormValues } from './draft-to-form';
  *
  * The rows are the editor's field array (the scanner appends to it as well). A stored ISBN or ISSN whose check digit
  * is wrong is kept with a warning (§3.2); `warnings` maps such a value to its warning code, shown on its row.
+ *
+ * Its part of the editor shows the heading and the hint (`hintId`, which describes the list): the legend is said to
+ * screen readers only.
  */
 export function IdentifiersField({
   form,
   array,
   required,
   warnings,
+  hintId,
 }: {
   form: UseFormReturn<RecordFormValues>;
   array: UseFieldArrayReturn<RecordFormValues, 'identifiers'>;
   required: boolean;
   /** A stored value → its warning code (`isbn_invalid`, `issn_invalid`). */
   warnings: ReadonlyMap<string, string>;
+  hintId: string;
 }) {
   const t = useT();
   const legend = useLegend('vocab.field.identifiers', required);
-  const hintId = useId();
   const baseId = useId();
   const { register, control } = form;
   const rows = useWatch({ control, name: 'identifiers' });
@@ -40,10 +45,7 @@ export function IdentifiersField({
 
   return (
     <fieldset className="grid min-w-0 gap-3" aria-describedby={hintId}>
-      <legend className="mb-1 text-sm font-medium">{legend}</legend>
-      <p id={hintId} className="text-xs text-muted-foreground">
-        {t('catalog.records.identifiers.hint')}
-      </p>
+      <legend className="sr-only">{legend}</legend>
       <ul className="grid gap-2">
         {fields.map((field, i) => {
           const n = i + 1;
@@ -54,7 +56,7 @@ export function IdentifiersField({
           return (
             <li key={field.id} className="grid gap-1">
               <div className="flex flex-wrap items-start gap-2">
-                <select className={`${SELECT_CLASS} w-auto`} aria-label={t('catalog.records.identifiers.type', { n })} {...register(`identifiers.${i}.type`)}>
+                <select className={cn(SELECT_CLASS, 'w-auto')} aria-label={t('catalog.records.identifiers.type', { n })} {...register(`identifiers.${i}.type`)}>
                   {IDENTIFIER_TYPES.map((type) => (
                     <option key={type} value={type}>
                       {t(vocabKey('identifier_type', type))}
@@ -62,7 +64,7 @@ export function IdentifiersField({
                   ))}
                 </select>
                 <Input
-                  className="min-w-40 flex-1 font-mono"
+                  className="min-w-40 flex-1"
                   maxLength={64}
                   autoComplete="off"
                   spellCheck={false}
@@ -80,15 +82,14 @@ export function IdentifiersField({
                   aria-invalid={qualifierError === undefined ? undefined : true}
                   {...register(`identifiers.${i}.qualifier`)}
                 />
-                <Button type="button" variant="ghost" size="icon" aria-label={t('catalog.records.identifiers.remove', { n })} onClick={() => remove(i)}>
-                  <XIcon aria-hidden="true" />
+                <Button type="button" variant="ghost" aria-label={t('catalog.records.identifiers.remove', { n })} onClick={() => remove(i)}>
+                  {t('catalog.records.row.remove')}
                 </Button>
               </div>
               <ErrorText id={errorId} error={valueError ?? qualifierError} />
               {warning !== undefined && (
-                <p className="flex items-center gap-1 text-sm text-warning-foreground">
-                  <TriangleAlertIcon className="size-4 shrink-0" aria-hidden="true" />
-                  {t(`catalog.records.warning.${warning}` as TKey)}
+                <p className="text-meta">
+                  <StatusText tone="warn">{t(`catalog.records.warning.${warning}` as TKey)}</StatusText>
                 </p>
               )}
             </li>
@@ -97,7 +98,6 @@ export function IdentifiersField({
       </ul>
       <div>
         <Button type="button" variant="outline" size="sm" onClick={() => append({ type: 'isbn', value: '', qualifier: '' })}>
-          <PlusIcon aria-hidden="true" />
           {t('catalog.records.identifiers.add')}
         </Button>
       </div>

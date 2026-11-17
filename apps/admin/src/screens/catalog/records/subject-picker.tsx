@@ -5,7 +5,8 @@ import { useFieldArray, useWatch, type UseFormReturn } from 'react-hook-form';
 import { Badge, SELECT_CLASS } from '@/components/form-field';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import { useT } from '@/i18n';
-import { ErrorText, RowButtons, errorAt, useLegend, usePickerSearch } from './agent-picker';
+import { cn } from '@/lib/utils';
+import { ErrorText, LIST_LEGEND, RowButtons, errorAt, useLegend, usePickerSearch } from './agent-picker';
 import type { RecordFormValues, SubjectRow } from './draft-to-form';
 
 /**
@@ -41,7 +42,7 @@ export function SubjectPicker({ form, required }: { form: UseFormReturn<RecordFo
 
   return (
     <fieldset className="grid min-w-0 gap-3">
-      <legend className="mb-1 text-sm font-medium">{legend}</legend>
+      <legend className={LIST_LEGEND}>{legend}</legend>
       {fields.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('catalog.records.subjects.none')}</p>
       ) : (
@@ -49,18 +50,18 @@ export function SubjectPicker({ form, required }: { form: UseFormReturn<RecordFo
           {fields.map((field, i) => {
             const ref = rows[i]?.ref ?? field.ref;
             return (
-              <li key={field.id} className="grid gap-2 rounded-md border p-2">
+              <li key={field.id} className="grid gap-2 rounded-md border px-3 py-2.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{ref.term}</span>
+                  <span className="font-semibold">{ref.term}</span>
                   {ref.id !== null && <span className="text-xs text-muted-foreground">{t(vocabKey('subject_type', ref.type))}</span>}
-                  {ref.id === null && <Badge tone="info">{t('catalog.records.new_badge')}</Badge>}
+                  {ref.id === null && <Badge>{t('catalog.records.new_badge')}</Badge>}
                   <span className="ml-auto">
                     <RowButtons name={ref.term} index={i} count={fields.length} onMove={move} onRemove={() => remove(i)} />
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   {ref.id === null && (
-                    <select className={`${SELECT_CLASS} w-auto`} aria-label={t('catalog.records.subjects.type', { term: ref.term })} {...register(`subjects.${i}.ref.type`)}>
+                    <select className={cn(SELECT_CLASS, 'w-auto')} aria-label={t('catalog.records.subjects.type', { term: ref.term })} {...register(`subjects.${i}.ref.type`)}>
                       {SUBJECT_TYPES.map((type) => (
                         <option key={type} value={type}>
                           {t(vocabKey('subject_type', type))}

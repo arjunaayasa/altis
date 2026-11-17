@@ -3,11 +3,11 @@ import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import type { ItemDetail, ItemView } from '@altis/shared/api/catalog/items';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
-import { ArrowLeftIcon } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm, type Path } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Badge, Notice, NoticeAlert, RefetchProblem } from '@/components/form-field';
+import { BackLink, Callout, FormBar, LoadingState, MoreMenu, MoreMenuItem, PageError, PageHead, StatusText } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/i18n';
 import { holdsAt } from '@/lib/access';
@@ -52,20 +52,15 @@ import { isUlid } from './search';
  *   again and the form follows it. Field errors land on their fields (`catalog.items.error.*` for the items API's own
  *   codes; `custom.<code>` on its custom field); a stale version (CONFLICT_STALE) offers "Muat ulang". The live item
  *   custom fields are part of the form (item-form.tsx).
- * - "Siangi" (archive: `withdrawn` + `archived_at`) asks first, then sends `DELETE …` with `{version}`. An archived
- *   item comes back only through `withdrawn → processing`.
+ * - "Siangi" (archive: `withdrawn` + `archived_at`), in the page head's ⋯ menu, asks first, then sends `DELETE …` with
+ *   `{version}`. An archived item comes back only through `withdrawn → processing`.
  * - Without `catalog.items.manage` at the item's branch (`holdsAt`), or with the branch marked inactive (L13,
  *   `isWritableBranch`), the page is read-only and says why: the server would refuse.
  */
 
-function BackLink() {
+function ItemsBackLink() {
   const t = useT();
-  return (
-    <Link to="/admin/catalog/items" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-      <ArrowLeftIcon className="size-4" aria-hidden="true" />
-      {t('catalog.items.back')}
-    </Link>
-  );
+  return <BackLink to="/admin/catalog/items">{t('catalog.items.back')}</BackLink>;
 }
 
 const enc = encodeURIComponent;
@@ -76,12 +71,17 @@ function ItemEditForm({
   canManage,
   choices,
   reload,
+  archiving,
+  onArchiveClose,
 }: {
   item: ItemView;
   canManage: boolean;
   choices: ItemFormChoices;
   /** Reads the item again and answers it (undefined when the read failed). */
   reload(): Promise<ItemView | undefined>;
+  /** "Siangi" was chosen in the page head's menu: the question is open. */
+  archiving: boolean;
+  onArchiveClose(): void;
 }) {
   const t = useT();
   const queryClient = useQueryClient();
@@ -94,7 +94,6 @@ function ItemEditForm({
   useDirtyGuard(isDirty);
   const [outcome, setOutcome] = useState<'saved' | 'no_changes' | 'archived' | null>(null);
   const [problem, setProblem] = useState<{ text: string; stale: boolean } | null>(null);
-  const [archiving, setArchiving] = useState(false);
   /** The message key of each custom field the server refused (a code may hold a `.`: no form path). */
   const [customErrors, setCustomErrors] = useState<Record<string, string>>({});
 
@@ -174,8 +173,6 @@ function ItemEditForm({
     setProblem(null);
   };
 
-  const canArchive = canManage && !base.archived && canTransition(base.status, 'withdrawn');
-
   return (
     <>
       {outcome === 'saved' && <Notice kind="success">{t('catalog.items.saved')}</Notice>}
@@ -186,7 +183,7 @@ function ItemEditForm({
           kind="error"
           action={
             problem.stale ? (
-              <Button type="button" variant="outline" size="sm" onClick={() => void reloadForm()}>
+              <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => void reloadForm()}>
                 {t('catalog.items.reload')}
               </Button>
             ) : undefined
@@ -196,7 +193,7 @@ function ItemEditForm({
         </Notice>
       )}
       <form noValidate onSubmit={(e) => void submit(e)}>
-        <fieldset disabled={!canManage} className="flex min-w-0 flex-col gap-6 rounded-lg border bg-card p-4">
+        <fieldset disabled={!canManage} className="grid min-w-0">
           <ItemFields
             form={form}
             base={base}
@@ -206,16 +203,15 @@ function ItemEditForm({
             onCustomChange={(code) => setCustomErrors((old) => withoutCustomError(old, code))}
           />
           {canManage && (
-            <div className="flex flex-wrap gap-2">
+            <FormBar className="mt-1">
               <Button type="submit" disabled={isSubmitting}>
                 {t(isSubmitting ? 'form.saving' : 'form.save')}
               </Button>
-              {canArchive && (
-                <Button type="button" variant="outline" onClick={() => setArchiving(true)}>
-                  {t('catalog.items.archive')}
-                </Button>
-              )}
-            </div>
+              <Button asChild variant="outline">
+                <Link to="/admin/catalog/items">{t('form.cancel')}</Link>
+              </Button>
+              {isDirty && <StatusText tone="warn">{t('catalog.items.unsaved')}</StatusText>}
+            </FormBar>
           )}
         </fieldset>
       </form>
@@ -235,7 +231,7 @@ function ItemEditForm({
           setOutcome('archived');
           await invalidateAfterItemWrite(queryClient);
         }}
-        onClose={() => setArchiving(false)}
+        onClose={onArchiveClose}
       />
     </>
   );
@@ -263,44 +259,54 @@ function ItemPage({ item, reload }: { item: ItemDetail; reload(): Promise<ItemVi
   // fields are shown once read (none when they cannot be: the stored values are then kept as they are).
   const ready = types.data !== undefined && suppliers.data !== undefined && locations.data !== undefined && custom.settled;
   const firstProblem = [types, suppliers, locations].find((q) => q.data === undefined && q.isError);
+  const [archiving, setArchiving] = useState(false);
+  const canArchive = ready && canManage && !item.archived && canTransition(item.status, 'withdrawn');
 
   return (
     <>
-      <header className="flex flex-col gap-2">
-        <h1 className="font-mono text-2xl font-semibold break-all">{item.barcode}</h1>
-        <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-          <div className="flex gap-1">
-            <dt className="text-muted-foreground">{t('catalog.items.record')}:</dt>
-            <dd>
-              <Link to={`/admin/catalog/records/${enc(item.record.id)}`} className="font-medium text-primary underline-offset-4 hover:underline">
-                {item.record.title}
-              </Link>
-            </dd>
-          </div>
-          <div className="flex gap-1">
-            <dt className="text-muted-foreground">{t('catalog.items.branch')}:</dt>
-            <dd>{t('catalog.items.branch_option', { code: item.branch.code, name: item.branch.name })}</dd>
-          </div>
-        </dl>
-        <div className="flex flex-wrap gap-2">
-          <ItemStatusBadge status={item.status} circulation={item.circulation} />
-          {item.circulation.state === null && (
-            <Badge tone={item.loanable ? 'info' : 'warning'}>{t(item.loanable ? 'catalog.items.loanable' : 'catalog.items.not_loanable')}</Badge>
-          )}
-          {item.selfService && <Badge>{t('catalog.items.self_service')}</Badge>}
-          {item.archived && <Badge tone="danger">{t('catalog.items.archived')}</Badge>}
-        </div>
-      </header>
-      {item.archived && <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{t('catalog.items.archived_notice')}</p>}
-      {!canManage && <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{t(outside ? 'catalog.items.outside_limit' : 'catalog.items.read_only')}</p>}
+      <PageHead
+        title={<span className="break-all">{item.barcode}</span>}
+        intro={
+          <span className="grid gap-2">
+            <span className="flex flex-wrap gap-x-6 gap-y-1">
+              <span>
+                {t('catalog.items.record')}:{' '}
+                <Link to={`/admin/catalog/records/${enc(item.record.id)}`} className="font-semibold text-accent-text underline-offset-4 hover:underline">
+                  {item.record.title}
+                </Link>
+              </span>
+              <span>
+                {t('catalog.items.branch')}: <span className="text-foreground">{t('catalog.items.branch_option', { code: item.branch.code, name: item.branch.name })}</span>
+              </span>
+            </span>
+            <span className="flex flex-wrap gap-2">
+              <ItemStatusBadge status={item.status} circulation={item.circulation} />
+              {item.circulation.state === null && (
+                <Badge tone={item.loanable ? 'neutral' : 'warning'}>{t(item.loanable ? 'catalog.items.loanable' : 'catalog.items.not_loanable')}</Badge>
+              )}
+              {item.selfService && <Badge>{t('catalog.items.self_service')}</Badge>}
+              {item.archived && <Badge tone="danger">{t('catalog.items.archived')}</Badge>}
+            </span>
+          </span>
+        }
+        actions={
+          canArchive ? (
+            <MoreMenu label={t('catalog.items.more')}>
+              <MoreMenuItem danger onSelect={() => setArchiving(true)}>
+                {t('catalog.items.archive')}
+              </MoreMenuItem>
+            </MoreMenu>
+          ) : undefined
+        }
+      />
+      {item.archived && <Callout title={t('catalog.items.archived_notice')} />}
+      {!canManage && <Callout title={t(outside ? 'catalog.items.outside_limit' : 'catalog.items.read_only')} />}
       {ready ? (
-        <ItemEditForm key={item.id} item={item} canManage={canManage} choices={choices} reload={reload} />
+        <ItemEditForm key={item.id} item={item} canManage={canManage} choices={choices} reload={reload} archiving={archiving} onArchiveClose={() => setArchiving(false)} />
       ) : firstProblem !== undefined ? (
-        <Notice kind="error">{problemText(t, firstProblem.error)}</Notice>
+        <PageError error={firstProblem.error} />
       ) : (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
+        <LoadingState />
       )}
       {/* After the locations: a move names them (archived ones included); if they cannot be read, the history is still
           shown, a move then naming an unknown location. */}
@@ -318,18 +324,16 @@ export function ItemEditScreen() {
   const reload = async (): Promise<ItemView | undefined> => (await item.refetch()).data;
 
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
-      <BackLink />
+    <div className="grid max-w-5xl gap-6">
+      <ItemsBackLink />
       {/* The data wins over an error: a failed background refetch keeps the form and what was typed. */}
       {!valid ? (
         <Notice kind="error">{t('error.NOT_FOUND')}</Notice>
       ) : item.data === undefined ? (
         item.isError ? (
-          <Notice kind="error">{problemText(t, item.error)}</Notice>
+          <PageError error={item.error} />
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <LoadingState />
         )
       ) : (
         <>
