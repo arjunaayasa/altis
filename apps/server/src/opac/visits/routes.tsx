@@ -1,5 +1,5 @@
 import { activateStation, checkIn, hit, readSettings } from '@altis/core';
-import { DomainError, VISIT_PURPOSES, isDomainError, resolveLocale, t, type Locale, type VisitPurpose } from '@altis/shared';
+import { DomainError, VISIT_PURPOSES, isDomainError, isLocale, resolveLocale, t, type Locale, type VisitPurpose } from '@altis/shared';
 import { StationActivateForm, StationCheckinForm } from '@altis/shared/api/visits';
 import { DEFAULT_ACCENT, isAccent } from '@altis/opac-theme';
 import type { Context } from 'hono';
@@ -12,6 +12,7 @@ import type { DbHandle } from '@altis/db';
 import type { JSX } from 'hono/jsx/jsx-runtime';
 import { stationCsrfToken } from '../../http/visit-station.js';
 import { opacText } from '../catalog/messages.js';
+import { keepLang } from '../catalog/views/page.js';
 import { Layout, toDocument } from '../layout.js';
 
 // The guestbook station (`/kunjungan`): a library device that records visits on its own page, without a staff session.
@@ -31,6 +32,8 @@ import { Layout, toDocument } from '../layout.js';
 
 interface Frame {
   locale: Locale;
+  /** The language the request named (`?lang=`), kept on every form, link and redirect of the station. */
+  lang: Locale | null;
   libraryName: string;
   accent: string;
   welcome: string | null;
@@ -39,17 +42,22 @@ interface Frame {
 
 async function frameOf(rc: { readonly db: DbHandle; readonly c: Context<AppEnv> }): Promise<Frame> {
   const s = await readSettings(rc.db.db, ['library.name', 'library.locale', 'opac.accent', 'visits.askPurpose', 'visits.station.welcome.id', 'visits.station.welcome.en'], []);
-  const locale = resolveLocale(rc.c.req.query('lang'), String(s['library.locale']));
+  const asked = rc.c.req.query('lang');
+  const locale = resolveLocale(asked, String(s['library.locale']));
   const accent = String(s['opac.accent']);
   const welcome = (locale === 'en' ? s['visits.station.welcome.en'] : s['visits.station.welcome.id']) as string | null;
   return {
     locale,
+    lang: asked !== undefined && isLocale(asked) ? asked : null,
     libraryName: String(s['library.name']),
     accent: isAccent(accent) ? accent : DEFAULT_ACCENT,
     welcome: welcome === null || welcome.trim() === '' ? null : welcome,
     askPurpose: s['visits.askPurpose'] === true,
   };
 }
+
+/** `path` of the station in the language the request named. */
+const at = (f: Frame, path: string): string => keepLang(path, f.lang);
 
 /** A station page: its nonce, CSP and `no-store`; `refreshTo` sends the device back there after 4 seconds. */
 function page(c: Context<AppEnv>, f: Frame, status: 200 | 422 | 429, body: (nonce: string) => JSX.Element, refreshTo?: string): Response {
@@ -63,7 +71,7 @@ function page(c: Context<AppEnv>, f: Frame, status: 200 | 422 | 429, body: (nonc
       libraryName={f.libraryName}
       accent={f.accent}
       robots="noindex"
-      head={refreshTo === undefined ? undefined : <meta http-equiv="refresh" content={`4;url=${refreshTo}`} />}
+      head={refreshTo === undefined ? undefined : <meta http-equiv="refresh" content={`4;url=${at(f, refreshTo)}`} />}
     >
       {body(nonce)}
     </Layout>,
@@ -103,7 +111,7 @@ function CheckinForm(props: { f: Frame; csrf: string; guest: boolean; error?: st
       <p class="guestbook-welcome">{f.welcome ?? opacText(l, 'visits.welcome')}</p>
       {props.error === undefined ? null : <p class="guestbook-error">{props.error}</p>}
       {guest ? (
-        <form method="post" action="/kunjungan">
+        <form method="post" action={at(f, '/kunjungan')}>
           <input type="hidden" name="_csrf" value={csrf} />
           <input type="hidden" name="guest" value="1" />
           <h2>{opacText(l, 'visits.guest_title')}</h2>
@@ -114,18 +122,18 @@ function CheckinForm(props: { f: Frame; csrf: string; guest: boolean; error?: st
           {f.askPurpose ? <PurposeSelect locale={l} /> : null}
           <div class="guestbook-actions">
             <button type="submit">{opacText(l, 'visits.submit')}</button>
-            <a href="/kunjungan">{opacText(l, 'visits.member_button')}</a>
+            <a href={at(f, '/kunjungan')}>{opacText(l, 'visits.member_button')}</a>
           </div>
         </form>
       ) : (
-        <form method="post" action="/kunjungan">
+        <form method="post" action={at(f, '/kunjungan')}>
           <input type="hidden" name="_csrf" value={csrf} />
           <label for="memberNo">{opacText(l, 'visits.member_no')}</label>
           <input id="memberNo" class="guestbook-scan" name="memberNo" maxlength={200} required autofocus autocomplete="off" inputmode="text" />
           {f.askPurpose ? <PurposeSelect locale={l} /> : null}
           <div class="guestbook-actions">
             <button type="submit">{opacText(l, 'visits.submit')}</button>
-            <a href="/kunjungan?tamu=1">{opacText(l, 'visits.guest_button')}</a>
+            <a href={at(f, '/kunjungan?tamu=1')}>{opacText(l, 'visits.guest_button')}</a>
           </div>
         </form>
       )}
@@ -161,7 +169,7 @@ const activatePage = route({
           <h1>{opacText(f.locale, 'visits.activate_title')}</h1>
           <p class="guestbook-greeting">{opacText(f.locale, 'visits.activate_done')}</p>
           <div class="guestbook-actions">
-            <a href="/kunjungan">{opacText(f.locale, 'visits.activate_open')}</a>
+            <a href={at(f, '/kunjungan')}>{opacText(f.locale, 'visits.activate_open')}</a>
           </div>
         </div>
       ));
@@ -176,7 +184,7 @@ function activateForm(c: Context<AppEnv>, f: Frame, csrf: string, status: 200 | 
       <h1>{opacText(f.locale, 'visits.activate_title')}</h1>
       <p class="guestbook-welcome">{opacText(f.locale, 'visits.activate_lead')}</p>
       {error === undefined ? null : <p class="guestbook-error">{error}</p>}
-      <form method="post" action="/kunjungan/aktifkan">
+      <form method="post" action={at(f, '/kunjungan/aktifkan')}>
         <input type="hidden" name="_csrf" value={csrf} />
         <label for="code">{opacText(f.locale, 'visits.activate_code')}</label>
         <input id="code" class="guestbook-code" name="code" maxlength={32} required autofocus autocomplete="off" />
@@ -219,7 +227,7 @@ const activateSubmit = route({
       actor: { type: 'visit_station', id: paired.stationId, ip: rc.ip },
     });
     setAuthCookie(rc.c, 'altis_vs', paired.token, { maxAgeS: VISIT_STATION_MAX_AGE_S, sameSite: 'Strict' });
-    return redirect(rc.c, '/kunjungan');
+    return redirect(rc.c, at(f, '/kunjungan'));
   },
 });
 
@@ -234,8 +242,8 @@ const stationPage = route({
   audit: null,
   handler: async (rc) => {
     const station = rc.visitStation;
-    if (station === null) return redirect(rc.c, '/kunjungan/aktifkan');
     const f = await frameOf(rc);
+    if (station === null) return redirect(rc.c, at(f, '/kunjungan/aktifkan'));
     const csrf = stationCsrfToken(csrfKey(requestConfig(rc.c)), station.id);
     return page(rc.c, f, 200, () => <CheckinForm f={f} csrf={csrf} guest={rc.c.req.query('tamu') === '1'} />);
   },
@@ -281,7 +289,7 @@ const stationCheckin = route({
               {opacText(l, 'visits.greeting_guest', { name: name.split(/\s+/u)[0] ?? name })}
             </div>
             <div class="guestbook-actions">
-              <a href="/kunjungan">{opacText(l, 'visits.again')}</a>
+              <a href={at(f, '/kunjungan')}>{opacText(l, 'visits.again')}</a>
             </div>
           </div>
         ),
@@ -299,8 +307,8 @@ const stationCheckin = route({
             <p>{opacText(l, 'visits.unknown_hint')}</p>
           </div>
           <div class="guestbook-actions">
-            <a href="/kunjungan">{opacText(l, 'visits.again')}</a>
-            <a href="/kunjungan?tamu=1">{opacText(l, 'visits.guest_button')}</a>
+            <a href={at(f, '/kunjungan')}>{opacText(l, 'visits.again')}</a>
+            <a href={at(f, '/kunjungan?tamu=1')}>{opacText(l, 'visits.guest_button')}</a>
           </div>
         </div>
       ), '/kunjungan');
@@ -317,7 +325,7 @@ const stationCheckin = route({
             <p>{note}</p>
           </div>
           <div class="guestbook-actions">
-            <a href="/kunjungan">{opacText(l, 'visits.again')}</a>
+            <a href={at(f, '/kunjungan')}>{opacText(l, 'visits.again')}</a>
           </div>
         </div>
       ),
