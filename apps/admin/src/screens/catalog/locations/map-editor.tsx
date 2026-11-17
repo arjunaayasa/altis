@@ -2,9 +2,9 @@ import { vocabKey } from '@altis/shared';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import type { LocationView, MapBox } from '@altis/shared/api/catalog/locations';
 import { useQueryClient } from '@tanstack/react-query';
-import { TrashIcon, XIcon } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type ChangeEvent, type KeyboardEvent, type PointerEvent } from 'react';
-import { Badge, Notice } from '@/components/form-field';
+import { Notice } from '@/components/form-field';
+import { LAYER, StatusText, Tag, type TagTone } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -323,32 +323,31 @@ export function MapEditor({
 
   const chosen = children.find((c) => c.id === selected) ?? null;
   const chosenBox = chosen === null ? null : boxOf(chosen.id);
-  const status = (l: LocationView): { text: string; tone: 'neutral' | 'info' | 'warning' | 'danger' } => {
-    if (drafts.has(l.id)) return { text: t('catalog.locations.map.status.changed'), tone: 'warning' };
-    if (redraw.has(l.id)) return { text: t('catalog.locations.badge.redraw'), tone: 'danger' };
-    if (l.box !== null) return { text: t('catalog.locations.map.status.saved'), tone: 'info' };
+  const status = (l: LocationView): { text: string; tone: TagTone } => {
+    if (drafts.has(l.id)) return { text: t('catalog.locations.map.status.changed'), tone: 'warn' };
+    if (redraw.has(l.id)) return { text: t('catalog.locations.badge.redraw'), tone: 'bad' };
+    if (l.box !== null) return { text: t('catalog.locations.map.status.saved'), tone: 'ok' };
     return { text: t('catalog.locations.map.status.none'), tone: 'neutral' };
   };
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-4 rounded-lg border bg-card p-4">
+    <section aria-labelledby={headingId} className={cn('grid gap-4 rounded-lg border p-4', LAYER)}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id={headingId} ref={heading} tabIndex={-1} className="text-lg font-semibold outline-none">
+        <h2 id={headingId} ref={heading} tabIndex={-1} className="text-base font-bold outline-none">
           {t('catalog.locations.map.title', { name: room.name })}
         </h2>
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>
-          <XIcon aria-hidden="true" />
+        <Button type="button" variant="outline" size="sm" className="bg-background" onClick={onClose}>
           {t('catalog.locations.map.close')}
         </Button>
       </div>
 
       {room.mapFileId === null ? (
-        <p className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">{t('catalog.locations.map.no_plan')}</p>
+        <p className="max-w-[75ch] text-sm text-muted-foreground">{t('catalog.locations.map.no_plan')}</p>
       ) : (
         <div
           ref={surface}
           data-map-surface
-          className={cn('relative w-full max-w-4xl touch-none overflow-hidden rounded-md border bg-muted select-none', canManage && selected !== null && 'cursor-crosshair')}
+          className={cn('relative w-full max-w-4xl touch-none overflow-hidden rounded-md border bg-background select-none', canManage && selected !== null && 'cursor-crosshair')}
           onPointerDown={pointerDown}
           onPointerMove={pointerMove}
           onPointerUp={pointerUp}
@@ -365,7 +364,7 @@ export function MapEditor({
             const isChosen = l.id === selected;
             const style = { left: `${box.x / 10}%`, top: `${box.y / 10}%`, width: `${box.w / 10}%`, height: `${box.h / 10}%` };
             const caption = (
-              <span className="pointer-events-none absolute top-0 left-0 max-w-full truncate bg-background/80 px-1 text-[10px] leading-4">{l.shelfHint ?? l.name}</span>
+              <span className="pointer-events-none absolute top-0 left-0 max-w-full truncate bg-background px-1 text-xs leading-4">{l.shelfHint ?? l.name}</span>
             );
             if (!canManage) {
               return (
@@ -385,7 +384,7 @@ export function MapEditor({
                 aria-describedby={hintId}
                 className={cn(
                   'absolute cursor-move border-2 outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  isChosen ? 'z-10 border-primary bg-primary/25' : 'border-amber-500 bg-amber-400/20',
+                  isChosen ? 'z-10 border-primary bg-primary/25' : 'border-warn bg-warn-bg/60',
                 )}
                 style={style}
                 onFocus={() => setSelected(l.id)}
@@ -411,7 +410,7 @@ export function MapEditor({
               accept="image/jpeg,image/png,image/webp"
               aria-describedby={`${fileId}-hint`}
               disabled={busy !== null}
-              className="text-sm file:mr-2 file:rounded-md file:border file:bg-background file:px-2 file:py-1"
+              className="text-sm file:mr-2 file:h-7.5 file:rounded-md file:border file:bg-background file:px-2.5 file:text-meta file:font-semibold"
               onChange={(e) => void choosePlan(e)}
             />
             <p id={`${fileId}-hint`} className="text-xs text-muted-foreground">
@@ -419,8 +418,7 @@ export function MapEditor({
             </p>
           </div>
           {room.mapFileId !== null && (
-            <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void removePlan()}>
-              <TrashIcon aria-hidden="true" />
+            <Button type="button" variant="outline" size="sm" className="bg-background" disabled={busy !== null} onClick={() => void removePlan()}>
               {t('catalog.locations.map.remove_plan')}
             </Button>
           )}
@@ -440,7 +438,7 @@ export function MapEditor({
       )}
 
       <fieldset className="grid gap-2">
-        <legend className="mb-1 text-sm font-medium">{t('catalog.locations.map.children')}</legend>
+        <legend className="mb-1 text-sm font-bold">{t('catalog.locations.map.children')}</legend>
         {children.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('catalog.locations.map.no_children')}</p>
         ) : (
@@ -465,8 +463,8 @@ export function MapEditor({
                   ) : (
                     <span>{l.name}</span>
                   )}
-                  <Badge>{t(vocabKey('location_kind', l.kind))}</Badge>
-                  <Badge tone={s.tone}>{s.text}</Badge>
+                  <Tag>{t(vocabKey('location_kind', l.kind))}</Tag>
+                  <Tag tone={s.tone}>{s.text}</Tag>
                 </li>
               );
             })}
@@ -475,11 +473,11 @@ export function MapEditor({
       </fieldset>
 
       {canManage && chosen !== null && (
-        <fieldset className="grid gap-3 rounded-md border p-3">
-          <legend className="px-1 text-sm font-medium">{t('catalog.locations.map.coords', { name: chosen.name })}</legend>
+        <fieldset className="grid gap-3">
+          <legend className="mb-1 text-sm font-bold">{t('catalog.locations.map.coords', { name: chosen.name })}</legend>
           {chosenBox === null ? (
             <div>
-              <Button type="button" variant="outline" size="sm" disabled={room.mapFileId === null} onClick={() => setDraft(chosen.id, NEW_BOX)}>
+              <Button type="button" variant="outline" size="sm" className="bg-background" disabled={room.mapFileId === null} onClick={() => setDraft(chosen.id, NEW_BOX)}>
                 {t('catalog.locations.map.new_box')}
               </Button>
             </div>
@@ -500,8 +498,7 @@ export function MapEditor({
                   />
                 </div>
               ))}
-              <Button type="button" variant="outline" size="sm" onClick={() => setDraft(chosen.id, null)}>
-                <TrashIcon aria-hidden="true" />
+              <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => setDraft(chosen.id, null)}>
                 {t('catalog.locations.map.remove_box')}
               </Button>
             </div>
@@ -511,15 +508,17 @@ export function MapEditor({
 
       {canManage && (
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" disabled={drafts.size === 0 || busy !== null} onClick={() => void saveBoxes()}>
+          <Button type="button" size="sm" disabled={drafts.size === 0 || busy !== null} onClick={() => void saveBoxes()}>
             {t(busy === 'boxes' ? 'form.saving' : 'catalog.locations.map.save')}
           </Button>
           {drafts.size > 0 && (
             <>
-              <Button type="button" variant="outline" disabled={busy !== null} onClick={() => setDrafts(new Map())}>
+              <Button type="button" variant="outline" size="sm" className="bg-background" disabled={busy !== null} onClick={() => setDrafts(new Map())}>
                 {t('catalog.locations.map.discard')}
               </Button>
-              <span className="text-sm text-muted-foreground">{t('catalog.locations.map.unsaved', { count: drafts.size })}</span>
+              <StatusText tone="warn" className="text-meta">
+                {t('catalog.locations.map.unsaved', { count: drafts.size })}
+              </StatusText>
             </>
           )}
         </div>

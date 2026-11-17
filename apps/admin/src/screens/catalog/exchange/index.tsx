@@ -1,6 +1,7 @@
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PageHead } from '@/components/layout';
+import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { useMe } from '@/lib/me';
@@ -46,30 +47,27 @@ export function ExchangeScreen() {
   }, [askedSelection, canExport, navigate]);
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="flex max-w-2xl flex-col gap-1">
-        <h1 className="text-2xl font-semibold">{t('nav.catalog.exchange')}</h1>
-        <p className="text-sm text-muted-foreground">{t('catalog.exchange.description')}</p>
-      </header>
+    <div className="grid gap-6">
+      <PageHead title={t('nav.catalog.exchange')} intro={t('catalog.exchange.description')} />
       <Tabs value={tab} onValueChange={(value) => isExchangeTab(value) && value !== tab && void navigate({ to: PATH, search: { tab: value } })}>
-        <TabsList aria-label={t('catalog.exchange.tabs')}>
+        <TabsList aria-label={t('catalog.exchange.tabs')} className={WRAPPING_TABS.list}>
           {tabs.map((k) => (
-            <TabsTrigger key={k} value={k}>
+            <TabsTrigger key={k} value={k} className={WRAPPING_TABS.trigger}>
               {t(`catalog.exchange.tab.${k}`)}
             </TabsTrigger>
           ))}
         </TabsList>
         {canImport && (
-          <TabsContent value="import" forceMount hidden={tab !== 'import'} className="pt-2">
+          <TabsContent value="import" forceMount hidden={tab !== 'import'} className="pt-5">
             <ImportWizard />
           </TabsContent>
         )}
         {canExport && (
-          <TabsContent value="export" forceMount hidden={tab !== 'export'} className="pt-2">
+          <TabsContent value="export" forceMount hidden={tab !== 'export'} className="pt-5">
             <ExportForm selection={selection} onDropSelection={() => setSelection(null)} />
           </TabsContent>
         )}
-        <TabsContent value="runs" className="pt-2">
+        <TabsContent value="runs" className="pt-5">
           <RunsTable />
         </TabsContent>
       </Tabs>

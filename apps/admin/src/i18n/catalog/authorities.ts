@@ -47,7 +47,6 @@ export const AUTHORITIES_ID = {
     'Otoritas yang tidak dipakai cantuman mana pun. Anda dapat mengarsipkan paling banyak 500 sekaligus; yang ternyata masih dipakai dilewati.',
   'catalog.authorities.orphans.caption': 'Otoritas yatim',
   'catalog.authorities.orphans.empty': 'Tidak ada otoritas yatim.',
-  'catalog.authorities.orphans.col.select': 'Pilih',
   'catalog.authorities.orphans.select': 'Pilih {name}',
   'catalog.authorities.orphans.select_all': 'Pilih semua yang tampil (paling banyak 500)',
   'catalog.authorities.orphans.selected': '{count} dipilih',
@@ -119,7 +118,6 @@ export const AUTHORITIES_ID = {
   'catalog.authorities.merge.irreversible': 'Penggabungan ini tidak bisa dibatalkan.',
   'catalog.authorities.merge.confirm': 'Gabungkan',
   'catalog.authorities.merge.merging': 'Menggabungkan…',
-  'catalog.authorities.merge.close': 'Tutup',
   'catalog.authorities.merge.done': 'Digabungkan ke {target}. Cantuman yang terdampak diindeks ulang di latar belakang.',
 
   'catalog.authorities.thesaurus.title': 'Tesaurus',
@@ -197,7 +195,6 @@ export const AUTHORITIES_EN: Record<keyof typeof AUTHORITIES_ID, string> = {
     'Authorities that no record uses. You can archive up to 500 at once; any that turn out to be in use are skipped.',
   'catalog.authorities.orphans.caption': 'Orphan authorities',
   'catalog.authorities.orphans.empty': 'There are no orphan authorities.',
-  'catalog.authorities.orphans.col.select': 'Select',
   'catalog.authorities.orphans.select': 'Select {name}',
   'catalog.authorities.orphans.select_all': 'Select all shown (up to 500)',
   'catalog.authorities.orphans.selected': '{count} selected',
@@ -268,7 +265,6 @@ export const AUTHORITIES_EN: Record<keyof typeof AUTHORITIES_ID, string> = {
   'catalog.authorities.merge.irreversible': 'This merge cannot be undone.',
   'catalog.authorities.merge.confirm': 'Merge',
   'catalog.authorities.merge.merging': 'Merging…',
-  'catalog.authorities.merge.close': 'Close',
   'catalog.authorities.merge.done': 'Merged into {target}. The records concerned are re-indexed in the background.',
 
   'catalog.authorities.thesaurus.title': 'Thesaurus',

@@ -1,14 +1,15 @@
 import { vocabKey, type LocationKind } from '@altis/shared';
 import type { LocationView } from '@altis/shared/api/catalog/locations';
-import { Badge } from '@/components/form-field';
+import { Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/i18n';
 import { useCount } from '@/screens/catalog/masters/master-table';
 
 /**
  * The location tree of one branch (Phase 2 spec §3.6; plan Task 27): rooms › areas › shelves as nested lists, in the
- * server's tree order (each room, then its subtree). Each line shows the kind, the code, a shelf's call-number range
- * and the live items placed directly on it, plus its actions. The helpers below also answer which room a location
+ * server's tree order (each room, then its subtree), drawn as one bordered list with thin lines between the rows and
+ * each level indented. Each line shows the kind, the code, a shelf's call-number range and the live items placed
+ * directly on it, plus its actions. The helpers below also answer which room a location
  * belongs to, for the shelf map: a box is drawn on its room's floor plan.
  */
 
@@ -113,62 +114,65 @@ export interface TreeActions {
 
 export function LocationTree({ nodes, label, actions }: { nodes: readonly LocationNode[]; label: string; actions: TreeActions }) {
   return (
-    <ul aria-label={label} className="flex flex-col gap-1">
+    <ul aria-label={label} className="overflow-hidden rounded-lg border text-sm [&>li:first-child>[data-location-row]]:border-t-0">
       {nodes.map((node) => (
-        <TreeItem key={node.location.id} node={node} actions={actions} />
+        <TreeItem key={node.location.id} node={node} depth={0} actions={actions} />
       ))}
     </ul>
   );
 }
 
-function TreeItem({ node, actions }: { node: LocationNode; actions: TreeActions }) {
+/** The indent of a row at `depth` (rooms at 0): 12 px, then 24 px per level. */
+const indent = (depth: number): { paddingLeft: string } => ({ paddingLeft: `${12 + Math.min(depth, 6) * 24}px` });
+
+function TreeItem({ node, depth, actions }: { node: LocationNode; depth: number; actions: TreeActions }) {
   const t = useT();
   const count = useCount();
   const l = node.location;
   const live = !l.archived;
   return (
     <li>
-      <div data-location-row className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-card px-3 py-2 text-sm">
-        <span data-location-name className="font-medium">
+      <div data-location-row className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t py-2 pr-2" style={indent(depth)}>
+        <span data-location-name className={l.kind === 'room' ? 'font-bold' : 'font-semibold'}>
           {l.name}
         </span>
-        <Badge tone={l.kind === 'room' ? 'info' : 'neutral'}>{t(vocabKey('location_kind', l.kind))}</Badge>
-        <span className="font-mono text-xs text-muted-foreground">{l.code}</span>
+        <Tag>{t(vocabKey('location_kind', l.kind))}</Tag>
+        <span className="text-muted-foreground">{l.code}</span>
         {l.classFrom !== null && l.classTo !== null && <span>{t('catalog.locations.class_range', { from: l.classFrom, to: l.classTo })}</span>}
-        <span className="text-muted-foreground">{t('catalog.locations.items', { count: count(l.itemCount) })}</span>
-        {l.archived && <Badge>{t('catalog.locations.badge.archived')}</Badge>}
-        {!l.isPublic && <Badge>{t('catalog.locations.badge.hidden')}</Badge>}
-        {l.kind === 'room' && l.mapFileId !== null && <Badge tone="info">{t('catalog.locations.badge.plan')}</Badge>}
-        {actions.redraw.has(l.id) && <Badge tone="danger">{t('catalog.locations.badge.redraw')}</Badge>}
-        <span className="ml-auto flex flex-wrap gap-1">
+        <span className="text-muted-foreground tabular-nums">{t('catalog.locations.items', { count: count(l.itemCount) })}</span>
+        {l.archived && <Tag>{t('catalog.locations.badge.archived')}</Tag>}
+        {!l.isPublic && <Tag>{t('catalog.locations.badge.hidden')}</Tag>}
+        {l.kind === 'room' && l.mapFileId !== null && <Tag>{t('catalog.locations.badge.plan')}</Tag>}
+        {actions.redraw.has(l.id) && <Tag tone="bad">{t('catalog.locations.badge.redraw')}</Tag>}
+        <span className="ml-auto flex flex-wrap">
           {actions.canManage && live && l.kind !== 'shelf' && (
-            <Button variant="outline" size="sm" aria-label={t('catalog.locations.action.add_inside', { name: l.name })} onClick={() => actions.onAdd(l)}>
+            <Button variant="ghost" size="sm" aria-label={t('catalog.locations.action.add_inside', { name: l.name })} onClick={() => actions.onAdd(l)}>
               {t('catalog.locations.action.add')}
             </Button>
           )}
           {live && l.kind === 'room' && (
-            <Button variant="outline" size="sm" aria-label={t('catalog.locations.action.map_named', { name: l.name })} onClick={() => actions.onMap(l)}>
+            <Button variant="ghost" size="sm" aria-label={t('catalog.locations.action.map_named', { name: l.name })} onClick={() => actions.onMap(l)}>
               {t('catalog.locations.action.map')}
             </Button>
           )}
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             aria-label={t(actions.canManage ? 'catalog.locations.action.edit_named' : 'catalog.locations.action.view_named', { name: l.name })}
             onClick={() => actions.onEdit(l)}>
             {t(actions.canManage ? 'catalog.locations.action.edit' : 'catalog.locations.action.view')}
           </Button>
           {actions.canManage && live && (
-            <Button variant="outline" size="sm" aria-label={t('catalog.locations.action.archive_named', { name: l.name })} onClick={() => actions.onArchive(l)}>
+            <Button variant="ghost" size="sm" aria-label={t('catalog.locations.action.archive_named', { name: l.name })} onClick={() => actions.onArchive(l)}>
               {t('catalog.locations.action.archive')}
             </Button>
           )}
         </span>
       </div>
       {node.children.length > 0 && (
-        <ul className="mt-1 ml-3 flex flex-col gap-1 border-l pl-3 sm:ml-5 sm:pl-4">
+        <ul>
           {node.children.map((child) => (
-            <TreeItem key={child.location.id} node={child} actions={actions} />
+            <TreeItem key={child.location.id} node={child} depth={depth + 1} actions={actions} />
           ))}
         </ul>
       )}

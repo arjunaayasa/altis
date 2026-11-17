@@ -1,16 +1,15 @@
 import { EXPORT_FORMATS, IMPORT_FORMATS, vocabKey, type RunStatus } from '@altis/shared';
 import type { ImportSummary } from '@altis/shared/api/catalog/exchange';
 import type { DedupeScanSummary, RunView } from '@altis/shared/api/catalog/runs';
-import { DownloadIcon, FileTextIcon, TriangleAlertIcon } from 'lucide-react';
 import { useRef, type ReactNode } from 'react';
 import { useDateTime } from '@/components/data-table';
-import { Badge } from '@/components/form-field';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Callout, StatStrip, TABLE, Tag, type TagTone } from '@/components/layout';
 import { buttonVariants } from '@/components/ui/button';
 import { useLocale, useT, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
 import { isMessageKey } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
+import { cn } from '@/lib/utils';
 
 /**
  * What a catalog run shows once it has a summary (Phase 2 spec §5.3, §5.4, §3.3; plan Task 29), for the import wizard,
@@ -35,6 +34,9 @@ export const runKey = (id: string) => ['catalog', 'runs', 'detail', id] as const
 
 /** Every query of the runs (the lists and each run). */
 export const RUNS_KEY = ['catalog', 'runs'] as const;
+
+/** The look of a link to a run's page. */
+export const RUN_LINK = 'w-fit text-sm font-semibold text-accent-text underline-offset-4 hover:underline';
 
 /** The admin page of a run. */
 export const runHref = (id: string): string => `/admin/catalog/runs/${encodeURIComponent(id)}`;
@@ -105,11 +107,11 @@ export function formatLabel(t: Translate, run: Pick<RunView, 'kind' | 'format'>)
   return f;
 }
 
-/** The status badge of a run. */
+/** The status tag of a run: its word, green once it succeeded, red when it failed. */
 export function RunStatusBadge({ status }: { status: RunStatus }) {
   const t = useT();
-  const tone = status === 'failed' ? 'danger' : status === 'running' ? 'warning' : status === 'succeeded' ? 'info' : 'neutral';
-  return <Badge tone={tone}>{t(vocabKey('run_status', status))}</Badge>;
+  const tone: TagTone = status === 'failed' ? 'bad' : status === 'succeeded' ? 'ok' : 'neutral';
+  return <Tag tone={tone}>{t(vocabKey('run_status', status))}</Tag>;
 }
 
 /** A label for a counter key: its own text where this screen has one, else the key itself. */
@@ -133,16 +135,7 @@ function warningText(t: Translate, code: string): string {
 function Counts({ entries }: { entries: [label: string, value: number][] }) {
   const locale = useLocale();
   const number = new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'id-ID');
-  return (
-    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3 lg:grid-cols-4">
-      {entries.map(([label, value], i) => (
-        <div key={i} className="flex flex-col rounded-md border px-3 py-2">
-          <dt className="text-muted-foreground">{label}</dt>
-          <dd className="text-lg font-semibold tabular-nums">{number.format(value)}</dd>
-        </div>
-      ))}
-    </dl>
-  );
+  return <StatStrip items={entries.map(([label, value], i) => ({ key: String(i), label, value: number.format(value) }))} />;
 }
 
 /** One sample draft as the table shows it, read defensively (the summary is the server's JSON). */
@@ -182,15 +175,15 @@ function SampleTable({ rows }: { rows: SampleRow[] }) {
   const t = useT();
   return (
     <div className="grid gap-2">
-      <h4 className="text-sm font-semibold">{t('catalog.exchange.summary.sample')}</h4>
-      <p className="text-xs text-muted-foreground">{t('catalog.exchange.summary.sample_hint', { count: rows.length })}</p>
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
+      <h4 className="text-sm font-bold">{t('catalog.exchange.summary.sample')}</h4>
+      <p className="text-meta text-muted-foreground">{t('catalog.exchange.summary.sample_hint', { count: rows.length })}</p>
+      <div className={TABLE.wrap}>
+        <table className={TABLE.table}>
           <caption className="sr-only">{t('catalog.exchange.summary.sample')}</caption>
-          <thead className="bg-muted/50 text-left">
+          <thead>
             <tr>
               {(['title', 'author', 'year', 'identifiers', 'type', 'items'] as const).map((c) => (
-                <th key={c} scope="col" className="px-3 py-2 font-medium whitespace-nowrap text-muted-foreground">
+                <th key={c} scope="col" className={cn(TABLE.th, c === 'items' && 'text-right')}>
                   {t(`catalog.exchange.summary.col.${c}`)}
                 </th>
               ))}
@@ -198,16 +191,16 @@ function SampleTable({ rows }: { rows: SampleRow[] }) {
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={i} className="border-t align-top">
-                <td className="px-3 py-2">
-                  <span className="font-medium">{r.title}</span>
+              <tr key={i}>
+                <td className={TABLE.td}>
+                  <span className="font-semibold">{r.title}</span>
                   {r.subtitle !== null && <span className="text-muted-foreground"> : {r.subtitle}</span>}
                 </td>
-                <td className="px-3 py-2">{r.author}</td>
-                <td className="px-3 py-2 tabular-nums">{r.year}</td>
-                <td className="px-3 py-2 tabular-nums">{r.identifiers}</td>
-                <td className="px-3 py-2">{r.type ?? <span className="text-muted-foreground">{t('catalog.exchange.summary.type_default')}</span>}</td>
-                <td className="px-3 py-2 tabular-nums">{r.items}</td>
+                <td className={TABLE.td}>{r.author}</td>
+                <td className={TABLE.td}>{r.year}</td>
+                <td className={TABLE.td}>{r.identifiers}</td>
+                <td className={TABLE.td}>{r.type ?? <span className="text-muted-foreground">{t('catalog.exchange.summary.type_default')}</span>}</td>
+                <td className={cn(TABLE.td, 'text-right')}>{r.items}</td>
               </tr>
             ))}
           </tbody>
@@ -221,17 +214,13 @@ function Warnings({ codes }: { codes: string[] }) {
   const t = useT();
   if (codes.length === 0) return null;
   return (
-    <Alert className="border-warning-foreground/30 bg-warning text-warning-foreground">
-      <TriangleAlertIcon aria-hidden="true" />
-      <AlertDescription className="text-current">
-        <p className="font-medium">{t('catalog.exchange.summary.warnings')}</p>
-        <ul className="list-disc pl-5">
-          {codes.map((code, i) => (
-            <li key={i}>{warningText(t, code)}</li>
-          ))}
-        </ul>
-      </AlertDescription>
-    </Alert>
+    <Callout tone="warn" title={t('catalog.exchange.summary.warnings')}>
+      <ul className="list-disc pl-5">
+        {codes.map((code, i) => (
+          <li key={i}>{warningText(t, code)}</li>
+        ))}
+      </ul>
+    </Callout>
   );
 }
 
@@ -244,7 +233,7 @@ function ImportView({ summary, dryRun }: { summary: ImportSummary; dryRun: boole
   const sample = (summary.sample ?? []).map(sampleRowOf).filter((r): r is SampleRow => r !== null);
   return (
     <div className="grid gap-3">
-      {dryRun && <p className="text-sm font-medium">{t('catalog.exchange.summary.dry_note')}</p>}
+      {dryRun && <p className="text-sm font-semibold">{t('catalog.exchange.summary.dry_note')}</p>}
       <Warnings codes={summary.warnings} />
       <Counts
         entries={[
@@ -259,7 +248,7 @@ function ImportView({ summary, dryRun }: { summary: ImportSummary; dryRun: boole
       />
       {reasons.length > 0 && (
         <div className="grid gap-1 text-sm">
-          <p className="font-medium">{t('catalog.exchange.summary.skipped_by')}</p>
+          <p className="font-semibold">{t('catalog.exchange.summary.skipped_by')}</p>
           <ul className="list-disc pl-5">
             {reasons.map(([code, n]) => (
               <li key={code}>
@@ -298,8 +287,7 @@ function RunFiles({ run }: { run: RunView }) {
   const links: ReactNode[] = [];
   if (run.reportFileId !== null) {
     links.push(
-      <a key="report" href={reportHref(run.id)} download className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-        <FileTextIcon aria-hidden="true" />
+      <a key="report" href={reportHref(run.id)} download className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
         {t('catalog.exchange.file.report')}
       </a>,
     );
@@ -310,8 +298,7 @@ function RunFiles({ run }: { run: RunView }) {
   const available = exported && run.outputName !== null;
   if (available && holds(me, 'catalog.export.run')) {
     links.push(
-      <a key="download" href={downloadHref(run.id)} download className={buttonVariants({ size: 'sm' })}>
-        <DownloadIcon aria-hidden="true" />
+      <a key="download" href={downloadHref(run.id)} download className={cn(buttonVariants({ size: 'sm' }))}>
         {t('catalog.exchange.file.download')}
       </a>,
     );

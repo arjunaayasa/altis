@@ -3,8 +3,10 @@ import type { CollectionTypeView, CustomFieldView, LanguageView, MaterialTypeTem
 import { useId } from 'react';
 import { useWatch, type UseFormReturn } from 'react-hook-form';
 import { Field, SELECT_CLASS } from '@/components/form-field';
+import { TABLE } from '@/components/layout';
 import { useLocale, useT } from '@/i18n';
 import { fieldErrorText } from '@/lib/form-errors';
+import { cn } from '@/lib/utils';
 
 /**
  * The template of a material type (Phase 2 spec §3.8; plan Task 27): how the record editor and the server treat each
@@ -124,35 +126,35 @@ export function TemplateEditor({
 
   return (
     <div className="grid gap-6">
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
+      <div className={TABLE.wrap}>
+        <table className={TABLE.table}>
           <caption className="sr-only">{t('catalog.masters.mt.template_caption')}</caption>
-          <thead className="bg-muted/50 text-left">
+          <thead>
             <tr>
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+              <th scope="col" className={TABLE.th}>
                 {t('catalog.masters.mt.col.field')}
               </th>
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+              <th scope="col" className={TABLE.th}>
                 {t('catalog.masters.mt.col.state')}
               </th>
             </tr>
           </thead>
           <tbody>
-            <tr className="border-t">
-              <th scope="row" className="px-3 py-2 text-left font-normal">
+            <tr>
+              <th scope="row" className={cn(TABLE.td, 'text-left font-normal')}>
                 {t('catalog.masters.mt.title_field')}
               </th>
-              <td className="px-3 py-2 text-muted-foreground">{t('catalog.masters.mt.title_always')}</td>
+              <td className={cn(TABLE.td, 'text-muted-foreground')}>{t('catalog.masters.mt.title_always')}</td>
             </tr>
             {RECORD_FIELD_NAMES.map((name) => {
               const id = `${ids}-${name}`;
               const error = fieldErrorText(t, errors?.fields?.[name]);
               return (
-                <tr key={name} className="border-t">
-                  <th scope="row" className="px-3 py-2 text-left font-normal">
+                <tr key={name}>
+                  <th scope="row" className={cn(TABLE.td, 'py-1.5 text-left align-middle font-normal')}>
                     <label htmlFor={id}>{t(vocabKey('field', name))}</label>
                   </th>
-                  <td className="px-3 py-2">
+                  <td className={cn(TABLE.td, 'py-1.5')}>
                     <select
                       id={id}
                       className={`${SELECT_CLASS} max-w-48`}
@@ -167,7 +169,7 @@ export function TemplateEditor({
                       ))}
                     </select>
                     {error !== undefined && (
-                      <p id={`${id}-error`} className="mt-1 text-sm text-destructive">
+                      <p id={`${id}-error`} className="mt-1 text-meta font-semibold text-bad">
                         {error}
                       </p>
                     )}
@@ -179,8 +181,8 @@ export function TemplateEditor({
         </table>
       </div>
 
-      <fieldset className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2">
-        <legend className="px-1 text-sm font-medium">{t('catalog.masters.mt.defaults')}</legend>
+      <fieldset className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+        <legend className="mb-3 text-sm font-bold">{t('catalog.masters.mt.defaults')}</legend>
         <Field label={t('catalog.masters.mt.default_language')} error={errors?.defaults?.languageId}>
           {(c) => (
             <select {...c} className={SELECT_CLASS} disabled={disabled} {...form.register('template.defaults.languageId')}>
@@ -207,8 +209,8 @@ export function TemplateEditor({
         </Field>
       </fieldset>
 
-      <fieldset className="grid gap-3 rounded-lg border p-4" aria-describedby={`${ids}-custom-hint`}>
-        <legend className="px-1 text-sm font-medium">{t('catalog.masters.mt.custom_fields')}</legend>
+      <fieldset className="grid gap-3" aria-describedby={`${ids}-custom-hint`}>
+        <legend className="mb-1 text-sm font-bold">{t('catalog.masters.mt.custom_fields')}</legend>
         <p id={`${ids}-custom-hint`} className="text-xs text-muted-foreground">
           {t('catalog.masters.mt.custom_fields_hint')}
         </p>
@@ -228,8 +230,8 @@ export function TemplateEditor({
           ))}
         </div>
         {customErrors.map((e) => (
-          <p key={e.key} className="text-sm text-destructive">
-            {e.code !== null && <span className="font-mono">{e.code}: </span>}
+          <p key={e.key} className="text-meta font-semibold text-bad">
+            {e.code !== null && <span>{e.code}: </span>}
             <span>{e.text}</span>
           </p>
         ))}

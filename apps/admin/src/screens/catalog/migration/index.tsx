@@ -5,12 +5,11 @@ import type { RunListResponse, RunStarted, RunView } from '@altis/shared/api/cat
 import type { UploadContextName } from '@altis/shared/api/files';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
-import { PlayIcon, PlusIcon, XIcon } from 'lucide-react';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { z } from 'zod';
-import { DataTable, useDateTime } from '@/components/data-table';
-import { Badge, CheckField, Field, Notice, NoticeAlert, ProblemAlert } from '@/components/form-field';
+import { useDateTime } from '@/components/data-table';
+import { CheckField, Field, Notice, NoticeAlert, ProblemAlert } from '@/components/form-field';
+import { DenseTable, FactList, LoadingState, PageHead, Section, Steps, Tag, type DenseColumn, type TagTone } from '@/components/layout';
 import { JobProgress } from '@/components/job-progress';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -259,7 +258,22 @@ function Wizard({
     }
   };
 
-  if (step === 'source') return <SourceStep value={source} errors={sourceErrors} onChange={changeSource} onNext={next} />;
+  const steps = (
+    <Steps
+      steps={[t('catalog.migration.source.title'), t('catalog.migration.options.title')]}
+      current={step === 'source' ? 0 : 1}
+      label={t('catalog.migration.steps')}
+      doneLabel={t('catalog.migration.step_done')}
+    />
+  );
+  if (step === 'source') {
+    return (
+      <div className="grid gap-5">
+        {steps}
+        <SourceStep value={source} errors={sourceErrors} onChange={changeSource} onNext={next} />
+      </div>
+    );
+  }
 
   const uploading = phase.kind === 'hashing' || phase.kind === 'sending' ? phase : null;
   const pct = uploading === null || uploading.total === 0 ? 0 : (uploading.done / uploading.total) * 100;
@@ -273,41 +287,42 @@ function Wizard({
           : 'catalog.migration.uploading_files';
 
   return (
-    <OptionsStep value={options} errors={optionErrors} libraryName={libraryName} onChange={changeOptions}>
-      {uploading !== null && uploadLabel !== null && (
-        <div className="flex flex-col gap-1">
-          <div className="flex items-baseline justify-between gap-2 text-sm">
-            <span className="font-medium">{t(uploadLabel)}</span>
-            <span className="tabular-nums">{Math.round(pct)} %</span>
+    <div className="grid gap-5">
+      {steps}
+      <OptionsStep value={options} errors={optionErrors} libraryName={libraryName} onChange={changeOptions}>
+        {uploading !== null && uploadLabel !== null && (
+          <div className="flex flex-col gap-1">
+            <div className="flex items-baseline justify-between gap-2 text-sm">
+              <span className="font-semibold">{t(uploadLabel)}</span>
+              <span className="tabular-nums">{Math.round(pct)} %</span>
+            </div>
+            <ProgressBar value={pct} label={t(uploadLabel)} />
+            <p className="text-xs text-muted-foreground tabular-nums">
+              {t('catalog.migration.upload_amount', { done: bytes(uploading.done), total: bytes(uploading.total) })}
+            </p>
           </div>
-          <ProgressBar value={pct} label={t(uploadLabel)} />
-          <p className="text-xs text-muted-foreground tabular-nums">
-            {t('catalog.migration.upload_amount', { done: bytes(uploading.done), total: bytes(uploading.total) })}
-          </p>
-        </div>
-      )}
-      {phase.kind === 'starting' && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('catalog.migration.starting')}
-        </p>
-      )}
-      {failure !== null && (failure.info === true ? <NoticeAlert>{failure.text}</NoticeAlert> : <Notice kind="error">{failure.text}</Notice>)}
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" disabled={busy} onClick={() => setStep('source')}>
-          {t('catalog.migration.back')}
-        </Button>
-        <Button type="button" disabled={busy || branches.data === undefined} onClick={() => void start()}>
-          <PlayIcon aria-hidden="true" />
-          {t('catalog.migration.start_dry')}
-        </Button>
-        {uploading !== null && (
-          <Button type="button" variant="outline" onClick={() => run.current?.abort()}>
-            <XIcon aria-hidden="true" />
-            {t('catalog.migration.cancel_upload')}
-          </Button>
         )}
-      </div>
-    </OptionsStep>
+        {phase.kind === 'starting' && (
+          <p role="status" className="text-sm text-muted-foreground">
+            {t('catalog.migration.starting')}
+          </p>
+        )}
+        {failure !== null && (failure.info === true ? <NoticeAlert>{failure.text}</NoticeAlert> : <Notice kind="error">{failure.text}</Notice>)}
+        <div className="flex flex-wrap gap-2 border-t pt-4">
+          <Button type="button" variant="outline" disabled={busy} onClick={() => setStep('source')}>
+            {t('catalog.migration.back')}
+          </Button>
+          <Button type="button" disabled={busy || branches.data === undefined} onClick={() => void start()}>
+            {t('catalog.migration.start_dry')}
+          </Button>
+          {uploading !== null && (
+            <Button type="button" variant="outline" onClick={() => run.current?.abort()}>
+              {t('catalog.migration.cancel_upload')}
+            </Button>
+          )}
+        </div>
+      </OptionsStep>
+    </div>
   );
 }
 
@@ -446,31 +461,29 @@ function RealRunPanel({
   };
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-4 rounded-lg border bg-card p-4">
-      <h2 id={titleId} className="text-base font-semibold">
+    <section aria-labelledby={titleId} className="grid max-w-4xl gap-4 border-t pt-6">
+      <h2 id={titleId} className="text-base font-bold">
         {t('catalog.migration.real.title')}
       </h2>
-      <p className="text-sm text-muted-foreground">{t('catalog.migration.real.description')}</p>
+      <p className="max-w-[75ch] text-sm text-muted-foreground">{t('catalog.migration.real.description')}</p>
       <CatalogModeNote mode={catalogMode} />
       {reconciled !== undefined && reconciled !== null && !reconciled.ok && <Notice kind="error">{t('catalog.migration.real.reconcile_warning')}</Notice>}
-      <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
-        <dt className="text-muted-foreground">{t('catalog.migration.real.source')}</dt>
-        <dd>
-          {db === null
-            ? t('catalog.migration.real.source_dump')
-            : t('catalog.migration.real.source_db', { database: db.database, host: db.host, port: String(db.port) })}
-          {' · '}
-          {t(options.files === 'zip' ? 'catalog.migration.real.files_yes' : 'catalog.migration.real.files_no')}
-        </dd>
-        <dt className="text-muted-foreground">{t('catalog.migration.real.branch')}</dt>
-        <dd>{branch === undefined ? options.branchId : `${branch.name} (${branch.code})`}</dd>
-        <dt className="text-muted-foreground">{t('catalog.migration.real.price')}</dt>
-        <dd>{t(priceModeLabel(options.priceMode))}</dd>
-        <dt className="text-muted-foreground">{t('catalog.migration.real.source_name')}</dt>
-        <dd className="font-mono">{options.sourceName}</dd>
-        <dt className="text-muted-foreground">{t('catalog.migration.options.catalog_mode')}</dt>
-        <dd>{t(catalogModeLabel(catalogMode))}</dd>
-      </dl>
+      <FactList
+        className="max-w-2xl"
+        items={[
+          {
+            key: 'source',
+            label: t('catalog.migration.real.source'),
+            value: `${
+              db === null ? t('catalog.migration.real.source_dump') : t('catalog.migration.real.source_db', { database: db.database, host: db.host, port: String(db.port) })
+            } · ${t(options.files === 'zip' ? 'catalog.migration.real.files_yes' : 'catalog.migration.real.files_no')}`,
+          },
+          { key: 'branch', label: t('catalog.migration.real.branch'), value: branch === undefined ? options.branchId : `${branch.name} (${branch.code})` },
+          { key: 'price', label: t('catalog.migration.real.price'), value: t(priceModeLabel(options.priceMode)) },
+          { key: 'name', label: t('catalog.migration.real.source_name'), value: options.sourceName },
+          { key: 'mode', label: t('catalog.migration.options.catalog_mode'), value: t(catalogModeLabel(catalogMode)) },
+        ]}
+      />
       <SkipCatalogField allowed={skipAllowed} checked={skipCatalog} disabled={busy} onChange={setSkipCatalog} />
       <PeopleFields value={people} onChange={setPeople} memberTypes={memberTypes} />
       {db !== null && (
@@ -513,9 +526,8 @@ function RealRunPanel({
         }}
       />
       {failure !== null && <Notice kind="error">{failure}</Notice>}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 border-t pt-4">
         <Button type="button" disabled={busy} onClick={() => void submit()}>
-          <PlayIcon aria-hidden="true" />
           {busy ? t('catalog.migration.real.working') : t('catalog.migration.real.submit')}
         </Button>
       </div>
@@ -571,22 +583,15 @@ function RunSection({
 
   const newButton = (
     <Button type="button" variant="outline" onClick={onNew}>
-      <PlusIcon aria-hidden="true" />
       {t('catalog.migration.run.new')}
     </Button>
   );
 
   if (run === undefined || run.kind !== 'migration') {
-    if (run === undefined && !query.isError) {
-      return (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('catalog.migration.loading')}
-        </p>
-      );
-    }
+    if (run === undefined && !query.isError) return <LoadingState label={t('catalog.migration.loading')} />;
     const notFound = run !== undefined || (query.error instanceof ApiError && query.error.code === 'NOT_FOUND');
     return (
-      <div className="flex flex-col items-start gap-3">
+      <div className="grid justify-items-start gap-3">
         {notFound ? <Notice kind="error">{t('catalog.migration.run.not_found')}</Notice> : <ProblemAlert error={query.error} />}
         {newButton}
       </div>
@@ -602,26 +607,26 @@ function RunSection({
   const why = offer ? notUsable(run, options, meId(me), now) : null;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="grid gap-6">
       {joined && <NoticeAlert>{t('catalog.migration.joined')}</NoticeAlert>}
-      <section aria-labelledby={titleId} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
+      <section aria-labelledby={titleId} className="grid gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 id={titleId} className="text-base font-semibold">
+          <h2 id={titleId} className="text-base font-bold">
             {t(run.dryRun ? 'catalog.migration.kind.dry' : 'catalog.migration.kind.real')}
           </h2>
-          <Badge tone={status === 'failed' ? 'danger' : status === 'succeeded' ? 'info' : 'neutral'}>{t(`vocab.run_status.${status}`)}</Badge>
+          <Tag tone={statusTone(status)}>{t(`vocab.run_status.${status}`)}</Tag>
           <span className="text-sm text-muted-foreground">{t('catalog.migration.run.started_at', { at: dateTime(run.createdAt) })}</span>
         </div>
         {live ? (
           <>
-            <p role="status" className="text-sm font-medium">
+            <p role="status" className="text-sm font-semibold">
               {t(run.dryRun ? 'catalog.migration.run.live_dry' : 'catalog.migration.run.live_real')}
             </p>
             {stage !== null && <p className="text-sm">{t('catalog.migration.run.stage', { stage: stageText(t, stage) })}</p>}
             <p className="text-xs text-muted-foreground">{t('catalog.migration.run.keep_open')}</p>
             {run.jobId !== null && <JobProgress jobId={run.jobId} onDone={ended} />}
             {run.jobId !== null && holds(me, 'system.jobs.read') && (
-              <Link to="/admin/jobs/$jobId" params={{ jobId: run.jobId }} className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+              <Link to="/admin/jobs/$jobId" params={{ jobId: run.jobId }} className="w-fit text-sm font-semibold text-accent-text underline-offset-4 hover:underline">
                 {t('catalog.migration.run.job')}
               </Link>
             )}
@@ -650,42 +655,40 @@ function RunSection({
 
 // ---- the history ---------------------------------------------------------------------------------------------------
 
-const features = tableFeatures({});
-const column = createColumnHelper<typeof features, RunView>();
+/** The tone of a run's status tag: green once it succeeded, red when it failed, neutral otherwise. */
+function statusTone(status: RunView['status']): TagTone {
+  return status === 'failed' ? 'bad' : status === 'succeeded' ? 'ok' : 'neutral';
+}
 
 function History({ runs, onOpen }: { runs: RunView[]; onOpen: OpenRun }) {
   const t = useT();
   const dateTime = useDateTime();
-  const titleId = useId();
-  const columns = useMemo(
-    () =>
-      column.columns([
-        column.accessor('createdAt', { header: () => t('catalog.migration.history.col_created'), cell: (c) => dateTime(c.getValue()) }),
-        column.accessor('dryRun', {
-          header: () => t('catalog.migration.history.col_kind'),
-          cell: (c) => t(c.getValue() ? 'catalog.migration.kind.dry' : 'catalog.migration.kind.real'),
-        }),
-        column.accessor('status', { header: () => t('catalog.migration.history.col_status'), cell: (c) => <Badge>{t(`vocab.run_status.${shownStatus(c.row.original)}`)}</Badge> }),
-        column.display({
-          id: 'actions',
-          header: () => t('catalog.migration.col_actions'),
-          cell: (c) => (
-            <Button type="button" variant="outline" size="sm" onClick={() => onOpen(c.row.original.id)}>
-              {t('catalog.migration.history.open')}
-            </Button>
-          ),
-        }),
-      ]),
-    [t, dateTime, onOpen],
-  );
-  const table = useTable({ features, columns, data: runs, getRowId: (r) => r.id });
+  const columns: DenseColumn<RunView>[] = [
+    { id: 'created', header: t('catalog.migration.history.col_created'), className: 'whitespace-nowrap', cell: (r) => dateTime(r.createdAt) },
+    { id: 'kind', header: t('catalog.migration.history.col_kind'), cell: (r) => t(r.dryRun ? 'catalog.migration.kind.dry' : 'catalog.migration.kind.real') },
+    {
+      id: 'status',
+      header: t('catalog.migration.history.col_status'),
+      cell: (r) => {
+        const status = shownStatus(r);
+        return <Tag tone={statusTone(status)}>{t(`vocab.run_status.${status}`)}</Tag>;
+      },
+    },
+    {
+      id: 'actions',
+      header: <span className="sr-only">{t('catalog.migration.col_actions')}</span>,
+      className: 'w-px py-1.5 text-right whitespace-nowrap',
+      cell: (r) => (
+        <Button type="button" variant="ghost" size="sm" onClick={() => onOpen(r.id)}>
+          {t('catalog.migration.history.open')}
+        </Button>
+      ),
+    },
+  ];
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3">
-      <h2 id={titleId} className="text-base font-semibold">
-        {t('catalog.migration.history.title')}
-      </h2>
-      <DataTable table={table} caption={t('catalog.migration.history.title')} empty={t('catalog.migration.history.empty')} />
-    </section>
+    <Section title={t('catalog.migration.history.title')}>
+      <DenseTable caption={t('catalog.migration.history.title')} columns={columns} rows={runs} rowKey={(r) => r.id} empty={t('catalog.migration.history.empty')} />
+    </Section>
   );
 }
 
@@ -729,13 +732,7 @@ function Migration({ libraryName }: { libraryName: string }) {
     return <RunSection key={chosen} runId={chosen} joined={joined === chosen} draft={options} libraryName={libraryName} onOpen={open} onNew={startNew} />;
   }
   if (history.data === undefined || live !== null) {
-    return history.isError ? (
-      <ProblemAlert error={history.error} />
-    ) : (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('catalog.migration.loading')}
-      </p>
-    );
+    return history.isError ? <ProblemAlert error={history.error} /> : <LoadingState label={t('catalog.migration.loading')} />;
   }
   return (
     <>
@@ -751,11 +748,8 @@ export function SlimsMigrationScreen() {
   const me = useMe();
   const allowed = holds(me, 'catalog.migration.run');
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">{t('nav.catalog.migration')}</h1>
-        <p className="text-sm text-muted-foreground">{t('catalog.migration.description')}</p>
-      </div>
+    <div className="grid gap-6">
+      <PageHead title={t('nav.catalog.migration')} intro={t('catalog.migration.description')} />
       {/* Every route of the screen needs the permission (a super admin's, M1): say so before anything is asked. */}
       {!allowed ? <ProblemAlert error={new ApiError(403, 'AUTHZ_DENIED')} /> : <Migration libraryName={me?.library.name ?? ''} />}
     </div>

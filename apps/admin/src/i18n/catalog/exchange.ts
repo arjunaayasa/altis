@@ -173,6 +173,11 @@ export const EXCHANGE_ID = {
   'catalog.exchange.file.download': 'Unduh berkas ekspor',
   'catalog.exchange.file.expires': 'Berkas dapat diunduh sampai {date}.',
   'catalog.exchange.file.expired': 'Berkas ekspor sudah kedaluwarsa pada {date} dan dihapus. Jalankan ekspornya lagi.',
+  'catalog.exchange.import.step_done': 'selesai',
+  'catalog.exchange.export.file_section': 'Berkas hasil',
+  'catalog.exchange.runs.filters': 'Saringan riwayat',
+  'catalog.exchange.summary.items': 'Eksemplar',
+  'catalog.exchange.summary.bytes': 'Ukuran berkas (bita)',
 } as const;
 
 export const EXCHANGE_EN: Record<keyof typeof EXCHANGE_ID, string> = {
@@ -342,4 +347,9 @@ export const EXCHANGE_EN: Record<keyof typeof EXCHANGE_ID, string> = {
   'catalog.exchange.file.download': 'Download the export file',
   'catalog.exchange.file.expires': 'The file can be downloaded until {date}.',
   'catalog.exchange.file.expired': 'The export file expired on {date} and was removed. Run the export again.',
+  'catalog.exchange.import.step_done': 'done',
+  'catalog.exchange.export.file_section': 'Output file',
+  'catalog.exchange.runs.filters': 'History filters',
+  'catalog.exchange.summary.items': 'Items',
+  'catalog.exchange.summary.bytes': 'File size (bytes)',
 };

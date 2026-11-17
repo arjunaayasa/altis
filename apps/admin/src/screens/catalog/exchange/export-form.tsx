@@ -5,16 +5,16 @@ import type { CollectionTypeView, MasterListResponse, MaterialTypeView } from '@
 import type { RunStarted, RunView } from '@altis/shared/api/catalog/runs';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { DownloadIcon, FilterIcon, RotateCcwIcon } from 'lucide-react';
 import { useId, useState, type FormEvent } from 'react';
 import { JobProgress, type JobOutcome } from '@/components/job-progress';
 import { CheckField, Field, NoticeAlert, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { Callout, FORM_FULL, FormSection, LoadingState } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT } from '@/i18n';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/lib/me';
-import { RUNS_KEY, SummaryView, runHref, runKey, useRetryKey } from './summary-view';
+import { RUNS_KEY, RUN_LINK, SummaryView, runHref, runKey, useRetryKey } from './summary-view';
 
 /**
  * Impor/Ekspor, the export form (Phase 2 spec §5.4, §13; plan Task 29): `POST catalog/exports` with a format and the
@@ -169,8 +169,8 @@ function ExportRun({ started, chosen, onAgain }: { started: RunStarted; chosen: 
   const leftOut = chosen === null || run.data === undefined ? 0 : leftOutOf(run.data, chosen);
   const number = new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'id-ID');
   return (
-    <section aria-labelledby={headingId} className="grid gap-3 rounded-lg border p-4">
-      <h3 id={headingId} className="text-base font-semibold">
+    <section aria-labelledby={headingId} className="grid gap-3">
+      <h3 id={headingId} className="text-base font-bold">
         {t(read ? 'catalog.exchange.export.result' : 'catalog.exchange.export.running')}
       </h3>
       <JobProgress
@@ -189,11 +189,10 @@ function ExportRun({ started, chosen, onAgain }: { started: RunStarted; chosen: 
       <div className="flex flex-wrap items-center gap-3">
         {outcome !== null && (
           <Button type="button" variant="outline" onClick={onAgain}>
-            <RotateCcwIcon aria-hidden="true" />
             {t('catalog.exchange.export.again')}
           </Button>
         )}
-        <Link to={runHref(started.runId)} className="text-sm text-primary underline-offset-4 hover:underline">
+        <Link to={runHref(started.runId)} className={RUN_LINK}>
           {t('catalog.exchange.open_run')}
         </Link>
       </div>
@@ -250,41 +249,37 @@ export function ExportForm({ selection, onDropSelection }: { selection: ExportSe
   };
 
   return (
-    <section aria-labelledby={headingId} className="grid gap-4 rounded-lg border bg-card p-4">
-      <h2 id={headingId} className="text-lg font-semibold">
+    <section aria-labelledby={headingId} className="grid gap-5">
+      <h2 id={headingId} className="text-base font-bold">
         {t('catalog.exchange.export.title')}
       </h2>
       {started !== null ? (
         <ExportRun key={started.run.runId} started={started.run} chosen={started.chosen} onAgain={() => setStarted(null)} />
       ) : !settled ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
+        <LoadingState />
       ) : (
         <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
           <ProblemAlert error={listProblem} />
           {ids !== null ? (
-            <div className="grid gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-medium">{t('catalog.exchange.export.selection', { count: number.format(ids.length) })}</span>
-                <Button type="button" size="sm" variant="outline" onClick={onDropSelection}>
-                  <FilterIcon aria-hidden="true" />
+            <Callout
+              title={t('catalog.exchange.export.selection', { count: number.format(ids.length) })}
+              action={
+                <Button type="button" size="sm" variant="outline" className="bg-background" onClick={onDropSelection}>
                   {t('catalog.exchange.export.selection_clear')}
                 </Button>
-              </div>
+              }>
               <CheckField
                 label={t('catalog.exchange.export.include_archived')}
                 hint={t('catalog.exchange.export.selection_archived_hint')}
                 checked={filters.includeArchived}
                 onChange={(e) => set('includeArchived', e.target.checked)}
               />
-            </div>
+            </Callout>
           ) : (
             <>
               {selection?.kind === 'lost' && <NoticeAlert>{t('catalog.exchange.export.selection_lost')}</NoticeAlert>}
-              <fieldset className="grid gap-3 rounded-md border p-3 sm:grid-cols-2">
-                <legend className="px-1 text-sm font-medium">{t('catalog.exchange.export.filters')}</legend>
-                <Field label={t('catalog.exchange.export.q')} hint={t('catalog.exchange.export.q_hint')} className="sm:col-span-2">
+              <FormSection title={t('catalog.exchange.export.filters')}>
+                <Field label={t('catalog.exchange.export.q')} hint={t('catalog.exchange.export.q_hint')} className={FORM_FULL}>
                   {(c) => (
                     <Input
                       {...c}
@@ -337,37 +332,41 @@ export function ExportForm({ selection, onDropSelection }: { selection: ExportSe
                   {(c) => <Input {...c} type="date" value={filters.changedSince} onChange={(e) => set('changedSince', e.target.value)} />}
                 </Field>
                 <CheckField
-                  className="self-end"
+                  className="self-end pb-2"
                   label={t('catalog.exchange.export.include_archived')}
                   checked={filters.includeArchived}
                   onChange={(e) => set('includeArchived', e.target.checked)}
                 />
-              </fieldset>
+              </FormSection>
             </>
           )}
-          <Field label={t('catalog.exchange.export.format')}>
-            {(c) => (
-              <select {...c} className={SELECT_CLASS} value={format} onChange={(e) => setFormat(e.target.value as ExportFormat)}>
-                {EXPORT_FORMATS.map((f) => (
-                  <option key={f} value={f}>
-                    {t(vocabKey('export_format', f))}
-                  </option>
-                ))}
-              </select>
-            )}
-          </Field>
-          <CheckField
-            label={t('catalog.exchange.export.include_items')}
-            checked={includeItems}
-            onChange={(e) => setIncludeItems(e.target.checked)}
-          />
-          <ProblemAlert error={problem} />
-          <p className="text-sm text-muted-foreground">{t('catalog.exchange.export.hint')}</p>
-          <div>
-            <Button type="submit" disabled={posting}>
-              <DownloadIcon aria-hidden="true" />
-              {t('catalog.exchange.export.submit')}
-            </Button>
+          <FormSection title={t('catalog.exchange.export.file_section')}>
+            <Field label={t('catalog.exchange.export.format')}>
+              {(c) => (
+                <select {...c} className={SELECT_CLASS} value={format} onChange={(e) => setFormat(e.target.value as ExportFormat)}>
+                  {EXPORT_FORMATS.map((f) => (
+                    <option key={f} value={f}>
+                      {t(vocabKey('export_format', f))}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+            <CheckField
+              className="self-end pb-2"
+              label={t('catalog.exchange.export.include_items')}
+              checked={includeItems}
+              onChange={(e) => setIncludeItems(e.target.checked)}
+            />
+          </FormSection>
+          <div className="grid gap-3 border-t pt-4">
+            <ProblemAlert error={problem} />
+            <p className="max-w-[75ch] text-sm text-muted-foreground">{t('catalog.exchange.export.hint')}</p>
+            <div>
+              <Button type="submit" disabled={posting}>
+                {t('catalog.exchange.export.submit')}
+              </Button>
+            </div>
           </div>
         </form>
       )}

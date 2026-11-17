@@ -2,10 +2,10 @@ import { ACCRED_GROUPS, isUlid } from '@altis/shared';
 import { MIGRATION_DRY_LIST_KEYS, MIGRATION_MATCH_KEYS, type MigrationSummary } from '@altis/shared/api/catalog/migration';
 import type { RunView } from '@altis/shared/api/catalog/runs';
 import { Link } from '@tanstack/react-router';
-import { DownloadIcon } from 'lucide-react';
 import { useId, type ReactNode } from 'react';
 import { z } from 'zod';
 import { Badge, Notice, NoticeAlert } from '@/components/form-field';
+import { TABLE } from '@/components/layout';
 import { buttonVariants } from '@/components/ui/button';
 import { useLocale, useT, type Translate } from '@/i18n';
 import { isMessageKey } from '@/lib/form-errors';
@@ -134,14 +134,14 @@ export function stageText(t: Translate, stage: string): string {
 function ReportTable({ title, hint, head, children }: { title: string; hint?: string; head: ReactNode; children: ReactNode }) {
   const id = useId();
   return (
-    <div className="flex flex-col gap-2">
-      <h3 id={id} className="text-sm font-semibold">
+    <div className="grid gap-2">
+      <h3 id={id} className="text-sm font-bold">
         {title}
       </h3>
-      {hint !== undefined && <p className="text-sm text-muted-foreground">{hint}</p>}
-      <div className="overflow-x-auto rounded-md border">
-        <table aria-labelledby={id} className="w-full text-sm">
-          <thead className="bg-muted/50 text-left">
+      {hint !== undefined && <p className="max-w-[75ch] text-sm text-muted-foreground">{hint}</p>}
+      <div className={TABLE.wrap}>
+        <table aria-labelledby={id} className={TABLE.table}>
+          <thead>
             <tr>{head}</tr>
           </thead>
           <tbody>{children}</tbody>
@@ -153,7 +153,7 @@ function ReportTable({ title, hint, head, children }: { title: string; hint?: st
 
 function Th({ children, numeric = false }: { children: ReactNode; numeric?: boolean }) {
   return (
-    <th scope="col" className={cn('px-3 py-2 font-medium whitespace-nowrap text-muted-foreground', numeric && 'text-right')}>
+    <th scope="col" className={cn(TABLE.th, numeric && 'text-right')}>
       {children}
     </th>
   );
@@ -161,14 +161,14 @@ function Th({ children, numeric = false }: { children: ReactNode; numeric?: bool
 
 function RowHead({ children }: { children: ReactNode }) {
   return (
-    <th scope="row" className="px-3 py-2 text-left font-mono text-xs font-normal break-all">
+    <th scope="row" className={cn(TABLE.td, 'text-left font-normal break-all')}>
       {children}
     </th>
   );
 }
 
 function Td({ children, numeric = false, className }: { children: ReactNode; numeric?: boolean; className?: string }) {
-  return <td className={cn('px-3 py-2', numeric && 'text-right tabular-nums', className)}>{children}</td>;
+  return <td className={cn(TABLE.td, numeric && 'text-right', className)}>{children}</td>;
 }
 
 /** Why a table is not read, by its `unreadKind` (none: the earlier label). */
@@ -199,18 +199,16 @@ export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?:
   const failing = report?.reconciliation?.tables.filter((r) => !r.unread && r.diff !== 0) ?? [];
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-4 rounded-lg border bg-card p-4">
+    <section aria-labelledby={titleId} className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id={titleId} className="text-base font-semibold">
+        <h2 id={titleId} className="text-base font-bold">
           {t(run.dryRun ? 'catalog.migration.report.title_dry' : 'catalog.migration.report.title_real')}
         </h2>
         {run.reportFileId !== null && (
           <a
             href={`/api/v1/catalog/runs/${encodeURIComponent(run.id)}/report`}
             download
-            className={buttonVariants({ variant: 'outline', size: 'sm' })}
-          >
-            <DownloadIcon aria-hidden="true" />
+            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
             {t('catalog.migration.report.download')}
           </a>
         )}
@@ -226,7 +224,7 @@ export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?:
           </p>
           {report.warnings.length > 0 && (
             <div className="flex flex-col gap-1">
-              <h3 className="text-sm font-semibold">{t('catalog.migration.report.warnings')}</h3>
+              <h3 className="text-sm font-bold">{t('catalog.migration.report.warnings')}</h3>
               <ul className="list-disc pl-5 text-sm">
                 {report.warnings.map((w) => (
                   <li key={w}>{codeText(t, 'catalog.migration.warning.', w)}</li>
@@ -264,7 +262,7 @@ export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?:
                 {report.reconciliation.tables.map((r) => {
                   const fails = !r.unread && r.diff !== 0;
                   return (
-                    <tr key={r.table} className={cn('border-t align-top', fails && 'bg-destructive/5 text-destructive')} data-reconcile={fails ? 'failed' : r.unread ? 'unread' : 'ok'}>
+                    <tr key={r.table} className={fails ? 'bg-bad-bg' : undefined} data-reconcile={fails ? 'failed' : r.unread ? 'unread' : 'ok'}>
                       <RowHead>{r.table}</RowHead>
                       <Td numeric>{n(r.source)}</Td>
                       <Td numeric>{r.unread ? t('catalog.migration.report.none') : n(r.migrated)}</Td>
@@ -276,7 +274,7 @@ export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?:
                           <UnreadLabel kind={r.unreadKind} />
                         ) : fails ? (
                           <span className="inline-flex flex-wrap items-center justify-end gap-2">
-                            <span className="font-semibold">{n(r.diff)}</span>
+                            <span className="font-semibold text-bad">{n(r.diff)}</span>
                             <Badge tone="danger">{t('catalog.migration.report.diff_failed')}</Badge>
                           </span>
                         ) : (
@@ -298,7 +296,7 @@ export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?:
 
           {report.targets.length > 0 && unclosed && !run.dryRun && (
             <section className="flex flex-col gap-1">
-              <h3 className="text-sm font-semibold">{t('catalog.migration.report.targets')}</h3>
+              <h3 className="text-sm font-bold">{t('catalog.migration.report.targets')}</h3>
               <p className="text-sm text-muted-foreground">{t('catalog.migration.report.targets_unclosed')}</p>
             </section>
           )}
@@ -316,7 +314,7 @@ export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?:
               }
             >
               {report.targets.map((r) => (
-                <tr key={r.table} className="border-t align-top">
+                <tr key={r.table}>
                   <RowHead>{r.table}</RowHead>
                   <Td numeric>{n(r.before)}</Td>
                   <Td numeric>{n(r.after)}</Td>
@@ -343,15 +341,15 @@ export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?:
               }
             >
               {report.charset.map((c) => (
-                <tr key={c.column} className="border-t align-top">
+                <tr key={c.column}>
                   <RowHead>{c.column}</RowHead>
                   <Td numeric>{n(c.rows)}</Td>
                   <Td numeric>{n(c.ascii)}</Td>
                   <Td numeric>{n(c.utf8)}</Td>
-                  <Td numeric className={c.cp1252 > 0 ? 'text-warning-foreground' : undefined}>
+                  <Td numeric className={c.cp1252 > 0 ? 'font-semibold text-warn' : undefined}>
                     {n(c.cp1252)}
                   </Td>
-                  <Td numeric className={c.mojibake > 0 ? 'text-warning-foreground' : undefined}>
+                  <Td numeric className={c.mojibake > 0 ? 'font-semibold text-warn' : undefined}>
                     {n(c.mojibake)}
                   </Td>
                   <Td>
@@ -360,7 +358,7 @@ export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?:
                     ) : (
                       <ul className="flex flex-col gap-1">
                         {c.samples.map((s, i) => (
-                          <li key={i} className="font-mono text-xs break-all">
+                          <li key={i} className="text-meta break-all">
                             {s}
                           </li>
                         ))}
@@ -384,7 +382,7 @@ export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?:
               }
             >
               {report.fixes.map((f, i) => (
-                <tr key={i} className="border-t align-top">
+                <tr key={i}>
                   <RowHead>{f.column}</RowHead>
                   <Td>{codeText(t, 'catalog.migration.fix.', f.fix)}</Td>
                   <Td numeric>{n(f.count)}</Td>
@@ -406,11 +404,11 @@ export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?:
               }
             >
               {report.samples.map((s, i) => (
-                <tr key={i} className="border-t align-top">
+                <tr key={i}>
                   <RowHead>{s.column}</RowHead>
                   <Td>{codeText(t, 'catalog.migration.fix.', s.fix)}</Td>
-                  <Td className="font-mono text-xs break-all">{s.before}</Td>
-                  <Td className="font-mono text-xs break-all">{s.after ?? t('catalog.migration.report.none')}</Td>
+                  <Td className="text-meta break-all">{s.before}</Td>
+                  <Td className="text-meta break-all">{s.after ?? t('catalog.migration.report.none')}</Td>
                 </tr>
               ))}
             </ReportTable>
@@ -430,11 +428,11 @@ export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?:
               }
             >
               {report.checks.map((c, i) => (
-                <tr key={i} className="border-t align-top">
+                <tr key={i}>
                   <RowHead>{c.legacyId}</RowHead>
                   <Td className="break-words">{c.title}</Td>
                   <Td>
-                    <Badge tone={c.matches ? 'info' : 'warning'}>
+                    <Badge tone={c.matches ? 'neutral' : 'warning'}>
                       {t(c.matches ? 'catalog.migration.report.match_yes' : 'catalog.migration.report.match_no')}
                     </Badge>
                   </Td>
@@ -443,8 +441,7 @@ export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?:
                       <Link
                         to="/admin/catalog/records/$recordId"
                         params={{ recordId: c.recordId }}
-                        className="font-medium text-primary underline-offset-4 hover:underline"
-                      >
+                        className="font-semibold text-accent-text underline-offset-4 hover:underline">
                         {t('catalog.migration.report.open_record')}
                       </Link>
                     )}
