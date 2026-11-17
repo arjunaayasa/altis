@@ -161,6 +161,7 @@ export const MASTERS_ID = {
   'catalog.masters.mt.custom_fields': 'Ruas tambahan yang tampil',
   'catalog.masters.mt.custom_fields_hint': 'Ruas tambahan cantuman yang dicentang tampil di editor cantuman jenis ini, menurut urutan centangnya.',
   'catalog.masters.mt.custom_none': 'Belum ada ruas tambahan untuk cantuman.',
+  'catalog.masters.options.remove_short': 'Hapus',
 } as const;
 
 export const MASTERS_EN: Record<keyof typeof MASTERS_ID, string> = {
@@ -320,4 +321,5 @@ export const MASTERS_EN: Record<keyof typeof MASTERS_ID, string> = {
   'catalog.masters.mt.custom_fields': 'Custom fields shown',
   'catalog.masters.mt.custom_fields_hint': 'The ticked record custom fields show in the editor of records of this type, in the order they were ticked.',
   'catalog.masters.mt.custom_none': 'There are no custom fields for records yet.',
+  'catalog.masters.options.remove_short': 'Remove',
 };
