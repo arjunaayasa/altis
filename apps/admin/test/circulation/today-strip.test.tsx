@@ -1,14 +1,15 @@
 import type { BranchView } from '@altis/shared/api/branches';
-import type { CirculationDaySummary } from '@altis/shared/api/circulation-summary';
 import type { DashboardResponse } from '@altis/shared/api/dashboard';
+import type { DeskDashboard, LibraryDashboard } from '@altis/shared/api/dashboard-home';
 import type { ReportCatalogEntry } from '@altis/shared/api/reports';
 import type { VisitSummary } from '@altis/shared/api/visits';
 import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { adminMe, signedIn, startApp } from '../fake-api';
 
-// The numbers of today on Beranda: lent, returned, overdue and holds ready at the desk's branch, and today's visits,
-// each a link to its screen; nothing for a user who holds neither permission. The report catalogue lists the member,
+// The numbers of today on Beranda: lent, returned and overdue at the desk's branch and the active members, each a link
+// to its screen (a plain figure for a user who may not open it); nothing for a user who holds neither permission. The
+// holds ready move to "Perlu perhatian", today's visits to the visits card. The report catalogue lists the member,
 // visit and circulation reports under their own modules.
 
 beforeEach(() => {
@@ -42,38 +43,86 @@ const DASHBOARD: DashboardResponse = {
   alerts: [],
 };
 
-const SUMMARY: CirculationDaySummary = { branchId: 'B1', on: '2026-11-15', loaned: 12, returned: 9, overdue: 3, holdsReady: 2 };
+const HOURS = Array.from({ length: 24 }, (_, hour) => ({ hour, loans: hour === 8 ? 12 : 0, returns: hour === 9 ? 9 : 0 }));
+const DESK: DeskDashboard = {
+  branchId: 'B1',
+  on: '2026-11-15',
+  timeZone: 'Asia/Jakarta',
+  weekAgo: '2026-11-08',
+  loaned: 12,
+  returned: 9,
+  loanedWeekAgo: 10,
+  returnedWeekAgo: 1234,
+  overdue: 3,
+  overdueMembers: 2,
+  holdsReady: 2,
+  holdsToClear: 0,
+  hours: HOURS,
+};
+const LIBRARY: LibraryDashboard = { today: '2026-11-15', members: { active: 480, joinedThisMonth: 12, expiringSoon: 0 }, loans: { longOverdue: 0 }, usage: null };
 const VISITS: VisitSummary = { on: '2026-11-15', total: 1234, members: 1200, guests: 34, bySource: { station: 1234 } };
 
 describe('the numbers of today', () => {
-  it('shows the desk branch’s loans, returns, overdue loans and holds ready, and today’s visits, each linking to its screen', async () => {
+  it('shows the desk branch’s loans, returns and overdue loans and the active members, each linking to its screen', async () => {
     const { requests } = startApp({
       me: adminMe(),
       path: '/admin',
       routes: {
         'GET dashboard': () => DASHBOARD,
         'GET branches': () => ({ items: [BRANCH] }),
-        'GET branches/:branchId/circulation/summary': () => SUMMARY,
+        'GET branches/:branchId/dashboard': () => DESK,
+        'GET dashboard/library': () => LIBRARY,
         'GET visits/summary': () => VISITS,
       },
     });
-    const strip = await screen.findByRole('region', { name: 'Hari ini' });
-    await waitFor(() => expect(within(strip).getByText('1.234')).toBeTruthy());
+    const strip = await screen.findByRole('region', { name: 'Angka hari ini' });
+    await waitFor(() => expect(within(strip).getByText('480')).toBeTruthy());
+    await waitFor(() => expect(within(strip).getByText('12')).toBeTruthy());
     const figure = (key: string) => strip.querySelector(`[data-figure="${key}"]`) as HTMLAnchorElement;
-    expect([figure('loaned').textContent, figure('loaned').getAttribute('href')]).toEqual(['Dipinjam hari ini12', '/admin/layanan']);
-    expect([figure('returned').textContent, figure('returned').getAttribute('href')]).toEqual(['Dikembalikan hari ini9', '/admin/layanan/kembali']);
-    expect([figure('overdue').textContent, figure('overdue').getAttribute('href')]).toEqual(['Pinjaman terlambat3', '/admin/layanan/terlambat']);
-    expect([figure('holds_ready').textContent, figure('holds_ready').getAttribute('href')]).toEqual(['Reservasi siap diambil2', '/admin/layanan/rak-tunggu']);
-    expect(figure('visits').getAttribute('href')).toBe('/admin/layanan/kunjungan');
-    expect(within(strip).getByText('Cabang Perpustakaan Pusat')).toBeTruthy();
-    expect(requests.find((r) => r.path === 'branches/B1/circulation/summary')).toBeDefined();
-    expect(requests.filter((r) => r.path === 'visits/summary').map((r) => r.query.get('branchId'))).toEqual(['B1']);
+    expect([figure('loaned').textContent, figure('loaned').getAttribute('href')]).toEqual(['Dipinjam hari ini12Minggu lalu 10', '/admin/layanan']);
+    expect([figure('returned').textContent, figure('returned').getAttribute('href')]).toEqual(['Dikembalikan hari ini9Minggu lalu 1.234', '/admin/layanan/kembali']);
+    expect([figure('overdue').textContent, figure('overdue').getAttribute('href')]).toEqual(['Pinjaman terlambat32 anggota', '/admin/layanan/terlambat']);
+    expect([figure('active_members').textContent, figure('active_members').getAttribute('href')]).toEqual(['Anggota aktif48012 baru bulan ini', '/admin/anggota']);
+    expect(requests.find((r) => r.path === 'branches/B1/dashboard')).toBeDefined();
+    // The holds ready for pickup are a line of "Perlu perhatian"; today's visits are a figure of the visits card.
+    const attention = screen.getByRole('region', { name: 'Perlu perhatian' });
+    expect(within(attention).getByRole('link', { name: 'Reservasi siap diambil 2' }).getAttribute('href')).toBe('/admin/layanan/rak-tunggu');
+    const visits = await screen.findByRole('region', { name: 'Kunjungan' });
+    await waitFor(() => expect(within(visits).getByText('1.234')).toBeTruthy());
+    expect(within(visits).getByText('Kunjungan hari ini')).toBeTruthy();
+    expect(requests.filter((r) => r.path === 'visits/summary').map((r) => r.query.get('branchId'))).toEqual([null]);
   });
 
-  it('a staff member without the desk or the visits permission sees no strip', async () => {
-    startApp({ me: signedIn({ permissions: [] }), path: '/admin', routes: { 'GET dashboard': () => DASHBOARD, 'GET branches': () => ({ items: [BRANCH] }) } });
+  it('a desk user without the overdue list sees the overdue figure without a link; nothing of the members', async () => {
+    const me = signedIn({ permissions: [] });
+    me.branchPermissions = { B1: ['circulation.desk.use'] };
+    startApp({
+      me,
+      path: '/admin',
+      routes: {
+        'GET dashboard': () => DASHBOARD,
+        'GET branches': () => ({ items: [BRANCH] }),
+        'GET branches/:branchId/dashboard': () => DESK,
+        'GET dashboard/library': () => ({ ...LIBRARY, members: null, loans: null }),
+      },
+    });
+    const strip = await screen.findByRole('region', { name: 'Angka hari ini' });
+    await waitFor(() => expect(within(strip).getByText('12')).toBeTruthy());
+    expect([...strip.querySelectorAll('[data-figure]')].map((f) => [f.getAttribute('data-figure'), f.tagName])).toEqual([
+      ['loaned', 'A'],
+      ['returned', 'A'],
+      ['overdue', 'DIV'],
+    ]);
+  });
+
+  it('a staff member without the desk or the members permission sees no strip', async () => {
+    startApp({
+      me: signedIn({ permissions: [] }),
+      path: '/admin',
+      routes: { 'GET dashboard': () => DASHBOARD, 'GET branches': () => ({ items: [BRANCH] }), 'GET dashboard/library': () => ({ ...LIBRARY, members: null, loans: null }) },
+    });
     await screen.findByRole('group', { name: 'Dasbor sistem' });
-    expect(screen.queryByRole('region', { name: 'Hari ini' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Angka hari ini' })).toBeNull();
   });
 });
 
