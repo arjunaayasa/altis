@@ -1,12 +1,11 @@
 import type { AgentView, AuthorityKind, MergeIntoBody } from '@altis/shared/api/catalog/authorities';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
-import { CheckIcon, ChevronsUpDownIcon } from 'lucide-react';
+import { ChevronsUpDownIcon } from 'lucide-react';
 import { useId, useMemo, useRef, useState } from 'react';
 import { Field } from '@/components/form-field';
-import { useReturnFocus } from '@/components/return-focus';
+import { Callout, InlinePanel } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useT } from '@/i18n';
 import { api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
@@ -15,69 +14,41 @@ import { authorityLabel, authorityName, authorityPath, typeLabel, useAuthorityCa
 
 /**
  * "Gabungkan ke otoritas lain…" of an authority's page (Phase 2 Task 26; spec §3.5 "Gabung", §13;
- * `POST catalog/{agents|subjects|publishers}/:id/merge`). Two steps in one dialog:
+ * `POST catalog/{agents|subjects|publishers}/:id/merge`). Two steps in one panel, opened in the page under the button:
  *
  * 1. **The target.** A search among the live authorities of the same kind (an agent's among the agents of its own type,
  *    since agents of different types cannot merge); the authority itself is never offered. "Lanjut" needs a choice.
  * 2. **The confirmation.** Which authority goes into which, what moves, and that the merge cannot be undone. Only
  *    "Gabungkan" posts `{intoId, version}` (the version is the source's: the page's own writes chain through
  *    `version()`). A refusal (CATALOG_MERGE_INVALID: the target was archived or merged meanwhile; CONFLICT_STALE) stays in
- *    the dialog with its reason; "Kembali" goes back to the choice.
+ *    the panel with its reason; "Kembali" goes back to the choice.
  *
  * The answer is `{id, version}` only (S15): `onMerged` hands it to the page, which reads the source again (now merged,
- * read-only, with a link to its target). Every step starts afresh when the dialog opens again.
- *
- * The target's search list opens inside the dialog, not in a popover (ui/combobox): the modal dialog blocks the wheel
- * and touch scrolling of anything outside its content, and a popover is portalled outside it, so a long list of
- * candidates could not be scrolled there.
+ * read-only, with a link to its target). Every step starts afresh when the panel opens again. Esc closes the open search
+ * list first, then the panel (not while the merge is being sent).
  */
 
-export interface MergeDialogProps {
+export interface MergePanelProps {
   kind: AuthorityKind;
   /** The authority merged away. */
   source: AuthorityView;
-  open: boolean;
-  onOpenChange(open: boolean): void;
+  /** Batal or Esc. */
+  onClose(): void;
   /** The source's version to send: past the page's own writes. */
   version(): number;
   /** The merge went through: the version sent, the server's answer, and the target. */
   onMerged(sent: number, saved: StoreResponse, target: AuthorityView): void;
 }
 
-export function MergeDialog({ kind, source, open, onOpenChange, version, onMerged }: MergeDialogProps) {
+export function MergePanel({ kind, source, onClose, version, onMerged }: MergePanelProps) {
   const t = useT();
-  const focus = useReturnFocus();
   const [busy, setBusy] = useState(false);
-  /** Escape closes the open search list first (its own handler), then the dialog. */
-  const pickerOpen = useRef(false);
   const name = authorityName(source);
   return (
-    <Dialog open={open} onOpenChange={(next) => (busy && !next ? undefined : onOpenChange(next))}>
-      <DialogContent
-        closeLabel={t('catalog.authorities.merge.close')}
-        onOpenAutoFocus={focus.onOpenAutoFocus}
-        onCloseAutoFocus={focus.onCloseAutoFocus}
-        onEscapeKeyDown={(e) => {
-          if (pickerOpen.current || busy) e.preventDefault();
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>{t('catalog.authorities.merge.title', { name })}</DialogTitle>
-          <DialogDescription>{t('catalog.authorities.merge.description', { name })}</DialogDescription>
-        </DialogHeader>
-        <MergeSteps
-          kind={kind}
-          source={source}
-          version={version}
-          onMerged={onMerged}
-          onBusy={setBusy}
-          onPickerOpen={(o) => {
-            pickerOpen.current = o;
-          }}
-          onCancel={() => onOpenChange(false)}
-        />
-      </DialogContent>
-    </Dialog>
+    <InlinePanel title={t('catalog.authorities.merge.title', { name })} onCancel={() => (busy ? undefined : onClose())} className="max-w-3xl">
+      <p className="text-sm text-muted-foreground">{t('catalog.authorities.merge.description', { name })}</p>
+      <MergeSteps kind={kind} source={source} version={version} onMerged={onMerged} onBusy={setBusy} onCancel={onClose} />
+    </InlinePanel>
   );
 }
 
@@ -100,7 +71,6 @@ function TargetPicker({
   onSearchChange,
   loading,
   emptyText,
-  onOpenChange,
 }: {
   id: string;
   options: readonly Option[];
@@ -110,16 +80,11 @@ function TargetPicker({
   onSearchChange(search: string): void;
   loading: boolean;
   emptyText: string;
-  onOpenChange(open: boolean): void;
 }) {
   const t = useT();
   const listId = useId();
   const trigger = useRef<HTMLButtonElement>(null);
-  const [open, setOpenState] = useState(false);
-  const setOpen = (next: boolean): void => {
-    setOpenState(next);
-    onOpenChange(next);
-  };
+  const [open, setOpen] = useState(false);
   const close = (): void => {
     setOpen(false);
     trigger.current?.focus();
@@ -136,9 +101,8 @@ function TargetPicker({
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-controls={open ? listId : undefined}
-        className="w-full justify-between font-normal"
-        onClick={() => setOpen(!open)}
-      >
+        className="w-full justify-between bg-background font-normal"
+        onClick={() => setOpen(!open)}>
         <span className={cn('truncate', chosen === undefined && 'text-muted-foreground')}>{chosen?.label ?? t('catalog.authorities.merge.target_placeholder')}</span>
         <ChevronsUpDownIcon className="opacity-50" aria-hidden="true" />
       </Button>
@@ -146,13 +110,14 @@ function TargetPicker({
         <Command
           shouldFilter={false}
           label={t('catalog.authorities.merge.search_label')}
-          className="border"
+          className="border bg-background"
           onKeyDown={(e) => {
             if (e.key !== 'Escape') return;
+            // The list closes first: the panel's own Esc must not see this one.
             e.preventDefault();
+            e.stopPropagation();
             close();
-          }}
-        >
+          }}>
           <CommandInput autoFocus placeholder={t('catalog.authorities.merge.search_placeholder')} value={search} onValueChange={onSearchChange} />
           <CommandList id={listId} className="max-h-60">
             {loading ? (
@@ -170,10 +135,8 @@ function TargetPicker({
                     onSelect={() => {
                       onValueChange(o.value);
                       close();
-                    }}
-                  >
-                    <span className="truncate">{o.label}</span>
-                    <CheckIcon aria-hidden="true" className={cn('ml-auto', o.value === value ? 'opacity-100' : 'opacity-0')} />
+                    }}>
+                    <span className={cn('truncate', o.value === value && 'font-semibold')}>{o.label}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -185,16 +148,15 @@ function TargetPicker({
   );
 }
 
-/** The two steps; mounted only while the dialog is open (Radix renders no content when closed). */
+/** The two steps; mounted only while the panel is open. */
 function MergeSteps({
   kind,
   source,
   version,
   onMerged,
   onBusy,
-  onPickerOpen,
   onCancel,
-}: Pick<MergeDialogProps, 'kind' | 'source' | 'version' | 'onMerged'> & { onBusy(busy: boolean): void; onPickerOpen(open: boolean): void; onCancel(): void }) {
+}: Pick<MergePanelProps, 'kind' | 'source' | 'version' | 'onMerged'> & { onBusy(busy: boolean): void; onCancel(): void }) {
   const t = useT();
   const [search, setSearch] = useState('');
   const [target, setTarget] = useState<AuthorityView | null>(null);
@@ -236,31 +198,31 @@ function MergeSteps({
   if (confirming && target !== null) {
     return (
       <>
-        <div className="flex flex-col gap-2 text-sm">
-          <p className="font-medium">{t('catalog.authorities.merge.question', { source: authorityLabel(t, kind, source), target: authorityLabel(t, kind, target) })}</p>
+        <div className="grid max-w-[75ch] gap-2 text-sm">
+          <p className="font-semibold">{t('catalog.authorities.merge.question', { source: authorityLabel(t, kind, source), target: authorityLabel(t, kind, target) })}</p>
           <p>{t(`catalog.authorities.merge.effect.${kind}`, { source: authorityName(source), target: authorityName(target) })}</p>
-          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 font-medium text-destructive">{t('catalog.authorities.merge.irreversible')}</p>
         </div>
+        <Callout tone="warn" title={t('catalog.authorities.merge.irreversible')} />
         {error !== null && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-sm font-semibold text-bad">
             {error}
           </p>
         )}
-        <DialogFooter>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="destructive" disabled={busy} onClick={() => void merge()}>
+            {t(busy ? 'catalog.authorities.merge.merging' : 'catalog.authorities.merge.confirm')}
+          </Button>
           <Button
+            size="sm"
             variant="outline"
             disabled={busy}
             onClick={() => {
               setError(null);
               setConfirming(false);
-            }}
-          >
+            }}>
             {t('catalog.authorities.merge.back')}
           </Button>
-          <Button variant="destructive" disabled={busy} onClick={() => void merge()}>
-            {t(busy ? 'catalog.authorities.merge.merging' : 'catalog.authorities.merge.confirm')}
-          </Button>
-        </DialogFooter>
+        </div>
       </>
     );
   }
@@ -268,7 +230,7 @@ function MergeSteps({
   return (
     <>
       {type !== undefined && <p className="text-sm text-muted-foreground">{t('catalog.authorities.merge.same_type', { type: typeLabel(t, type) ?? type })}</p>}
-      <Field label={t('catalog.authorities.merge.target')}>
+      <Field label={t('catalog.authorities.merge.target')} className="max-w-xl">
         {(c) => (
           <TargetPicker
             id={c.id}
@@ -285,24 +247,17 @@ function MergeSteps({
                   ? problemText(t, candidates.error)
                   : t('catalog.authorities.merge.search_empty')
             }
-            onOpenChange={onPickerOpen}
           />
         )}
       </Field>
-      <DialogFooter>
-        <Button variant="outline" onClick={onCancel}>
-          {t('form.cancel')}
-        </Button>
-        <Button
-          disabled={target === null}
-          onClick={() => {
-            onPickerOpen(false);
-            setConfirming(true);
-          }}
-        >
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" disabled={target === null} onClick={() => setConfirming(true)}>
           {t('catalog.authorities.merge.next')}
         </Button>
-      </DialogFooter>
+        <Button size="sm" variant="outline" onClick={onCancel}>
+          {t('form.cancel')}
+        </Button>
+      </div>
     </>
   );
 }
