@@ -1,10 +1,9 @@
 import { ITEM_STATUSES, type ItemStatus } from '@altis/shared';
 import { ITEM_BULK_MAX, type ItemBulkBody, type ItemBulkResponse, type ItemListItem } from '@altis/shared/api/catalog/items';
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Field, Notice, NoticeAlert, SELECT_CLASS } from '@/components/form-field';
-import { useReturnFocus } from '@/components/return-focus';
+import { Callout, InlinePanel } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
 import { holdsAt } from '@/lib/access';
@@ -18,7 +17,7 @@ import { LocationOptions, useBranchLocations, useCollectionTypeName, useCollecti
  * their status or their collection type (`POST branches/:branchId/items/bulk`, at most {@link ITEM_BULK_MAX} ids).
  *
  * - The route is branch-scoped, so the items go in one request per branch, and only the branches where the user may
- *   manage items (`holdsAt`) and that are writable (L13, `isWritableBranch`); the others are left out and the dialog says how
+ *   manage items (`holdsAt`) and that are writable (L13, `isWritableBranch`); the others are left out and the panel says how
  *   many. A branch whose request is refused (or fails) does not stop the next ones: it is listed with its reason.
  * - A location belongs to one branch: the move is offered only when the items are all of one branch.
  * - Each status change is checked per item by the server (§2.5); the refused items come back with their reason
@@ -28,7 +27,8 @@ import { LocationOptions, useBranchLocations, useCollectionTypeName, useCollecti
  * - **Tanggal terima** (`set.receivedDate`): "Isi yang kosong" (the default, `receivedDateMode: 'fill_empty'`) fills only
  *   the copies without one, and the server refuses the others `received_date_set`; "Timpa semua" (`overwrite`) sets it
  *   on every copy. A date filled here is an edit made in ALTIS, so a SLiMS re-sync skips such a copy from then on: the
- *   dialog says so above its buttons as soon as a date is entered, before the change is confirmed.
+ *   panel says so above its buttons as soon as a date is entered, before the change is confirmed. It opens as an inline
+ *   panel under the list's selection bar.
  */
 
 /** The location choice "no location" (the select's `''` is "unchanged"). */
@@ -52,31 +52,18 @@ interface BranchFailure {
   reason: string;
 }
 
-export function BulkDialog({
-  open,
+/** The panel under the item list's selection bar (Esc or "Batal" closes it; "Selesai" once applied). */
+export function BulkPanel({
   items,
   onApplied,
   onClose,
 }: {
-  open: boolean;
   /** The selected rows. */
   items: readonly ItemListItem[];
   /** After a request changed something (the list reads again). */
   onApplied(): void;
   onClose(): void;
 }) {
-  const t = useT();
-  const focus = useReturnFocus();
-  return (
-    <Dialog open={open} onOpenChange={(next) => (next ? undefined : onClose())}>
-      <DialogContent closeLabel={t('catalog.items.bulk.close')} onOpenAutoFocus={focus.onOpenAutoFocus} onCloseAutoFocus={focus.onCloseAutoFocus}>
-        {open && <BulkBody items={items} onApplied={onApplied} onClose={onClose} />}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function BulkBody({ items, onApplied, onClose }: { items: readonly ItemListItem[]; onApplied(): void; onClose(): void }) {
   const t = useT();
   const me = useMe();
   const typeName = useCollectionTypeName();
@@ -104,6 +91,11 @@ function BulkBody({ items, onApplied, onClose }: { items: readonly ItemListItem[
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const barcodes = useMemo(() => new Map(items.map((i) => [i.id, i.barcode])), [items]);
   const tooMany = managed.length > ITEM_BULK_MAX;
+  const doneButton = useRef<HTMLButtonElement>(null);
+  // Once applied, the form's buttons are gone: the focus goes to "Selesai".
+  useEffect(() => {
+    if (outcome !== null) doneButton.current?.focus();
+  }, [outcome]);
 
   const apply = async (): Promise<void> => {
     if (busy) return;
@@ -140,19 +132,21 @@ function BulkBody({ items, onApplied, onClose }: { items: readonly ItemListItem[
   };
 
   return (
-    <>
-      <DialogHeader>
-        <DialogTitle>{t('catalog.items.bulk.title')}</DialogTitle>
-        <DialogDescription>{t('catalog.items.bulk.description', { count: managed.length })}</DialogDescription>
-      </DialogHeader>
+    <InlinePanel
+      title={t('catalog.items.bulk.title')}
+      onCancel={onClose}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void apply();
+      }}>
+      <p className="text-sm text-muted-foreground">{t('catalog.items.bulk.description', { count: managed.length })}</p>
       {items.length > held.length && (
-        <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">
-          {held.length === 0 ? t('catalog.items.bulk.none_managed') : t('catalog.items.bulk.not_managed', { count: items.length - held.length })}
-        </p>
+        <Callout
+          className="bg-background"
+          title={held.length === 0 ? t('catalog.items.bulk.none_managed') : t('catalog.items.bulk.not_managed', { count: items.length - held.length })}
+        />
       )}
-      {held.length > managed.length && (
-        <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{t('catalog.items.bulk.outside_limit', { count: held.length - managed.length })}</p>
-      )}
+      {held.length > managed.length && <Callout className="bg-background" title={t('catalog.items.bulk.outside_limit', { count: held.length - managed.length })} />}
       {tooMany && <Notice kind="error">{t('catalog.items.bulk.too_many', { max: ITEM_BULK_MAX })}</Notice>}
       {error !== null && <Notice kind="error">{error}</Notice>}
       {failures.length > 0 && (
@@ -165,17 +159,17 @@ function BulkBody({ items, onApplied, onClose }: { items: readonly ItemListItem[
         </Notice>
       )}
       {outcome !== null ? (
-        <div className="flex flex-col gap-3">
+        <div className="grid gap-3">
           <Notice kind="success">{t('catalog.items.bulk.updated', { count: outcome.updated })}</Notice>
           {outcome.refused.length > 0 && (
-            <div className="flex flex-col gap-1">
+            <div className="grid gap-1">
               <h3 id={ids.refused} className="text-sm font-semibold">
                 {t('catalog.items.bulk.refused', { count: outcome.refused.length })}
               </h3>
               <ul aria-labelledby={ids.refused} className="max-h-60 overflow-y-auto text-sm">
                 {outcome.refused.map((r) => (
                   <li key={r.id} className="py-0.5">
-                    <span className="font-mono">{barcodes.get(r.id) ?? r.id}</span>
+                    <span className="font-semibold">{barcodes.get(r.id) ?? r.id}</span>
                     {' — '}
                     {t(`catalog.items.bulk.refused.${r.code}`)}
                   </li>
@@ -183,56 +177,58 @@ function BulkBody({ items, onApplied, onClose }: { items: readonly ItemListItem[
               </ul>
             </div>
           )}
-          <DialogFooter>
-            <Button type="button" onClick={onClose}>
+          <div className="flex flex-wrap gap-2">
+            <Button ref={doneButton} type="button" size="sm" onClick={onClose}>
               {t('catalog.items.bulk.done')}
             </Button>
-          </DialogFooter>
+          </div>
         </div>
       ) : (
         managed.length > 0 &&
         !tooMany && (
-          <div className="flex flex-col gap-4">
-            <Field id={ids.location} label={t('catalog.items.bulk.location')} hint={oneBranch === null ? t('catalog.items.bulk.location_one_branch') : undefined}>
-              {(c) => (
-                <select {...c} className={SELECT_CLASS} disabled={oneBranch === null || busy} value={location} onChange={(e) => setLocation(e.target.value)}>
-                  <option value="">{t('catalog.items.bulk.keep')}</option>
-                  <option value={NO_LOCATION}>{t('catalog.items.no_location')}</option>
-                  <LocationOptions locations={locations.data?.items ?? []} />
-                </select>
-              )}
-            </Field>
-            <Field id={ids.status} label={t('catalog.items.bulk.status')}>
-              {(c) => (
-                <select {...c} className={SELECT_CLASS} disabled={busy} value={status} onChange={(e) => setStatus(e.target.value as ItemStatus | '')}>
-                  <option value="">{t('catalog.items.bulk.keep')}</option>
-                  {ITEM_STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {t(`vocab.item_status.${s}`)}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </Field>
-            <Field id={ids.type} label={t('catalog.items.bulk.collection_type')}>
-              {(c) => (
-                <select {...c} className={SELECT_CLASS} disabled={busy} value={collectionTypeId} onChange={(e) => setCollectionTypeId(e.target.value)}>
-                  <option value="">{t('catalog.items.bulk.keep')}</option>
-                  {(types.data?.items ?? [])
-                    .filter((ct) => !ct.archived)
-                    .map((ct) => (
-                      <option key={ct.id} value={ct.id}>
-                        {typeName(ct)}
+          <>
+            <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Field id={ids.location} label={t('catalog.items.bulk.location')} hint={oneBranch === null ? t('catalog.items.bulk.location_one_branch') : undefined}>
+                {(c) => (
+                  <select {...c} className={SELECT_CLASS} disabled={oneBranch === null || busy} value={location} onChange={(e) => setLocation(e.target.value)}>
+                    <option value="">{t('catalog.items.bulk.keep')}</option>
+                    <option value={NO_LOCATION}>{t('catalog.items.no_location')}</option>
+                    <LocationOptions locations={locations.data?.items ?? []} />
+                  </select>
+                )}
+              </Field>
+              <Field id={ids.status} label={t('catalog.items.bulk.status')}>
+                {(c) => (
+                  <select {...c} className={SELECT_CLASS} disabled={busy} value={status} onChange={(e) => setStatus(e.target.value as ItemStatus | '')}>
+                    <option value="">{t('catalog.items.bulk.keep')}</option>
+                    {ITEM_STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {t(`vocab.item_status.${s}`)}
                       </option>
                     ))}
-                </select>
-              )}
-            </Field>
-            <Field id={ids.received} label={t('catalog.items.bulk.received_date')} hint={t('catalog.items.bulk.received_date_hint')}>
-              {(c) => <Input {...c} type="date" disabled={busy} value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} />}
-            </Field>
+                  </select>
+                )}
+              </Field>
+              <Field id={ids.type} label={t('catalog.items.bulk.collection_type')}>
+                {(c) => (
+                  <select {...c} className={SELECT_CLASS} disabled={busy} value={collectionTypeId} onChange={(e) => setCollectionTypeId(e.target.value)}>
+                    <option value="">{t('catalog.items.bulk.keep')}</option>
+                    {(types.data?.items ?? [])
+                      .filter((ct) => !ct.archived)
+                      .map((ct) => (
+                        <option key={ct.id} value={ct.id}>
+                          {typeName(ct)}
+                        </option>
+                      ))}
+                  </select>
+                )}
+              </Field>
+              <Field id={ids.received} label={t('catalog.items.bulk.received_date')} hint={t('catalog.items.bulk.received_date_hint')}>
+                {(c) => <Input {...c} type="date" disabled={busy} value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} />}
+              </Field>
+            </div>
             <fieldset className="grid gap-2" disabled={busy || receivedDate === ''}>
-              <legend className="mb-1 text-sm font-medium">{t('catalog.items.bulk.received_mode')}</legend>
+              <legend className="mb-1.5 text-meta leading-snug font-semibold">{t('catalog.items.bulk.received_mode')}</legend>
               {RECEIVED_DATE_MODES.map((mode) => (
                 <div key={mode} className="flex items-center gap-2">
                   <input
@@ -251,17 +247,24 @@ function BulkBody({ items, onApplied, onClose }: { items: readonly ItemListItem[
               ))}
             </fieldset>
             {receivedDate !== '' && <NoticeAlert>{t('catalog.items.bulk.received_sync_note')}</NoticeAlert>}
-            <DialogFooter>
-              <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
-                {t('form.cancel')}
-              </Button>
-              <Button type="button" disabled={busy} onClick={() => void apply()}>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" size="sm" disabled={busy}>
                 {t(busy ? 'catalog.items.bulk.applying' : 'catalog.items.bulk.apply')}
               </Button>
-            </DialogFooter>
-          </div>
+              <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onClose}>
+                {t('form.cancel')}
+              </Button>
+            </div>
+          </>
         )
       )}
-    </>
+      {outcome === null && (managed.length === 0 || tooMany) && (
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={onClose}>
+            {t('catalog.items.bulk.close')}
+          </Button>
+        </div>
+      )}
+    </InlinePanel>
   );
 }

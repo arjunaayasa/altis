@@ -3,10 +3,10 @@ import { issueCode } from '@altis/shared/api/common';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
-import { PlusIcon } from 'lucide-react';
 import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DataTable } from '@/components/data-table';
-import { Badge, Field, Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { Badge, Field, Notice, SELECT_CLASS } from '@/components/form-field';
+import { ErrorState, LAYER, SkeletonTable } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type TKey } from '@/i18n';
@@ -108,8 +108,7 @@ export function RecordItemsTab({ recordId, defaultCollectionTypeId = null }: Rec
             <Link
               to="/admin/catalog/items/$itemId"
               params={{ itemId: info.row.original.id }}
-              className="font-mono font-medium whitespace-nowrap text-primary underline-offset-4 hover:underline"
-            >
+              className="font-semibold whitespace-nowrap text-accent-text underline-offset-4 hover:underline">
               {info.getValue()}
             </Link>
           ),
@@ -151,32 +150,26 @@ export function RecordItemsTab({ recordId, defaultCollectionTypeId = null }: Rec
   const table = useTable({ features, columns, data: items, getRowId: (item) => item.id });
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h2 id={titleId} className="text-base font-semibold">
+    <section aria-labelledby={titleId} className="grid gap-5">
+      <div className="grid max-w-[75ch] gap-1">
+        <h2 id={titleId} className="text-base font-bold">
           {t('catalog.items.tab.title')}
         </h2>
         <p className="text-sm text-muted-foreground">{t('catalog.items.tab.description')}</p>
-      </header>
+      </div>
 
       {!valid ? null : list.data === undefined ? (
         list.isError ? (
-          <ProblemAlert error={list.error}>
-            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void list.refetch()}>
-              {t('table.retry')}
-            </Button>
-          </ProblemAlert>
+          <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <SkeletonTable label={t('shell.loading')} rows={3} />
         )
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="grid gap-3">
           {list.isError && <Notice kind="error">{problemText(t, list.error)}</Notice>}
           <DataTable table={table} caption={t('catalog.items.tab.title')} empty={t('catalog.items.tab.empty')} />
           {list.data.nextCursor !== null && (
-            <Link to="/admin/catalog/items" search={{ recordId }} className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+            <Link to="/admin/catalog/items" search={{ recordId }} className="w-fit text-sm font-semibold text-accent-text underline-offset-4 hover:underline">
               {t('catalog.items.tab.more')}
             </Link>
           )}
@@ -187,8 +180,7 @@ export function RecordItemsTab({ recordId, defaultCollectionTypeId = null }: Rec
         <>
           <QuickAdd recordId={recordId} preferredType={defaultCollectionTypeId} onAdded={refresh} />
           <div>
-            <Button type="button" variant="outline" onClick={() => setBatchOpen(true)}>
-              <PlusIcon aria-hidden="true" />
+            <Button type="button" variant="outline" aria-pressed={batchOpen} onClick={() => setBatchOpen(!batchOpen)}>
               {t('catalog.items.batch.open')}
             </Button>
           </div>
@@ -300,13 +292,13 @@ function QuickAdd({ recordId, preferredType, onAdded }: { recordId: string; pref
   };
 
   return (
-    <div role="form" aria-labelledby={titleId} className="flex flex-col gap-3 rounded-lg border bg-card p-4" onKeyDown={enterRuns(() => void add())}>
-      <h3 id={titleId} className="text-sm font-semibold">
+    <div role="form" aria-labelledby={titleId} className={`grid gap-3.5 rounded-lg border p-4 ${LAYER}`} onKeyDown={enterRuns(() => void add())}>
+      <h3 id={titleId} className="text-sm font-bold">
         {t('catalog.items.quick.title')}
       </h3>
       {added !== null && <Notice kind="success">{t('catalog.items.quick.added', { barcode: added })}</Notice>}
       {problem !== null && <Notice kind="error">{problem}</Notice>}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
         <Field label={t('catalog.items.filter.branch')} hint={t('catalog.items.quick.branch_hint')} error={errors.branch}>
           {(c) => (
             <select
@@ -335,7 +327,6 @@ function QuickAdd({ recordId, preferredType, onAdded }: { recordId: string; pref
               autoComplete="off"
               spellCheck={false}
               maxLength={200}
-              className="font-mono"
               disabled={busy}
               value={barcode}
               onChange={(e) => {
@@ -379,8 +370,8 @@ function QuickAdd({ recordId, preferredType, onAdded }: { recordId: string; pref
           setCustomErrors((old) => withoutCustomError(old, code));
         }}
       />
-      <div>
-        <Button type="button" disabled={busy} onClick={() => void add()}>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" disabled={busy} onClick={() => void add()}>
           {t(busy ? 'catalog.items.quick.adding' : 'catalog.items.quick.add')}
         </Button>
       </div>

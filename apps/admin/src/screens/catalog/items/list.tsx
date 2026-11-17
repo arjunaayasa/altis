@@ -2,12 +2,10 @@ import { ITEM_STATUSES } from '@altis/shared';
 import { ITEM_BULK_MAX, type ItemDetail, type ItemListItem, type ItemListResponse } from '@altis/shared/api/catalog/items';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
-import { ScanBarcodeIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { AddToPrintQueue } from '@/components/catalog/print-queue';
-import { DataTable } from '@/components/data-table';
-import { Badge, Field, Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { Badge, Field, Notice, SELECT_CLASS } from '@/components/form-field';
+import { DenseTable, ErrorState, FilterField, FilterRow, PageHead, SelectionBar, SkeletonTable, type DenseColumn } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type TKey } from '@/i18n';
@@ -16,7 +14,7 @@ import { problemText } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
 import { useScannerInput } from '@/lib/scanner';
 import { ItemStatusBadge } from '@/screens/circulation/common';
-import { BulkDialog } from './bulk-dialog';
+import { BulkPanel } from './bulk-dialog';
 import {
   ITEMS_KEY,
   LocationOptions,
@@ -48,7 +46,7 @@ import { ITEMS_FILTER_KEYS, itemsSearchOf, type ItemsSearch } from './search';
  * - **The list**, by barcode, in keyset pages ("Muat lagi").
  * - **Selection** of the loaded rows: "Tambah ke antrean cetak" for anyone who may read (labels are printed with
  *   `catalog.records.read`), and "Ubah massal" ({@link BulkDialog}, ≤ {@link ITEM_BULK_MAX}) for a user who manages
- *   items at some branch. A filter change clears the selection.
+ *   items at some branch, in its panel under the selection bar ({@link BulkPanel}). A filter change clears the selection.
  */
 
 /** The query string of `filters` (fixed order), plus the page's cursor. */
@@ -63,8 +61,6 @@ function listPath(filters: ItemsSearch, cursor: string | null): string {
   return `catalog/items?${q.toString()}`;
 }
 
-const features = tableFeatures({});
-const column = createColumnHelper<typeof features, ItemListItem>();
 const NO_ITEMS: ItemListItem[] = [];
 
 /** The scan field: Enter, the "Buka" button or a scanner burst anywhere on the page opens the item. */
@@ -115,30 +111,28 @@ function ScanField({ paused }: { paused: boolean }) {
   };
 
   return (
-    <form noValidate aria-label={t('catalog.items.scan.label')} className="flex flex-col gap-2 rounded-lg border bg-card p-4" onSubmit={submit}>
-      <div className="flex flex-wrap items-end gap-2">
-        <Field label={t('catalog.items.scan.label')} hint={t('catalog.items.scan.hint')} error={fieldError ?? undefined} className="min-w-0 flex-1">
-          {(c) => (
+    <form noValidate aria-label={t('catalog.items.scan.label')} className="grid max-w-2xl gap-3" onSubmit={submit}>
+      <Field label={t('catalog.items.scan.label')} hint={t('catalog.items.scan.hint')} error={fieldError ?? undefined} className="min-w-0">
+        {(c) => (
+          <div className="flex gap-2">
             <Input
               {...c}
               ref={input}
               autoComplete="off"
               spellCheck={false}
               maxLength={200}
-              className="font-mono"
               value={value}
               onChange={(e) => {
                 setValue(e.target.value);
                 setFieldError(null);
               }}
             />
-          )}
-        </Field>
-        <Button type="submit" disabled={busy} className="mb-6">
-          <ScanBarcodeIcon aria-hidden="true" />
-          {t(busy ? 'catalog.items.scan.searching' : 'catalog.items.scan.open')}
-        </Button>
-      </div>
+            <Button type="submit" disabled={busy}>
+              {t(busy ? 'catalog.items.scan.searching' : 'catalog.items.scan.open')}
+            </Button>
+          </div>
+        )}
+      </Field>
       {notice !== null && <Notice kind="error">{notice}</Notice>}
     </form>
   );
@@ -157,8 +151,21 @@ function Filters({ filters, onChange }: { filters: ItemsSearch; onChange(patch: 
   const set = (patch: Partial<Record<keyof ItemsSearch, string>>): void => onChange(patch);
   const any = Object.keys(filters).length > 0;
   return (
-    <section aria-label={t('catalog.items.filters')} className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
-      <Field label={t('catalog.items.filter.branch')}>
+    // The location's hint stands under its select: the filters line up by their labels, the actions by the controls.
+    <FilterRow
+      label={t('catalog.items.filters')}
+      className="items-start"
+      actions={
+        filters.recordId !== undefined || any ? (
+          <span className="flex min-h-8.5 flex-wrap items-center gap-2 sm:mt-6">
+            {filters.recordId !== undefined && <span className="text-meta text-muted-foreground">{t('catalog.items.filter.record')}</span>}
+            <Button type="button" variant="link" className="h-auto p-0" onClick={() => onChange(null)}>
+              {t('catalog.items.filter.reset')}
+            </Button>
+          </span>
+        ) : undefined
+      }>
+      <FilterField label={t('catalog.items.filter.branch')}>
         {(c) => (
           <select {...c} className={SELECT_CLASS} value={filters.branchId ?? ''} onChange={(e) => set({ branchId: e.target.value, locationId: '' })}>
             <option value="">{t('catalog.items.filter.branch_all')}</option>
@@ -169,22 +176,16 @@ function Filters({ filters, onChange }: { filters: ItemsSearch; onChange(patch: 
             ))}
           </select>
         )}
-      </Field>
-      <Field label={t('catalog.items.filter.location')} hint={filters.branchId === undefined ? t('catalog.items.filter.location_hint') : undefined}>
+      </FilterField>
+      <FilterField label={t('catalog.items.filter.location')} hint={filters.branchId === undefined ? t('catalog.items.filter.location_hint') : undefined}>
         {(c) => (
-          <select
-            {...c}
-            className={SELECT_CLASS}
-            disabled={filters.branchId === undefined}
-            value={filters.locationId ?? ''}
-            onChange={(e) => set({ locationId: e.target.value })}
-          >
+          <select {...c} className={SELECT_CLASS} disabled={filters.branchId === undefined} value={filters.locationId ?? ''} onChange={(e) => set({ locationId: e.target.value })}>
             <option value="">{t('catalog.items.filter.location_all')}</option>
             <LocationOptions locations={locations.data?.items ?? []} keep={filters.locationId ?? null} />
           </select>
         )}
-      </Field>
-      <Field label={t('catalog.items.filter.status')}>
+      </FilterField>
+      <FilterField label={t('catalog.items.filter.status')}>
         {(c) => (
           <select {...c} className={SELECT_CLASS} value={filters.status ?? ''} onChange={(e) => set({ status: e.target.value })}>
             <option value="">{t('catalog.items.filter.status_all')}</option>
@@ -195,8 +196,8 @@ function Filters({ filters, onChange }: { filters: ItemsSearch; onChange(patch: 
             ))}
           </select>
         )}
-      </Field>
-      <Field label={t('catalog.items.filter.collection_type')}>
+      </FilterField>
+      <FilterField label={t('catalog.items.filter.collection_type')}>
         {(c) => (
           <select {...c} className={SELECT_CLASS} value={filters.collectionTypeId ?? ''} onChange={(e) => set({ collectionTypeId: e.target.value })}>
             <option value="">{t('catalog.items.filter.collection_type_all')}</option>
@@ -207,16 +208,8 @@ function Filters({ filters, onChange }: { filters: ItemsSearch; onChange(patch: 
             ))}
           </select>
         )}
-      </Field>
-      {(filters.recordId !== undefined || any) && (
-        <div className="flex flex-wrap items-center gap-3 text-sm sm:col-span-2 lg:col-span-4">
-          {filters.recordId !== undefined && <span className="text-muted-foreground">{t('catalog.items.filter.record')}</span>}
-          <Button type="button" variant="outline" size="sm" onClick={() => onChange(null)}>
-            {t('catalog.items.filter.reset')}
-          </Button>
-        </div>
-      )}
-    </section>
+      </FilterField>
+    </FilterRow>
   );
 }
 
@@ -232,12 +225,14 @@ export function ItemsListScreen() {
   const types = useCollectionTypes();
   const typeName = useCollectionTypeName();
   const [selected, setSelected] = useState<ReadonlyMap<string, ItemListItem>>(new Map());
-  const [bulkOpen, setBulkOpen] = useState(false);
+  const [panel, setPanel] = useState<string | null>(null);
   const [bulkApplied, setBulkApplied] = useState(false);
+  const selectAll = useRef<HTMLInputElement>(null);
 
   // Another filter is another list: what was selected in the old one is not shown any more.
   useEffect(() => {
     setSelected(new Map());
+    setPanel(null);
   }, [filtersKey]);
 
   const list = useInfiniteQuery({
@@ -270,136 +265,145 @@ export function ItemsListScreen() {
     });
   };
 
-  const columns = useMemo(() => {
-    const toggle = (row: ItemListItem, on: boolean): void => {
-      setSelected((old) => {
-        const next = new Map(old);
-        if (on) next.set(row.id, row);
-        else next.delete(row.id);
-        return next;
-      });
-    };
-    const toggleAll = (on: boolean): void => setSelected(on ? new Map(items.map((i) => [i.id, i])) : new Map());
-    const all = items.length > 0 && items.every((i) => selected.has(i.id));
-    return column.columns([
-      column.display({
-        id: 'select',
-        header: () => (
-          <input
-            type="checkbox"
-            aria-label={t('catalog.items.select_all')}
-            className="size-4 accent-primary"
-            checked={all}
-            ref={(el) => {
-              if (el !== null) el.indeterminate = !all && selected.size > 0;
-            }}
-            onChange={(e) => toggleAll(e.target.checked)}
-          />
-        ),
-        cell: (info) => (
-          <input
-            type="checkbox"
-            aria-label={t('catalog.items.select_row', { barcode: info.row.original.barcode })}
-            className="size-4 accent-primary"
-            checked={selected.has(info.row.original.id)}
-            onChange={(e) => toggle(info.row.original, e.target.checked)}
-          />
-        ),
-      }),
-      column.accessor('barcode', {
-        header: t('catalog.items.col.barcode'),
-        cell: (info) => (
-          <Link
-            to={`/admin/catalog/items/${encodeURIComponent(info.row.original.id)}`}
-            className="font-mono font-medium whitespace-nowrap text-primary underline-offset-4 hover:underline"
-          >
-            {info.getValue()}
-          </Link>
-        ),
-      }),
-      column.display({ id: 'title', header: t('catalog.items.col.title'), cell: (info) => <span className="break-words">{info.row.original.record.title}</span> }),
-      column.display({ id: 'branch', header: t('catalog.items.col.branch'), cell: (info) => info.row.original.branch.code }),
-      column.display({
-        id: 'location',
-        header: t('catalog.items.col.location'),
-        cell: (info) => {
-          const path = info.row.original.locationPath;
-          return path === null ? <span className="text-muted-foreground">{t('catalog.items.no_location')}</span> : locationPathLabel(path);
-        },
-      }),
-      column.accessor('callNumber', {
-        header: t('catalog.items.col.call_number'),
-        cell: (info) => <span className="whitespace-nowrap">{info.getValue() ?? '—'}</span>,
-      }),
-      column.display({
-        id: 'collectionType',
-        header: t('catalog.items.col.collection_type'),
-        cell: (info) => typeNames.get(info.row.original.collectionTypeId) ?? '—',
-      }),
-      column.display({
-        id: 'status',
-        header: t('catalog.items.col.status'),
-        cell: (info) => {
-          const row = info.row.original;
-          return (
-            <span className="flex flex-wrap gap-1">
-              <ItemStatusBadge status={row.status} circulation={row.circulation} />
-              {row.archived && <Badge tone="danger">{t('catalog.items.archived')}</Badge>}
-            </span>
-          );
-        },
-      }),
-    ]);
-  }, [t, items, selected, typeNames]);
-
-  const table = useTable({ features, columns, data: items, getRowId: (item) => item.id });
+  const choose = (next: ReadonlyMap<string, ItemListItem>): void => {
+    if (next.size === 0) setPanel(null);
+    setSelected(next);
+  };
+  const toggle = (row: ItemListItem, on: boolean): void => {
+    const next = new Map(selected);
+    if (on) next.set(row.id, row);
+    else next.delete(row.id);
+    choose(next);
+  };
+  const all = items.length > 0 && items.every((i) => selected.has(i.id));
   const chosen = useMemo(() => [...selected.values()], [selected]);
+  const filtered = Object.keys(filters).length > 0;
+
+  /** The bulk panel closed: after a change, the selection is done with and the lists read again. */
+  const closeBulk = (): void => {
+    setPanel(null);
+    if (bulkApplied) {
+      setBulkApplied(false);
+      choose(new Map());
+      void invalidateAfterItemWrite(queryClient);
+    }
+  };
+
+  const columns: DenseColumn<ItemListItem>[] = [
+    {
+      id: 'select',
+      headClassName: 'w-px',
+      header: (
+        <input
+          ref={(el) => {
+            selectAll.current = el;
+            if (el !== null) el.indeterminate = !all && selected.size > 0;
+          }}
+          type="checkbox"
+          aria-label={t('catalog.items.select_all')}
+          className="size-4 align-middle accent-primary"
+          checked={all}
+          onChange={(e) => choose(e.target.checked ? new Map(items.map((i) => [i.id, i])) : new Map())}
+        />
+      ),
+      cell: (row) => (
+        <input
+          type="checkbox"
+          aria-label={t('catalog.items.select_row', { barcode: row.barcode })}
+          className="size-4 align-middle accent-primary"
+          checked={selected.has(row.id)}
+          onChange={(e) => toggle(row, e.target.checked)}
+        />
+      ),
+    },
+    {
+      id: 'barcode',
+      header: t('catalog.items.col.barcode'),
+      cell: (row) => (
+        <Link to={`/admin/catalog/items/${encodeURIComponent(row.id)}`} className="font-semibold whitespace-nowrap text-accent-text underline-offset-4 hover:underline">
+          {row.barcode}
+        </Link>
+      ),
+    },
+    { id: 'title', header: t('catalog.items.col.title'), cell: (row) => <span className="break-words">{row.record.title}</span> },
+    { id: 'branch', header: t('catalog.items.col.branch'), cell: (row) => row.branch.code },
+    {
+      id: 'location',
+      header: t('catalog.items.col.location'),
+      cell: (row) => (row.locationPath === null ? <span className="text-muted-foreground">{t('catalog.items.no_location')}</span> : locationPathLabel(row.locationPath)),
+    },
+    { id: 'callNumber', header: t('catalog.items.col.call_number'), className: 'whitespace-nowrap', cell: (row) => row.callNumber ?? '—' },
+    { id: 'collectionType', header: t('catalog.items.col.collection_type'), cell: (row) => typeNames.get(row.collectionTypeId) ?? '—' },
+    {
+      id: 'status',
+      header: t('catalog.items.col.status'),
+      cell: (row) => (
+        <span className="flex flex-wrap gap-1">
+          <ItemStatusBadge status={row.status} circulation={row.circulation} />
+          {row.archived && <Badge tone="danger">{t('catalog.items.archived')}</Badge>}
+        </span>
+      ),
+    },
+  ];
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">{t('catalog.items.title')}</h1>
-        <p className="text-sm text-muted-foreground">{t('catalog.items.description')}</p>
-      </header>
+    <div className="grid gap-6">
+      <PageHead title={t('catalog.items.title')} intro={t('catalog.items.description')} />
 
-      <ScanField paused={bulkOpen} />
+      <ScanField paused={panel !== null} />
       <Filters filters={filters} onChange={setFilters} />
 
-      {chosen.length > 0 && (
-        <div role="region" aria-label={t('catalog.items.selected', { count: chosen.length })} className="flex flex-wrap items-center gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-          <span className="font-medium">{t('catalog.items.selected', { count: chosen.length })}</span>
-          <AddToPrintQueue entries={chosen.map((i) => ({ kind: 'item' as const, id: i.id, label: i.barcode }))} />
-          {managed.length > 0 && (
-            <Button type="button" size="sm" disabled={chosen.length > ITEM_BULK_MAX} onClick={() => setBulkOpen(true)}>
-              {t('catalog.items.bulk.open')}
-            </Button>
-          )}
-          <Button type="button" variant="ghost" size="sm" onClick={() => setSelected(new Map())}>
-            {t('catalog.items.selection_clear')}
-          </Button>
-          {managed.length > 0 && chosen.length > ITEM_BULK_MAX && (
-            <span className="w-full text-muted-foreground">{t('catalog.items.bulk.too_many', { max: ITEM_BULK_MAX })}</span>
-          )}
-        </div>
-      )}
-
       {list.isError && list.data === undefined ? (
-        <ProblemAlert error={list.error}>
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => void list.refetch()}>
-            {t('table.retry')}
-          </Button>
-        </ProblemAlert>
+        <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
       ) : list.data === undefined ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
+        <SkeletonTable label={t('shell.loading')} columns={8} />
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="grid gap-3">
           {list.isError && <Notice kind="error">{problemText(t, list.error)}</Notice>}
-          <DataTable table={table} caption={t('catalog.items.caption')} empty={t('catalog.items.empty')} />
+          <SelectionBar
+            count={chosen.length}
+            label={t('catalog.items.selected', { count: chosen.length })}
+            actions={managed.length > 0 && chosen.length <= ITEM_BULK_MAX ? [{ id: 'bulk', label: t('catalog.items.bulk.open') }] : []}
+            open={panel}
+            onOpenChange={(id) => (id === null ? closeBulk() : setPanel(id))}
+            onClear={() => choose(new Map())}
+            clearLabel={t('catalog.items.selection_clear')}
+            focusAfter={selectAll}
+            extra={
+              <>
+                <AddToPrintQueue entries={chosen.map((i) => ({ kind: 'item' as const, id: i.id, label: i.barcode }))} />
+                {managed.length > 0 && chosen.length > ITEM_BULK_MAX && (
+                  <>
+                    <Button type="button" size="sm" variant="ghost" disabled>
+                      {t('catalog.items.bulk.open')}
+                    </Button>
+                    <span className="w-full text-meta text-muted-foreground">{t('catalog.items.bulk.too_many', { max: ITEM_BULK_MAX })}</span>
+                  </>
+                )}
+              </>
+            }>
+            {panel === 'bulk' && <BulkPanel items={chosen} onApplied={() => setBulkApplied(true)} onClose={closeBulk} />}
+          </SelectionBar>
+          <DenseTable
+            caption={t('catalog.items.caption')}
+            columns={columns}
+            rows={items}
+            rowKey={(row) => row.id}
+            rowClassName={(row) => (selected.has(row.id) ? 'bg-accent-soft' : undefined)}
+            empty={
+              <span className="flex flex-wrap items-center gap-2">
+                {t('catalog.items.empty')}
+                {filtered && (
+                  <Button type="button" variant="link" className="h-auto p-0" onClick={() => setFilters(null)}>
+                    {t('catalog.items.filter.reset')}
+                  </Button>
+                )}
+              </span>
+            }
+          />
           {list.hasNextPage ? (
             <div>
-              <Button variant="outline" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
+              <Button variant="outline" size="sm" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
                 {t(list.isFetchingNextPage ? 'shell.loading' : 'catalog.items.load_more')}
               </Button>
             </div>
@@ -408,20 +412,6 @@ export function ItemsListScreen() {
           )}
         </div>
       )}
-
-      <BulkDialog
-        open={bulkOpen}
-        items={chosen}
-        onApplied={() => setBulkApplied(true)}
-        onClose={() => {
-          setBulkOpen(false);
-          if (bulkApplied) {
-            setBulkApplied(false);
-            setSelected(new Map());
-            void invalidateAfterItemWrite(queryClient);
-          }
-        }}
-      />
     </div>
   );
 }

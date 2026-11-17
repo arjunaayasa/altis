@@ -310,6 +310,7 @@ describe('ItemEditScreen: access and archive', () => {
     expect(screen.getByText(/tidak dapat mengubahnya/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Simpan' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Siangi' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Tindakan lain untuk eksemplar ini' })).toBeNull();
     expect(screen.getByRole('textbox', { name: 'Barkod' }).matches(':disabled')).toBe(true);
     expect(writes()).toEqual([]);
   });
@@ -350,7 +351,9 @@ describe('ItemEditScreen: access and archive', () => {
       }),
     });
     await statusSelect();
-    fireEvent.click(screen.getByRole('button', { name: 'Siangi' }));
+    // Siangi is in the page head's ⋯ menu.
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Tindakan lain untuk eksemplar ini' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Siangi' }));
     const dialog = await screen.findByRole('alertdialog', { name: 'Siangi eksemplar ini?' });
     expect(writes()).toEqual([]);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Siangi' }));
@@ -358,7 +361,7 @@ describe('ItemEditScreen: access and archive', () => {
     expect(await screen.findByText(/sudah disiangi dan diarsipkan/)).toBeTruthy();
     // Withdrawn: the only way back is `processing`.
     expect(optionsOf(await statusSelect())).toEqual(['withdrawn', 'processing']);
-    expect(screen.queryByRole('button', { name: 'Siangi' })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Tindakan lain untuk eksemplar ini' })).toBeNull());
   });
 
   it('an unknown item is “not found”', async () => {
