@@ -5,6 +5,7 @@ import type { EvidenceListResponse } from '@altis/shared/api/accreditation';
 import { SLIMS_FIXTURE_SEED, slimsFixtureBytes } from '../../../packages/core/test/support/slims-fixture/index.js';
 import type { CspRecorder } from '../lib/csp.js';
 import { T, expect, passReauth, signIn, test } from '../fixtures.js';
+import { openNavPage } from '../lib/nav.js';
 
 // The accreditation workspace of a school library, end to end, as its librarian prepares a period, in a real browser
 // with the CSP guard of fixtures.ts on every page (the spec fails on any CSP violation):
@@ -115,7 +116,6 @@ test('Akreditasi: a school period prepared, computed, frozen, and its simulation
   const startsOn = `${startYear}-07-01`;
   const endsOn = `${startYear + 1}-06-30`;
   const periodName = `Tahun pelajaran ${startYear}/${startYear + 1} (uji ${tag})`;
-  const mainNav = page.getByRole('navigation', { name: T('shell.nav_label') });
   const status = page.getByRole('region', { name: T('accreditation.status.title') });
   const tab = (key: Parameters<typeof T>[0]) => page.getByRole('tablist', { name: T('accreditation.tabs') }).getByRole('tab', { name: T(key), exact: true });
   let periodId = '';
@@ -132,7 +132,7 @@ test('Akreditasi: a school period prepared, computed, frozen, and its simulation
   });
 
   await clean(csp, 'Akreditasi: a new period of the senior-high instrument', async () => {
-    await mainNav.getByRole('link', { name: T('nav.reports.accreditation'), exact: true }).click();
+    await openNavPage(page, '/admin/accreditation');
     await expect(page).toHaveURL(/\/admin\/accreditation$/);
     await expect(page.getByRole('heading', { level: 1, name: T('accreditation.title'), exact: true })).toBeVisible();
     await page.getByRole('link', { name: T('accreditation.new_period'), exact: true }).first().click();

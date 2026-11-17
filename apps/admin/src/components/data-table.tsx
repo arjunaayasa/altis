@@ -21,14 +21,14 @@ export function DataTable<TFeatures extends TableFeatures, TData extends RowData
   const rows = table.getRowModel().rows;
   const columns = table.getAllLeafColumns().length;
   return (
-    <div className="overflow-x-auto rounded-md border">
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto rounded-lg border">
+      <table className="w-full text-sm tabular-nums">
         <caption className="sr-only">{caption}</caption>
-        <thead className="bg-muted/50 text-left">
+        <thead className="border-b bg-layer text-left">
           {table.getHeaderGroups().map((group) => (
             <tr key={group.id}>
               {group.headers.map((header) => (
-                <th key={header.id} scope="col" className="px-3 py-2 font-medium whitespace-nowrap text-muted-foreground">
+                <th key={header.id} scope="col" className="px-3 py-2 text-xs font-semibold whitespace-nowrap text-muted-foreground">
                   {header.isPlaceholder ? null : <table.FlexRender header={header} />}
                 </th>
               ))}
@@ -38,15 +38,15 @@ export function DataTable<TFeatures extends TableFeatures, TData extends RowData
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={columns} className="px-3 py-6 text-center text-muted-foreground">
+              <td colSpan={columns} className="px-3 py-7 text-center text-muted-foreground">
                 {empty}
               </td>
             </tr>
           ) : (
             rows.map((row) => (
-              <tr key={row.id} className="border-t align-top">
+              <tr key={row.id} className="border-t align-top first:border-t-0">
                 {row.getAllCells().map((cell) => (
-                  <td key={cell.id} className="px-3 py-2">
+                  <td key={cell.id} className="px-3 py-2.5">
                     <table.FlexRender cell={cell} />
                   </td>
                 ))}

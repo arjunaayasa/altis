@@ -1,9 +1,33 @@
 /* The admin stylesheet: Tailwind (utilities from the classes under src/ only) and the ALTIS design tokens. Served as a
-   hashed file from /admin/assets (CSP style-src 'self'); nothing here is inlined into index.html. */
+   hashed file from /admin/assets (CSP style-src 'self'); nothing here is inlined into index.html.
+
+   The visual system: calm, dense, easy to scan. Neutrals carry almost everything; the one accent (`--primary`) is for
+   the main action, the selected item, the selected row and focus; green / amber / red only for states, always with a
+   word next to them. Dark is composed on its own (not an inversion). The theme follows the system unless the user
+   chose one in the user menu: `data-theme="light|dark"` on <html> (src/lib/theme.ts; index.html sets it before the
+   first paint). */
 @import 'tailwindcss' source('.');
 @import 'tw-animate-css';
 
+/* `dark:` follows the same choice as the tokens. */
+@custom-variant dark {
+  &:where([data-theme='dark'], [data-theme='dark'] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme='light']), :root:not([data-theme='light']) *) {
+      @slot;
+    }
+  }
+}
+
 @theme inline {
+  --font-sans: var(--font-ui);
+  /* The admin's type scale is 12 / 13 / 14 (the base) / 16 / 20 / 24 px: Tailwind's xs, meta, sm, base, xl, 2xl. */
+  --text-meta: 0.8125rem;
+  --text-meta--line-height: calc(1.25 / 0.8125);
+  --shadow-pop: var(--pop);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
@@ -14,89 +38,216 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
   --color-success-foreground: var(--success-foreground);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-layer: var(--layer);
+  --color-layer-2: var(--layer-2);
+  --color-faint: var(--faint);
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-ok-line: var(--ok-line);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-warn-line: var(--warn-line);
+  --color-bad: var(--bad);
+  --color-bad-bg: var(--bad-bg);
+  --color-bad-line: var(--bad-line);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/*
+ * The tokens. The design's own names are the neutral layers (`--layer`: sidebar, panels, table heads; `--layer-2`:
+ * hover and neutral tags), the text steps (`--foreground`, `--muted-foreground`, `--faint`), the borders
+ * (`--border`, `--border-strong`), the accent (`--primary`, `--primary-hover`, `--accent-soft` for selected and
+ * active items, `--accent-text` for links), the states with their background and line (`--ok`, `--warn`, `--bad`,
+ * each with `-bg` and `-line`), the chart series (`--series-1`, `--series-2`) and the one shadow, for menus and
+ * dialogs (`--pop`). The shadcn names the primitives use are mapped onto them; `--accent` keeps its shadcn meaning
+ * (the hover layer), so the design's accent is `--primary`.
+ *
+ * Shape: radius 6 px for controls (rounded-md), 8 px for containers (rounded-lg); controls 34 px high (h-8.5).
+ */
 :root {
+  --font-ui: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   --radius: 0.5rem;
-  --background: oklch(0.99 0.002 240);
-  --foreground: oklch(0.2 0.02 250);
-  --muted: oklch(0.96 0.005 240);
-  --muted-foreground: oklch(0.48 0.02 250);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.02 250);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.02 250);
-  --primary: oklch(0.45 0.12 250);
-  --primary-foreground: oklch(0.98 0.005 240);
-  --secondary: oklch(0.95 0.01 240);
-  --secondary-foreground: oklch(0.25 0.03 250);
-  --accent: oklch(0.94 0.02 240);
-  --accent-foreground: oklch(0.22 0.03 250);
-  --destructive: oklch(0.55 0.2 27);
-  --warning: oklch(0.95 0.06 85);
-  --warning-foreground: oklch(0.35 0.08 70);
-  /* The service desk's scan feedback only: green reads as "done" from across the desk. */
-  --success: oklch(0.55 0.14 150);
-  --success-soft: oklch(0.95 0.05 150);
-  --success-foreground: oklch(0.32 0.08 150);
-  --border: oklch(0.9 0.01 240);
-  --input: oklch(0.88 0.01 240);
-  --ring: oklch(0.55 0.12 250);
+
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.23 0.015 255);
+  --layer: oklch(0.976 0.004 255);
+  --layer-2: oklch(0.952 0.006 255);
+  --muted: var(--layer-2);
+  --muted-foreground: oklch(0.44 0.014 255);
+  --faint: oklch(0.54 0.012 255);
+  --card: var(--background);
+  --card-foreground: var(--foreground);
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.48 0.14 255);
+  --primary-hover: oklch(0.42 0.14 255);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: var(--layer-2);
+  --secondary-foreground: var(--foreground);
+  --accent: var(--layer-2);
+  --accent-foreground: var(--foreground);
+  --accent-soft: oklch(0.955 0.022 255);
+  --accent-text: oklch(0.44 0.14 255);
+  --border: oklch(0.91 0.006 255);
+  --border-strong: oklch(0.82 0.01 255);
+  --input: var(--border-strong);
+  --ring: var(--primary);
+
+  --ok: oklch(0.46 0.11 150);
+  --ok-bg: oklch(0.965 0.025 150);
+  --ok-line: oklch(0.84 0.06 150);
+  --warn: oklch(0.47 0.1 65);
+  --warn-bg: oklch(0.972 0.035 85);
+  --warn-line: oklch(0.85 0.08 80);
+  --bad: oklch(0.5 0.17 25);
+  --bad-bg: oklch(0.97 0.018 25);
+  --bad-line: oklch(0.85 0.06 25);
+  /* The older state names, on the new values. */
+  --destructive: var(--bad);
+  --destructive-foreground: var(--background);
+  --warning: var(--warn-bg);
+  --warning-foreground: var(--warn);
+  --success: var(--ok);
+  --success-soft: var(--ok-bg);
+  --success-foreground: var(--ok);
+
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --pop: 0 10px 30px oklch(0.2 0.02 255 / 0.12), 0 1px 3px oklch(0.2 0.02 255 / 0.08);
+  --scrim: oklch(0.2 0.01 255 / 0.45);
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: oklch(0.18 0.015 250);
-    --foreground: oklch(0.95 0.005 240);
-    --muted: oklch(0.25 0.015 250);
-    --muted-foreground: oklch(0.72 0.02 250);
-    --card: oklch(0.21 0.015 250);
-    --card-foreground: oklch(0.95 0.005 240);
-    --popover: oklch(0.21 0.015 250);
-    --popover-foreground: oklch(0.95 0.005 240);
-    --primary: oklch(0.72 0.11 250);
-    --primary-foreground: oklch(0.18 0.02 250);
-    --secondary: oklch(0.27 0.015 250);
-    --secondary-foreground: oklch(0.95 0.005 240);
-    --accent: oklch(0.3 0.02 250);
-    --accent-foreground: oklch(0.95 0.005 240);
-    --destructive: oklch(0.65 0.19 25);
-    --warning: oklch(0.32 0.06 80);
-    --warning-foreground: oklch(0.92 0.06 90);
-    --success: oklch(0.68 0.14 150);
-    --success-soft: oklch(0.3 0.06 150);
-    --success-foreground: oklch(0.9 0.07 150);
-    --border: oklch(0.32 0.015 250);
-    --input: oklch(0.36 0.015 250);
-    --ring: oklch(0.65 0.11 250);
+  :root:not([data-theme='light']) {
+    --background: oklch(0.205 0.008 255);
+    --foreground: oklch(0.94 0.005 255);
+    --layer: oklch(0.18 0.008 255);
+    --layer-2: oklch(0.255 0.01 255);
+    --muted-foreground: oklch(0.78 0.01 255);
+    --faint: oklch(0.68 0.01 255);
+    --primary: oklch(0.72 0.12 255);
+    --primary-hover: oklch(0.79 0.1 255);
+    --primary-foreground: oklch(0.17 0.02 255);
+    --accent-soft: oklch(0.29 0.045 255);
+    --accent-text: oklch(0.8 0.1 255);
+    --border: oklch(0.3 0.01 255);
+    --border-strong: oklch(0.41 0.012 255);
+    --ok: oklch(0.8 0.11 150);
+    --ok-bg: oklch(0.26 0.035 150);
+    --ok-line: oklch(0.42 0.07 150);
+    --warn: oklch(0.84 0.1 82);
+    --warn-bg: oklch(0.27 0.035 80);
+    --warn-line: oklch(0.46 0.07 80);
+    --bad: oklch(0.78 0.12 25);
+    --bad-bg: oklch(0.27 0.045 25);
+    --bad-line: oklch(0.46 0.09 25);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --pop: 0 10px 30px oklch(0 0 0 / 0.45), 0 1px 3px oklch(0 0 0 / 0.3);
+    --scrim: oklch(0 0 0 / 0.55);
+    color-scheme: dark;
   }
+}
+
+:root[data-theme='dark'] {
+  --background: oklch(0.205 0.008 255);
+  --foreground: oklch(0.94 0.005 255);
+  --layer: oklch(0.18 0.008 255);
+  --layer-2: oklch(0.255 0.01 255);
+  --muted-foreground: oklch(0.78 0.01 255);
+  --faint: oklch(0.68 0.01 255);
+  --primary: oklch(0.72 0.12 255);
+  --primary-hover: oklch(0.79 0.1 255);
+  --primary-foreground: oklch(0.17 0.02 255);
+  --accent-soft: oklch(0.29 0.045 255);
+  --accent-text: oklch(0.8 0.1 255);
+  --border: oklch(0.3 0.01 255);
+  --border-strong: oklch(0.41 0.012 255);
+  --ok: oklch(0.8 0.11 150);
+  --ok-bg: oklch(0.26 0.035 150);
+  --ok-line: oklch(0.42 0.07 150);
+  --warn: oklch(0.84 0.1 82);
+  --warn-bg: oklch(0.27 0.035 80);
+  --warn-line: oklch(0.46 0.07 80);
+  --bad: oklch(0.78 0.12 25);
+  --bad-bg: oklch(0.27 0.045 25);
+  --bad-line: oklch(0.46 0.09 25);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --pop: 0 10px 30px oklch(0 0 0 / 0.45), 0 1px 3px oklch(0 0 0 / 0.3);
+  --scrim: oklch(0 0 0 / 0.55);
+  color-scheme: dark;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
-  }
-  html {
-    color-scheme: light dark;
+    @apply border-border outline-ring;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-sm text-foreground antialiased;
+    line-height: 1.5;
+    caret-color: var(--primary);
+    accent-color: var(--primary);
+  }
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--foreground);
+  }
+  :focus-visible {
+    outline-width: 2px;
+    outline-style: solid;
+    outline-offset: 2px;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  /* Numbers line up in every table. */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+  kbd {
+    @apply rounded-sm border border-border-strong bg-background px-1 text-xs leading-normal font-semibold whitespace-nowrap text-muted-foreground;
+    font-family: inherit;
+  }
+}
+
+/* Motion: 150 to 250 ms for state changes only, and none for a user who asks for less. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

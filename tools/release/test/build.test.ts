@@ -217,11 +217,15 @@ describe('test-profile release 0.1.0-test', () => {
 
     const html = textOf(entries, `${RELEASE}/public/admin/index.html`);
     expect(html).toContain('<meta name="csp-nonce" content="__CSP_NONCE__"');
-    // No inline script or style: every script and stylesheet comes from /admin/assets (CSP script-src/style-src).
+    // No inline style: every stylesheet comes from /admin/assets (CSP style-src). Every script does too, but for the
+    // colour theme's boot, inline with the request's nonce (CSP script-src) so that it runs before the first paint.
     expect(html).not.toMatch(/<style/i);
-    const scripts = [...html.matchAll(/<script\b[^>]*>/gi)].map((m) => m[0]);
-    expect(scripts.length).toBeGreaterThan(0);
-    for (const tag of scripts) expect(tag).toMatch(/\ssrc="\/admin\/assets\/[^"]+\.js"/);
+    const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
+    expect(scripts.filter(([tag]) => /\ssrc=/.test(tag!)).length).toBeGreaterThan(0);
+    for (const [tag, body] of scripts) {
+      if (body!.trim() !== '') expect(tag).toContain('nonce="__CSP_NONCE__"');
+      else expect(tag).toMatch(/\ssrc="\/admin\/assets\/[^"]+\.js"/);
+    }
     // Every <link> names an asset too, but for the empty `data:` icon that spares the browser a /favicon.ico request.
     for (const [, href] of html.matchAll(/<link\b[^>]*\shref="([^"]+)"/gi)) expect(href).toMatch(/^(\/admin\/assets\/|data:,$)/);
 

@@ -3,7 +3,7 @@ import type { MeResponse } from '@altis/shared/api/auth';
 import { describe, expect, it } from 'vitest';
 import { editionNav } from '@/edition';
 import { ADMIN_MESSAGES } from '@/i18n';
-import { NAV, NAV_GROUPS, activeNavPath, visibleNav, visibleNavSections } from '@/lib/nav';
+import { HOME_SHORTCUTS, NAV, NAV_GROUPS, NAV_MODULES, activeModule, activeNavPath, visibleModules, visibleNav, visibleNavSections, visibleShortcuts } from '@/lib/nav';
 
 // Permission-based navigation (spec §13.3 "Kerangka admin"). The menus only hide: the server refuses whatever they
 // hide anyway (§4.8).
@@ -309,5 +309,88 @@ describe('activeNavPath: the one menu item a page marks', () => {
   it('only the items given count: a hidden item leaves the page to the item above it', () => {
     const shown = NAV.filter((item) => item.to !== '/admin/anggota/tipe');
     expect(activeNavPath(shown, '/admin/anggota/tipe')).toBe('/admin/anggota');
+  });
+});
+
+describe('modules: the module bar and the sidebar', () => {
+  const modulesOf = (m: FullMe) => visibleModules(m).map((v) => [v.module, paths(v.items)]);
+
+  it('NAV_MODULES: Beranda, then the groups in their order', () => {
+    expect([...NAV_MODULES]).toEqual(['home', ...NAV_GROUPS]);
+  });
+
+  it('a module shows when the user sees one of its pages; Beranda holds the ungrouped items', () => {
+    const superAdmin = me({ permissions: [], superAdmin: true });
+    expect(visibleModules(superAdmin).map((v) => v.module)).toEqual(['home', 'catalog', 'circulation', 'members', 'reports', 'opac', 'system']);
+    expect(modulesOf(superAdmin)[0]).toEqual(['home', ['/admin']]);
+    // The same split as the sections.
+    expect(visibleModules(superAdmin).map((v) => v.items)).toEqual(visibleNavSections(superAdmin).map((s) => s.items));
+    expect(modulesOf(me({ permissions: ['reports.statistics.read'] }))).toEqual([
+      ['home', ['/admin']],
+      ['reports', ['/admin/reports']],
+      ['system', ['/admin/about']],
+    ]);
+    expect(visibleModules(undefined)).toEqual([]);
+  });
+
+  it('the desk held at one branch only: Beranda, Layanan with the desk pages, Sistem with Tentang', () => {
+    const desk = me({ permissions: [], branchPermissions: { b1: ['circulation.desk.use'] } });
+    expect(modulesOf(desk)).toEqual([
+      ['home', ['/admin']],
+      ['circulation', ['/admin/layanan', '/admin/layanan/kembali', '/admin/layanan/rak-tunggu', '/admin/layanan/baca']],
+      ['system', ['/admin/about']],
+    ]);
+  });
+
+  it('activeModule: the module of the marked item; else of the area the page lies in; else Beranda', () => {
+    const all = visibleModules(me({ permissions: [], superAdmin: true }));
+    expect(activeModule(all, '/admin')).toBe('home');
+    expect(activeModule(all, '/admin/')).toBe('home');
+    expect(activeModule(all, '/admin/layanan/kembali')).toBe('circulation');
+    expect(activeModule(all, '/admin/anggota/01J0000000000000000000000A')).toBe('members');
+    expect(activeModule(all, '/admin/settings/opac')).toBe('system');
+    expect(activeModule(all, '/admin/jobs/01J0000000000000000000000A')).toBe('system');
+    expect(activeModule(all, '/admin/opac/pages/new')).toBe('opac');
+    expect(activeModule(all, '/admin/accreditation/new')).toBe('reports');
+    // No item covers it: the area's module.
+    expect(activeModule(all, '/admin/catalog/runs/01J0000000000000000000000A')).toBe('catalog');
+    // No module at all.
+    expect(activeModule(all, '/admin/profile/sessions')).toBe('home');
+    expect(activeModule(all, '/admin/no-such-section')).toBe('home');
+  });
+
+  it('activeModule: a page whose item the menus hide still opens its module; a module the user does not see falls back to Beranda', () => {
+    const reader = visibleModules(me({ permissions: ['members.records.read'] }));
+    // Tipe Anggota is hidden; the page lies under Daftar Anggota.
+    expect(activeModule(reader, '/admin/anggota/tipe')).toBe('members');
+    // The catalogue is not this user's.
+    expect(activeModule(reader, '/admin/catalog/records')).toBe('home');
+    // Sistem is (Tentang): a page of it the user cannot open still shows that module.
+    expect(activeModule(reader, '/admin/users')).toBe('system');
+  });
+
+  it('HOME_SHORTCUTS: the desk, quick return, a new member and the member import, behind the permission of each page', () => {
+    expect(HOME_SHORTCUTS.map((item) => [item.to, item.permission, item.anyBranch ?? false])).toEqual([
+      ['/admin/layanan', 'circulation.desk.use', true],
+      ['/admin/layanan/kembali', 'circulation.desk.use', true],
+      ['/admin/anggota/baru', 'members.records.manage', false],
+      ['/admin/anggota/impor', 'members.import.run', false],
+    ]);
+    for (const item of HOME_SHORTCUTS) {
+      expect(ADMIN_MESSAGES.id[item.labelKey], item.labelKey).toBeTruthy();
+      expect(ADMIN_MESSAGES.en[item.labelKey], item.labelKey).toBeTruthy();
+    }
+  });
+
+  it('visibleShortcuts: filtered as the menus are', () => {
+    expect(paths(visibleShortcuts(me({ permissions: [], superAdmin: true })))).toEqual(paths(HOME_SHORTCUTS));
+    expect(paths(visibleShortcuts(me({ permissions: [...systemRolePermissions('admin')] })))).toEqual(paths(HOME_SHORTCUTS));
+    expect(paths(visibleShortcuts(me({ permissions: [], branchPermissions: { b1: ['circulation.desk.use'] } })))).toEqual([
+      '/admin/layanan',
+      '/admin/layanan/kembali',
+    ]);
+    expect(paths(visibleShortcuts(me({ permissions: ['members.records.read'] })))).toEqual([]);
+    expect(paths(visibleShortcuts(me({ permissions: ['members.records.manage', 'members.import.run'] })))).toEqual(['/admin/anggota/baru', '/admin/anggota/impor']);
+    expect(visibleShortcuts(undefined)).toEqual([]);
   });
 });
