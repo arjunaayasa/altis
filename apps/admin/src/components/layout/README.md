@@ -21,7 +21,8 @@ In the examples, `things.*` keys stand for the screen's own i18n keys (every tex
 | `callout.tsx` | `Callout`, `PageError` |
 | `status.tsx` | `StatusText`, `Tag`, the tone classes `TONE_TEXT`, `TONE_SURFACE`, `TAG_TONE`, `TAG_SHAPE`, `LAYER` |
 | `figures.tsx` | `StatStrip`, `FactList` |
-| `form-section.tsx` | `FormSection`, `FormBar`, `FORM_FULL` |
+| `form-section.tsx` | `FormSection`, `SideSection`, `FormBar`, `FORM_FULL` |
+| `link-tabs.tsx` | `LinkTabs` |
 | `steps.tsx` | `Steps` |
 | `kbd.tsx`, `member-photo.tsx` | `Kbd`; `MemberPhoto`, `initials` |
 
@@ -35,7 +36,9 @@ The older shared components keep their props and already have this look: `DataTa
 From top to bottom, leaving out what the screen does not have. The page itself is `<div className="grid gap-6">`
 (24 px between its parts); the shell already gives the padding, the width limit and the `h1` focus.
 
-1. `BackLink` (detail pages only), then `PageHead`: the `h1`, one sentence under it, the actions on the right.
+1. `BackLink` (detail pages only; `search` brings back the list's own tab or kind), then `PageHead`: the `h1`, one
+   sentence under it, the actions on the right. Pages of one part reached from the same place (the settings groups,
+   the profile, jobs and schedules) put `LinkTabs` right under the head.
 2. The outcome of the last action: `Notice` (success) or `PageError` (failure). Nothing else goes above the head.
 3. `FilterRow` (lists), or `Tabs` then `FilterRow` when the tabs switch the list.
 4. The data: `SelectionBar` with its inline panel, then the table; or `StatStrip`, `Section`s, a form in `FormSection`s.
@@ -85,6 +88,16 @@ something small on the right of the heading, the content 12 px below).
 </Section>
 ```
 
+A part of a page that reads better with its title on the left, like a form section (a settings group, a profile part,
+a member's own data), is a `SideSection`: title and one sentence left, anything right (its own form, a list, buttons,
+an inline panel), a thin rule above it when another part comes before it in the page's `grid gap-6`.
+
+```tsx
+<SideSection title={t('things.privacy')} intro={t('things.privacy_intro')}>
+  <form noValidate aria-label={t('things.privacy')} onSubmit={save}>…</form>
+</SideSection>
+```
+
 ## 3. Filters
 
 Every filter has a **visible label above it**; a placeholder is an example, never the label. `FilterRow` is a named
@@ -104,8 +117,8 @@ in its `onChange`. Buttons such as "Hapus saringan" go in `actions`, at the end 
 
 ## 4. Tables
 
-`DenseTable` for rows you hold in an array, `DataTable` for a TanStack table, the `TABLE` classes only when neither
-fits (row focus, colspans). Every table has a caption (read by screen readers only), its header on the neutral layer,
+`DenseTable` for rows you hold in an array, `DataTable` for a TanStack table (its `alignRight` names the columns of
+numbers), the `TABLE` classes only when neither fits (row focus, colspans). Every table has a caption (read by screen readers only), its header on the neutral layer,
 rows 14 px with thin lines, digits in `tabular-nums` (already on every table). Numbers align right
 (`className: 'text-right'`, `headClassName: 'text-right'`). The row's actions are a small `MoreMenu` in the last
 column, whose header is `<span className="sr-only">{t('table.actions')}</span>`. A selected row has `bg-accent-soft`.
@@ -180,7 +193,12 @@ destructive bulk action asks its question in words inside its panel, with a `var
 
 **Tabs** (`components/ui/tabs`) switch between views of the same object or list ("Data anggota", "Pinjaman aktif");
 the arrow keys move between them. Add `WRAPPING_TABS` when they may wrap on a narrow screen. A count may follow a tab's
-name in `text-faint`. Pages of a module are sidebar items, not tabs.
+name in `text-faint`. Pages of a module are sidebar items, not tabs; the few pages of one sidebar item (the settings
+groups) are `LinkTabs`, links with the current page underlined.
+
+```tsx
+<LinkTabs label={t('things.sections')} items={[{ to: '/admin/things', label: t('things.tab.list') }, { to: '/admin/things/schedules', label: t('things.tab.schedules') }]} />
+```
 
 ```tsx
 <Tabs value={tab} onValueChange={setTab}>
@@ -201,7 +219,9 @@ name in `text-faint`. Pages of a module are sidebar items, not tabs.
 
 **Forms** are split into `FormSection`s (title and one sentence left, fields right in two or three columns; a field
 that needs the whole width takes `FORM_FULL`), each field a `Field` with its label above, its error under the control,
-then its hint. The buttons end the form in a `FormBar`: the submit first, then Batal, then the unsaved-changes word.
+then its hint. A form with a side column of its own (the record editor's cover) takes `columns={2}`; a part made of
+one list field that brings its own fieldset (authors, identifiers) takes `list`, and `introId` lets the sentence
+describe that list. The buttons end the form in a `FormBar`: the submit first, then Batal, then the unsaved-changes word.
 
 ```tsx
 <form noValidate onSubmit={submit}>
@@ -223,6 +243,10 @@ Back and Next buttons in a `FormBar`.
 ```tsx
 <Steps steps={[t('members.import.step.file'), t('members.import.step.mapping'), t('members.import.step.dry_run'), t('members.import.step.result')]} current={step} label={t('members.import.steps')} doneLabel={t('members.import.step_done')} />
 ```
+
+**Links that look like buttons**: a route is `<Button asChild variant="outline"><Link …/></Button>`; a plain `<a>` (a
+download, a file opened in a new tab) takes `className={buttonVariants({ variant: 'outline', size: 'sm' })}`, whose
+classes are already merged, so the outline keeps its border.
 
 ## 8. States
 
@@ -264,8 +288,11 @@ Icons appear in exactly these places, and nowhere else:
 5. the back arrow (`BackLink`);
 6. a spinner beside the words of a running action ("Memproses…").
 
-Never in buttons, menu items, tabs, cards, headings, table cells or empty states. Never an emoji. An icon is
-`lucide-react`, 16 px, stroke 2, `aria-hidden="true"`: the words next to it carry the meaning.
+Never in buttons, menu items, tabs, cards, headings, table cells or empty states; a chevron or a spinner sits in the
+control it belongs to (a disclosure button with `aria-expanded`, a combobox, a button while it works). Never an emoji.
+An icon is `lucide-react`, 16 px, stroke 2, `aria-hidden="true"`: the words next to it carry the meaning. The test
+`test/icon-guard.test.ts` reads the screens and the install wizard: it fails on an icon outside this list, and on one
+inside a button, menu item, tab or heading.
 
 ```tsx
 <MoreMenu small label={t('members.action.more_named', { name })}>…</MoreMenu> {/* the ⋯ icon is the menu's own */}
