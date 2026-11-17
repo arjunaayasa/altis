@@ -11,8 +11,8 @@ import { JobProgress, type JobOutcome } from '@/components/job-progress';
 import { CheckField, Field, Notice, NoticeAlert, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
 import { FactList, FormSection, LoadingState, Steps } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FileInput } from '@/components/file-input';
 import { useLocale, useT, type TKey } from '@/i18n';
 import { holds, holdsAt, meId } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
@@ -197,9 +197,9 @@ function FileStep({ onUploaded }: { onUploaded(source: Source): void }) {
     <form noValidate className="grid max-w-xl gap-3" onSubmit={start}>
       <div className="grid gap-1.5">
         <Label htmlFor={inputId}>{t('catalog.exchange.import.file')}</Label>
-        <Input
+        <FileInput
           id={inputId}
-          type="file"
+          chosen={file?.name ?? null}
           accept=".mrc,.marc,.iso,.dat,.xml,.csv,.txt,application/marc,application/marcxml+xml,application/xml,text/xml,text/csv,text/plain"
           aria-describedby={hintId}
           disabled={upload !== null}

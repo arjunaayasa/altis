@@ -2,8 +2,8 @@ import type { BackupItem, BackupUploadResponse } from '@altis/shared/api/backups
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Notice, NoticeAlert } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FileInput } from '@/components/file-input';
 import { useLocale, useT } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
@@ -178,10 +178,10 @@ export function UploadPanel({ onUploaded }: { onUploaded(item: BackupItem): void
           <Label htmlFor={fileId} className="text-meta">
             {t('backups.upload.file')}
           </Label>
-          <Input
+          <FileInput
             id={fileId}
             ref={input}
-            type="file"
+            chosen={file?.name ?? null}
             accept=".altisbak,application/octet-stream"
             disabled={busy}
             onChange={(e) => {

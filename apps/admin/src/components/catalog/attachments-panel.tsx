@@ -9,6 +9,7 @@ import { Badge, Field, Notice, RefetchProblem, SELECT_CLASS, TEXTAREA_CLASS } fr
 import { ErrorState, LAYER, LoadingState } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { FileInput } from '@/components/file-input';
 import { useLocale, useT, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
@@ -382,7 +383,7 @@ function AddAttachment({ recordId, onAdded }: { recordId: string; onAdded(): Pro
       </fieldset>
       {kind === 'file' ? (
         <Field id={ids.file} label={t('catalog.attachments.field.file')} hint={t('catalog.attachments.field.file_hint')} error={fieldError(errors.file)} className="sm:col-span-2">
-          {(c) => <Input {...c} ref={fileInput} type="file" disabled={busy} onChange={(e) => chooseFile(e.target.files?.[0] ?? null)} />}
+          {(c) => <FileInput {...c} ref={fileInput} chosen={file?.name ?? null} disabled={busy} onChange={(e) => chooseFile(e.target.files?.[0] ?? null)} />}
         </Field>
       ) : (
         <Field id={ids.url} label={t('catalog.attachments.field.url')} hint={t('catalog.attachments.field.url_hint')} error={fieldError(errors.url)} className="sm:col-span-2">

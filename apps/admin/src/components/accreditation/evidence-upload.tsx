@@ -7,6 +7,7 @@ import { Field } from '@/components/form-field';
 import { InlinePanel } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { FileInput } from '@/components/file-input';
 import { useT, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
@@ -255,14 +256,13 @@ function UploadForm(props: EvidenceUploadProps & { busy: boolean; onBusy(busy: b
       </p>
       <Field label={t('accreditation.registers.upload.file')}>
         {(c) => (
-          <input
+          <FileInput
             {...c}
-            type="file"
+            chosen={file?.name ?? null}
             accept={props.imagesOnly === true ? EVIDENCE_IMAGE_ACCEPT : EVIDENCE_ACCEPT}
             disabled={busy}
             aria-invalid={error?.file === true ? true : undefined}
             aria-describedby={error?.file === true ? errorId : undefined}
-            className="text-sm file:mr-2 file:rounded-md file:border file:bg-background file:px-2 file:py-1"
             onChange={(e) => {
               setFile(e.target.files?.[0] ?? null);
               setError(null);

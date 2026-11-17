@@ -10,8 +10,8 @@ import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 
 import { NoticeAlert, ProblemAlert } from '@/components/form-field';
 import { SideSection, StatusText } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FileInput } from '@/components/file-input';
 import { useLocale, useT, type AdminKey, type Translate } from '@/i18n';
 import { ApiError, OPS_PAGE_PATH, api } from '@/lib/api';
 import { page } from '@/lib/page';
@@ -324,10 +324,10 @@ export function PackageUploadPanel({ blocked }: { blocked: boolean }) {
           <Label htmlFor={fileId} className="text-meta">
             {t('updates.upload.file')}
           </Label>
-          <Input
+          <FileInput
             id={fileId}
             ref={input}
-            type="file"
+            chosen={file?.name ?? null}
             accept=".zip,application/zip"
             disabled={busy}
             aria-invalid={fileError ? true : undefined}

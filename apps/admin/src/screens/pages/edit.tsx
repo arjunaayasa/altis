@@ -18,6 +18,7 @@ import { BackLink, Callout, ErrorState, FORM_FULL, FormBar, FormSection, LAYER, 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
+import { FileInput } from '@/components/file-input';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
@@ -235,10 +236,10 @@ function ImageInsert({ format, onInsert, disabled }: { format: BodyFormat; onIns
       <h3 className="text-sm font-bold sm:col-span-2">{t('pages.image.title')}</h3>
       <Field id={ids.file} label={t('pages.image.file')} hint={t('pages.image.file_hint')} error={errors.file}>
         {(c) => (
-          <Input
+          <FileInput
             {...c}
             ref={fileInput}
-            type="file"
+            chosen={file?.name ?? null}
             accept="image/jpeg,image/png,image/webp,image/gif"
             disabled={busy}
             onChange={(e) => {

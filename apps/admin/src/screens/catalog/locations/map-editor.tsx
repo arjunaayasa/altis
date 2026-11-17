@@ -8,6 +8,7 @@ import { LAYER, StatusText, Tag, type TagTone } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FileInput } from '@/components/file-input';
 import { useT, type TKey } from '@/i18n';
 import { api } from '@/lib/api';
 import { useDirtyGuard } from '@/lib/dirty-forms';
@@ -403,14 +404,12 @@ export function MapEditor({
         <div className="flex flex-wrap items-end gap-3">
           <div className="grid gap-1">
             <Label htmlFor={fileId}>{t(room.mapFileId === null ? 'catalog.locations.map.upload' : 'catalog.locations.map.replace')}</Label>
-            <input
+            <FileInput
               ref={fileInput}
               id={fileId}
-              type="file"
               accept="image/jpeg,image/png,image/webp"
               aria-describedby={`${fileId}-hint`}
               disabled={busy !== null}
-              className="text-sm file:mr-2 file:h-7.5 file:rounded-md file:border file:bg-background file:px-2.5 file:text-meta file:font-semibold"
               onChange={(e) => void choosePlan(e)}
             />
             <p id={`${fileId}-hint`} className="text-xs text-muted-foreground">

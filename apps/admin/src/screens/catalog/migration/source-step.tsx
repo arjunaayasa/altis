@@ -4,6 +4,7 @@ import { CheckField, Field, Notice } from '@/components/form-field';
 import { TABLE } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { FileInput } from '@/components/file-input';
 import { useLocale, useT, type TKey } from '@/i18n';
 import { api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
@@ -121,7 +122,7 @@ function FileField({
     <Field label={label} {...(hint === undefined ? {} : { hint })} error={error}>
       {(c) => (
         <div className="grid gap-1">
-          <Input {...c} type="file" accept={accept} onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
+          <FileInput {...c} accept={accept} onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
           {file !== null && <p className="text-xs text-muted-foreground">{t('catalog.migration.file.chosen', { name: file.name, size: bytes(file.size) })}</p>}
         </div>
       )}

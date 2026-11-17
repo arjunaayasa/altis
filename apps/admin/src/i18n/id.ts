@@ -107,6 +107,8 @@ export const ADMIN_ID = {
   'form.refetch_failed': 'Data terbaru gagal dimuat; yang tampil masih data yang dimuat sebelumnya.',
   'form.yes': 'Ya',
   'form.no': 'Tidak',
+  'form.file.choose': 'Pilih berkas',
+  'form.file.none': 'Belum ada berkas dipilih',
   'form.error.required': 'Wajib diisi.',
   'form.error.taken': 'Sudah dipakai. Gunakan yang lain.',
   'form.error.too_small': 'Terlalu pendek atau belum diisi.',
