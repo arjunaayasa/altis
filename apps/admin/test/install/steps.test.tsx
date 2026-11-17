@@ -93,6 +93,10 @@ describe('checks', () => {
     expect(await screen.findByText(ID['checks.exposure.ok'])).toBeTruthy();
     expect(screen.getByText(ID['checks.blocked_preflight'])).toBeTruthy();
     expect(button('app.next').disabled).toBe(true);
+    // The failed status word takes the foreground colour of its background (the dark scheme's red is light).
+    const failed = screen.getAllByText(ID['checks.status.error'])[0]!;
+    expect(failed.className).toContain('text-destructive-foreground');
+    expect(failed.className).not.toContain('text-white');
   });
 
   it('the aaPanel Default project warning and the detected runtime are shown', async () => {
