@@ -11,7 +11,6 @@ export const MIGRATION_ID = {
   'catalog.migration.loading': 'Memuat migrasi…',
 
   // The wizard's steps.
-  'catalog.migration.step': 'Langkah {n} dari 2',
   'catalog.migration.next': 'Lanjut',
   'catalog.migration.back': 'Kembali',
 
@@ -320,6 +319,10 @@ export const MIGRATION_ID = {
   'catalog.migration.people.serve_confirm_title': 'Mulai melayani di ALTIS?',
   'catalog.migration.people.serve_confirm':
     'Mulai sekarang layanan perpustakaan berjalan di ALTIS: hentikan transaksi di SLiMS. Migrasi ulang masih bisa menambah dan menyelaraskan data, tetapi mode sirkulasi Ganti tidak dapat dipakai lagi. Langkah ini tidak dapat dibatalkan.',
+  'catalog.migration.steps': 'Langkah migrasi',
+  'catalog.migration.step_done': 'selesai',
+  'catalog.migration.people.check_done': 'Sudah',
+  'catalog.migration.people.check_open': 'Belum',
 } as const;
 
 export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
@@ -327,7 +330,6 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
     'Move SLiMS 9 data (SLiMS 8 as far as possible) into ALTIS: the catalogue (master data, authorities, records, items, attachments, covers, pages and news), members, staff, visits, circulation and the stocktake history. Start with a dry run: everything is read, but nothing is written.',
   'catalog.migration.loading': 'Loading the migration…',
 
-  'catalog.migration.step': 'Step {n} of 2',
   'catalog.migration.next': 'Next',
   'catalog.migration.back': 'Back',
 
@@ -626,4 +628,8 @@ export const MIGRATION_EN: Record<keyof typeof MIGRATION_ID, string> = {
   'catalog.migration.people.serve_confirm_title': 'Start serving in ALTIS?',
   'catalog.migration.people.serve_confirm':
     'From now on the library serves in ALTIS: stop transactions in SLiMS. A migration run can still add and re-sync data, but the circulation mode Replace can no longer be used. This cannot be undone.',
+  'catalog.migration.steps': 'Migration steps',
+  'catalog.migration.step_done': 'done',
+  'catalog.migration.people.check_done': 'Done',
+  'catalog.migration.people.check_open': 'Not yet',
 };
