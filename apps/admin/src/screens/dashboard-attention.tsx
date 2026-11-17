@@ -37,8 +37,8 @@ interface Item {
 const SEVERITY_TONE: Readonly<Record<AlertSeverity, Item['tone']>> = { error: 'bad', warning: 'warn', info: 'plain' };
 
 const TONE_CLASS: Readonly<Record<Item['tone'], string>> = {
-  bad: 'font-semibold text-destructive',
-  warn: 'font-semibold text-warning-foreground',
+  bad: 'font-semibold text-bad',
+  warn: 'font-semibold text-warn',
   plain: 'text-muted-foreground',
 };
 
@@ -99,7 +99,7 @@ export function Attention({ items }: { items: readonly Item[] }) {
         {items.map((item) => {
           const body = (
             <>
-              <span className={cn('font-semibold', item.to !== null && 'group-hover:text-primary group-hover:underline')}>{item.label}</span>
+              <span className={cn('font-semibold', item.to !== null && 'group-hover:text-accent-text group-hover:underline')}>{item.label}</span>
               {/* A space between the two, for the accessible name of the link. */}{' '}
               {item.value !== '' && <span className={cn('shrink-0 tabular-nums', TONE_CLASS[item.tone])}>{item.value}</span>}
             </>

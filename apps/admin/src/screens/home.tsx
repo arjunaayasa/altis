@@ -24,7 +24,7 @@ import { UsageBlocks } from '@/screens/dashboard-usage';
  * 3. the loans by subject beside the most borrowed titles (dashboard-usage.tsx);
  * 4. the library's statistics (dashboard-library.tsx) and the system section (dashboard.tsx).
  *
- * A two-column row falls back to one column when one of its blocks is not there, and below 1024 px. A user who sees
+ * A two-column row falls back to one column when one of its blocks is not there, and below 1060 px. A user who sees
  * none of the library blocks gets the hint that the command palette finds pages and commands.
  */
 
@@ -83,7 +83,7 @@ export function HomeScreen() {
       </div>
       <TodayStrip />
       {(hasActivity || hasAttention) && (
-        <div className={cn('grid gap-8', hasActivity && hasAttention && 'lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]')}>
+        <div className={cn('grid gap-8', hasActivity && hasAttention && 'min-[1060px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]')}>
           <DeskActivity />
           <Attention items={attention} />
         </div>

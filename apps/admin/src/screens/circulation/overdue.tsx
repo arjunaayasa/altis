@@ -107,7 +107,7 @@ export function OverdueScreen() {
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <span className="min-w-0">
           {canOpenMember ? (
-            <Link to={`/admin/anggota/${encodeURIComponent(m.id)}`} className="font-semibold text-primary underline-offset-4 hover:underline">
+            <Link to={`/admin/anggota/${encodeURIComponent(m.id)}`} className="font-semibold text-accent-text underline-offset-4 hover:underline">
               {m.name}
             </Link>
           ) : (
@@ -158,7 +158,7 @@ export function OverdueScreen() {
         <span className="grid justify-items-end">
           <StatusText tone={row.daysLate > LATE_RED_AFTER_DAYS ? 'bad' : 'warn'}>{t('circulation.fact.days', { count: row.daysLate })}</StatusText>
           {row.finePreview !== null && (
-            <span className="text-xs text-destructive">{t('charges.fine_preview', { amount: money(row.finePreview.amount, row.finePreview.currency), days: row.finePreview.days })}</span>
+            <span className="text-xs text-bad">{t('charges.fine_preview', { amount: money(row.finePreview.amount, row.finePreview.currency), days: row.finePreview.days })}</span>
           )}
         </span>
       ),

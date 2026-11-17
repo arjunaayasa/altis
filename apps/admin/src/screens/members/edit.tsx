@@ -444,10 +444,10 @@ export function MemberDetailScreen() {
             <p role="status" className="sr-only">
               {t('shell.loading')}
             </p>
-            <span className="h-32 w-24 shrink-0 rounded border bg-muted" />
+            <span className="h-32 w-24 shrink-0 rounded border bg-layer-2" />
             <div className="grid flex-1 gap-2 pt-1">
-              <span className="h-5 w-60 max-w-full animate-pulse rounded bg-muted motion-reduce:animate-none" />
-              <span className="h-3 w-36 animate-pulse rounded bg-muted motion-reduce:animate-none" />
+              <span className="h-5 w-60 max-w-full animate-pulse rounded bg-layer-2 motion-reduce:animate-none" />
+              <span className="h-3 w-36 animate-pulse rounded bg-layer-2 motion-reduce:animate-none" />
             </div>
           </div>
         )}

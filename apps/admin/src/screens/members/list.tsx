@@ -121,7 +121,7 @@ export function MembersListScreen() {
       header: t('members.col.name'),
       cell: (r) => (
         <span className="grid">
-          <Link to={`/admin/anggota/${encodeURIComponent(r.id)}`} className="w-fit font-semibold text-primary underline-offset-4 hover:underline">
+          <Link to={`/admin/anggota/${encodeURIComponent(r.id)}`} className="w-fit font-semibold text-accent-text underline-offset-4 hover:underline">
             {r.name}
           </Link>
           <span className="text-xs font-semibold tracking-wide text-muted-foreground tabular-nums">{r.memberNo}</span>
@@ -294,7 +294,7 @@ export function MembersListScreen() {
             columns={columns}
             rows={rows}
             rowKey={(r) => r.id}
-            rowClassName={(r) => (selection.has(r.id) ? 'bg-primary/10' : undefined)}
+            rowClassName={(r) => (selection.has(r.id) ? 'bg-accent-soft' : undefined)}
             empty={
               <span className="flex flex-wrap items-center gap-2">
                 {t('members.empty_filtered')}

@@ -809,7 +809,7 @@ function HomeEditor({
           </div>
         </Section>
 
-        <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-t bg-background/95 px-4 py-3 md:-mx-6 md:px-6">
+        <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-t bg-background/95 px-4 py-3 lg:-mx-8 lg:px-8">
           <Button ref={saveButton} type="submit" disabled={saving}>
             {t('opacHome.save')}
           </Button>

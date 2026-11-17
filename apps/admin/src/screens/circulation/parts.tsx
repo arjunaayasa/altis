@@ -23,20 +23,20 @@ export type StatusTone = 'ok' | 'warn' | 'bad';
 
 /** The text colour of a status. */
 export const TONE_TEXT: Readonly<Record<StatusTone, string>> = {
-  ok: 'text-success-foreground',
-  warn: 'text-warning-foreground',
-  bad: 'text-destructive',
+  ok: 'text-ok',
+  warn: 'text-warn',
+  bad: 'text-bad',
 };
 
 /** The surface (background and border) of a status box. */
 export const TONE_SURFACE: Readonly<Record<StatusTone, string>> = {
-  ok: 'border-success/40 bg-success-soft',
-  warn: 'border-warning-foreground/30 bg-warning',
-  bad: 'border-destructive/40 bg-destructive/10',
+  ok: 'border-ok-line bg-ok-bg',
+  warn: 'border-warn-line bg-warn-bg',
+  bad: 'border-bad-line bg-bad-bg',
 };
 
 /** The neutral second layer (side panels, inline panels, table heads). */
-export const LAYER = 'bg-muted/50';
+export const LAYER = 'bg-layer';
 
 /** A status word in its colour; the word carries the meaning. */
 export function StatusText({ tone, className, ...props }: ComponentProps<'span'> & { tone: StatusTone }) {
@@ -46,11 +46,11 @@ export function StatusText({ tone, className, ...props }: ComponentProps<'span'>
 export type TagTone = StatusTone | 'neutral' | 'accent';
 
 const TAG_TONE: Readonly<Record<TagTone, string>> = {
-  ok: 'bg-success-soft text-success-foreground',
-  warn: 'bg-warning text-warning-foreground',
-  bad: 'bg-destructive/10 text-destructive',
-  neutral: 'bg-muted text-muted-foreground',
-  accent: 'bg-primary/10 text-primary',
+  ok: 'bg-ok-bg text-ok',
+  warn: 'bg-warn-bg text-warn',
+  bad: 'bg-bad-bg text-bad',
+  neutral: 'bg-layer-2 text-muted-foreground',
+  accent: 'bg-accent-soft text-accent-text',
 };
 
 /** A short labelled state (a member's status, "Batas penuh"): a tinted chip whose word says the state. */
@@ -179,7 +179,7 @@ export const TABLE = Object.freeze({
   group: cn('border-b px-3 py-2 [tr:last-child>&]:border-b-0', LAYER),
   empty: 'px-3 py-7 text-muted-foreground',
   /** A row that can take the focus (keyboard row actions): the focused row takes the selection colour. */
-  focusRow: 'outline-none focus:bg-primary/10 focus-visible:shadow-[inset_2px_0_0_var(--color-primary)]',
+  focusRow: 'outline-none focus:bg-accent-soft focus-visible:shadow-[inset_2px_0_0_var(--color-primary)]',
 });
 
 export interface DenseColumn<T> {
@@ -321,7 +321,7 @@ export function MemberPhoto({ name, fileId, size = 'sm', alt }: { name: string; 
     return <img src={`/files/${encodeURIComponent(fileId)}`} alt={alt ?? ''} className={cn('shrink-0 rounded border object-cover', box)} />;
   }
   return (
-    <span aria-hidden={alt === undefined ? true : undefined} role={alt === undefined ? undefined : 'img'} aria-label={alt} className={cn('grid shrink-0 place-items-center rounded border bg-muted font-bold text-muted-foreground', box)}>
+    <span aria-hidden={alt === undefined ? true : undefined} role={alt === undefined ? undefined : 'img'} aria-label={alt} className={cn('grid shrink-0 place-items-center rounded border bg-layer-2 font-bold text-muted-foreground', box)}>
       {initials(name)}
     </span>
   );
@@ -339,7 +339,7 @@ export function Steps({ steps, current, label, doneLabel }: { steps: readonly st
               className={cn(
                 'inline-grid size-5.5 place-items-center rounded-full border text-xs font-bold tabular-nums',
                 state === 'current' && 'border-primary bg-primary text-primary-foreground',
-                state === 'done' && 'border-success/50 text-success-foreground',
+                state === 'done' && 'border-ok-line text-ok',
               )}>
               {i + 1}
             </span>
@@ -441,7 +441,7 @@ export function MoreMenu({ label, small = false, children }: { label: string; sm
               const next = e.relatedTarget as Node | null;
               if (next !== null && list.current?.contains(next) !== true && trigger.current?.contains(next) !== true) setPlace(null);
             }}
-            className="z-50 grid min-w-52 rounded-lg border bg-popover p-1 text-left text-popover-foreground shadow-lg">
+            className="z-50 grid min-w-52 rounded-lg border bg-popover p-1 text-left text-popover-foreground shadow-pop">
             {children(() => close(true))}
           </div>,
           document.body,
@@ -455,7 +455,7 @@ export function MoreMenuItem({ danger = false, className, ...props }: ComponentP
   return (
     <button
       type="button"
-      className={cn('flex h-8 items-center rounded-md px-2.5 text-left text-sm whitespace-nowrap outline-none hover:bg-muted focus-visible:bg-muted', danger && 'text-destructive', className)}
+      className={cn('flex h-8 items-center rounded-md px-2.5 text-left text-sm whitespace-nowrap outline-none hover:bg-layer-2 focus-visible:bg-layer-2', danger && 'text-bad', className)}
       {...props}
     />
   );
@@ -480,7 +480,7 @@ export function SkeletonTable({ label, columns = 6, rows = 6 }: { label: string;
               <tr key={r}>
                 {Array.from({ length: columns }, (_, c) => (
                   <td key={c} className={TABLE.td}>
-                    <span className={cn('block h-3 animate-pulse rounded bg-muted motion-reduce:animate-none', c === 0 ? 'w-4' : c === 1 ? 'w-40' : 'w-20')} />
+                    <span className={cn('block h-3 animate-pulse rounded bg-layer-2 motion-reduce:animate-none', c === 0 ? 'w-4' : c === 1 ? 'w-40' : 'w-20')} />
                   </td>
                 ))}
               </tr>

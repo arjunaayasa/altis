@@ -34,7 +34,7 @@ function Figure({ label, value, tone }: { label: string; value: number | undefin
   return (
     <div className="flex flex-col">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={`text-xl font-semibold tabular-nums ${tone === 'warning' && value !== undefined && value > 0 ? 'text-destructive' : ''}`}>
+      <dd className={`text-xl font-semibold tabular-nums ${tone === 'warning' && value !== undefined && value > 0 ? 'text-bad' : ''}`}>
         {value === undefined ? '—' : number.format(value)}
       </dd>
     </div>
@@ -51,7 +51,7 @@ function StatCard({ title, to, linkLabel, children, chart }: { title: string; to
       </h3>
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">{children}</dl>
       {chart}
-      <Link to={to} className="mt-auto self-start text-sm text-primary underline-offset-4 hover:underline">
+      <Link to={to} className="mt-auto self-start text-sm font-semibold text-accent-text underline-offset-4 hover:underline">
         {linkLabel}
       </Link>
     </section>
@@ -110,7 +110,7 @@ export function LibraryStatistics() {
           {t('dashboard.library.title')}
         </h2>
         {holds(me, 'reports.statistics.read') && (
-          <Link to="/admin/reports" className="text-sm text-primary underline-offset-4 hover:underline">
+          <Link to="/admin/reports" className="text-sm font-semibold text-accent-text underline-offset-4 hover:underline">
             {t('dashboard.library.reports')}
           </Link>
         )}
