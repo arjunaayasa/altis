@@ -1,15 +1,16 @@
-import { recordUrlPath } from '@altis/core';
+import { recordUrlPath, shelfStatuses, type ShelfStatus } from '@altis/core';
 import type { DbHandle } from '@altis/db';
 import type { Locale } from '@altis/shared';
 import { BookCover } from './cover.js';
 import { opacText, type OpacKey } from './messages.js';
+import { ShelfStatusLine } from './shelf-status.js';
 import { withLang } from './urls.js';
 
 // A result of the OPAC search (Phase 2 Task 33; spec §4, §9.1): the light projection a card shows, read for the ids of
 // one page in one pass (three queries whatever the page size): the record's title, subtitle, year, cover, material
-// type, publisher, call number and classification, its main agent (`is_main`, the first by `sort_order`), and whether
-// it is available now (the `av` facet the index wrote: an `available` item in a public location, §4.6) or has copies
-// none of which is (`br` without `av`). No RecordData is loaded. The feeds read the same.
+// type, publisher, call number and classification, its main agent (`is_main`, the first by `sort_order`), and, for a
+// page (not a feed), what its copies allow now (core shelfStatuses: one grouped read of the page's copies, never who
+// holds one). No RecordData is loaded. The feeds read the same, without the copies.
 //
 // The search answered ids from `search_doc`; each is checked against `records` once more (opac_visible, not archived,
 // not merged), so a record hidden or archived between the two reads is left out rather than shown.
@@ -27,11 +28,9 @@ export interface ResultCardData {
   materialTypeId: string;
   /** The display name of the main agent, if any. */
   mainAgent: string | null;
-  /** An `available` item in a public location (facet `av`). */
-  available: boolean;
   // ---- Komunitas (OPAC look) ----
-  /** The title has copies but none is on an open shelf now (facet `br` without `av`). */
-  offShelf: boolean;
+  /** What the card says of the title's copies; null when it has none (or the copies were not read: a feed). */
+  shelf: ShelfStatus | null;
   /** The publisher's display name, or null. */
   publisher: string | null;
   callNumber: string | null;
@@ -40,11 +39,11 @@ export interface ResultCardData {
   createdAt: number;
 }
 
-/** The cards of `ids`, in that order; an id that is no longer public is left out. */
-export async function resultCards(db: Db, ids: readonly string[]): Promise<ResultCardData[]> {
+/** The cards of `ids`, in that order; an id that is no longer public is left out. `shelf`: read the copies too. */
+export async function resultCards(db: Db, ids: readonly string[], o: { shelf?: boolean } = {}): Promise<ResultCardData[]> {
   if (ids.length === 0) return [];
   const wanted = [...new Set(ids)];
-  const [records, agents, available] = await Promise.all([
+  const [records, agents, shelf] = await Promise.all([
     db
       .selectFrom('records as r')
       .leftJoin('publishers as p', 'p.id', 'r.publisher_id')
@@ -74,12 +73,10 @@ export async function resultCards(db: Db, ids: readonly string[]): Promise<Resul
       .orderBy('ra.record_id')
       .orderBy('ra.sort_order')
       .execute(),
-    db.selectFrom('search_facet').select(['record_id', 'facet']).where('facet', 'in', ['av', 'br']).where('record_id', 'in', wanted).execute(),
+    o.shelf === true ? shelfStatuses(db, wanted) : Promise.resolve(new Map<string, ShelfStatus>()),
   ]);
   const mainAgent = new Map<string, string>();
   for (const r of agents) if (!mainAgent.has(r.record_id)) mainAgent.set(r.record_id, r.name_display);
-  const isAvailable = new Set(available.filter((r) => r.facet === 'av').map((r) => r.record_id));
-  const hasCopies = new Set(available.filter((r) => r.facet === 'br').map((r) => r.record_id));
   const byId = new Map(records.map((r) => [r.id, r]));
   return wanted.flatMap((id) => {
     const r = byId.get(id);
@@ -94,8 +91,7 @@ export async function resultCards(db: Db, ids: readonly string[]): Promise<Resul
         coverFileId: r.cover_file_id,
         materialTypeId: r.material_type_id,
         mainAgent: mainAgent.get(r.id) ?? null,
-        available: isAvailable.has(r.id),
-        offShelf: !isAvailable.has(r.id) && hasCopies.has(r.id),
+        shelf: shelf.get(r.id) ?? null,
         publisher: r.publisher === null || r.publisher.trim() === '' ? null : r.publisher,
         callNumber: r.call_number === null || r.call_number.trim() === '' ? null : r.call_number.trim(),
         classification: r.classification,
@@ -119,9 +115,9 @@ function classLabel(classification: string | null, locale: Locale): string | nul
 /**
  * A result: a row of the list with a thin line under it: the cover (or the cloth strip of the substitute cover), the
  * title linking to the record, the main agent with the publisher and year, the call number with the class and the
- * material type, and the availability in words.
+ * material type, and what the copies allow in words (`year`: the current one, which a due date leaves out).
  */
-export function ResultCard(props: { card: ResultCardData; materialType: string | null; locale: Locale; lang: Locale | null }) {
+export function ResultCard(props: { card: ResultCardData; materialType: string | null; locale: Locale; lang: Locale | null; year: number }) {
   const { card, materialType, locale, lang } = props;
   const href = recordUrlPath(card.id, card.title);
   const published = [card.publisher, card.year].filter((x): x is string => x !== null && x.trim() !== '').join(', ');
@@ -153,15 +149,11 @@ export function ResultCard(props: { card: ResultCardData; materialType: string |
             {kind.join(' · ')}
           </span>
         )}
-        {card.available ? (
+        {card.shelf === null ? null : (
           <span class="card-badges">
-            <span class="status status-ok">{opacText(locale, 'search.card.available')}</span>
+            <ShelfStatusLine status={card.shelf} locale={locale} year={props.year} />
           </span>
-        ) : card.offShelf ? (
-          <span class="card-badges">
-            <span class="status status-muted">{opacText(locale, 'search.card.off_shelf')}</span>
-          </span>
-        ) : null}
+        )}
       </span>
     </li>
   );

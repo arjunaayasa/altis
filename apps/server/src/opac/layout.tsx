@@ -1,7 +1,7 @@
 import { sha256hex } from '@altis/core';
 import { DEFAULT_ACCENT, OPAC_CSS, isAccent } from '@altis/opac-theme';
 import { COMMUNITY_SOURCE_URL, LOCALES, t, type Locale } from '@altis/shared';
-import { OPAC_HOME_OVERLAY, brandRgb } from '@altis/shared/api/opac-home';
+import { OPAC_HOME_OVERLAY, brandRgb, phoneHref } from '@altis/shared/api/opac-home';
 import type { Child, PropsWithChildren } from 'hono/jsx';
 import { opacText } from './catalog/messages.js';
 import { OPAC_SEARCH_SCOPES, type OpacSearchScope } from './catalog/search-params.js';
@@ -11,7 +11,9 @@ import { OPAC_SEARCH_SCOPES, type OpacSearchScope } from './catalog/search-param
 // the language switch and (for the catalogue's pages) the site menu (on a narrow screen one "Katalog" link) and a
 // search band, and a dark footer: for the catalogue's pages the library's address, its links, opening hours and a
 // search field, on every page the line "Ditenagai ALTIS Community" with the link to the source code (AGPL-3.0 section
-// 13: the users of a network service are offered its source) and the staff sign-in. Text goes through JSX, which escapes it, and
+// 13: the users of a network service are offered its source) and the staff sign-in, after the year and the library's
+// name. The library's logo (when it has one) stands before its name in the header and the footer; its telephone number
+// and e-mail address (when published) are `tel:` and `mailto:` links in the footer. Text goes through JSX, which escapes it, and
 // there is no inline script, style attribute or event handler: the stylesheet is the one @altis/opac-theme file under
 // a content hash, so the CSP needs no `unsafe-inline`; a JSON-LD script carries the response's nonce (catalog/page.tsx),
 // which is also in `<meta name="csp-nonce">` like the admin's index.html. The one style element, the library colour of
@@ -41,10 +43,20 @@ export interface FrameLink {
   current?: boolean | undefined;
 }
 
+/** The library's logo: a local path (`/files/<id>`) and its alternative text. */
+export interface SiteLogo {
+  src: string;
+  alt: string;
+}
+
 /** The footer's blocks of a catalogue page; each left out when it has nothing to show. */
 export interface SiteFooter {
   /** The library's address (line breaks kept), or null. */
   address: string | null;
+  // ---- Komunitas (OPAC look) ----
+  /** The published telephone number and e-mail address, each null when there is none. */
+  phone?: string | null | undefined;
+  email?: string | null | undefined;
   /** The opening hours, one row per group of days; none: no hours block. */
   hours: readonly { days: string; time: string }[];
   /** The language of the address and the hours when it is not the page's. */
@@ -77,6 +89,10 @@ export interface PageFrame {
   brand?: string | null | undefined;
   /** The page's own search form for the search band, in place of `search`'s. */
   searchBand?: Child;
+  /** The library's logo before its name in the header and the footer; null or absent: the name alone. */
+  logo?: SiteLogo | null | undefined;
+  /** The year of the footer's line (the request's, in the library's time zone). */
+  year?: number | undefined;
 }
 
 // ---- Komunitas (OPAC home page) ----
@@ -213,19 +229,54 @@ export function SearchForm(props: { locale: Locale; lang: Locale | null; id: str
   );
 }
 
-/** The footer: the library's blocks when the page has them (`footer`), then the software's line and the staff link. */
-function Footer(props: { locale: Locale; libraryName: string | undefined; footer: SiteFooter | undefined }) {
-  const { locale, libraryName, footer } = props;
+/** The logo as the brand shows it: 40 px high, its width following it (the alternative text is the setting's). */
+function LogoImage(props: { logo: SiteLogo; class: string }) {
+  return <img class={props.class} src={props.logo.src} alt={props.logo.alt} height={40} decoding="async" />;
+}
+
+/** The published telephone number and e-mail address as links, each with its word; nothing without either. */
+export function ContactLines(props: { locale: Locale; phone: string | null | undefined; email: string | null | undefined; class: string }) {
+  const { locale } = props;
+  const phone = props.phone === null || props.phone === undefined || props.phone.trim() === '' ? null : props.phone.trim();
+  const email = props.email === null || props.email === undefined || props.email.trim() === '' ? null : props.email.trim();
+  if (phone === null && email === null) return null;
+  return (
+    <p class={props.class}>
+      {phone === null ? null : (
+        <span>
+          {opacText(locale, 'shell.contact.phone')} <a href={phoneHref(phone)}>{phone}</a>
+        </span>
+      )}
+      {email === null ? null : (
+        <span>
+          {opacText(locale, 'shell.contact.email')} <a href={`mailto:${email}`}>{email}</a>
+        </span>
+      )}
+    </p>
+  );
+}
+
+/**
+ * The footer: the library's blocks when the page has them (`footer`), then the line with the year and the library's
+ * name, the software, the source code and the staff link.
+ */
+function Footer(props: { locale: Locale; libraryName: string | undefined; footer: SiteFooter | undefined; logo: SiteLogo | null; year: number }) {
+  const { locale, libraryName, footer, logo } = props;
+  const hasContact = footer !== undefined && ((footer.phone ?? '').trim() !== '' || (footer.email ?? '').trim() !== '');
   return (
     <footer class="site-footer">
       {footer === undefined ? null : (
         <div class="foot-grid">
-          {footer.address === null || libraryName === undefined ? null : (
+          {libraryName === undefined || (footer.address === null && !hasContact && logo === null) ? null : (
             <div class="foot-block">
+              {logo === null ? null : <LogoImage logo={logo} class="foot-logo" />}
               <h2>{libraryName}</h2>
-              <p class="foot-address" lang={footer.contentLang}>
-                {footer.address}
-              </p>
+              {footer.address === null ? null : (
+                <p class="foot-address" lang={footer.contentLang}>
+                  {footer.address}
+                </p>
+              )}
+              <ContactLines locale={locale} phone={footer.phone} email={footer.email} class="foot-contact" />
             </div>
           )}
           {/* A list under its heading, not a second navigation landmark: the header's menu is the site's. */}
@@ -264,6 +315,7 @@ function Footer(props: { locale: Locale; libraryName: string | undefined; footer
       )}
       <div class="foot-bottom">
         <p>
+          <span>{`© ${props.year} ${libraryName ?? t(locale, 'opac.home.title')}`}</span>
           <span>{opacText(locale, 'shell.footer.powered')}</span>
           <a href={COMMUNITY_SOURCE_URL} rel="noopener">
             {opacText(locale, 'shell.footer.source')}
@@ -289,6 +341,7 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
   const headerClass =
     hero === undefined ? 'site-header' : hero.photo === null ? 'site-header hero-band' : `site-header hero-band hero-photo hero-ov-${heroOverlay(hero.photo.overlay)}`;
   const brand = brandColor(hero?.brand ?? frame?.brand);
+  const logo = frame?.logo ?? null;
   // The home link is `/` or `/?lang=xx`: the catalogue's is the same with `/cari`.
   const catalogHref = frame === undefined ? null : `/cari${frame.homeHref.slice(1)}`;
   return (
@@ -323,9 +376,16 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
             />
           )}
           <div class="bar">
-            <a class="brand" href={frame?.homeHref ?? '/'}>
-              {libraryName ?? t(locale, 'opac.home.title')}
-            </a>
+            {logo === null ? (
+              <a class="brand" href={frame?.homeHref ?? '/'}>
+                {libraryName ?? t(locale, 'opac.home.title')}
+              </a>
+            ) : (
+              <a class="brand brand-with-logo" href={frame?.homeHref ?? '/'}>
+                <LogoImage logo={logo} class="brand-logo" />
+                <span class="brand-name">{libraryName ?? t(locale, 'opac.home.title')}</span>
+              </a>
+            )}
             {nav.length === 0 ? null : (
               <nav class="menu" aria-label={opacText(locale, 'shell.nav.label')}>
                 <ul>
@@ -382,7 +442,7 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
         <main id={MAIN_ID} tabindex={-1}>
           {children}
         </main>
-        <Footer locale={locale} libraryName={libraryName} footer={frame?.footer} />
+        <Footer locale={locale} libraryName={libraryName} footer={frame?.footer} logo={logo} year={frame?.year ?? new Date().getUTCFullYear()} />
       </body>
     </html>
   );

@@ -40,8 +40,10 @@ export const HOME_CSS: string = [
     'border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-pop)}',
   '.home-search .search-hero{max-width:none;margin:0;display:grid;gap:.75rem}',
   '.home-search .search-row input[type=search],.home-search .search-row button{min-height:3.125rem;font-size:1.0625rem}',
-  '.home-search .search-row input[type=search]{flex-basis:10rem}',
+  // On a phone the text has a row of its own (its example read whole), the button the next one.
+  '.home-search .search-row input[type=search]{flex-basis:100%}',
   '.home-search .search-row button{padding:0 1.625rem}',
+  '@media (min-width:30rem){.home-search .search-row input[type=search]{flex-basis:10rem}}',
   // The field choice: radio buttons drawn as a row of pills.
   '.scope{display:flex;flex-wrap:wrap;gap:.375rem;margin:0;padding:0;border:0;min-width:0}',
   '.scope label{position:relative;display:inline-flex;cursor:pointer}',
@@ -99,6 +101,9 @@ export const HOME_CSS: string = [
   '.visit-block p{color:var(--muted);font-size:.9375rem}',
   '.visit-address{white-space:pre-line}',
   '.map-link{display:inline-flex;align-items:center;min-height:2.75rem;font-weight:600}',
+  // The published telephone number and e-mail address, one per line, as links.
+  '.visit-contact{display:grid;gap:.125rem;margin:0 0 .25rem}',
+  '.visit-contact a{overflow-wrap:anywhere}',
   '.hours{width:100%;border-collapse:collapse;font-size:.9375rem}',
   '.hours th,.hours td{padding:.375rem 0;border-bottom:1px solid var(--border);text-align:left;font-weight:400;vertical-align:top}',
   '.hours td{padding-left:1rem;text-align:right;font-variant-numeric:tabular-nums}',

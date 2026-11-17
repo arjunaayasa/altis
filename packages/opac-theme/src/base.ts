@@ -29,6 +29,13 @@ export type AccentName = (typeof ACCENTS)[number];
 /** The accent of a library that has not chosen one (the setting's default). */
 export const DEFAULT_ACCENT: AccentName = 'teal';
 
+// ---- Komunitas (OPAC look) ----
+/**
+ * The accent a fresh install starts with: the design's blue, stored by the install itself. The setting's default
+ * stays {@link DEFAULT_ACCENT}, so a library installed before keeps the accent it has (chosen or not).
+ */
+export const FRESH_INSTALL_ACCENT: AccentName = 'blue';
+
 /** True when `s` is one of {@link ACCENTS}; an exact match. */
 export function isAccent(s: unknown): s is AccentName {
   return typeof s === 'string' && (ACCENTS as readonly string[]).includes(s);

@@ -141,7 +141,18 @@ const HOME: OpacHomeContent = {
 
 describe('the site menu and the footer', () => {
   it('siteInfo: each of Profil, Layanan and Kontak only with its home block switched on and with content', () => {
-    expect(siteInfo(OPAC_HOME_DEFAULT, null, false)).toEqual({ address: null, hours: [], brand: null, profile: false, services: false, contact: false, news: false });
+    expect(siteInfo(OPAC_HOME_DEFAULT, null, false)).toEqual({
+      address: null,
+      hours: [],
+      brand: null,
+      profile: false,
+      services: false,
+      contact: false,
+      news: false,
+      logo: null,
+      phone: null,
+      email: null,
+    });
     expect(siteInfo(HOME, 'Jl. Kenari 12', true)).toEqual({
       address: 'Jl. Kenari 12',
       hours: [
@@ -153,6 +164,9 @@ describe('the site menu and the footer', () => {
       services: true,
       contact: true,
       news: true,
+      logo: null,
+      phone: null,
+      email: null,
     });
     const off = siteInfo({ ...HOME, blocks: { ...HOME.blocks, about: false, services: false, visit: false } }, '  ', false);
     expect(off).toMatchObject({ address: null, hours: [], profile: false, services: false, contact: false });
