@@ -2,14 +2,11 @@ import { ACCRED_GROUPS } from '@altis/shared';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import { MemberTypeBody, MemberTypePatchBody, type MemberTypeView } from '@altis/shared/api/members';
 import { useQueryClient } from '@tanstack/react-query';
-import { PlusIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { Badge, CheckField, Field, Notice, ProblemAlert, RootError, SELECT_CLASS } from '@/components/form-field';
-import { useReturnFocus } from '@/components/return-focus';
+import { CheckField, Field, Notice, ProblemAlert, RootError, SELECT_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
@@ -17,26 +14,17 @@ import { ApiError, api } from '@/lib/api';
 import { useDirtyGuard } from '@/lib/dirty-forms';
 import { FORM_PARSE, problemText } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
-import {
-  MasterTable,
-  changedFields,
-  countsIn,
-  isFieldProblem,
-  isStale,
-  optionalText,
-  putFieldErrors,
-  serverIssues,
-  zodIssues,
-  type MasterColumn,
-} from '@/screens/catalog/masters/master-table';
+import { changedFields, countsIn, isFieldProblem, isStale, optionalText, putFieldErrors, serverIssues, zodIssues } from '@/screens/catalog/masters/master-table';
 import { useMemberTypes, useTypeName } from '@/screens/circulation/common';
+import { Callout, DenseTable, InlinePanel, PageHead, SkeletonTable, StatusText, Tag, type DenseColumn } from '@/screens/circulation/parts';
 
 /**
  * Tipe Anggota (`/admin/anggota/tipe`): the member types, each with its code, names, accreditation group, the most open
  * loans a member of the type may hold ("no limit" and "may not borrow" are explicit choices, never a magic number) and
  * the membership length ("never expires" explicit too). Saving a type never recalculates its members' dates: a new
  * length applies to a member when the membership is extended. A type live members still use cannot be archived (409
- * MEMBER_TYPE_IN_USE, with how many). The loan period and renewals are the loan rules' (Aturan Peminjaman).
+ * MEMBER_TYPE_IN_USE, with how many): said on the page. The loan period and renewals are the loan rules' (Aturan
+ * Peminjaman). The list is a dense table; adding or changing a type opens its form in the page, above the table.
  */
 
 const TYPES_KEY = ['members', 'types'] as const;
@@ -146,13 +134,14 @@ function TypeFormBody({ row, canManage, onSaved, onCancel }: { row: MemberTypeVi
   });
 
   return (
-    <form
-      noValidate
+    <InlinePanel
+      title={row === null ? t('members.types.new_title') : t('members.types.edit_title', { code: row.code })}
+      onCancel={onCancel}
       onSubmit={(e) => {
         form.clearErrors();
         void submit(e);
       }}>
-      <fieldset disabled={!canManage} className="grid min-w-0 gap-4 sm:grid-cols-2">
+      <fieldset disabled={!canManage} className="grid max-w-4xl min-w-0 gap-x-5 gap-y-4 sm:grid-cols-2">
         <Field label={t('members.types.field.code')} error={errors.code}>
           {(c) => <Input {...c} autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={32} {...form.register('code')} />}
         </Field>
@@ -227,23 +216,23 @@ function TypeFormBody({ row, canManage, onSaved, onCancel }: { row: MemberTypeVi
         <Field label={t('members.types.field.sort_order')} error={errors.sortOrder}>
           {(c) => <Input {...c} inputMode="numeric" autoComplete="off" className="max-w-32" {...form.register('sortOrder')} />}
         </Field>
-        <p className="text-xs text-muted-foreground sm:col-span-2">{t('members.types.no_recount')}</p>
+        <p className="text-sm text-muted-foreground sm:col-span-2">{t(row === null ? 'members.types.form_intro' : 'members.types.no_recount')}</p>
         <RootError message={errors.root?.server?.message} />
         <div className="sm:col-span-2">
           <ProblemAlert error={problem} />
         </div>
       </fieldset>
-      <DialogFooter className="mt-4">
-        <Button type="button" variant="outline" onClick={onCancel}>
-          {t(canManage ? 'form.cancel' : 'members.close')}
-        </Button>
+      <div className="flex flex-wrap gap-2">
         {canManage && (
-          <Button type="submit" disabled={isSubmitting}>
-            {t(isSubmitting ? 'form.saving' : 'form.save')}
+          <Button type="submit" size="sm" disabled={isSubmitting}>
+            {t(isSubmitting ? 'form.saving' : 'members.types.save')}
           </Button>
         )}
-      </DialogFooter>
-    </form>
+        <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+          {t(canManage ? 'form.cancel' : 'members.close')}
+        </Button>
+      </div>
+    </InlinePanel>
   );
 }
 
@@ -252,44 +241,49 @@ export function MemberTypesScreen() {
   const me = useMe();
   const typeName = useTypeName();
   const queryClient = useQueryClient();
-  const focus = useReturnFocus();
   const canManage = holds(me, 'members.types.manage');
   const [showArchived, setShowArchived] = useState(false);
   const list = useMemberTypes(showArchived);
-  const [dialog, setDialog] = useState<{ row: MemberTypeView | null } | null>(null);
+  const [editing, setEditing] = useState<{ row: MemberTypeView | null } | null>(null);
   const [archiving, setArchiving] = useState<MemberTypeView | null>(null);
-  const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [inUse, setInUse] = useState<{ name: string; count: number } | null>(null);
 
   const refresh = (): Promise<void> => queryClient.invalidateQueries({ queryKey: TYPES_KEY });
+  const open = (row: MemberTypeView | null): void => {
+    setNotice(null);
+    setInUse(null);
+    setEditing({ row });
+  };
 
   const archive = async (row: MemberTypeView): Promise<void> => {
     setNotice(null);
+    setInUse(null);
     const current = list.data?.items.find((r) => r.id === row.id) ?? row;
     try {
       await api<StoreResponse>('DELETE', `members/types/${encodeURIComponent(row.id)}`, { version: current.version });
     } catch (e) {
       if (e instanceof ApiError && e.code === 'MEMBER_TYPE_IN_USE') {
-        const n = countsIn(e.detail)[0] ?? current.memberCount;
-        setNotice({ tone: 'error', text: t('members.types.in_use', { name: typeName(row), count: n }) });
+        setInUse({ name: typeName(row), count: countsIn(e.detail)[0] ?? current.memberCount });
         await refresh();
         return;
       }
       if (isStale(e)) await refresh();
       throw e;
     }
-    setNotice({ tone: 'success', text: t('members.types.archived', { code: row.code }) });
+    setNotice(t('members.types.archived', { code: row.code }));
     await refresh();
   };
 
-  const columns: MasterColumn<MemberTypeView>[] = [
-    { id: 'code', header: t('members.types.col.code'), cell: (r) => <span className="font-mono font-medium">{r.code}</span> },
+  const columns: DenseColumn<MemberTypeView>[] = [
+    { id: 'code', header: t('members.types.col.code'), className: 'whitespace-nowrap', cell: (r) => <span className="font-semibold tracking-wide">{r.code}</span> },
     {
       id: 'name',
       header: t('members.types.col.name'),
       cell: (r) => (
         <span className="flex flex-wrap items-center gap-2">
-          {typeName(r)}
-          {r.archived && <Badge tone="neutral">{t('members.archived')}</Badge>}
+          <strong>{typeName(r)}</strong>
+          {r.archived && <Tag>{t('members.archived')}</Tag>}
         </span>
       ),
     },
@@ -297,13 +291,14 @@ export function MemberTypesScreen() {
     {
       id: 'limit',
       header: t('members.types.col.loan_limit'),
+      className: 'whitespace-nowrap',
       cell: (r) =>
         r.loanLimit === null ? (
-          <Badge tone="neutral">{t('members.types.limit.none')}</Badge>
+          t('members.types.limit.none')
         ) : r.loanLimit === 0 ? (
-          <Badge tone="warning">{t('members.types.limit.zero')}</Badge>
+          <StatusText tone="warn">{t('members.types.limit.zero')}</StatusText>
         ) : (
-          String(r.loanLimit)
+          t('members.types.limit.items', { count: r.loanLimit })
         ),
     },
     {
@@ -312,92 +307,87 @@ export function MemberTypesScreen() {
       className: 'whitespace-nowrap',
       cell: (r) => (r.membershipDays === null ? t('members.never_expires') : t('members.types.days', { count: r.membershipDays })),
     },
-    { id: 'members', header: t('members.types.col.members'), cell: (r) => String(r.memberCount) },
+    { id: 'members', header: t('members.types.col.members'), headClassName: 'text-right', className: 'text-right', cell: (r) => String(r.memberCount) },
     {
       id: 'actions',
-      header: t('table.actions'),
-      className: 'whitespace-nowrap',
+      header: <span className="sr-only">{t('table.actions')}</span>,
+      className: 'w-px py-1.5 text-right whitespace-nowrap',
       cell: (r) => (
-        <div className="flex flex-wrap gap-1">
-          <Button
-            variant="outline"
-            size="sm"
-            aria-label={t('members.types.edit_named', { code: r.code })}
-            onClick={() => {
-              setNotice(null);
-              setDialog({ row: r });
-            }}>
+        <>
+          <Button variant="ghost" size="sm" aria-label={t('members.types.edit_named', { code: r.code })} onClick={() => open(r)}>
             {t(canManage ? 'members.types.edit' : 'members.types.view')}
           </Button>
           {canManage && !r.archived && (
-            <Button variant="outline" size="sm" aria-label={t('members.types.archive_named', { code: r.code })} onClick={() => setArchiving(r)}>
+            <Button variant="ghost" size="sm" aria-label={t('members.types.archive_named', { code: r.code })} onClick={() => setArchiving(r)}>
               {t('members.types.archive')}
             </Button>
           )}
-        </div>
+        </>
       ),
     },
   ];
 
+  const empty = list.data !== undefined && list.data.items.length === 0 && !showArchived;
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="grid gap-1">
-          <h1 className="text-2xl font-semibold">{t('nav.members.types')}</h1>
-          <p className="max-w-3xl text-sm text-muted-foreground">{t('members.types.intro')}</p>
-        </div>
-        {canManage && (
-          <Button
-            onClick={() => {
-              setNotice(null);
-              setDialog({ row: null });
-            }}>
-            <PlusIcon aria-hidden="true" />
-            {t('members.types.add')}
-          </Button>
-        )}
-      </div>
-      <CheckField label={t('members.types.show_archived')} checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-      {notice !== null && <Notice kind={notice.tone}>{notice.text}</Notice>}
+    <div className="grid gap-6">
+      <PageHead
+        title={t('nav.members.types')}
+        intro={t('members.types.intro')}
+        actions={
+          canManage && (
+            <Button aria-expanded={editing !== null && editing.row === null} onClick={() => open(null)}>
+              {t('members.types.add')}
+            </Button>
+          )
+        }
+      />
+      {notice !== null && <Notice kind="success">{notice}</Notice>}
+      {inUse !== null && (
+        <Callout tone="bad" role="alert" title={t('members.types.in_use_title', { name: inUse.name, count: inUse.count })}>
+          <p>{t('members.types.in_use_body')}</p>
+        </Callout>
+      )}
+      {editing !== null && (
+        <TypeFormBody
+          key={editing.row?.id ?? 'new'}
+          row={editing.row}
+          canManage={canManage}
+          onCancel={() => setEditing(null)}
+          onSaved={async (code) => {
+            await refresh();
+            setNotice(t('members.types.saved', { code }));
+            setEditing(null);
+          }}
+        />
+      )}
       {list.data === undefined ? (
         list.isError ? (
-          <Notice
-            kind="error"
+          <Callout
+            tone="bad"
+            role="alert"
+            title={t('members.types.failed')}
             action={
-              <Button variant="outline" size="sm" onClick={() => void list.refetch()}>
+              <Button variant="outline" size="sm" className="bg-background" onClick={() => void list.refetch()}>
                 {t('table.retry')}
               </Button>
             }>
-            {problemText(t, list.error)}
-          </Notice>
+            <p>{problemText(t, list.error)}</p>
+          </Callout>
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <SkeletonTable label={t('shell.loading')} columns={7} rows={4} />
         )
+      ) : empty ? (
+        <section className="grid max-w-[62ch] gap-3 py-4">
+          <h2 className="text-base font-bold">{t('members.types.empty')}</h2>
+          <p className="text-sm text-muted-foreground">{t('members.types.empty_hint')}</p>
+        </section>
       ) : (
-        <MasterTable caption={t('members.types.caption')} columns={columns} rows={list.data.items} empty={t('members.types.empty')} />
+        <div className="grid gap-3">
+          <CheckField label={t('members.types.show_archived')} checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+          <DenseTable caption={t('members.types.caption')} columns={columns} rows={list.data.items} rowKey={(r) => r.id} empty={t('members.types.empty')} />
+        </div>
       )}
-      <Dialog open={dialog !== null} onOpenChange={(open) => (open ? undefined : setDialog(null))}>
-        {dialog !== null && (
-          <DialogContent closeLabel={t('form.cancel')} onOpenAutoFocus={focus.onOpenAutoFocus} onCloseAutoFocus={focus.onCloseAutoFocus} className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{dialog.row === null ? t('members.types.add') : t('members.types.edit_title', { code: dialog.row.code })}</DialogTitle>
-              <DialogDescription>{t('members.types.form_intro')}</DialogDescription>
-            </DialogHeader>
-            <TypeFormBody
-              row={dialog.row}
-              canManage={canManage}
-              onCancel={() => setDialog(null)}
-              onSaved={async (code) => {
-                await refresh();
-                setNotice({ tone: 'success', text: t('members.types.saved', { code }) });
-                setDialog(null);
-              }}
-            />
-          </DialogContent>
-        )}
-      </Dialog>
       {archiving !== null && (
         <ConfirmDialog
           open

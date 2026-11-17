@@ -171,7 +171,7 @@ describe('holds at the desk', () => {
       },
     });
     await scan('A001');
-    expect(await screen.findByRole('region', { name: 'Anggota Budi Santoso' })).toBeTruthy();
+    expect(await screen.findByRole('complementary', { name: 'Budi Santoso' })).toBeTruthy();
     fireEvent.keyDown(window, { key: 'F7' });
     fireEvent.keyDown(window, { key: 'F7' });
     fireEvent.click(await screen.findByRole('button', { name: 'Tambah reservasi…' }));
@@ -186,7 +186,7 @@ describe('holds at the desk', () => {
 
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     await waitFor(() => expect(dialog.isConnected).toBe(false));
-    expect(screen.getByRole('region', { name: 'Anggota Budi Santoso' })).toBeTruthy();
+    expect(screen.getByRole('complementary', { name: 'Budi Santoso' })).toBeTruthy();
 
     // In a browser the dialog's own Esc handler runs first, marks the key as used and closes the dialog; the desk may
     // already see no dialog when the same key reaches it. A used Esc is not the desk's: the visit goes on.
@@ -199,7 +199,7 @@ describe('holds at the desk', () => {
     } finally {
       document.removeEventListener('keydown', used, { capture: true });
     }
-    expect(screen.getByRole('region', { name: 'Anggota Budi Santoso' })).toBeTruthy();
+    expect(screen.getByRole('complementary', { name: 'Budi Santoso' })).toBeTruthy();
     // An Esc nobody used still ends the visit.
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     expect(await screen.findByText('Belum ada anggota')).toBeTruthy();

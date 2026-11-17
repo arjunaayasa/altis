@@ -10,12 +10,14 @@ import { useT } from '@/i18n';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/lib/me';
 import { useMemberTypes, useTypeName } from '@/screens/circulation/common';
+import { Callout, InlinePanel } from '@/screens/circulation/parts';
 import { refreshMembers } from './common';
 import { addToCardQueue } from './tools';
 
 /**
- * The bulk bar of the member list: what the selected members get (`POST members/bulk`), as an inline panel under the
- * selection (no dialog, except the archive question, which the panel asks in words): extend the membership, change the
+ * The bulk bar of the member list: a tinted bar over the table naming how many are selected, with one button per bulk
+ * action; each opens its inline panel under the bar (no dialog; archiving asks its question in words in the panel).
+ * What the selected members get goes to `POST members/bulk`: extend the membership, change the
  * type, class or home branch, suspend or reactivate, archive or restore; and the class promotion, which works on whole
  * classes ("VII-A => VIII-A", one pair per line) rather than on the selection. The answer says how many changed and
  * which members were refused, with the reason. "Tambah ke antrean kartu" queues the selection for Cetak Kartu.
@@ -132,40 +134,15 @@ export function BulkBar({ selected, onClear, canManage }: { selected: MemberList
     setQueued(addToCardQueue(selected.map((m) => ({ id: m.id, memberNo: m.memberNo, name: m.name }))));
   };
 
-  return (
-    <section aria-label={t('members.tools.selected', { count })} className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {count > 0 && (
-          <p className="mr-2 text-sm font-medium" role="status">
-            {t('members.tools.selected', { count })}
-          </p>
-        )}
-        {count > 0 && (
-          <Button size="sm" variant="outline" onClick={queue}>
-            {t('members.tools.to_card_queue')}
-          </Button>
-        )}
-        {canManage &&
-          count > 0 &&
-          (['extend', 'set', 'suspend', 'reactivate', 'archive', 'restore'] as const).map((p) => (
-            <Button key={p} size="sm" variant={panel === p ? 'default' : 'outline'} onClick={() => open(p)}>
-              {t(`members.tools.bulk.${p}`)}
-            </Button>
-          ))}
-        {canManage && (
-          <Button size="sm" variant={panel === 'promote' ? 'default' : 'outline'} onClick={() => open('promote')}>
-            {t('members.tools.bulk.promote')}
-          </Button>
-        )}
-        {count > 0 && (
-          <Button size="sm" variant="ghost" onClick={onClear}>
-            {t('members.tools.clear_selection')}
-          </Button>
-        )}
-      </div>
-      {queued !== null && <Notice kind="success">{t('members.tools.added_to_queue', { count: queued })}</Notice>}
-      {panel !== null && (
-        <form noValidate onSubmit={(e) => void submit(e)} className="grid gap-3 rounded-md border bg-card p-3 sm:grid-cols-2">
+  const ACTIONS = ['extend', 'set', 'suspend', 'reactivate', 'archive', 'restore'] as const;
+  const panelFields =
+    panel === null ? null : (
+      <InlinePanel
+        key={panel}
+        title={panel === 'promote' ? t('members.tools.bulk.promote') : t('members.tools.bulk.panel_title', { action: t(`members.tools.bulk.${panel}`), count })}
+        onSubmit={(e) => void submit(e)}
+        onCancel={() => setPanel(null)}>
+        <div className="grid max-w-3xl gap-3 sm:grid-cols-2">
           {panel === 'extend' && (
             <>
               <Field id={`${ids}-from`} label={t('members.tools.bulk.from')}>
@@ -179,7 +156,7 @@ export function BulkBar({ selected, onClear, canManage }: { selected: MemberList
           )}
           {panel === 'set' && (
             <>
-              <Field id={`${ids}-type`} label={t('members.tools.bulk.type')}>
+              <Field id={`${ids}-type`} label={t('members.tools.bulk.type')} hint={t('members.tools.bulk.type_hint')}>
                 <select id={`${ids}-type`} className={SELECT_CLASS} value={typeId} onChange={(e) => setTypeId(e.target.value)}>
                   <option value="">{t('members.tools.bulk.keep')}</option>
                   {(types.data?.items ?? []).map((type) => (
@@ -206,50 +183,95 @@ export function BulkBar({ selected, onClear, canManage }: { selected: MemberList
           )}
           {panel === 'suspend' && (
             <Field label={t('members.tools.bulk.note')} className="sm:col-span-2">
-              {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={191} value={note} onChange={(e) => setNote(e.target.value)} />}
+              {(c) => <textarea {...c} rows={2} className={TEXTAREA_CLASS} maxLength={191} value={note} onChange={(e) => setNote(e.target.value)} />}
             </Field>
           )}
+          {panel === 'reactivate' && <p className="text-sm sm:col-span-2">{t('members.reactivate.body')}</p>}
           {panel === 'archive' && <p className="text-sm sm:col-span-2">{t('members.tools.bulk.archive_confirm', { count })}</p>}
+          {panel === 'restore' && <p className="text-sm sm:col-span-2">{t('members.tools.bulk.restore_note')}</p>}
           {panel === 'promote' && (
             <Field label={t('members.tools.bulk.promote_pairs')} hint={t('members.tools.bulk.promote_hint')} className="sm:col-span-2">
               {(c) => <textarea {...c} className={TEXTAREA_CLASS} rows={5} value={pairs} onChange={(e) => setPairs(e.target.value)} />}
             </Field>
           )}
-          {error !== null && (
-            <p role="alert" className="text-sm text-destructive sm:col-span-2">
-              {error}
-            </p>
-          )}
-          <div className="sm:col-span-2">
-            <ProblemAlert error={problem} />
-          </div>
-          {result !== null && (
-            <div className="grid gap-1 text-sm sm:col-span-2" role="status">
-              <p>{t('members.tools.bulk.done', { done: result.done })}</p>
-              {result.refused.length > 0 && (
-                <>
-                  <p>{t('members.tools.bulk.refused', { count: result.refused.length })}</p>
-                  <ul className="list-disc pl-5">
-                    {result.refused.map((r) => (
-                      <li key={r.id}>
-                        {memberName.get(r.id) ?? r.id}: {t(`vocab.member_bulk_refusal.${r.reason}`)}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </div>
-          )}
-          <div className="flex flex-wrap gap-2 sm:col-span-2">
-            <Button type="submit" disabled={busy} variant={panel === 'archive' ? 'destructive' : 'default'}>
-              {panel === 'promote' ? t('members.tools.bulk.promote') : t('members.tools.bulk.apply', { count })}
+        </div>
+        {error !== null && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <ProblemAlert error={problem} />
+        {result !== null && (
+          <Callout tone={result.refused.length > 0 ? 'warn' : 'ok'} role="status" title={t('members.tools.bulk.done', { done: result.done })}>
+            {result.refused.length > 0 && (
+              <>
+                <p>{t('members.tools.bulk.refused', { count: result.refused.length })}</p>
+                <ul className="list-disc pl-5">
+                  {result.refused.map((r) => (
+                    <li key={r.id}>
+                      {memberName.get(r.id) ?? r.id}: {t(`vocab.member_bulk_refusal.${r.reason}`)}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </Callout>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" size="sm" disabled={busy} variant={panel === 'archive' ? 'destructive' : 'default'}>
+            {panel === 'promote' ? t('members.tools.bulk.promote') : t('members.tools.bulk.apply', { count })}
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => setPanel(null)}>
+            {t('members.tools.bulk.cancel')}
+          </Button>
+        </div>
+      </InlinePanel>
+    );
+
+  if (count === 0) {
+    // Nothing selected: only the class promotion, which works on whole classes.
+    return (
+      <div className="grid gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {queued !== null && <Notice kind="success">{t('members.tools.added_to_queue', { count: queued })}</Notice>}
+          {canManage && (
+            <Button size="sm" variant="outline" aria-pressed={panel === 'promote'} onClick={() => (panel === 'promote' ? setPanel(null) : open('promote'))}>
+              {t('members.tools.bulk.promote')}…
             </Button>
-            <Button type="button" variant="outline" onClick={() => setPanel(null)}>
-              {t('members.tools.bulk.cancel')}
+          )}
+        </div>
+        {panelFields}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-3">
+      <section aria-label={t('members.tools.selected', { count })} className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-lg border border-primary bg-primary/10 px-3 py-2">
+        <p className="mr-1.5 text-sm font-bold text-primary" role="status">
+          {t('members.tools.selected', { count })}
+        </p>
+        {canManage &&
+          ACTIONS.map((p) => (
+            <Button key={p} size="sm" variant="ghost" aria-pressed={panel === p} className="aria-pressed:bg-background aria-pressed:text-foreground" onClick={() => (panel === p ? setPanel(null) : open(p))}>
+              {t(`members.tools.bulk.${p}`)}
             </Button>
-          </div>
-        </form>
-      )}
-    </section>
+          ))}
+        {canManage && (
+          <Button size="sm" variant="ghost" aria-pressed={panel === 'promote'} className="aria-pressed:bg-background aria-pressed:text-foreground" onClick={() => (panel === 'promote' ? setPanel(null) : open('promote'))}>
+            {t('members.tools.bulk.promote')}
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" onClick={queue}>
+          {t('members.tools.to_card_queue')}
+        </Button>
+        <span className="flex-1" />
+        <Button size="sm" variant="ghost" onClick={onClear}>
+          {t('members.tools.clear_selection')}
+        </Button>
+      </section>
+      {queued !== null && <Notice kind="success">{t('members.tools.added_to_queue', { count: queued })}</Notice>}
+      {panelFields}
+    </div>
   );
 }
