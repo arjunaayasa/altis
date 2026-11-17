@@ -29,6 +29,8 @@ export const SYSTEM_UI_ID = {
   'settings.load_failed': 'Pengaturan gagal dimuat',
   'system.remove': 'Hapus',
   'auditlog.actor.filter_short': 'Saring',
+  'jobs.schedules.every_minutes_one': 'Setiap {minutes} menit',
+  'backups.more_named': 'Tindakan untuk cadangan {time}',
 } as const;
 
 export const SYSTEM_UI_EN: Record<keyof typeof SYSTEM_UI_ID, string> = {
@@ -58,4 +60,6 @@ export const SYSTEM_UI_EN: Record<keyof typeof SYSTEM_UI_ID, string> = {
   'settings.load_failed': 'The settings could not be loaded',
   'system.remove': 'Remove',
   'auditlog.actor.filter_short': 'Filter',
+  'jobs.schedules.every_minutes_one': 'Every {minutes} minute',
+  'backups.more_named': 'Actions for the backup of {time}',
 };
