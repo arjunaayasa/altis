@@ -3,10 +3,10 @@ import { AttachmentPatchBody, type AttachmentCreateBody, type AttachmentListResp
 import { isHttpUrl } from '@altis/shared/api/catalog/common';
 import { issueCode } from '@altis/shared/api/common';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArchiveIcon, ExternalLinkIcon, FileIcon, LinkIcon, PencilIcon, PlusIcon } from 'lucide-react';
 import { useCallback, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Badge, Field, Notice, RefetchProblem, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
+import { ErrorState, LAYER, LoadingState } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT, type Translate } from '@/i18n';
@@ -137,7 +137,7 @@ function MemberTypesPicker({ value, onChange }: { value: readonly string[]; onCh
   if (types.isError) return <p className="text-sm text-muted-foreground sm:col-span-2">{t('catalog.attachments.member_types_unreadable')}</p>;
   return (
     <fieldset className="grid gap-1 sm:col-span-2" aria-describedby={`${legend}-hint`}>
-      <legend className="mb-1 text-sm font-medium">{t('catalog.attachments.field.member_types')}</legend>
+      <legend className="mb-1.5 text-meta leading-snug font-semibold">{t('catalog.attachments.field.member_types')}</legend>
       <p id={`${legend}-hint`} className="text-xs text-muted-foreground">
         {t('catalog.attachments.member_types_hint')}
       </p>
@@ -190,9 +190,9 @@ function AttachmentRow({
     <li className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
-          {a.kind === 'file' ? <FileIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <LinkIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
-          <span className="font-medium break-words">{a.title}</span>
-          <Badge tone={a.access === 'public' ? 'info' : 'neutral'}>{t(`vocab.attachment_access.${a.access}`)}</Badge>
+          <span className="font-semibold break-words">{a.title}</span>
+          <Badge>{t(`vocab.attachment_kind.${a.kind}`)}</Badge>
+          <Badge>{t(`vocab.attachment_access.${a.access}`)}</Badge>
         </div>
         {a.kind === 'url' && a.url !== null && <span className="text-xs break-all text-muted-foreground">{a.url}</span>}
         {facts.length > 0 && <span className="text-xs text-muted-foreground">{facts.join(' · ')}</span>}
@@ -203,7 +203,6 @@ function AttachmentRow({
         {href !== null && (
           <Button asChild variant="outline" size="sm">
             <a href={href} target="_blank" rel="noopener noreferrer" aria-label={t('catalog.attachments.open_label', { title: a.title })}>
-              <ExternalLinkIcon aria-hidden="true" />
               {t('catalog.attachments.open')}
             </a>
           </Button>
@@ -211,11 +210,9 @@ function AttachmentRow({
         {canManage && (
           <>
             <Button type="button" variant="outline" size="sm" aria-label={t('catalog.attachments.edit_label', { title: a.title })} onClick={onEdit}>
-              <PencilIcon aria-hidden="true" />
               {t('catalog.attachments.edit')}
             </Button>
             <Button type="button" variant="outline" size="sm" aria-label={t('catalog.attachments.archive_label', { title: a.title })} onClick={onArchive}>
-              <ArchiveIcon aria-hidden="true" />
               {t('catalog.attachments.archive')}
             </Button>
           </>
@@ -367,11 +364,15 @@ function AddAttachment({ recordId, onAdded }: { recordId: string; onAdded(): Pro
   };
 
   return (
-    <div role="form" aria-label={t('catalog.attachments.add_title')} className="grid gap-3 border-t pt-4 sm:grid-cols-2" onKeyDown={enterRuns(() => void add())}>
-      <h3 className="text-sm font-semibold sm:col-span-2">{t('catalog.attachments.add_title')}</h3>
+    <div
+      role="form"
+      aria-label={t('catalog.attachments.add_title')}
+      className={`grid gap-x-5 gap-y-3.5 rounded-lg border p-4 sm:grid-cols-2 ${LAYER}`}
+      onKeyDown={enterRuns(() => void add())}>
+      <h3 className="text-sm font-bold sm:col-span-2">{t('catalog.attachments.add_title')}</h3>
       <PartProblem text={problem} />
       <fieldset className="flex flex-wrap gap-4 sm:col-span-2" disabled={busy}>
-        <legend className="mb-1 text-sm font-medium">{t('catalog.attachments.kind')}</legend>
+        <legend className="mb-1.5 text-meta leading-snug font-semibold">{t('catalog.attachments.kind')}</legend>
         {(['file', 'url'] as const).map((k) => (
           <label key={k} className="flex items-center gap-2 text-sm">
             <input type="radio" name={kindName} value={k} checked={kind === k} onChange={() => setKind(k)} className="size-4 accent-primary" />
@@ -399,8 +400,7 @@ function AddAttachment({ recordId, onAdded }: { recordId: string; onAdded(): Pro
         {(c) => <textarea {...c} className={TEXTAREA_CLASS} disabled={busy} value={description} onChange={(e) => setDescription(e.target.value)} />}
       </Field>
       <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
-        <Button type="button" disabled={busy} onClick={() => void add()}>
-          <PlusIcon aria-hidden="true" />
+        <Button type="button" size="sm" disabled={busy} onClick={() => void add()}>
           {t(busy ? 'catalog.attachments.adding' : 'catalog.attachments.add')}
         </Button>
         {progress !== null && (
@@ -435,9 +435,9 @@ export function AttachmentsPanel({ recordId }: AttachmentsPanelProps) {
   const reload = (): Promise<void> => queryClient.invalidateQueries({ queryKey: key });
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <div className="flex flex-col gap-1">
-        <h2 id={titleId} className="text-base font-semibold">
+    <section aria-labelledby={titleId} className="grid gap-4">
+      <div className="grid max-w-[75ch] gap-1">
+        <h2 id={titleId} className="text-base font-bold">
           {t('catalog.attachments.title')}
         </h2>
         <p className="text-sm text-muted-foreground">{t('catalog.attachments.description')}</p>
@@ -445,11 +445,9 @@ export function AttachmentsPanel({ recordId }: AttachmentsPanelProps) {
       {outcome}
       {list.data === undefined ? (
         list.isError ? (
-          <Notice kind="error">{problemText(t, list.error)}</Notice>
+          <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <LoadingState lines={3} />
         )
       ) : (
         <>
@@ -457,7 +455,7 @@ export function AttachmentsPanel({ recordId }: AttachmentsPanelProps) {
           {list.data.items.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('catalog.attachments.empty')}</p>
           ) : (
-            <ul className="divide-y">
+            <ul className="divide-y rounded-lg border px-4">
               {list.data.items.map((a) =>
                 editing === a.id && canManage ? (
                   <EditAttachment

@@ -1,6 +1,5 @@
 import { isUlid } from '@altis/shared';
 import { Link } from '@tanstack/react-router';
-import { PrinterIcon } from 'lucide-react';
 import { useCallback, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { useLocale, useT } from '@/i18n';
@@ -221,17 +220,16 @@ export function AddToPrintQueue({ entries }: AddToPrintQueueProps): ReactNode {
   const [outcome, setOutcome] = useState<QueueAddResult | null>(null);
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
-      <Button type="button" size="sm" variant="outline" disabled={entries.length === 0} onClick={() => setOutcome(queue.add(entries))}>
-        <PrinterIcon aria-hidden="true" />
+      <Button type="button" size="sm" variant="ghost" disabled={entries.length === 0} onClick={() => setOutcome(queue.add(entries))}>
         {t('catalog.labels.queue.add')}
       </Button>
       {outcome !== null && (
-        <span role="status" className="text-sm">
+        <span role="status" className="text-meta">
           {outcome.added === 0
             ? t('catalog.labels.queue.added_none')
             : t('catalog.labels.queue.added', { count: number.format(outcome.added) })}
           {outcome.dropped > 0 && <> {t('catalog.labels.queue.dropped', { count: number.format(outcome.dropped) })}</>}{' '}
-          <Link to="/admin/catalog/labels" className="font-medium text-primary underline-offset-4 hover:underline">
+          <Link to="/admin/catalog/labels" className="font-semibold text-accent-text underline-offset-4 hover:underline">
             {t('catalog.labels.queue.open')}
           </Link>
         </span>

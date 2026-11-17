@@ -1,14 +1,14 @@
 import { AGENT_TYPES, RELATOR_ROLES, vocabKey } from '@altis/shared';
 import type { AgentListResponse } from '@altis/shared/api/catalog/authorities';
 import { keepPreviousData } from '@tanstack/react-query';
-import { ArrowDownIcon, ArrowUpIcon, XIcon } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { get, useFieldArray, useWatch, type FieldError, type FieldErrors, type UseFormReturn } from 'react-hook-form';
 import { Badge, SELECT_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { useT, type TKey } from '@/i18n';
+import { cn } from '@/lib/utils';
 import { fieldErrorText } from '@/lib/form-errors';
 import { useApiQuery } from '@/lib/me';
 import type { AgentRow, RecordFormValues } from './draft-to-form';
@@ -66,7 +66,7 @@ export function ErrorText({ id, error }: { id?: string; error: FieldError | unde
   const text = fieldErrorText(t, error);
   if (text === undefined) return null;
   return (
-    <p id={id} className="text-sm text-destructive">
+    <p id={id} className="text-meta font-semibold text-bad">
       {text}
     </p>
   );
@@ -79,36 +79,34 @@ export function useLegend(labelKey: TKey, required: boolean): string {
   return required ? t('catalog.records.required', { label }) : label;
 }
 
-/** The order buttons and "remove" of one row of a list. */
+/** The legend of a list field inside a part of the editor: the label's look (the part's heading may say the same). */
+export const LIST_LEGEND = 'mb-1.5 text-meta leading-snug font-semibold';
+
+/** The order buttons and "remove" of one row of a list: short words, each named with the row ("Naikkan …"). */
 export function RowButtons({ name, index, count, onMove, onRemove }: { name: string; index: number; count: number; onMove(from: number, to: number): void; onRemove(): void }) {
   const t = useT();
   return (
     <span className="flex gap-1">
-      <Button type="button" variant="ghost" size="icon" className="size-8" aria-label={t('catalog.records.move_up', { name })} disabled={index === 0} onClick={() => onMove(index, index - 1)}>
-        <ArrowUpIcon aria-hidden="true" />
+      <Button type="button" variant="ghost" size="sm" aria-label={t('catalog.records.move_up', { name })} disabled={index === 0} onClick={() => onMove(index, index - 1)}>
+        {t('catalog.records.row.up')}
       </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="size-8"
-        aria-label={t('catalog.records.move_down', { name })}
-        disabled={index === count - 1}
-        onClick={() => onMove(index, index + 1)}
-      >
-        <ArrowDownIcon aria-hidden="true" />
+      <Button type="button" variant="ghost" size="sm" aria-label={t('catalog.records.move_down', { name })} disabled={index === count - 1} onClick={() => onMove(index, index + 1)}>
+        {t('catalog.records.row.down')}
       </Button>
-      <Button type="button" variant="ghost" size="icon" className="size-8" aria-label={t('catalog.records.remove', { name })} onClick={onRemove}>
-        <XIcon aria-hidden="true" />
+      <Button type="button" variant="ghost" size="sm" aria-label={t('catalog.records.remove', { name })} onClick={onRemove}>
+        {t('catalog.records.row.remove')}
       </Button>
     </span>
   );
 }
 
-export function AgentPicker({ form, required }: { form: UseFormReturn<RecordFormValues>; required: boolean }) {
+/**
+ * The agents' list. Its part of the editor shows the heading and the hint (`hintId`, which describes the list): the
+ * legend is said to screen readers only.
+ */
+export function AgentPicker({ form, required, hintId }: { form: UseFormReturn<RecordFormValues>; required: boolean; hintId: string }) {
   const t = useT();
   const legend = useLegend('vocab.field.agents', required);
-  const hintId = useId();
   const { control, register, setValue } = form;
   const { fields, append, remove, move } = useFieldArray({ control, name: 'agents' });
   const rows = useWatch({ control, name: 'agents' });
@@ -144,10 +142,7 @@ export function AgentPicker({ form, required }: { form: UseFormReturn<RecordForm
 
   return (
     <fieldset className="grid min-w-0 gap-3" aria-describedby={hintId}>
-      <legend className="mb-1 text-sm font-medium">{legend}</legend>
-      <p id={hintId} className="text-xs text-muted-foreground">
-        {t('catalog.records.agents.hint')}
-      </p>
+      <legend className="sr-only">{legend}</legend>
       {fields.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('catalog.records.agents.none')}</p>
       ) : (
@@ -156,18 +151,18 @@ export function AgentPicker({ form, required }: { form: UseFormReturn<RecordForm
             const ref = rows[i]?.ref ?? field.ref;
             const rowError = errorAt(errors, `agents.${i}.ref`) ?? errorAt(errors, `agents.${i}.ref.name`);
             return (
-              <li key={field.id} className="grid gap-2 rounded-md border p-2">
+              <li key={field.id} className="grid gap-2 rounded-md border px-3 py-2.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{ref.name}</span>
+                  <span className="font-semibold">{ref.name}</span>
                   {ref.id !== null && ref.dates !== '' && <span className="text-sm text-muted-foreground">{ref.dates}</span>}
                   {ref.id !== null && <span className="text-xs text-muted-foreground">{t(vocabKey('agent_type', ref.type))}</span>}
-                  {ref.id === null && <Badge tone="info">{t('catalog.records.new_badge')}</Badge>}
+                  {ref.id === null && <Badge>{t('catalog.records.new_badge')}</Badge>}
                   <span className="ml-auto">
                     <RowButtons name={ref.name} index={i} count={fields.length} onMove={move} onRemove={() => remove(i)} />
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <select className={`${SELECT_CLASS} w-auto`} aria-label={t('catalog.records.agents.role', { name: ref.name })} {...register(`agents.${i}.role`)}>
+                  <select className={cn(SELECT_CLASS, 'w-auto')} aria-label={t('catalog.records.agents.role', { name: ref.name })} {...register(`agents.${i}.role`)}>
                     {RELATOR_ROLES.map((role) => (
                       <option key={role} value={role}>
                         {t(vocabKey('relator', role))}
@@ -186,7 +181,7 @@ export function AgentPicker({ form, required }: { form: UseFormReturn<RecordForm
                   </label>
                   {ref.id === null && (
                     <>
-                      <select className={`${SELECT_CLASS} w-auto`} aria-label={t('catalog.records.agents.type', { name: ref.name })} {...register(`agents.${i}.ref.type`)}>
+                      <select className={cn(SELECT_CLASS, 'w-auto')} aria-label={t('catalog.records.agents.type', { name: ref.name })} {...register(`agents.${i}.ref.type`)}>
                         {AGENT_TYPES.map((type) => (
                           <option key={type} value={type}>
                             {t(vocabKey('agent_type', type))}
