@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { newPassword } from '../lib/api.js';
 import { T, enrolInProfile, expect, expectHome, passReauth, signIn, signOut, submitPassword, test } from '../fixtures.js';
+import { moduleBar, navLink, openNavPage } from '../lib/nav.js';
 
 // Staff administration in the browser (spec §7.1–§7.3, §13.3 "Pengguna"; Tasks 19, 29): the super admin creates
 // `petugas` with the role Admin; petugas changes the required password and enables 2FA; the super admin resets
@@ -13,7 +14,7 @@ const PETUGAS = { username: 'petugas', name: 'Petugas Sirkulasi', email: 'petuga
 
 /** The users list, searched for petugas, and its row. */
 async function petugasRow(page: Page) {
-  await page.getByRole('navigation', { name: T('shell.nav_label') }).getByRole('link', { name: T('nav.users'), exact: true }).click();
+  await openNavPage(page, '/admin/users');
   await expect(page.getByRole('heading', { level: 1, name: T('nav.users'), exact: true })).toBeVisible();
   await page.getByLabel(T('users.search'), { exact: true }).fill(PETUGAS.username);
   await page.getByRole('button', { name: T('users.search_submit'), exact: true }).click();
@@ -25,7 +26,7 @@ async function petugasRow(page: Page) {
 test('super admin: create petugas as Admin, reset its 2FA (reauth), reset its password (temporary, once)', async ({ page, admin, newContext }) => {
   // 1. The super admin creates petugas with a password and the role Admin.
   await signIn(page, admin);
-  await page.getByRole('navigation', { name: T('shell.nav_label') }).getByRole('link', { name: T('nav.users'), exact: true }).click();
+  await openNavPage(page, '/admin/users');
   await page.getByRole('link', { name: T('users.add'), exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/users\/new$/);
   const initial = newPassword();
@@ -57,7 +58,8 @@ test('super admin: create petugas as Admin, reset its 2FA (reauth), reset its pa
   await petugas.getByRole('button', { name: T('profile.password.submit'), exact: true }).click();
   await expectHome(petugas);
   // The role Admin shows its sections.
-  await expect(petugas.getByRole('navigation', { name: T('shell.nav_label') }).getByRole('link', { name: T('nav.users'), exact: true })).toBeVisible();
+  await moduleBar(petugas).getByRole('link', { name: T('nav.group.system'), exact: true }).click();
+  await expect(navLink(petugas, '/admin/users')).toBeVisible();
   await enrolInProfile(petugas);
   await petugas.getByRole('button', { name: T('twofa.sign_in_again'), exact: true }).click();
   // From now on the password alone is not enough.

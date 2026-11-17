@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises';
 import type { Download } from '@playwright/test';
 import type { CspRecorder } from '../lib/csp.js';
 import { T, expect, signIn, test } from '../fixtures.js';
+import { openNavPage } from '../lib/nav.js';
 
 // The community report framework as a librarian uses it, in a real browser with the CSP guard of fixtures.ts on every
 // page: Laporan lists the collection reports; the title list is previewed (its first page holds a record this spec
@@ -42,7 +43,7 @@ test('Laporan: the title list is previewed, exported as CSV and the file downloa
   });
 
   await clean(csp, 'Laporan: the catalogue of reports opens the title list', async () => {
-    await page.getByRole('navigation', { name: T('shell.nav_label') }).getByRole('link', { name: T('nav.reports.reports'), exact: true }).click();
+    await openNavPage(page, '/admin/reports');
     await expect(page).toHaveURL(/\/admin\/reports$/);
     await expect(page.getByRole('heading', { level: 1, name: T('reports.catalog.title'), exact: true })).toBeVisible();
     await page.getByRole('link', { name: reportTitle, exact: true }).click();

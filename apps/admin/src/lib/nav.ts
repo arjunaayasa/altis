@@ -12,6 +12,9 @@ import type { AdminKey } from '@/i18n';
  * above the groups. The shell and the command palette show each group under its heading (`nav.group.<group>`). The
  * community milestones add Laporan (reports and accreditation) after Katalog, and Layanan (the circulation desk and its
  * lists) and Anggota (members) between Katalog and Laporan.
+ *
+ * The shell shows them as modules (at the end of this file): a module bar with Beranda and each group the user sees,
+ * and a sidebar with the pages of the active module only (Beranda adds its shortcuts). The palette lists every item.
  */
 export type NavGroup = 'catalog' | 'circulation' | 'members' | 'reports' | 'opac' | 'system';
 
@@ -103,14 +106,19 @@ export const NAV: readonly NavItem[] = Object.freeze([
 
 /** The items `me` may see: none until the session is fully signed in (a pre-2FA session learns nothing, M10). */
 export function visibleNav(me: MeResponse | undefined): NavItem[] {
-  if (me === undefined || !me.authenticated || me.stage !== 'full') return [];
+  return NAV.filter(navFilter(me));
+}
+
+/** The test {@link visibleNav} applies to an item (the same for the shortcuts of Beranda); false for every item until `me` is fully signed in. */
+function navFilter(me: MeResponse | undefined): (item: NavItem) => boolean {
+  if (me === undefined || !me.authenticated || me.stage !== 'full') return () => false;
   const held = new Set<string>(me.permissions);
   const atSomeBranch = new Set<string>(Object.values(me.branchPermissions).flat());
-  return NAV.filter((item) => {
+  return (item) => {
     if (item.superAdminOnly === true && !me.superAdmin) return false;
     if (item.permission === undefined || me.superAdmin || held.has(item.permission)) return true;
     return item.anyBranch === true && atSomeBranch.has(item.permission);
-  });
+  };
 }
 
 /**
@@ -149,4 +157,70 @@ export function visibleNavSections(me: MeResponse | undefined): NavSection[] {
     if (inGroup.length > 0) sections.push({ group, items: inGroup });
   }
   return sections;
+}
+
+// ---- Modules: the module bar and the sidebar of the shell ----
+
+/**
+ * A module of the shell: Beranda (`home`, the items of no group) or one nav group. The module bar under the top bar
+ * lists the modules the user sees, in this order; the sidebar lists the pages of the active one only.
+ */
+export type NavModule = 'home' | NavGroup;
+
+/** The modules in the order of the module bar. */
+export const NAV_MODULES: readonly NavModule[] = Object.freeze(['home', ...NAV_GROUPS] as const);
+
+/** A module the user sees, with its visible pages (never empty) in the order of {@link NAV}. */
+export interface ModuleView {
+  module: NavModule;
+  items: NavItem[];
+}
+
+/** {@link visibleNavSections} as modules: Beranda for the ungrouped items, then each group that has a visible item. */
+export function visibleModules(me: MeResponse | undefined): ModuleView[] {
+  return visibleNavSections(me).map((section) => ({ module: section.group ?? 'home', items: section.items }));
+}
+
+/** The first two segments of a path (`/admin/catalog/runs/1` → `/admin/catalog`): the area a page lies in. */
+function areaOf(path: string): string {
+  return path.split('/').slice(0, 3).join('/');
+}
+
+/**
+ * The module the page at `pathname` belongs to, among `modules` (what {@link visibleModules} answers): the module of
+ * the visible item {@link activeNavPath} marks; else, for a page under no visible item (a detail page of its own path,
+ * a page the user's menus hide), the module whose items share the page's area (`/admin/catalog/runs/1` → Katalog);
+ * else Beranda (the profile, a path no route serves).
+ */
+export function activeModule(modules: readonly ModuleView[], pathname: string): NavModule {
+  const items = modules.flatMap((m) => m.items);
+  const marked = activeNavPath(items, pathname);
+  if (marked !== null) return moduleOfItem(items.find((item) => item.to === marked)!);
+  const area = areaOf(pathname.replace(/\/+$/, ''));
+  if (area !== '/admin') {
+    const owner = NAV.find((item) => item.to !== '/admin' && areaOf(item.to) === area);
+    const module = owner === undefined ? undefined : moduleOfItem(owner);
+    if (module !== undefined && modules.some((m) => m.module === module)) return module;
+  }
+  return 'home';
+}
+
+function moduleOfItem(item: NavItem): NavModule {
+  return item.group ?? 'home';
+}
+
+/**
+ * The shortcuts the sidebar of Beranda lists under "Pintasan": the everyday pages of the desk and of the member list,
+ * each behind the permission its page needs. Shown under the same rules as {@link NAV} ({@link visibleShortcuts}).
+ */
+export const HOME_SHORTCUTS: readonly NavItem[] = Object.freeze([
+  { to: '/admin/layanan', labelKey: 'nav.circulation.desk', permission: 'circulation.desk.use', anyBranch: true },
+  { to: '/admin/layanan/kembali', labelKey: 'nav.circulation.quick_return', permission: 'circulation.desk.use', anyBranch: true },
+  { to: '/admin/anggota/baru', labelKey: 'shell.shortcut.add_member', permission: 'members.records.manage' },
+  { to: '/admin/anggota/impor', labelKey: 'nav.members.import', permission: 'members.import.run' },
+] satisfies NavItem[]);
+
+/** The shortcuts of Beranda `me` may open. */
+export function visibleShortcuts(me: MeResponse | undefined): NavItem[] {
+  return HOME_SHORTCUTS.filter(navFilter(me));
 }

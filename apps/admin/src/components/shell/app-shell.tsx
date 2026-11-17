@@ -1,11 +1,11 @@
 import type { MeResponse } from '@altis/shared/api/auth';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link, Outlet, useLocation, useNavigate, useRouter } from '@tanstack/react-router';
-import { LibraryIcon, LogOutIcon, MenuIcon, SearchIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
+import { Outlet, useLocation, useNavigate, useRouter } from '@tanstack/react-router';
+import { TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Banners } from '@/components/banners';
 import { CommandPalette, logout } from '@/components/command-palette';
-import { NotificationBell } from '@/components/notifications/bell';
+import { ShellFrame } from '@/components/shell/frame';
 import { Pending } from '@/components/shell/route-pages';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -14,16 +14,10 @@ import { holds } from '@/lib/access';
 import { inBackground, isSignInPath, sessionEndedHref } from '@/lib/api';
 import { dirtyForms } from '@/lib/dirty-forms';
 import { ME_KEY, ShellMeContext, gateTarget, useMe } from '@/lib/me';
-import { activeNavPath, visibleNavSections, type NavItem } from '@/lib/nav';
 import { REALTIME_RESYNC_KEYS, RealtimeContext, createRealtimeHub, invalidateRealtimeKeys, realtimeQueryKeys } from '@/lib/realtime';
 import { useShortcuts } from '@/lib/shortcuts';
-import { cn } from '@/lib/utils';
 
-/** "Ctrl+K", or "⌘K" on Apple systems. */
-export function paletteShortcut(): string {
-  const platform = typeof navigator === 'undefined' ? '' : navigator.platform;
-  return /Mac|iPhone|iPad/.test(platform) ? '⌘K' : 'Ctrl+K';
-}
+export { paletteShortcut } from '@/components/shell/frame';
 
 type SignedIn = Extract<MeResponse, { authenticated: true }>;
 
@@ -41,7 +35,8 @@ export function shellChannels(me: SignedIn): string[] {
 
 /**
  * The admin frame (spec §13.3 "Kerangka admin"): the library's name, the navigation the user's permissions allow
- * (lib/nav.ts), the command palette (Ctrl/⌘+K), the status banners, the notification bell (1c) and the screen of the
+ * (lib/nav.ts: the module bar and the sidebar of the active module, drawn by ShellFrame), the command palette
+ * (Ctrl/⌘+K), the status banners, the notification bell (1c), the user menu (theme, language) and the screen of the
  * route. The route gate (routes.tsx) only renders it for a fully signed-in session; the language comes from the root
  * (`me.user.locale ?? me.library.locale`).
  *
@@ -69,7 +64,6 @@ export function AppShell() {
   const queryClient = useQueryClient();
   const warningId = useId();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   useShortcuts({ 'mod+k': () => setPaletteOpen((open) => !open) });
 
   // The last signed-in answer: what the frame shows while auth/me is read again, and after the session ended.
@@ -118,152 +112,43 @@ export function AppShell() {
   }, [live, signedOut, keep, router]);
 
   if (me === null) return <Pending />;
-  // Phase 2 (Task 2): Beranda, then each nav group under its heading (Katalog, OPAC, Sistem; lib/nav.ts).
-  const sections = visibleNavSections(me);
-  // One item is marked: the page's own, else the closest one above it (lib/nav.ts `activeNavPath`). The router's own
-  // active state only counts an exact match here, so it never marks a second item.
-  const current = activeNavPath(
-    sections.flatMap((s) => s.items),
-    pathname,
-  );
-
-  const links = (items: readonly NavItem[], label?: string) => (
-    <ul className="flex flex-col gap-1" {...(label === undefined ? {} : { 'aria-label': label })}>
-      {items.map((item) => (
-        <li key={item.to}>
-          <Link
-            to={item.to}
-            activeOptions={{ exact: true, includeSearch: false }}
-            aria-current={item.to === current ? 'page' : undefined}
-            onClick={() => setMenuOpen(false)}
-            className={cn(
-              'block rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-              item.to === current && 'bg-accent font-medium text-accent-foreground',
-            )}
-          >
-            {t(item.labelKey)}
-          </Link>
-        </li>
-      ))}
-    </ul>
-  );
-
-  const nav = (
-    <nav aria-label={t('shell.nav_label')}>
-      <div className="flex flex-col gap-4">
-        {sections.map((section) =>
-          section.group === null ? (
-            <div key="top">{links(section.items)}</div>
-          ) : (
-            // The heading is seen; the list carries the group's name for assistive technology (no id: the menu is
-            // rendered twice, for the desktop and the mobile layout).
-            <div key={section.group}>
-              <p aria-hidden="true" className="px-3 pb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                {t(`nav.group.${section.group}`)}
-              </p>
-              {links(section.items, t(`nav.group.${section.group}`))}
-            </div>
-          ),
-        )}
-      </div>
-    </nav>
-  );
+  const signOut = (): void =>
+    void logout({
+      clearMe: () => queryClient.removeQueries({ queryKey: ME_KEY }),
+      navigate: (href) => void navigate({ href }),
+    });
 
   return (
-    <div className="flex min-h-dvh flex-col md:flex-row">
-      <a
-        href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2"
-      >
-        {t('shell.skip_to_content')}
-      </a>
-      <aside className="hidden w-60 shrink-0 border-r bg-card md:flex md:flex-col">
-        <div className="flex h-14 items-center gap-2 border-b px-4 font-semibold">
-          <LibraryIcon className="size-5 text-primary" aria-hidden="true" />
-          <span className="truncate">{me.library.name}</span>
+    <ShellFrame me={me} pathname={pathname} onPalette={() => setPaletteOpen(true)} onLogout={signOut}>
+      {keep && (
+        <div className="px-4 pt-4 lg:px-8">
+          <Alert variant="destructive" aria-labelledby={warningId}>
+            <TriangleAlertIcon aria-hidden="true" />
+            <AlertTitle id={warningId}>{t('shell.session_ended.title')}</AlertTitle>
+            <AlertDescription>
+              <p>{t('shell.session_ended.body')}</p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-1"
+                onClick={() => void router.navigate({ href: sessionEndedHref(router.latestLocation.href) })}
+              >
+                {t('shell.session_ended.sign_in')}
+              </Button>
+            </AlertDescription>
+          </Alert>
         </div>
-        <div className="flex-1 overflow-y-auto p-3">{nav}</div>
-      </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center gap-2 border-b bg-card px-4 md:px-6">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            aria-expanded={menuOpen}
-            aria-controls="altis-mobile-nav"
-            aria-label={t(menuOpen ? 'shell.menu_close' : 'shell.menu_open')}
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            {menuOpen ? <XIcon aria-hidden="true" /> : <MenuIcon aria-hidden="true" />}
-          </Button>
-          <span className="truncate font-semibold md:hidden">{me.library.name}</span>
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto gap-2 text-muted-foreground"
-            aria-label={t('shell.open_palette')}
-            aria-keyshortcuts="Control+K Meta+K"
-            onClick={() => setPaletteOpen(true)}
-          >
-            <SearchIcon aria-hidden="true" />
-            <span className="hidden sm:inline">{t('shell.open_palette')}</span>
-            <kbd className="hidden rounded border bg-muted px-1.5 text-xs sm:inline">{paletteShortcut()}</kbd>
-          </Button>
-          <div data-slot="notifications">
-            <NotificationBell />
-          </div>
-          <span className="hidden truncate text-sm lg:inline" title={t('shell.user_menu', { name: me.user.name })}>
-            {me.user.name}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={t('palette.logout')}
-            title={t('palette.logout')}
-            onClick={() =>
-              void logout({
-                clearMe: () => queryClient.removeQueries({ queryKey: ME_KEY }),
-                navigate: (href) => void navigate({ href }),
-              })
-            }
-          >
-            <LogOutIcon aria-hidden="true" />
-          </Button>
-        </header>
-        <div id="altis-mobile-nav" className={cn('border-b bg-card p-3 md:hidden', !menuOpen && 'hidden')}>
-          {nav}
-        </div>
-        {keep && (
-          <div className="px-4 pt-4 md:px-6">
-            <Alert variant="destructive" aria-labelledby={warningId}>
-              <TriangleAlertIcon aria-hidden="true" />
-              <AlertTitle id={warningId}>{t('shell.session_ended.title')}</AlertTitle>
-              <AlertDescription>
-                <p>{t('shell.session_ended.body')}</p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="mt-1"
-                  onClick={() => void router.navigate({ href: sessionEndedHref(router.latestLocation.href) })}
-                >
-                  {t('shell.session_ended.sign_in')}
-                </Button>
-              </AlertDescription>
-            </Alert>
-          </div>
-        )}
-        <Banners banners={me.banners} />
-        <main id="main" tabIndex={-1} className="flex-1 p-4 outline-none md:p-6">
-          {/* The screens see what the frame shows; another user's session starts every screen over. */}
-          <ShellMeContext.Provider value={me}>
-            <RealtimeContext.Provider value={hub}>
-              <Outlet key={me.user.id} />
-            </RealtimeContext.Provider>
-          </ShellMeContext.Provider>
-        </main>
-      </div>
+      )}
+      <Banners banners={me.banners} />
+      <main id="main" tabIndex={-1} className="w-full max-w-[1360px] min-w-0 flex-1 px-4 pt-4 pb-10 outline-none lg:px-8 lg:pt-6 lg:pb-12">
+        {/* The screens see what the frame shows; another user's session starts every screen over. */}
+        <ShellMeContext.Provider value={me}>
+          <RealtimeContext.Provider value={hub}>
+            <Outlet key={me.user.id} />
+          </RealtimeContext.Provider>
+        </ShellMeContext.Provider>
+      </main>
       <CommandPalette me={me} open={paletteOpen} onOpenChange={setPaletteOpen} />
-    </div>
+    </ShellFrame>
   );
 }

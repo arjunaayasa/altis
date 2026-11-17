@@ -15,6 +15,8 @@ import { defineConfig, type Plugin, type UserConfig } from 'vite';
 //   (the release's leak scan fails otherwise).
 // - index.html carries `<meta name="csp-nonce" content="__CSP_NONCE__">`; the server puts the request's nonce there
 //   and in its Content-Security-Policy (D31). Vite adds no inline script or style to it.
+//   Its one inline script of its own, the colour theme applied before the first paint (src/lib/theme.ts), carries that
+//   placeholder as its nonce.
 // - A second entry, install.html (1c Task 30): the web install wizard (src/install/main.tsx), with the same placeholder,
 //   which the server serves at /install (release kind `install-index`). Both pages load their hashed files from
 //   /admin/assets, so the base stays /admin/ for both.
