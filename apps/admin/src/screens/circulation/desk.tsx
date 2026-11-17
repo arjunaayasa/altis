@@ -742,17 +742,18 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
     if (offer === null) return;
     const current = offer;
     setOffer(null);
+    if (current.kind === 'force') {
+      // Forcing: the reason is asked for first (the panel under the feedback) and the focus goes to its field, not back
+      // to the box; Enter there sends the loan again.
+      setForcing({ barcode: current.barcode, reasons: current.reasons });
+      requestAnimationFrame(() => forceInput.current?.focus());
+      return;
+    }
     setBusy(true);
     try {
       if (current.kind === 'switch') await lookup(current.memberNo);
       else if (current.kind === 'return') await giveBack(current.barcode);
-      else if (current.kind === 'found_lost') await giveBack(current.barcode, true);
-      else {
-        // Forcing: the reason is asked for first (the panel under the feedback); Enter there sends the loan again.
-        setForcing({ barcode: current.barcode, reasons: current.reasons });
-        requestAnimationFrame(() => forceInput.current?.focus());
-        return;
-      }
+      else await giveBack(current.barcode, true);
     } finally {
       setBusy(false);
       focusBox();
