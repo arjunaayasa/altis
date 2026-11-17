@@ -61,6 +61,9 @@ export const DUPLICATES_ID = {
   'catalog.duplicates.merge.body':
     '“{source}” akan digabung ke “{target}”: eksemplar, lampiran, pengenal, pengarang, subjek, dan relasinya dipindahkan, lalu “{source}” diarsipkan dan alamat OPAC-nya dialihkan ke “{target}”. Penggabungan tidak dapat dibatalkan.',
   'catalog.duplicates.merge.done': '“{source}” sudah digabung ke “{target}”.',
+  // ---- the layout of the screen ----
+  'catalog.duplicates.compare.open_short': 'Buka',
+  'catalog.duplicates.compare.differs_tag': 'Berbeda',
 } as const;
 
 export const DUPLICATES_EN: Record<keyof typeof DUPLICATES_ID, string> = {
@@ -120,4 +123,7 @@ export const DUPLICATES_EN: Record<keyof typeof DUPLICATES_ID, string> = {
   'catalog.duplicates.merge.body':
     '“{source}” will be merged into “{target}”: its items, attachments, identifiers, authors, subjects and relations move, then “{source}” is archived and its OPAC address redirects to “{target}”. A merge cannot be undone.',
   'catalog.duplicates.merge.done': '“{source}” has been merged into “{target}”.',
+  // ---- the layout of the screen ----
+  'catalog.duplicates.compare.open_short': 'Open',
+  'catalog.duplicates.compare.differs_tag': 'Differs',
 };
