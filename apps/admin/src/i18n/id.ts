@@ -788,6 +788,8 @@ export const ADMIN_ID = {
   'jobs.schedule.diagnostics.exposure': 'Uji keterbukaan berkas',
   'jobs.schedule.diagnostics.ip_trust': 'Pemeriksaan kepercayaan alamat IP',
   'jobs.schedule.diagnostics.usage': 'Pengukuran ruang penyimpanan',
+  'jobs.schedule.update.check': 'Pemeriksaan pembaruan',
+  'jobs.schedule.privacy.anonymize': 'Anonimisasi anggota arsip',
 
   // ---- backups: Cadangan (§13.3 "Backup", §9.9, §9.10; 1c Task 32) --------------------------------------------
   'backups.description':
@@ -1150,6 +1152,7 @@ export const ADMIN_ID = {
   'updates.history.backup': 'Cadangan sebelum pembaruan',
   'updates.history.versions': '{from} → {to}',
   'jobs.type.update.check': 'Memeriksa pembaruan',
+  'jobs.type.privacy.anonymize': 'Menganonimkan anggota arsip yang lewat masa simpan',
   'jobs.type.release.adopt': 'Menyalin rilis terbundel ke folder data',
   'jobs.type.release.retention': 'Menghapus rilis lama',
   // 1d Task 29: the dashboard's Pembaruan card; Diagnostik's releases

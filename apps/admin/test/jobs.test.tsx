@@ -4,7 +4,9 @@ import type { JobListResponse, JobView, ScheduleView } from '@altis/shared/api/j
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { JOB_POLL_MS } from '@/components/job-progress';
+import { translate, type Translate } from '@/i18n';
 import { DRIVE_IDLE_LIMIT, DRIVE_IDLE_MS, DRIVE_MIN_GAP_MS } from '@/screens/jobs/detail';
+import { jobTypeLabel, scheduleLabel } from '@/screens/jobs/list';
 import { adminMe, problem, signedIn, startApp, superMe, type FakeHandler, type FakeRequest, type SignedIn } from './fake-api';
 
 // Tugas dan Jadwal (spec §13.3 "Daftar, detail, ulangi/batalkan (§10.5), aktif/nonaktifkan jadwal", §10.2; Task 31):
@@ -673,5 +675,16 @@ describe('schedules', () => {
     });
     expect(((await screen.findByRole('switch', { name: 'Aktifkan jadwal Cadangan harian' })) as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByRole('switch', { name: 'Aktifkan jadwal Pembersihan event lama' }) as HTMLInputElement).disabled).toBe(false);
+  });
+});
+
+describe('names of jobs and schedules', () => {
+  it('names the update check and the anonymisation of archived members in both languages, not by their codes', () => {
+    for (const locale of ['id', 'en'] as const) {
+      const t: Translate = (key, params) => translate(locale, key, params);
+      expect(scheduleLabel(t, 'update.check')).not.toBe('update.check');
+      expect(scheduleLabel(t, 'privacy.anonymize')).not.toBe('privacy.anonymize');
+      expect(jobTypeLabel(t, 'privacy.anonymize')).not.toBe('privacy.anonymize');
+    }
   });
 });

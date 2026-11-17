@@ -743,6 +743,8 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'jobs.schedule.diagnostics.exposure': 'File exposure test',
   'jobs.schedule.diagnostics.ip_trust': 'IP address trust check',
   'jobs.schedule.diagnostics.usage': 'Storage usage measurement',
+  'jobs.schedule.update.check': 'Update check',
+  'jobs.schedule.privacy.anonymize': 'Archived member anonymisation',
 
   'backups.description':
     'Backups keep a copy of the ALTIS data. Here you can make a backup, prepare its download, upload a backup archive, and restore data from a backup.',
@@ -1095,6 +1097,7 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'updates.history.backup': 'Backup before the update',
   'updates.history.versions': '{from} → {to}',
   'jobs.type.update.check': 'Check for updates',
+  'jobs.type.privacy.anonymize': 'Anonymise archived members past their retention',
   'jobs.type.release.adopt': 'Copy the bundled release into the data folder',
   'jobs.type.release.retention': 'Delete old releases',
   // 1d Task 29: the dashboard's Pembaruan card; Diagnostik's releases
