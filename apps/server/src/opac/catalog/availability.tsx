@@ -174,6 +174,12 @@ function statusClass(status: ItemStatus): string {
 export function AvailabilitySection(props: { availability: Availability; locale: Locale }) {
   const { availability: a, locale } = props;
   const none = '—';
+  const col = {
+    branch: opacText(locale, 'detail.col.branch'),
+    location: opacText(locale, 'detail.col.location'),
+    callNumber: t(locale, 'vocab.field.call_number'),
+    barcode: opacText(locale, 'detail.col.barcode'),
+  };
   return (
     <section class="record-section" aria-labelledby="ketersediaan">
       <h2 id="ketersediaan">{opacText(locale, 'detail.availability')}</h2>
@@ -186,24 +192,24 @@ export function AvailabilitySection(props: { availability: Availability; locale:
             <table class="availability">
               <thead>
                 <tr>
-                  <th scope="col">{opacText(locale, 'detail.col.branch')}</th>
-                  <th scope="col">{opacText(locale, 'detail.col.location')}</th>
-                  <th scope="col">{t(locale, 'vocab.field.call_number')}</th>
-                  <th scope="col">{opacText(locale, 'detail.col.barcode')}</th>
+                  <th scope="col">{col.branch}</th>
+                  <th scope="col">{col.location}</th>
+                  <th scope="col">{col.callNumber}</th>
+                  <th scope="col">{col.barcode}</th>
                   <th scope="col">{opacText(locale, 'detail.col.status')}</th>
                 </tr>
               </thead>
               <tbody>
                 {a.rows.map((r) => (
                   <tr>
-                    <td>{r.branch}</td>
-                    <td>
+                    <td data-label={col.branch}>{r.branch}</td>
+                    <td data-label={col.location}>
                       {r.place ?? none}
                       {r.hint === null ? null : <span class="shelf-hint">{r.hint}</span>}
                     </td>
-                    <td>{r.callNumber ?? none}</td>
-                    <td>{r.barcode}</td>
-                    <td>
+                    <td data-label={col.callNumber}>{r.callNumber ?? none}</td>
+                    <td data-label={col.barcode}>{r.barcode}</td>
+                    <td class="availability-status">
                       {r.state === 'loan' && r.dueOn !== null ? (
                         <span class="status status-warn">{opacText(locale, 'detail.on_loan', { date: formatDate(locale, Date.parse(`${r.dueOn}T00:00:00Z`), 'UTC') })}</span>
                       ) : r.state === 'held' ? (
