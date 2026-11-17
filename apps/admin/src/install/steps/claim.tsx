@@ -109,7 +109,7 @@ export function ClaimStep({ onClaimed, cookieLost = false }: { onClaimed(): void
             spellCheck={false}
             placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX"
             aria-describedby="install-code-hint"
-            className="font-mono tracking-wider"
+            className="font-mono sm:tracking-wider"
           />
         </Field>
         {problem}
