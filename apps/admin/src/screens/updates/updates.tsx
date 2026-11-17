@@ -15,7 +15,7 @@ import { useEffect, useId, useState, type ReactNode } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useDateTime } from '@/components/data-table';
 import { Field, Notice, ProblemAlert, RefetchProblem, SELECT_CLASS } from '@/components/form-field';
-import { Callout, ErrorState, LoadingState, PageHead } from '@/components/layout';
+import { Callout, ErrorState, LoadingState, PageHead, SideSection } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT, type AdminKey, type TKey, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
@@ -24,7 +24,7 @@ import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { page } from '@/lib/page';
 import { invalidateRealtimeKeys, useRealtime } from '@/lib/realtime';
-import { SettingsSection } from '@/screens/settings/library';
+
 import { UPDATES_HISTORY_KEY, UpdateHistory } from './history';
 import { PackageUploadPanel, PrecheckList, RefusalAlert, failureText, useReleaseDay } from './upload';
 
@@ -233,7 +233,7 @@ function ChannelForm({ channel, onChanged }: { channel: UpdateChannel; onChanged
 function CurrentSection({ view, canRun, onChanged }: { view: UpdatesView; canRun: boolean; onChanged(): void }) {
   const t = useT();
   return (
-    <SettingsSection title={t('updates.current.title')}>
+    <SideSection title={t('updates.current.title')}>
       <dl className="flex flex-col gap-3">
         <Row label={t('updates.current.version')}>
           <span translate="no" className="font-mono">
@@ -252,7 +252,7 @@ function CurrentSection({ view, canRun, onChanged }: { view: UpdatesView; canRun
         {!canRun && <Row label={t('updates.channel')}>{t(CHANNEL_LABEL[view.channel])}</Row>}
       </dl>
       {canRun && <ChannelForm channel={view.channel} onChanged={onChanged} />}
-    </SettingsSection>
+    </SideSection>
   );
 }
 
@@ -350,7 +350,7 @@ function ReleaseSection({ view, canRun, onRead }: { view: UpdatesView; canRun: b
   const applyEnabled = precheck !== null && precheck.ok && !isLive(view.op) && !applying;
 
   return (
-    <SettingsSection title={t('updates.check.title')}>
+    <SideSection title={t('updates.check.title')}>
       <div className="flex flex-col gap-2">
         <CheckStatus view={view} checking={checkingFrom !== null} />
         {view.onlineCheck && (
@@ -398,7 +398,7 @@ function ReleaseSection({ view, canRun, onRead }: { view: UpdatesView; canRun: b
       )}
 
       {view.dockerPull && <DockerPull only={!view.oneClick} />}
-    </SettingsSection>
+    </SideSection>
   );
 }
 
@@ -424,7 +424,7 @@ function RollbackSection({ view, onRead }: { view: UpdatesView; onRead(): void }
   };
 
   return (
-    <SettingsSection title={t('updates.rollback.title')}>
+    <SideSection title={t('updates.rollback.title')}>
       {target !== null && rollback.reason !== 'image' && <p className="text-sm">{t('updates.rollback.body', { version: target })}</p>}
       {reason !== null && (
         <p id={reasonId} className="text-sm text-muted-foreground">
@@ -452,7 +452,7 @@ function RollbackSection({ view, onRead }: { view: UpdatesView; onRead(): void }
           onClose={() => setConfirming(false)}
         />
       )}
-    </SettingsSection>
+    </SideSection>
   );
 }
 

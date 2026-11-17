@@ -3,12 +3,11 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
 import { useMemo, type ReactNode } from 'react';
 import { DataTable, useDateTime } from '@/components/data-table';
-import { ErrorState, SkeletonTable, Tag, type TagTone } from '@/components/layout';
+import { ErrorState, SideSection, SkeletonTable, Tag, type TagTone } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT, type Translate } from '@/i18n';
 import { api } from '@/lib/api';
 import { useMe } from '@/lib/me';
-import { SettingsSection } from '@/screens/settings/library';
 
 /**
  * "Riwayat" of Pembaruan (spec §13.3, §9.6 step 7 "catat di `releases_log`"; 1d Task 30): `GET updates/history`, the
@@ -141,7 +140,7 @@ export function UpdateHistory() {
   }
 
   return (
-    <SettingsSection title={t('updates.history.title')}>
+    <SideSection title={t('updates.history.title')}>
       {content}
       {history.hasNextPage && (
         <div>
@@ -150,6 +149,6 @@ export function UpdateHistory() {
           </Button>
         </div>
       )}
-    </SettingsSection>
+    </SideSection>
   );
 }

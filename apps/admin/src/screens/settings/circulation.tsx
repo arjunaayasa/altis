@@ -8,12 +8,13 @@ import {
 } from '@altis/shared/api/settings';
 import { useQueryClient } from '@tanstack/react-query';
 import { useId, useState, type FormEvent } from 'react';
+import { SideSection } from '@/components/layout';
 import { Field, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
 import { Input } from '@/components/ui/input';
 import { useT, type TKey } from '@/i18n';
 import { ApiError } from '@/lib/api';
 import { useDirtyGuard } from '@/lib/dirty-forms';
-import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, saveSettings, type SaveOutcome } from './library';
+import { SettingsFooter, SettingsLoader, SettingsPage, saveSettings, type SaveOutcome } from './library';
 // ---- Komunitas (charges and payments) ----
 import { FinesSettingsForm, HoldsSettingsForm } from './charges';
 // ---- Komunitas (notices) ----
@@ -100,7 +101,7 @@ function CirculationForm({ initial, canManage }: { initial: CirculationSettingsV
   };
 
   return (
-    <SettingsSection title={t('circulation.settings.desk_title')} description={t('circulation.settings.desk_intro')}>
+    <SideSection title={t('circulation.settings.desk_title')} intro={t('circulation.settings.desk_intro')}>
       <form noValidate className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => void submit(e)}>
         <Field label={t('circulation.settings.void_minutes')} hint={t('circulation.settings.void_minutes_hint')} error={errors.minutes}>
           {(c) => <Input {...c} inputMode="numeric" value={minutes} disabled={!canManage} onChange={(e) => setMinutes(e.target.value)} />}
@@ -116,7 +117,7 @@ function CirculationForm({ initial, canManage }: { initial: CirculationSettingsV
           <SettingsFooter canManage={canManage} busy={busy} outcome={outcome} problem={problem} rootError={undefined} />
         </div>
       </form>
-    </SettingsSection>
+    </SideSection>
   );
 }
 
@@ -167,7 +168,7 @@ function ClearanceForm({ initial, canManage }: { initial: MembersSettingsView; c
   };
 
   return (
-    <SettingsSection title={t('circulation.settings.clearance_title')} description={t('circulation.settings.clearance_intro')}>
+    <SideSection title={t('circulation.settings.clearance_title')} intro={t('circulation.settings.clearance_intro')}>
       <form noValidate className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => void submit(e)}>
         <fieldset disabled={!canManage} className="contents">
           <Field label={t('circulation.settings.prefix')} hint={t('circulation.settings.prefix_hint')} error={prefixError}>
@@ -196,7 +197,7 @@ function ClearanceForm({ initial, canManage }: { initial: MembersSettingsView; c
           <SettingsFooter canManage={canManage} busy={busy} outcome={outcome} problem={problem} rootError={undefined} />
         </div>
       </form>
-    </SettingsSection>
+    </SideSection>
   );
 }
 

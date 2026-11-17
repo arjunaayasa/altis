@@ -220,7 +220,7 @@ export function SchedulesScreen() {
 
   return (
     <div className="grid gap-6">
-      <JobsHeader current="schedules" description={t('jobs.schedules.description')} />
+      <JobsHeader description={t('jobs.schedules.description')} />
       {!manage && <NoticeAlert>{t('jobs.schedules.read_only')}</NoticeAlert>}
       {outcome !== null && <Notice kind={outcome.kind}>{outcome.text}</Notice>}
       <RefetchProblem query={list} />

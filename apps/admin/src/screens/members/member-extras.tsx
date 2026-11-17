@@ -5,7 +5,7 @@ import type { MemberView } from '@altis/shared/api/members';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Field, Notice, ProblemAlert } from '@/components/form-field';
-import { InlinePanel, MemberPhoto } from '@/components/layout';
+import { InlinePanel, MemberPhoto, SideSection } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -339,43 +339,37 @@ export function MemberPrivacyPanel({ member, onDone }: { member: MemberView; onD
   };
 
   return (
-    <section className="grid gap-x-8 gap-y-3 border-t pt-5 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1fr)]" aria-label={t('members.tools.privacy.title')}>
-      <div className="grid content-start gap-1">
-        <h2 className="text-base font-bold">{t('members.tools.privacy.title')}</h2>
-        <p className="text-sm text-muted-foreground">{t('members.tools.privacy.intro')}</p>
+    <SideSection title={t('members.tools.privacy.title')} intro={t('members.tools.privacy.intro')}>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" onClick={() => void download()}>
+          {t('members.tools.privacy.export')}
+        </Button>
+        <Button size="sm" variant="outline" className="text-bad" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          {t('members.tools.privacy.anonymize')}
+        </Button>
       </div>
-      <div className="grid content-start gap-3">
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={() => void download()}>
-            {t('members.tools.privacy.export')}
-          </Button>
-          <Button size="sm" variant="outline" className="text-bad" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-            {t('members.tools.privacy.anonymize')}
-          </Button>
-        </div>
-        {!open && <ProblemAlert error={problem} />}
-        {open && (
-          <InlinePanel
-            title={t('members.tools.privacy.anonymize_title', { name: member.name })}
-            onSubmit={(e) => void anonymize(e)}
-            onCancel={busy ? undefined : () => setOpen(false)}>
-            <p className="-mt-1.5 max-w-[75ch] text-sm text-muted-foreground">{t('members.tools.privacy.anonymize_intro')}</p>
-            <Field label={t('members.tools.privacy.confirm_no', { no: member.memberNo })} className="max-w-md">
-              {(c) => <Input {...c} autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)} />}
-            </Field>
-            <ProblemAlert error={problem} />
-            <div className="flex flex-wrap gap-2">
-              <Button type="submit" size="sm" variant="destructive" disabled={busy || typed.trim() === ''}>
-                {t('members.tools.privacy.anonymize_submit')}
-              </Button>
-              <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setOpen(false)}>
-                {t('form.cancel')}
-              </Button>
-            </div>
-          </InlinePanel>
-        )}
-      </div>
-    </section>
+      {!open && <ProblemAlert error={problem} />}
+      {open && (
+        <InlinePanel
+          title={t('members.tools.privacy.anonymize_title', { name: member.name })}
+          onSubmit={(e) => void anonymize(e)}
+          onCancel={busy ? undefined : () => setOpen(false)}>
+          <p className="-mt-1.5 max-w-[75ch] text-sm text-muted-foreground">{t('members.tools.privacy.anonymize_intro')}</p>
+          <Field label={t('members.tools.privacy.confirm_no', { no: member.memberNo })} className="max-w-md">
+            {(c) => <Input {...c} autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)} />}
+          </Field>
+          <ProblemAlert error={problem} />
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" size="sm" variant="destructive" disabled={busy || typed.trim() === ''}>
+              {t('members.tools.privacy.anonymize_submit')}
+            </Button>
+            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setOpen(false)}>
+              {t('form.cancel')}
+            </Button>
+          </div>
+        </InlinePanel>
+      )}
+    </SideSection>
   );
 }
 
@@ -418,13 +412,8 @@ export function MemberCustomPanel({ member, canManage, onDone }: { member: Membe
   };
 
   return (
-    <form
-      noValidate
-      onSubmit={(e) => void save(e)}
-      aria-label={t('catalog.records.section.custom')}
-      className="grid gap-x-8 gap-y-3 border-t pt-5 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1fr)]">
-      <h2 className="text-base font-bold">{t('catalog.records.section.custom')}</h2>
-      <div className="grid min-w-0 content-start gap-4">
+    <SideSection title={t('catalog.records.section.custom')}>
+      <form noValidate onSubmit={(e) => void save(e)} aria-label={t('catalog.records.section.custom')} className="grid min-w-0 content-start gap-4">
         <CustomFieldInputs defs={defs} values={values} disabled={!canManage} onChange={(code, value) => setValues((prev) => ({ ...prev, [code]: value }))} />
         <ProblemAlert error={problem} />
         {canManage && (
@@ -434,7 +423,7 @@ export function MemberCustomPanel({ member, canManage, onDone }: { member: Membe
             </Button>
           </div>
         )}
-      </div>
-    </form>
+      </form>
+    </SideSection>
   );
 }

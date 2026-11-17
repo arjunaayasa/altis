@@ -5,13 +5,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { SideSection } from '@/components/layout';
 import { Field, TEXTAREA_CLASS } from '@/components/form-field';
 import { Input } from '@/components/ui/input';
 import { translate, useT, type AdminKey } from '@/i18n';
 import { useDirtyGuard } from '@/lib/dirty-forms';
 import { FORM_PARSE, applyServerErrors, hasFieldErrors } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
-import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, blankToNull, saveSettings, type SaveOutcome } from './library';
+import { SettingsFooter, SettingsLoader, SettingsPage, blankToNull, saveSettings, type SaveOutcome } from './library';
 
 /**
  * Pengaturan → E-mail (spec §13.3 "nama pengirim + templat e-mail"; `PUT settings/email`): the sender's display name
@@ -114,7 +115,7 @@ function EmailSettingsForm({ initial, canManage }: { initial: EmailSettings; can
   const resetErrors = errors.templates?.passwordReset;
   return (
     <form noValidate className="flex flex-col gap-6" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
-      <SettingsSection title={t('settings.tab.email')} description={t('settings.email.description')}>
+      <SideSection title={t('settings.tab.email')} intro={t('settings.email.description')}>
         <Field label={t('settings.email.sender_name')} hint={t('settings.email.sender_name_hint')} error={errors.senderName} className="max-w-md">
           {(c) => (
             <Input
@@ -127,8 +128,8 @@ function EmailSettingsForm({ initial, canManage }: { initial: EmailSettings; can
             />
           )}
         </Field>
-      </SettingsSection>
-      <SettingsSection title={t('settings.email.reset_title')} description={t('settings.email.reset_description')}>
+      </SideSection>
+      <SideSection title={t('settings.email.reset_title')} intro={t('settings.email.reset_description')}>
         <p className="text-sm text-muted-foreground">
           {t('settings.email.placeholders', { placeholders: RESET_PLACEHOLDERS })}
         </p>
@@ -162,7 +163,7 @@ function EmailSettingsForm({ initial, canManage }: { initial: EmailSettings; can
             </Field>
           </fieldset>
         ))}
-      </SettingsSection>
+      </SideSection>
       <SettingsFooter canManage={canManage} busy={isSubmitting} outcome={outcome} problem={problem} rootError={errors.root?.['server']?.message} />
     </form>
   );

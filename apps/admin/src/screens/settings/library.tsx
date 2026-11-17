@@ -10,12 +10,11 @@ import {
 } from '@altis/shared/api/settings';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
 import { useId, useMemo, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Field, NoticeAlert, ProblemAlert, RefetchProblem, RootError, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
-import { ErrorState, FORM_FULL, FormBar, LoadingState, PageHead } from '@/components/layout';
+import { ErrorState, FORM_FULL, FormBar, LinkTabs, LoadingState, PageHead, SideSection } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type AdminKey } from '@/i18n';
@@ -67,46 +66,10 @@ export function SettingsPage({ children }: { children: ReactNode }) {
     <div className="grid max-w-5xl gap-6">
       <div className="grid gap-4">
         <PageHead title={t('nav.settings')} intro={t('settings.intro')} />
-        <nav aria-label={t('settings.sections')}>
-          <ul className="flex flex-wrap gap-x-1 border-b">
-            {SECTIONS.map((section) => (
-              <li key={section.to}>
-                <Link
-                  to={section.to}
-                  activeOptions={{ exact: true }}
-                  className="-mb-px block border-b-2 border-transparent px-2.5 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-foreground"
-                >
-                  {t(section.labelKey)}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
+        <LinkTabs label={t('settings.sections')} items={SECTIONS.map((section) => ({ to: section.to, label: t(section.labelKey) }))} />
       </div>
       <div className="grid min-w-0 gap-6">{children}</div>
     </div>
-  );
-}
-
-/**
- * A titled part of a settings page, laid out like a form section: its title and a sentence on the left (above on a
- * narrow screen), its form or list on the right; a thin rule between two parts. Never a card.
- */
-export function SettingsSection({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
-  const id = useId();
-  return (
-    <section
-      aria-labelledby={id}
-      className="grid min-w-0 gap-x-8 gap-y-4 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1fr)] [*+&]:border-t [*+&]:pt-6"
-    >
-      <header className="grid content-start gap-1">
-        <h2 id={id} className="text-base font-bold">
-          {title}
-        </h2>
-        {description !== undefined && <p className="text-sm text-muted-foreground">{description}</p>}
-      </header>
-      <div className="grid min-w-0 content-start gap-4">{children}</div>
-    </section>
   );
 }
 
@@ -296,7 +259,7 @@ function LibrarySettingsForm({ initial, canManage }: { initial: LibrarySettings;
   });
 
   return (
-    <SettingsSection title={t('settings.tab.library')} description={t('settings.library.description')}>
+    <SideSection title={t('settings.tab.library')} intro={t('settings.library.description')}>
       <form noValidate className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
         <Field label={t('settings.library.name')} error={errors.name} className={FORM_FULL}>
           {(c) => <Input {...c} autoComplete="organization" maxLength={191} {...form.register('name')} disabled={readOnly} />}
@@ -349,7 +312,7 @@ function LibrarySettingsForm({ initial, canManage }: { initial: LibrarySettings;
           />
         </div>
       </form>
-    </SettingsSection>
+    </SideSection>
   );
 }
 

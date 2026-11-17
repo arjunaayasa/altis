@@ -208,7 +208,7 @@ export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?:
           <a
             href={`/api/v1/catalog/runs/${encodeURIComponent(run.id)}/report`}
             download
-            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}>
             {t('catalog.migration.report.download')}
           </a>
         )}

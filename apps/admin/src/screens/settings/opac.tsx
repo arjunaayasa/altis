@@ -6,12 +6,12 @@ import { useState } from 'react';
 import { useForm, useWatch, type Control } from 'react-hook-form';
 import { z } from 'zod';
 import { CheckField, Field, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
-import { Callout } from '@/components/layout';
+import { Callout, SideSection } from '@/components/layout';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
 import { useDirtyGuard } from '@/lib/dirty-forms';
 import { FORM_PARSE, applyServerErrors, hasFieldErrors } from '@/lib/form-errors';
-import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, blankToNull, saveSettings, wholeNumberIn, type SaveOutcome } from './library';
+import { SettingsFooter, SettingsLoader, SettingsPage, blankToNull, saveSettings, wholeNumberIn, type SaveOutcome } from './library';
 
 /**
  * Pengaturan → Tampilan OPAC (spec §13.3 "penampilan OPAC"; `PUT settings/opac`): the welcome text of the OPAC home
@@ -124,7 +124,7 @@ function OpacSettingsForm({ initial, canManage }: { initial: OpacSettings; canMa
   });
 
   return (
-    <SettingsSection title={t('settings.tab.opac')} description={t('settings.opac.description')}>
+    <SideSection title={t('settings.tab.opac')} intro={t('settings.opac.description')}>
       <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
         <Field label={t('settings.opac.accent')} hint={t('settings.opac.accent_hint')} error={errors.accent} className="max-w-xs">
           {(c) => (
@@ -227,7 +227,7 @@ function OpacSettingsForm({ initial, canManage }: { initial: OpacSettings; canMa
         </fieldset>
         <SettingsFooter canManage={canManage} busy={isSubmitting} outcome={outcome} problem={problem} rootError={errors.root?.['server']?.message} />
       </form>
-    </SettingsSection>
+    </SideSection>
   );
 }
 

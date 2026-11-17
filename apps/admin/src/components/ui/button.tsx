@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 
 // Adapted from shadcn/ui (new-york-v4, MIT: LICENSE-shadcn-ui.txt; see README.md in this folder).
 
-const buttonVariants = cva(
+const variants = cva(
   'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-transparent text-sm leading-none font-semibold whitespace-nowrap transition-colors duration-150 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
@@ -29,15 +29,23 @@ const buttonVariants = cva(
   },
 );
 
+/**
+ * The classes of a button of `variant` and `size`, merged so that the variant's border and colours win over the base's
+ * (`border-input` over `border-transparent`): also right on a link drawn as a button by hand (`<a className={…}>`).
+ */
+function buttonVariants(props?: Parameters<typeof variants>[0]): string {
+  return cn(variants(props));
+}
+
 function Button({
   className,
   variant,
   size,
   asChild = false,
   ...props
-}: ComponentProps<'button'> & VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
+}: ComponentProps<'button'> & VariantProps<typeof variants> & { asChild?: boolean }) {
   const Comp = asChild ? Slot.Root : 'button';
-  return <Comp data-slot="button" className={cn(buttonVariants({ variant, size, className }))} {...props} />;
+  return <Comp data-slot="button" className={buttonVariants({ variant, size, className })} {...props} />;
 }
 
 export { Button, buttonVariants };

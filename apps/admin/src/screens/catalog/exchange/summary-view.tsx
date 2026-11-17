@@ -287,7 +287,7 @@ function RunFiles({ run }: { run: RunView }) {
   const links: ReactNode[] = [];
   if (run.reportFileId !== null) {
     links.push(
-      <a key="report" href={reportHref(run.id)} download className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
+      <a key="report" href={reportHref(run.id)} download className={buttonVariants({ variant: 'outline', size: 'sm' })}>
         {t('catalog.exchange.file.report')}
       </a>,
     );
@@ -298,7 +298,7 @@ function RunFiles({ run }: { run: RunView }) {
   const available = exported && run.outputName !== null;
   if (available && holds(me, 'catalog.export.run')) {
     links.push(
-      <a key="download" href={downloadHref(run.id)} download className={cn(buttonVariants({ size: 'sm' }))}>
+      <a key="download" href={downloadHref(run.id)} download className={buttonVariants({ size: 'sm' })}>
         {t('catalog.exchange.file.download')}
       </a>,
     );

@@ -8,7 +8,7 @@ import {
 } from '@altis/shared/api/updates';
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { NoticeAlert, ProblemAlert } from '@/components/form-field';
-import { StatusText } from '@/components/layout';
+import { SideSection, StatusText } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,7 +18,6 @@ import { page } from '@/lib/page';
 import { uploadFile } from '@/lib/upload';
 import { useBytes } from '@/screens/backups/upload';
 import { ProgressBar } from '@/screens/jobs/list';
-import { SettingsSection } from '@/screens/settings/library';
 
 /**
  * The parts of Pembaruan (screens/updates/updates.tsx; spec §13.3, §9.6; 1d Task 30) that both the release the update
@@ -319,7 +318,7 @@ export function PackageUploadPanel({ blocked }: { blocked: boolean }) {
   const progressLabel = progress === null ? '' : t(progress.kind === 'hashing' ? 'updates.upload.hashing' : 'updates.upload.sending');
 
   return (
-    <SettingsSection title={t('updates.upload.title')} description={t('updates.upload.body')}>
+    <SideSection title={t('updates.upload.title')} intro={t('updates.upload.body')}>
       <form noValidate className="grid gap-3" onSubmit={start}>
         <div className="grid max-w-md gap-1.5">
           <Label htmlFor={fileId} className="text-meta">
@@ -402,6 +401,6 @@ export function PackageUploadPanel({ blocked }: { blocked: boolean }) {
           </div>
         </div>
       )}
-    </SettingsSection>
+    </SideSection>
   );
 }
