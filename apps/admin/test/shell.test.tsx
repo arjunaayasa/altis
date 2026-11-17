@@ -472,6 +472,36 @@ describe('navigation and language', () => {
     expect(document.activeElement).toBe(menu);
   });
 
+  it('the open drawer is a modal dialog: the rest of the frame is inert, Escape closes it from anywhere, a change of page closes it', async () => {
+    const { router } = setup(signedIn(), '/admin/anggota');
+    // jsdom knows the attribute, not the property.
+    const inert = (...els: HTMLElement[]): boolean[] => els.map((el) => el.hasAttribute('inert'));
+    const menu = await screen.findByRole('button', { name: 'Menu' });
+    const header = screen.getByRole('banner');
+    const content = document.getElementById('main')!.parentElement!;
+    const skip = screen.getByRole('link', { name: 'Lewati ke konten utama' });
+    expect(inert(header, content, skip)).toEqual([false, false, false]);
+
+    fireEvent.click(menu);
+    const drawer = screen.getByRole('dialog', { name: 'Menu' });
+    expect(drawer.getAttribute('aria-modal')).toBe('true');
+    expect(drawer.id).toBe('altis-sidebar');
+    expect(inert(header, content, skip)).toEqual([true, true, true]);
+    // The focus somewhere else (a click on the page under the scrim): Escape still closes it.
+    act(() => (document.activeElement as HTMLElement).blur());
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).toBeNull();
+    expect(inert(header, content, skip)).toEqual([false, false, false]);
+    expect(document.activeElement).toBe(menu);
+
+    // Open again, then the page changes by other means (the command palette, a link in a notification): it closes.
+    fireEvent.click(menu);
+    expect(menu.getAttribute('aria-expanded')).toBe('true');
+    await act(() => router.navigate({ to: '/admin/profile' }));
+    expect(menu.getAttribute('aria-expanded')).toBe('false');
+    expect(inert(header)).toEqual([false]);
+  });
+
   it("the user's own language wins over the library's", async () => {
     setup(signedIn({ locale: 'en' }));
     expect(await screen.findByText('Welcome, Ani.')).toBeTruthy();
