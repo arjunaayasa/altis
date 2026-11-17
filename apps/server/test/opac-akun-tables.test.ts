@@ -149,6 +149,8 @@ describe('the member area tables stack into cards on a phone', () => {
     expect(id).toContain('Terlambat 3 hari</span>');
     expect(id).toContain('Terlambat 2 hari</span>');
     expect(id.match(/Denda berjalan/g)).toHaveLength(2);
+    // The date, the days late and the running fine are told apart as the history does: " · " between them.
+    expect(id).toMatch(/8 November 2026 · <span class="status status-warn">Terlambat 3 hari<\/span> · <span>Denda berjalan Rp\s?1\.500<\/span>/);
     const en = render(OpenLoans, { locale: 'en', keep: (p: string) => p, csrf: 'token', loans, canRenew: false });
     expect(en).toContain('10 days late (8 days fined)');
     const history = render(HistoryView, { locale: 'en', keep: (p: string) => p, loans: { rows: [loan('L4', { returnedOn: '2026-11-18', outcome: 'returned', daysLate: 10, finedDays: 8 })], total: 1, page: 1, pages: 1 } });
