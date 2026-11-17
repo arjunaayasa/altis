@@ -81,7 +81,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
       <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="text-sm font-medium break-words">{children}</dd>
+      <dd className="text-sm font-semibold break-words">{children}</dd>
     </div>
   );
 }
@@ -95,7 +95,7 @@ function When({ ms }: { ms: number }) {
 /** The link at the bottom of a block. */
 function BlockLink({ to, children }: { to: string; children: ReactNode }) {
   return (
-    <Link to={to} className="mt-auto self-start text-sm text-primary underline-offset-4 hover:underline">
+    <Link to={to} className="mt-auto w-fit text-sm font-semibold text-accent-text underline-offset-4 hover:underline">
       {children}
     </Link>
   );
@@ -206,7 +206,7 @@ function RuntimeBlock({ report }: BlockProps) {
         <Row label={t('diagnostics.runtime.runner')}>{t(`dashboard.scheduler.mode.${runtime.runner.mode}`)}</Row>
       </dl>
       <div className="flex flex-col gap-1">
-        <h3 className="text-sm font-medium">{t('diagnostics.runtime.last_runs')}</h3>
+        <h3 className="text-sm font-semibold">{t('diagnostics.runtime.last_runs')}</h3>
         {runs.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('diagnostics.never')}</p>
         ) : (
@@ -637,7 +637,7 @@ function OaiBlock({ report }: BlockProps) {
         <BlockWarning>
           <p>{t('alert.oai_misconfigured')}</p>
           {holds(me, 'system.settings.read') && (
-            <Link to="/admin/settings/opac" className="self-start font-medium underline underline-offset-4">
+            <Link to="/admin/settings/opac" className="w-fit font-semibold text-accent-text underline underline-offset-4">
               {t('catalog.settings.oai_status.open_settings')}
             </Link>
           )}
@@ -692,7 +692,7 @@ function StocktakeBlock({ report }: BlockProps) {
             </BlockWarning>
           )}
           {holds(me, 'system.jobs.read') && s.job !== null && (
-            <Link to="/admin/jobs/$jobId" params={{ jobId: s.job.id }} className="self-start text-sm text-primary underline-offset-4 hover:underline">
+            <Link to="/admin/jobs/$jobId" params={{ jobId: s.job.id }} className="w-fit text-sm font-semibold text-accent-text underline-offset-4 hover:underline">
               {t('diagnostics.queue.open')}
             </Link>
           )}

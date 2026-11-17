@@ -99,7 +99,7 @@ export function ProfileScreen() {
       <ProfileSection title={t('profile.account')} description={t('profile.account_hint')}>
         <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]">
           <dt className="text-muted-foreground">{t('profile.username')}</dt>
-          <dd className="font-medium break-all">{user.username}</dd>
+          <dd className="font-semibold break-all">{user.username}</dd>
           <dt className="text-muted-foreground">{t('profile.email')}</dt>
           <dd className="break-all">{user.email ?? t('profile.email_none')}</dd>
         </dl>

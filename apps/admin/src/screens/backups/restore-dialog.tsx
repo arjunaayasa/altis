@@ -60,7 +60,7 @@ function Fact({ label, children }: { label: string; children: string }) {
   return (
     <div className="flex flex-wrap justify-between gap-x-4 gap-y-1">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium">{children}</dd>
+      <dd className="font-semibold">{children}</dd>
     </div>
   );
 }

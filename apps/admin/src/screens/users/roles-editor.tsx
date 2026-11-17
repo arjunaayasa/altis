@@ -141,7 +141,7 @@ export function RolesEditor({ user, canManage, isSelf }: { user: UserDetail; can
             const verdict = role === undefined ? 'not_held' : assignable(me, role);
             return (
               <li key={pairOf(a)} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
-                <span className="min-w-0 font-medium [overflow-wrap:anywhere]">{name}</span>
+                <span className="min-w-0 font-semibold [overflow-wrap:anywhere]">{name}</span>
                 {/* A branch name can be long ("… (diarsipkan)" too): it wraps inside the badge on a 375 px phone. */}
                 <Badge tone="neutral" className="min-w-0 whitespace-normal [overflow-wrap:anywhere]">
                   {where}

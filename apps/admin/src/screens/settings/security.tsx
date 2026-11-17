@@ -190,7 +190,7 @@ function RoleMfaList() {
           if (!canManage) {
             return (
               <li key={role.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2 text-sm">
-                <span className="font-medium">{name}</span>
+                <span className="font-semibold">{name}</span>
                 <span className="text-muted-foreground">
                   {t('roles.mfa_status', { value: t(role.mfaRequired ? 'form.yes' : 'form.no') })} · {holders}
                 </span>

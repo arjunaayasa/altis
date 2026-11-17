@@ -271,7 +271,7 @@ function CatalogSettingsForm({ initial, canManage }: { initial: CatalogSettings;
             {...form.register('sru.allowPrivateHosts')}
             disabled={readOnly || !superAdmin}
           />
-          {!superAdmin && <p className="pl-6 text-xs font-medium text-muted-foreground">{t('catalog.settings.sru.allow_private_super_only')}</p>}
+          {!superAdmin && <p className="pl-6 text-xs font-semibold text-muted-foreground">{t('catalog.settings.sru.allow_private_super_only')}</p>}
         </div>
       </SettingsSection>
 

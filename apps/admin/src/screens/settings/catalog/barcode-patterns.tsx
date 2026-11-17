@@ -79,11 +79,11 @@ export function BarcodePatternsEditor({ form, readOnly }: { form: UseFormReturn<
 
   return (
     <fieldset className="grid min-w-0 gap-3" aria-describedby={`${baseId}-hint`}>
-      <legend className="mb-1 text-sm font-medium">{t('catalog.settings.patterns.legend')}</legend>
+      <legend className="mb-1 text-sm font-semibold">{t('catalog.settings.patterns.legend')}</legend>
       <p id={`${baseId}-hint`} className="text-xs text-muted-foreground">
         {t('catalog.settings.patterns.hint')} {t('catalog.settings.code_locked')}
       </p>
-      <div aria-hidden="true" className="hidden grid-cols-[7rem_minmax(0,1fr)_5rem_4.5rem_5rem_7rem_4.5rem] gap-2 text-xs font-medium text-muted-foreground md:grid">
+      <div aria-hidden="true" className="hidden grid-cols-[7rem_minmax(0,1fr)_5rem_4.5rem_5rem_7rem_4.5rem] gap-2 text-xs font-semibold text-muted-foreground md:grid">
         <span>{t('catalog.settings.patterns.col.id')}</span>
         <span>{t('catalog.settings.patterns.col.name')}</span>
         <span>{t('catalog.settings.patterns.col.prefix')}</span>
