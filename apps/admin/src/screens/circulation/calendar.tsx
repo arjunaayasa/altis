@@ -2,16 +2,15 @@ import type { CalendarKind } from '@altis/shared';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import { CalendarBody, type CalendarResponse, type CalendarRuleView } from '@altis/shared/api/circulation';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { useId, useMemo, useState, type FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Field, Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { DenseTable, ErrorState, PageHead, Section, SectionHead, SkeletonTable, TABLE, type DenseColumn } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT, type TKey } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
-import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { cn } from '@/lib/utils';
 import { todayLocal, useCalendarDate } from './common';
@@ -136,20 +135,35 @@ export function CalendarScreen() {
   const closed = new Set(query.data?.closed ?? []);
   const rules = query.data?.rules ?? [];
 
+  const columns: DenseColumn<CalendarRuleView>[] = [
+    { id: 'kind', header: t('circulation.calendar.col.kind'), cell: (r) => t(`vocab.calendar_kind.${r.kind}`) },
+    { id: 'name', header: t('circulation.calendar.col.name'), cell: (r) => <span className="font-semibold">{r.name}</span> },
+    { id: 'days', header: t('circulation.calendar.col.days'), cell: (r) => ruleDays(r) },
+    ...(canManage
+      ? [
+          {
+            id: 'actions',
+            header: <span className="sr-only">{t('table.actions')}</span>,
+            className: 'w-px py-1.5 text-right whitespace-nowrap',
+            cell: (r: CalendarRuleView) => (
+              <Button variant="ghost" size="sm" aria-label={t('circulation.calendar.remove_named', { name: r.name })} onClick={() => setRemoving(r)}>
+                {t('circulation.calendar.remove')}
+              </Button>
+            ),
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
-      <div className="grid gap-1">
-        <h1 className="text-2xl font-semibold">{t('nav.circulation.calendar')}</h1>
-        <p className="text-sm text-muted-foreground">{t('circulation.calendar.intro')}</p>
-      </div>
+    <div className="grid max-w-5xl gap-6">
+      <PageHead title={t('nav.circulation.calendar')} intro={t('circulation.calendar.intro')} />
       {notice !== null && <Notice kind="success">{notice}</Notice>}
 
       {canManage && (
-        <form noValidate onSubmit={(e) => void add(e)} aria-labelledby={`${ids}-add`} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-          <h2 id={`${ids}-add`} className="text-lg font-semibold">
-            {t('circulation.calendar.add')}
-          </h2>
-          <div className="grid gap-3 sm:grid-cols-2">
+        <form noValidate onSubmit={(e) => void add(e)} aria-labelledby={`${ids}-add`} className="grid gap-4">
+          <SectionHead id={`${ids}-add`} title={t('circulation.calendar.add')} />
+          <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
             <Field id={`${ids}-kind`} label={t('circulation.calendar.field.kind')}>
               <select id={`${ids}-kind`} className={SELECT_CLASS} value={kind} onChange={(e) => setKind(e.target.value as CalendarKind)}>
                 {KINDS.map((k) => (
@@ -195,7 +209,7 @@ export function CalendarScreen() {
             )}
           </div>
           <ProblemAlert error={problem} />
-          <div>
+          <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={busy}>
               {t('circulation.calendar.add_button')}
             </Button>
@@ -203,53 +217,15 @@ export function CalendarScreen() {
         </form>
       )}
 
-      {query.isError && query.data === undefined ? (
-        <Notice kind="error">{problemText(t, query.error)}</Notice>
-      ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-sm">
-            <caption className="sr-only">{t('circulation.calendar.caption')}</caption>
-            <thead className="bg-muted/50 text-left">
-              <tr>
-                {(['circulation.calendar.col.kind', 'circulation.calendar.col.name', 'circulation.calendar.col.days'] as const).map((key) => (
-                  <th key={key} scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                    {t(key)}
-                  </th>
-                ))}
-                {canManage && (
-                  <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                    {t('table.actions')}
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {rules.length === 0 ? (
-                <tr>
-                  <td colSpan={canManage ? 4 : 3} className="px-3 py-6 text-center text-muted-foreground">
-                    {query.data === undefined ? t('shell.loading') : t('circulation.calendar.empty')}
-                  </td>
-                </tr>
-              ) : (
-                rules.map((r) => (
-                  <tr key={r.id} className="border-t">
-                    <td className="px-3 py-2">{t(`vocab.calendar_kind.${r.kind}`)}</td>
-                    <td className="px-3 py-2 font-medium">{r.name}</td>
-                    <td className="px-3 py-2">{ruleDays(r)}</td>
-                    {canManage && (
-                      <td className="px-3 py-2">
-                        <Button variant="outline" size="sm" aria-label={t('circulation.calendar.remove_named', { name: r.name })} onClick={() => setRemoving(r)}>
-                          {t('circulation.calendar.remove')}
-                        </Button>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <Section title={t('circulation.calendar.caption')}>
+        {query.isError && query.data === undefined ? (
+          <ErrorState error={query.error} onRetry={() => void query.refetch()} retrying={query.isFetching} />
+        ) : query.data === undefined ? (
+          <SkeletonTable label={t('shell.loading')} columns={canManage ? 4 : 3} rows={3} />
+        ) : (
+          <DenseTable caption={t('circulation.calendar.caption')} columns={columns} rows={rules} rowKey={(r) => r.id} empty={t('circulation.calendar.empty')} />
+        )}
+      </Section>
 
       <MonthView month={month} closed={closed} weekdays={weekdays} onMonth={setMonth} />
 
@@ -295,50 +271,62 @@ function MonthView({ month, closed, weekdays, onMonth }: { month: string; closed
   while (cells.length % 7 !== 0) cells.push(null);
   const weeks = Array.from({ length: cells.length / 7 }, (_, w) => cells.slice(w * 7, w * 7 + 7));
   return (
-    <section aria-labelledby={`${ids}-title`} className="flex flex-col gap-2 rounded-lg border bg-card p-4">
-      <div className="flex items-center justify-between gap-2">
-        <h2 id={`${ids}-title`} className="text-lg font-semibold">
-          {title}
-        </h2>
-        <div className="flex gap-1">
-          <Button variant="outline" size="sm" aria-label={t('circulation.calendar.prev')} onClick={() => onMonth(shiftMonth(month, -1))}>
-            <ChevronLeftIcon aria-hidden="true" />
-          </Button>
-          <Button variant="outline" size="sm" aria-label={t('circulation.calendar.next')} onClick={() => onMonth(shiftMonth(month, 1))}>
-            <ChevronRightIcon aria-hidden="true" />
-          </Button>
-        </div>
-      </div>
-      <table className="w-full table-fixed text-center text-sm">
-        <caption className="sr-only">{t('circulation.calendar.month_caption', { month: title })}</caption>
-        <thead>
-          <tr>
-            {weekdays.map((w) => (
-              <th key={w} scope="col" className="py-1 text-xs font-medium text-muted-foreground">
-                {w.slice(0, 3)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {weeks.map((week, w) => (
-            <tr key={w}>
-              {week.map((d, i) => (
-                <td key={d ?? `e${w}-${i}`} className="p-0.5">
-                  {d !== null && (
-                    <span
-                      className={cn('block rounded-md py-1.5 tabular-nums', closed.has(d) ? 'bg-destructive/10 font-semibold text-destructive' : 'text-foreground')}
-                      aria-label={closed.has(d) ? t('circulation.calendar.closed_day', { day: Number(d.slice(8)) }) : undefined}>
-                      {Number(d.slice(8))}
-                    </span>
-                  )}
-                </td>
+    <section aria-labelledby={`${ids}-title`} className="grid gap-3">
+      <SectionHead
+        id={`${ids}-title`}
+        title={title}
+        aside={
+          <>
+            <Button type="button" variant="outline" size="sm" onClick={() => onMonth(shiftMonth(month, -1))}>
+              {t('circulation.calendar.prev')}
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => onMonth(shiftMonth(month, 1))}>
+              {t('circulation.calendar.next')}
+            </Button>
+          </>
+        }
+      />
+      <div className={TABLE.wrap}>
+        <table className="w-full table-fixed border-collapse text-center text-sm tabular-nums">
+          <caption className="sr-only">{t('circulation.calendar.month_caption', { month: title })}</caption>
+          <thead>
+            <tr>
+              {weekdays.map((w) => (
+                <th key={w} scope="col" className={cn(TABLE.th, 'px-1 text-center')}>
+                  <abbr title={w} className="no-underline">
+                    {w.slice(0, 3)}
+                  </abbr>
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="text-xs text-muted-foreground">{t('circulation.calendar.legend')}</p>
+          </thead>
+          <tbody>
+            {weeks.map((week, w) => (
+              <tr key={w}>
+                {week.map((d, i) => (
+                  <td key={d ?? `e${w}-${i}`} className="h-14 border-b p-1 align-top [tr:last-child>&]:border-b-0">
+                    {d !== null &&
+                      (closed.has(d) ? (
+                        <span className="grid h-full content-start gap-0.5 rounded bg-bad-bg py-1 text-bad">
+                          <span aria-hidden="true" className="font-bold">
+                            {Number(d.slice(8))}
+                          </span>
+                          <span aria-hidden="true" className="truncate text-xs font-semibold">
+                            {t('circulation.calendar.closed_short')}
+                          </span>
+                          <span className="sr-only">{t('circulation.calendar.closed_day', { day: Number(d.slice(8)) })}</span>
+                        </span>
+                      ) : (
+                        <span className="block py-1">{Number(d.slice(8))}</span>
+                      ))}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-meta text-muted-foreground">{t('circulation.calendar.legend')}</p>
     </section>
   );
 }
