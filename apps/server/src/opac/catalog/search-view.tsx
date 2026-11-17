@@ -5,6 +5,7 @@ import { FILTER_PARAMS, FacetsAside, HiddenParams, formatCount, type FacetNames 
 import { opacText, type OpacKey } from './messages.js';
 import { ResultCard, type ResultCardData } from './result-card.js';
 import {
+  OPAC_ADVANCED_PATH,
   OPAC_SEARCH_SCOPES,
   OPAC_SEARCH_TEXT_MAX,
   OPAC_SORTS,
@@ -16,9 +17,10 @@ import {
 } from './search-params.js';
 
 // The OPAC search page (Phase 2 Task 33; spec §4.4–§4.7, §9.1), `GET /cari`, inside opacPage's frame: the search box in
-// the header's search band (the field, the text, the filters and the order kept as hidden inputs), the notices (the
-// index being rebuilt, the spelling correction), the heading with the order form, the count ("lebih dari 10.000" past
-// the cap), the results as a list with thin lines between them, the empty state, the page cap message,
+// the header's search band (the field, the text, the filters and the order kept as hidden inputs, then the link to the
+// advanced search with the same search filled in), the notices (the index being rebuilt, the spelling correction), the
+// heading with the order form, the count ("lebih dari 10.000" past the cap, "0 judul" too) with a link that removes
+// every filter when one is set, the results as a list with thin lines between them, the empty state, the page cap message,
 // the pager (at most 50 pages, §4.5), the link to the results' feed, and the facets aside (facets-view.tsx). Every
 // control is a link or a GET form, so all of it works without JavaScript; the page writes no script.
 
@@ -43,6 +45,9 @@ export interface SearchViewProps {
   cards: readonly ResultCardData[];
   masters: SearchMasters;
   names: FacetNames;
+  // ---- Komunitas (OPAC look) ----
+  /** The current year (a due date of this year is written without it). */
+  year: number;
 }
 
 /** The page's title and heading: the query in quotes, or "Pencarian katalog". */
@@ -62,11 +67,15 @@ function sortOf(echo: OpacSearchEcho, text: string): OpacSort {
   return (echo.urut as OpacSort | undefined) ?? (text === '' ? 'terbaru' : 'relevansi');
 }
 
-/** The search box of the results page (the header's search band): the field, the text, the other parameters kept. */
+/**
+ * The search box of the results page (the header's search band): the field, the text, the other parameters kept; then
+ * the link to the advanced search, which opens with this search filled in.
+ */
 export function SearchBox(props: { locale: Locale; lang: Locale | null; echo: OpacSearchEcho; text: string }) {
   const { locale, lang, echo, text } = props;
   const scope = echo.ruas ?? 'semua';
   return (
+    <>
     <form class="search-box search-main" role="search" method="get" action="/cari">
       <label for="cari-q" class="visually-hidden">
         {opacText(locale, 'shell.search.label')}
@@ -87,6 +96,10 @@ export function SearchBox(props: { locale: Locale; lang: Locale | null; echo: Op
       </span>
       <HiddenParams echo={echo} omit={['q', 'persis', 'ruas']} lang={lang} />
     </form>
+    <a class="advanced-link" href={searchPath(echo, { urut: null, persis: null }, lang, OPAC_ADVANCED_PATH)}>
+      {opacText(locale, 'search.advanced.link')}
+    </a>
+    </>
   );
 }
 
@@ -142,9 +155,11 @@ function Count(props: { locale: Locale; result: CatalogSearchResult; page: numbe
   const total = formatCount(result.total, locale);
   const count = result.totalCapped
     ? opacText(locale, 'search.count_capped', { count: total })
-    : result.total === 1
-      ? opacText(locale, 'search.count_one')
-      : opacText(locale, 'search.count', { count: total });
+    : result.total === 0
+      ? opacText(locale, 'search.count_zero')
+      : result.total === 1
+        ? opacText(locale, 'search.count_one')
+        : opacText(locale, 'search.count', { count: total });
   const shown = result.recordIds.length;
   const from = (page - 1) * pageSize + 1;
   return (
@@ -225,6 +240,7 @@ export function SearchView(props: SearchViewProps) {
     <FacetsAside input={facetInput} facets={result.facets} approximate={result.facetsApproximate} sample={FACET_SAMPLE} hasResults={hasResults} />
   );
   const hasFilters = FILTER_PARAMS.some((p) => echo[p] !== undefined);
+  const noFilters = searchPath(echo, Object.fromEntries(FILTER_PARAMS.map((p) => [p, null])), lang);
   return (
     <div class="search-page">
       {result.building ? (
@@ -239,22 +255,28 @@ export function SearchView(props: SearchViewProps) {
             <h1 id="hasil-judul">{searchTitle(locale, text)}</h1>
             {hasResults ? <SortForm locale={locale} lang={lang} echo={echo} text={text} /> : null}
           </div>
-          {hasResults ? (
-            <div class="search-summary">
-              <Count locale={locale} result={result} page={page} pageSize={pageSize} />
-              {/* With results the facets aside is there: on a narrow screen it comes after them. */}
+          {/* The count, also when it is zero; with results the facets aside is there (after them on a narrow screen). */}
+          <div class="search-summary">
+            <Count locale={locale} result={result} page={page} pageSize={pageSize} />
+            {hasResults && hasFilters ? (
+              <a class="filters-remove" href={noFilters}>
+                {opacText(locale, 'search.filters.remove')}
+              </a>
+            ) : null}
+            {hasResults ? (
               <a class="filter-jump" href="#saring">
                 {opacText(locale, 'search.facets.title')}
               </a>
-            </div>
-          ) : (
+            ) : null}
+          </div>
+          {hasResults ? null : (
             <div class="search-empty">
               <p>
                 <strong>{opacText(locale, 'search.empty.title')}</strong>
               </p>
               <p>{opacText(locale, 'search.empty.hint')}</p>
               {hasFilters ? (
-                <a class="empty-clear" href={searchPath(echo, Object.fromEntries(FILTER_PARAMS.map((p) => [p, null])), lang)}>
+                <a class="empty-clear" href={noFilters}>
                   {opacText(locale, 'search.filters.clear')}
                 </a>
               ) : null}
@@ -263,7 +285,7 @@ export function SearchView(props: SearchViewProps) {
           {cards.length === 0 ? null : (
             <ol class="card-list result-list" start={(page - 1) * pageSize + 1}>
               {cards.map((card) => (
-                <ResultCard card={card} materialType={materialType.get(card.materialTypeId) ?? null} locale={locale} lang={lang} />
+                <ResultCard card={card} materialType={materialType.get(card.materialTypeId) ?? null} locale={locale} lang={lang} year={props.year} />
               ))}
             </ol>
           )}

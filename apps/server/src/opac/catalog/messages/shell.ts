@@ -53,6 +53,9 @@ export const SHELL_MESSAGES = defineOpacMessages(
     'shell.footer.search': 'Cari koleksi',
     'shell.footer.search_placeholder': 'Judul, pengarang, subjek',
     'shell.footer.powered': 'Ditenagai ALTIS Community',
+    // ---- Komunitas (OPAC look): the library's public contact ----
+    'shell.contact.phone': 'Telepon',
+    'shell.contact.email': 'E-mail',
   },
   {
     'shell.status.410.title': 'No longer available',
@@ -96,5 +99,7 @@ export const SHELL_MESSAGES = defineOpacMessages(
     'shell.footer.search': 'Search the collection',
     'shell.footer.search_placeholder': 'Title, author, subject',
     'shell.footer.powered': 'Powered by ALTIS Community',
+    'shell.contact.phone': 'Phone',
+    'shell.contact.email': 'Email',
   },
 );

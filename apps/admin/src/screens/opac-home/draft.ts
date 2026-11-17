@@ -50,6 +50,12 @@ export interface HomeDraft {
   facilities: FacilityDraft[];
   hours: HoursDraft[];
   blocks: OpacHomeBlocks;
+  // ---- Komunitas (OPAC look) ----
+  /** The library's logo and its alternative text as typed; null: none. */
+  logo: { fileId: string; alt: string } | null;
+  /** The published telephone number and e-mail address as typed (blank: none). */
+  phone: string;
+  email: string;
 }
 
 let lastKey = 0;
@@ -83,6 +89,9 @@ export function draftOf(view: Pick<OpacHomeView, 'home' | 'welcome'>): HomeDraft
     facilities: home.facilities.map((f) => ({ key: newRowKey(), fileId: f.fileId, alt: f.alt, caption: text(f.caption) })),
     hours: home.hours.map((h) => ({ key: newRowKey(), days: h.days, time: h.time, weekdays: [...h.weekdays].sort((a, b) => a - b) })),
     blocks: { ...home.blocks },
+    logo: home.logo === null ? null : { fileId: home.logo.fileId, alt: home.logo.alt },
+    phone: text(home.contact.phone),
+    email: text(home.contact.email),
   };
 }
 
@@ -125,6 +134,8 @@ function contentOf(draft: HomeDraft): OpacHomeContent {
     facilities: draft.facilities.map((f) => ({ fileId: f.fileId, alt: f.alt, caption: orNull(f.caption) })),
     hours: draft.hours.map((h) => ({ days: h.days, time: h.time, weekdays: [...h.weekdays] })),
     blocks: { ...draft.blocks },
+    logo: draft.logo === null ? null : { ...draft.logo },
+    contact: { phone: orNull(draft.phone), email: orNull(draft.email) },
   };
 }
 

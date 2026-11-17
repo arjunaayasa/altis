@@ -75,7 +75,21 @@ const FACET_PARAM: Readonly<Record<FacetName, OpacSearchParam>> = {
 };
 
 /** The parameters that filter (the active filters), in the order of the page's links. */
-export const FILTER_PARAMS: readonly OpacSearchParam[] = ['jenis', 'bahasa', 'koleksi', 'cabang', 'lokasi', 'subjek', 'pengarang', 'tahun', 'tersedia', 'lampiran', 'kelas'];
+export const FILTER_PARAMS: readonly OpacSearchParam[] = [
+  'jenis',
+  'bahasa',
+  'koleksi',
+  'cabang',
+  'lokasi',
+  'subjek',
+  'pengarang',
+  // ---- Komunitas (OPAC look): the advanced search's ISBN field ----
+  'isbn',
+  'tahun',
+  'tersedia',
+  'lampiran',
+  'kelas',
+];
 
 /** What the facets and the active filters are drawn from. */
 export interface FacetsInput {
@@ -198,6 +212,8 @@ function activeFilter(param: OpacSearchParam, value: string, i: FacetsInput): st
       return named(facetHeading('sb', locale), names.subjects.get(value));
     case 'pengarang':
       return named(opacText(locale, 'search.filter.agent'), names.agents.get(value));
+    case 'isbn':
+      return `${opacText(locale, 'search.filter.isbn')}: ${value}`;
     case 'tahun':
       return `${opacText(locale, 'search.year.label')}: ${value}`;
     case 'tersedia':

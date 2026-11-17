@@ -99,6 +99,9 @@ export const HOME_CSS: string = [
   '.visit-block p{color:var(--muted);font-size:.9375rem}',
   '.visit-address{white-space:pre-line}',
   '.map-link{display:inline-flex;align-items:center;min-height:2.75rem;font-weight:600}',
+  // The published telephone number and e-mail address, one per line, as links.
+  '.visit-contact{display:grid;gap:.125rem;margin:0 0 .25rem}',
+  '.visit-contact a{overflow-wrap:anywhere}',
   '.hours{width:100%;border-collapse:collapse;font-size:.9375rem}',
   '.hours th,.hours td{padding:.375rem 0;border-bottom:1px solid var(--border);text-align:left;font-weight:400;vertical-align:top}',
   '.hours td{padding-left:1rem;text-align:right;font-variant-numeric:tabular-nums}',
