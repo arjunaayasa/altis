@@ -44,9 +44,9 @@ import { MemberChargesTab } from '@/screens/circulation/charges';
  *   Data anggota (the form, one section per part), Pinjaman aktif, Riwayat pinjaman (both need
  *   `circulation.records.read`), Denda and Riwayat keanggotaan (the member's events).
  * - **Actions** for `members.records.manage`: extend the membership, suspend (a note is required) or reactivate, each
- *   opened in place under the head; archive asks first (a dialog: it removes the member from the lists) and a refusal
- *   while loans are open (MEMBER_IN_USE) is said on the page, with the way to the desk. "Layani di Meja Layanan" opens
- *   the member at the desk.
+ *   opened in place under the head (already open when a row of the member list asked for it); archive asks first (a
+ *   dialog: it removes the member from the lists) and a refusal while loans are open (MEMBER_IN_USE) is said on the
+ *   page, with the way to the desk. "Layani di Meja Layanan" opens the member at the desk.
  */
 
 interface MemberForm {
@@ -418,7 +418,8 @@ export function MemberDetailScreen() {
   const { memberId = '' } = useParams({ strict: false }) as { memberId?: string };
   const member = useMember(memberId);
   const [tab, setTab] = useState<DetailTab>('data');
-  const [panel, setPanel] = useState<HeadPanel | null>(null);
+  // Opened from a row of the member list to extend, suspend or reactivate: that panel is open at once.
+  const [panel, setPanel] = useState<HeadPanel | null>(location.state.memberPanel ?? null);
   const [dialog, setDialog] = useState<'archive' | 'password' | null>(null);
   const [notice, setNotice] = useState<string | null>(location.state.created === true ? t('members.created') : null);
   const [archiveRefused, setArchiveRefused] = useState(false);
@@ -458,6 +459,8 @@ export function MemberDetailScreen() {
   const m = member.data;
   const live = !m.archived && m.status !== 'anonymized';
   const toggle = (p: HeadPanel): void => setPanel((open) => (open === p ? null : p));
+  // Suspend or reactivate, whichever the member's stored status calls for now.
+  const statusPanel = panel === 'suspend' || panel === 'reactivate' ? (m.storedStatus === 'suspended' ? 'reactivate' : 'suspend') : null;
   const daysLeft = m.expiresOn === null ? null : daysUntil(todayLocal(), m.expiresOn);
 
   const archive = async (): Promise<void> => {
@@ -559,8 +562,8 @@ export function MemberDetailScreen() {
           }}
         />
       )}
-      {panel === 'suspend' && canManage && live && <SuspendPanel member={m} onClose={() => setPanel(null)} onDone={() => setNotice(t('members.suspended'))} />}
-      {panel === 'reactivate' && canManage && live && <ReactivatePanel member={m} onClose={() => setPanel(null)} onDone={() => setNotice(t('members.reactivated'))} />}
+      {statusPanel === 'suspend' && canManage && live && <SuspendPanel member={m} onClose={() => setPanel(null)} onDone={() => setNotice(t('members.suspended'))} />}
+      {statusPanel === 'reactivate' && canManage && live && <ReactivatePanel member={m} onClose={() => setPanel(null)} onDone={() => setNotice(t('members.reactivated'))} />}
       {panel === 'photo' && canManage && live && (
         <InlinePanel title={t('members.tools.photo.title')} onCancel={() => setPanel(null)} focusOnOpen>
           {/* ---- Komunitas K2 (members extended): the photo ---- */}

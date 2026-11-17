@@ -65,6 +65,8 @@ declare module '@tanstack/react-router' {
   interface HistoryState {
     /** The page was opened right after its record was created (a create screen's save): it says so once. */
     created?: boolean;
+    /** A member's page opened from a row of the member list to extend, suspend or reactivate: that panel opens at once. */
+    memberPanel?: 'extend' | 'suspend' | 'reactivate';
   }
 }
 

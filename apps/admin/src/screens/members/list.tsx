@@ -1,27 +1,32 @@
 import { MEMBER_STATUSES, type MemberStatus } from '@altis/shared';
-import type { MemberListItem, MemberSearchBody, MemberSearchResponse } from '@altis/shared/api/members';
-import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
+import type { StoreResponse } from '@altis/shared/api/catalog/common';
+import type { MemberListItem, MemberSearchBody, MemberSearchResponse, MemberView } from '@altis/shared/api/members';
+import { keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useId, useState, type FormEvent } from 'react';
-import { Field, SELECT_CLASS } from '@/components/form-field';
+import { ConfirmDialog } from '@/components/confirm-dialog';
+import { Field, Notice, SELECT_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
-import { api } from '@/lib/api';
+import { ApiError, api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
 import { MemberStatusBadge, todayLocal, useCalendarDate, useMemberTypes, useTypeName } from '@/screens/circulation/common';
-import { Callout, DenseTable, FILTER_ROW, MoreMenu, MoreMenuItem, PageHead, SkeletonTable, StatusText, type DenseColumn } from '@/screens/circulation/parts';
+import { Callout, DenseTable, FILTER_ROW, MoreMenu, MoreMenuItem, MoreMenuRule, PageHead, SkeletonTable, StatusText, type DenseColumn } from '@/screens/circulation/parts';
 // ---- Komunitas K2 (members extended) ----
 import { BulkBar } from './bulk';
+import { refreshMembers } from './common';
 
 /**
  * Daftar Anggota (`/admin/anggota`): search by member number, name, identity number or e-mail, filter by type, class and
  * status (by default every status but archived), 50 at a time by name ("Muat lebih banyak"). The filters sit in one row
  * with their labels and apply as they change (the typed ones a moment after the last key, or at once with Enter). The
  * search text never goes in a URL: it is the body of `POST members/search`. Each name opens the member's page; its ⋯
- * menu also serves the member at the desk. Selected members get the bulk bar and its panels (bulk.tsx).
+ * menu also serves the member at the desk and, for a manager, extends, suspends or reactivates that one member (its page
+ * opens with that panel open) or archives it (asked first in a dialog; a member with open loans is refused, said above
+ * the table). Selected members get the bulk bar and its panels (bulk.tsx).
  */
 
 interface Filters {
@@ -58,6 +63,30 @@ export function MembersListScreen() {
   const canTypes = holds(me, 'members.types.manage');
   const canServe =
     holds(me, 'circulation.desk.use') || Object.values(me?.authenticated === true ? me.branchPermissions : {}).some((p) => p.includes('circulation.desk.use'));
+  const queryClient = useQueryClient();
+  const [archiving, setArchiving] = useState<MemberListItem | null>(null);
+  const [refused, setRefused] = useState<MemberView | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const openPanel = (memberPanel: 'extend' | 'suspend' | 'reactivate', member: MemberListItem): void =>
+    void navigate({ href: `/admin/anggota/${encodeURIComponent(member.id)}`, state: { memberPanel } });
+
+  // Archiving one member reads it first (its version and open loans); open loans are refused and said above the table.
+  const archive = async (row: MemberListItem): Promise<void> => {
+    setNotice(null);
+    setRefused(null);
+    const view = await api<MemberView>('GET', `members/${encodeURIComponent(row.id)}`);
+    try {
+      await api<StoreResponse>('DELETE', `members/${encodeURIComponent(row.id)}`, { version: view.version });
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'MEMBER_IN_USE') {
+        setRefused(view);
+        return;
+      }
+      throw e;
+    }
+    await refreshMembers(queryClient);
+    setNotice(t('members.archive.done', { name: row.name }));
+  };
 
   // The typed filters apply a moment after the last key; the lists apply at once (see `pick`).
   useEffect(() => {
@@ -159,6 +188,20 @@ export function MembersListScreen() {
             <MoreMenuItem aria-label={t('members.action.serve_named', { name: r.name })} onSelect={() => void navigate({ href: `/admin/layanan?member=${encodeURIComponent(r.id)}` })}>
               {t('members.action.serve_desk')}
             </MoreMenuItem>
+          )}
+          {canManage && r.status !== 'archived' && r.status !== 'anonymized' && (
+            <>
+              <MoreMenuItem onSelect={() => openPanel('extend', r)}>{t('members.action.extend')}</MoreMenuItem>
+              {r.status === 'suspended' ? (
+                <MoreMenuItem onSelect={() => openPanel('reactivate', r)}>{t('members.action.reactivate_ellipsis')}</MoreMenuItem>
+              ) : (
+                <MoreMenuItem onSelect={() => openPanel('suspend', r)}>{t('members.action.suspend_ellipsis')}</MoreMenuItem>
+              )}
+              <MoreMenuRule />
+              <MoreMenuItem danger onSelect={() => setArchiving(r)}>
+                {t('members.action.archive')}
+              </MoreMenuItem>
+            </>
           )}
         </MoreMenu>
       ),
@@ -276,6 +319,22 @@ export function MembersListScreen() {
       ) : (
         <div className="grid gap-3">
           {(canManage || selection.size > 0) && <BulkBar selected={[...selection.values()]} canManage={canManage} onClear={() => setSelection(new Map())} />}
+          {notice !== null && <Notice kind="success">{notice}</Notice>}
+          {refused !== null && (
+            <Callout
+              tone="bad"
+              role="alert"
+              title={refused.openLoans > 0 ? t('members.archive.refused_title', { name: refused.name, count: refused.openLoans }) : t('error.MEMBER_IN_USE')}
+              action={
+                canServe ? (
+                  <Button asChild size="sm" variant="outline" className="bg-background">
+                    <Link to={`/admin/layanan?member=${encodeURIComponent(refused.id)}`}>{t('members.action.serve_desk')}</Link>
+                  </Button>
+                ) : undefined
+              }>
+              <p>{t('members.archive.refused_body')}</p>
+            </Callout>
+          )}
           <DenseTable
             caption={t('members.caption')}
             columns={columns}
@@ -310,6 +369,17 @@ export function MembersListScreen() {
             )}
           </div>
         </div>
+      )}
+      {archiving !== null && (
+        <ConfirmDialog
+          open
+          destructive
+          title={t('members.archive.title', { name: archiving.name })}
+          description={t('members.archive.body')}
+          confirmLabel={t('members.action.archive_confirm')}
+          onConfirm={() => archive(archiving)}
+          onClose={() => setArchiving(null)}
+        />
       )}
     </div>
   );
