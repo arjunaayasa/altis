@@ -1,7 +1,8 @@
 import type { DeskHour } from '@altis/shared/api/dashboard-home';
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { useLocale, useT } from '@/i18n';
+import { useBoxWidth } from '@/lib/box-width';
 import { cn } from '@/lib/utils';
 import { useCount, useDeskToday } from '@/screens/dashboard-today';
 
@@ -50,24 +51,6 @@ export function axisScale(max: number): { top: number; step: number } {
 function useClock(): (hour: number) => string {
   const locale = useLocale();
   return (hour: number) => `${String(hour % 24).padStart(2, '0')}${locale === 'en' ? ':' : '.'}00`;
-}
-
-/** The width of `ref`'s box, measured (`fallback` before the first measure, or where nothing measures). */
-function useBoxWidth(ref: RefObject<HTMLElement | null>, fallback: number): number {
-  const [width, setWidth] = useState(fallback);
-  useEffect(() => {
-    const el = ref.current;
-    if (el === null || typeof ResizeObserver === 'undefined') return;
-    const measure = () => {
-      const w = Math.round(el.getBoundingClientRect().width);
-      if (w > 0) setWidth(w);
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [ref]);
-  return width;
 }
 
 /** A bar with a rounded top and a square foot on the baseline. */
