@@ -12,14 +12,13 @@ import {
 } from '@altis/shared/api/system-config';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { LockIcon, LogInIcon, TriangleAlertIcon } from 'lucide-react';
 import { useId, useRef, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { Badge, CheckField, Field, NoticeAlert, ProblemAlert, RefetchProblem, RootError, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
+import { CheckField, Field, NoticeAlert, ProblemAlert, RefetchProblem, RootError, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
+import { Callout, ErrorState, FormBar, LoadingState, PageHead, SideSection, StatusText, Tag } from '@/components/layout';
 import { OneTimeSecretDialog } from '@/components/one-time-secret-dialog';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type Translate } from '@/i18n';
@@ -29,7 +28,7 @@ import { useDirtyGuard } from '@/lib/dirty-forms';
 import { FORM_PARSE, applyServerErrors, hasFieldErrors, problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { holdMe } from '@/lib/sign-in';
-import { SettingsSection, wholeNumberIn } from '@/screens/settings/library';
+import { wholeNumberIn } from '@/screens/settings/library';
 
 /**
  * Konfigurasi Sistem (spec §13.3, §7.6, P13, P15; decisions D17, D27, D42; super admin only: `system.config.manage`).
@@ -168,14 +167,14 @@ function ConfigProblem({ error }: { error: unknown }) {
   // unless the failed SMTP stage has a message of its own, which already says the same in the user's language.
   const detail = e !== null && e.code !== 'VALIDATION_FAILED' && stage === undefined ? e.detail : undefined;
   return (
-    <Alert variant="destructive">
-      <TriangleAlertIcon aria-hidden="true" />
-      <AlertDescription>
-        <p>{text}</p>
-        {stage !== undefined && <p>{t(`system.smtp.reason.${stage}`)}</p>}
-        {detail !== undefined && <p className="text-xs break-words">{detail}</p>}
-      </AlertDescription>
-    </Alert>
+    <Callout role="alert" tone="bad" title={text}>
+      {stage === undefined && detail === undefined ? undefined : (
+        <>
+          {stage !== undefined && <p>{t(`system.smtp.reason.${stage}`)}</p>}
+          {detail !== undefined && <p className="text-xs break-words">{detail}</p>}
+        </>
+      )}
+    </Callout>
   );
 }
 
@@ -183,10 +182,7 @@ function ConfigProblem({ error }: { error: unknown }) {
 function LockedBadge({ env }: { env: string }) {
   const t = useT();
   return (
-    <Badge tone="warning">
-      <LockIcon className="mr-1 size-3" aria-hidden="true" />
-      {t('system.locked', { env })}
-    </Badge>
+    <Tag tone="warn">{t('system.locked', { env })}</Tag>
   );
 }
 
@@ -250,7 +246,7 @@ function SystemConfigForm({ initial, onSignInAgain }: { initial: SystemConfigVie
   return (
     <>
       <form noValidate className="flex flex-col gap-6" onSubmit={(e) => void submit(e)} onChange={() => setSaved(null)}>
-        <SettingsSection title={t('system.site.title')}>
+        <SideSection title={t('system.site.title')}>
           <Field label={t('system.base_url')} hint={hintOf(t, locked, 'baseUrl', t('system.base_url_hint'))} error={errors.baseUrl}>
             {(c) => (
               <div className="flex flex-wrap items-center gap-2">
@@ -302,9 +298,9 @@ function SystemConfigForm({ initial, onSignInAgain }: { initial: SystemConfigVie
               />
             )}
           </Field>
-        </SettingsSection>
+        </SideSection>
 
-        <SettingsSection title={t('system.smtp.title')} description={t('system.smtp.description')}>
+        <SideSection title={t('system.smtp.title')} intro={t('system.smtp.description')}>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t('system.smtp.host')} error={errors.smtp?.host}>
               {(c) => <Input {...c} autoComplete="off" spellCheck={false} maxLength={HOST_MAX} {...form.register('smtp.host')} />}
@@ -347,9 +343,7 @@ function SystemConfigForm({ initial, onSignInAgain }: { initial: SystemConfigVie
                     className="min-w-0 flex-1"
                     {...form.register('smtp.password')}
                   />
-                  <Badge id={passwordStatusId} tone={view.smtp.password.isSet ? 'info' : 'neutral'}>
-                    {t(view.smtp.password.isSet ? 'system.smtp.password_set' : 'system.smtp.password_unset')}
-                  </Badge>
+                  <Tag id={passwordStatusId}>{t(view.smtp.password.isSet ? 'system.smtp.password_set' : 'system.smtp.password_unset')}</Tag>
                 </div>
               )}
             </Field>
@@ -361,22 +355,21 @@ function SystemConfigForm({ initial, onSignInAgain }: { initial: SystemConfigVie
             <CheckField label={t('system.smtp.password_clear')} disabled={password !== ''} {...form.register('clearPassword')} />
           )}
           {passwordWillClear && (
-            <p role="status" className="rounded-md border border-warning-foreground/30 bg-warning px-3 py-2 text-sm text-warning-foreground">
-              {t('system.smtp.password_will_clear')}
-            </p>
+            <Callout role="status" tone="warn" title={t('system.smtp.password_will_clear')} />
           )}
-        </SettingsSection>
+        </SideSection>
 
         <RootError message={errors.root?.['server']?.message} />
         <ConfigProblem error={problem} />
         {saved === 'saved' && <NoticeAlert tone="success">{t('form.saved')}</NoticeAlert>}
         {saved === 'unchanged' && <NoticeAlert>{t('settings.unchanged')}</NoticeAlert>}
-        <div className="flex flex-wrap items-center gap-3">
+        <FormBar>
           <Button type="submit" disabled={isSubmitting}>
             {t(isSubmitting ? 'form.saving' : 'form.save')}
           </Button>
           <p className="text-xs text-muted-foreground">{t('system.reauth_note')}</p>
-        </div>
+          {isDirty && <StatusText tone="warn">{t('system.unsaved')}</StatusText>}
+        </FormBar>
       </form>
       <EmailTest unsaved={isDirty} />
       <CronToken />
@@ -409,7 +402,7 @@ function EmailTest({ unsaved }: { unsaved: boolean }) {
   });
 
   return (
-    <SettingsSection title={t('system.email_test.title')} description={t('system.email_test.description')}>
+    <SideSection title={t('system.email_test.title')} intro={t('system.email_test.description')}>
       <form noValidate className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
         <div className="flex flex-wrap items-end gap-3">
           <Field label={t('system.email_test.to')} error={errors.to} className="min-w-0 flex-1 basis-64">
@@ -423,7 +416,7 @@ function EmailTest({ unsaved }: { unsaved: boolean }) {
         <ConfigProblem error={problem} />
         {sentTo !== null && <NoticeAlert tone="success">{t('system.email_test.sent', { to: sentTo })}</NoticeAlert>}
       </form>
-    </SettingsSection>
+    </SideSection>
   );
 }
 
@@ -455,7 +448,7 @@ function CronToken() {
   };
 
   return (
-    <SettingsSection title={t('system.cron.title')} description={t('system.cron.description')}>
+    <SideSection title={t('system.cron.title')} intro={t('system.cron.description')}>
       <div>
         <Button type="button" variant="outline" onClick={() => setConfirming(true)}>
           {t('system.cron.rotate')}
@@ -478,7 +471,7 @@ function CronToken() {
         valueClassName="text-sm"
         onClose={() => setToken(null)}
       />
-    </SettingsSection>
+    </SideSection>
   );
 }
 
@@ -487,27 +480,20 @@ function SignInAgain({ baseUrl }: { baseUrl: string }) {
   const t = useT();
   const href = `${baseUrl}/admin/login`;
   return (
-    <Alert>
-      <LogInIcon aria-hidden="true" />
-      <AlertTitle>{t('system.sign_in_again.title')}</AlertTitle>
-      <AlertDescription className="text-foreground">
-        <p>{t('system.sign_in_again.body')}</p>
-        <a href={href} className="mt-2 inline-block max-w-full font-medium break-all text-primary underline underline-offset-4">
-          {t('system.sign_in_again.link', { url: baseUrl })}
-        </a>
-      </AlertDescription>
-    </Alert>
+    <Callout title={t('system.sign_in_again.title')}>
+      <p>{t('system.sign_in_again.body')}</p>
+      <a href={href} className="mt-1 inline-block max-w-full font-semibold break-all text-accent-text underline underline-offset-4">
+        {t('system.sign_in_again.link', { url: baseUrl })}
+      </a>
+    </Callout>
   );
 }
 
 function Frame({ children }: { children: ReactNode }) {
   const t = useT();
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">{t('nav.system')}</h1>
-        <p className="text-sm text-muted-foreground">{t('system.description')}</p>
-      </header>
+    <div className="grid max-w-5xl gap-6">
+      <PageHead title={t('nav.system')} intro={t('system.description')} />
       {children}
     </div>
   );
@@ -515,7 +501,6 @@ function Frame({ children }: { children: ReactNode }) {
 
 /** `/admin/system`. */
 export function SystemConfigScreen() {
-  const t = useT();
   const me = useMe();
   const allowed = holds(me, 'system.config.manage');
   const [signInAgain, setSignInAgain] = useState<string | null>(null);
@@ -542,19 +527,9 @@ export function SystemConfigScreen() {
       </>
     );
   } else if (config.isError) {
-    content = (
-      <ProblemAlert error={config.error}>
-        <Button variant="outline" size="sm" className="mt-2" onClick={() => void config.refetch()}>
-          {t('table.retry')}
-        </Button>
-      </ProblemAlert>
-    );
+    content = <ErrorState error={config.error} onRetry={() => void config.refetch()} retrying={config.isFetching} />;
   } else {
-    content = (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('shell.loading')}
-      </p>
-    );
+    content = <LoadingState />;
   }
   return <Frame>{content}</Frame>;
 }

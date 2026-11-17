@@ -1,7 +1,7 @@
 import type { SystemConfigView } from '@altis/shared/api/system-config';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BRANCH_MAIN, USERS, USER_BUDI, adminMe, startApp, superMe, type FakeHandler } from './fake-api';
+import { BRANCH_MAIN, BRANCH_NORTH, USERS, adminMe, startApp, superMe, type FakeHandler } from './fake-api';
 
 // Focus after a dialog (WCAG 2.4.3, 2.4.7): a keyboard or screen-reader user goes back to where they were, never to
 // <body>. A secret shown after a confirmation opens only once the confirmation has closed (one modal at a time), so
@@ -22,6 +22,15 @@ function usersRoutes(extra: Record<string, FakeHandler>): Record<string, FakeHan
 
 const rowOf = (username: string): HTMLElement => screen.getByRole('link', { name: username }).closest('tr')!;
 
+/** The ⋯ button of a row, focused and opened as a keyboard user does; answers the button. */
+async function openRowMenu(row: HTMLElement): Promise<HTMLElement> {
+  const more = within(row).getByRole('button', { name: /^Tindakan untuk / });
+  more.focus();
+  fireEvent.keyDown(more, { key: 'Enter' });
+  await screen.findByRole('menu');
+  return more;
+}
+
 /** Watches the page for a moment when a confirmation and another dialog are open together; `stop()` tells. */
 function watchStackedDialogs(): { stop(): boolean } {
   let stacked = false;
@@ -38,7 +47,7 @@ function watchStackedDialogs(): { stop(): boolean } {
 }
 
 describe('users list', () => {
-  it('the temporary password opens after the confirmation closed; "Selesai" returns to the row\'s reset button', async () => {
+  it('the temporary password opens after the confirmation closed; "Selesai" returns to the row\'s ⋯ button', async () => {
     let reset = false;
     startApp({
       me: adminMe(),
@@ -56,9 +65,8 @@ describe('users list', () => {
       }),
     });
     await screen.findByRole('link', { name: 'budi' });
-    const button = within(rowOf('budi')).getByRole('button', { name: /kata sandi/ });
-    button.focus();
-    fireEvent.click(button);
+    const more = await openRowMenu(rowOf('budi'));
+    fireEvent.click(screen.getByRole('menuitem', { name: /kata sandi/ }));
     const confirm = await screen.findByRole('alertdialog');
     const watch = watchStackedDialogs();
     fireEvent.click(within(confirm).getAllByRole('button').at(-1)!);
@@ -67,31 +75,32 @@ describe('users list', () => {
     expect(watch.stop()).toBe(false);
     fireEvent.click(within(shown).getByRole('button', { name: 'Selesai' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    await waitFor(() => expect(document.activeElement).toBe(within(rowOf('budi')).getByRole('button', { name: /kata sandi/ })));
+    await waitFor(() => expect(document.activeElement).toBe(more));
   });
 
-  it('when the action removed the button it started from, the focus goes to the main region, not <body>', async () => {
-    let users = USERS;
+});
+
+describe('branches list', () => {
+  it('when the action removed the row it started from, the focus goes to the main region, not <body>', async () => {
+    let branches = [BRANCH_MAIN, BRANCH_NORTH];
     startApp({
       me: adminMe(),
-      path: '/admin/users',
+      path: '/admin/branches',
       routes: {
-        ...usersRoutes({}),
-        'GET users': () => ({ items: users, total: users.length, page: 1, pageSize: 25 }),
-        'POST users/:id/disable': () => {
-          users = USERS.map((u) => (u.id === USER_BUDI.id ? { ...u, status: 'disabled' as const } : u));
-          return { ...USER_BUDI, status: 'disabled' };
+        'GET branches': () => ({ items: branches }),
+        'DELETE branches/:id': () => {
+          branches = [BRANCH_MAIN];
+          return { ...BRANCH_NORTH, archivedAt: 1, version: BRANCH_NORTH.version + 1 };
         },
       },
     });
-    await screen.findByRole('link', { name: 'budi' });
-    const disable = within(rowOf('budi')).getByRole('button', { name: 'Nonaktifkan' });
-    disable.focus();
-    fireEvent.click(disable);
-    const confirm = await screen.findByRole('alertdialog', { name: 'Nonaktifkan Budi Santoso?' });
-    fireEvent.click(within(confirm).getByRole('button', { name: 'Nonaktifkan' }));
+    const row = (await screen.findByText(BRANCH_NORTH.code)).closest('tr')!;
+    await openRowMenu(row);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Arsipkan' }));
+    const confirm = await screen.findByRole('alertdialog');
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Arsipkan' }));
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
-    await waitFor(() => expect(within(rowOf('budi')).queryByRole('button', { name: 'Nonaktifkan' })).toBeNull());
+    await waitFor(() => expect(screen.queryByText(BRANCH_NORTH.code)).toBeNull());
     await waitFor(() => expect(document.activeElement?.id).toBe('main'));
   });
 });

@@ -11,16 +11,17 @@ import {
 } from '@altis/shared/api/catalog/migration';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { CheckCircle2Icon, CircleIcon } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { Badge, CheckField, Field, Notice, NoticeAlert, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { CheckField, Field, Notice, NoticeAlert, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { TABLE, Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT, type TKey } from '@/i18n';
 import { api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
 import { useApiQuery } from '@/lib/me';
+import { cn } from '@/lib/utils';
 import { useMemberTypes, useTypeName } from '@/screens/circulation/common';
 
 /**
@@ -98,7 +99,7 @@ function Radios<V extends string>({ legend, values, value, label, onChange, chil
   const name = useId();
   return (
     <fieldset className="grid gap-2">
-      <legend className="mb-1 text-sm font-medium">{legend}</legend>
+      <legend className="mb-1 text-sm font-bold">{legend}</legend>
       {values.map((v) => (
         <div key={v} className="flex items-center gap-2">
           <input id={`${name}-${v}`} type="radio" name={name} value={v} checked={value === v} onChange={() => onChange(v)} className="size-4 accent-primary" />
@@ -121,7 +122,7 @@ export function PeopleFields({ value, onChange, memberTypes }: { value: PeopleDr
   const auto = value.visitsBefore === 'auto';
   return (
     <div className="flex flex-col gap-4 border-t pt-4">
-      <h3 className="text-sm font-semibold">{t('catalog.migration.people.title')}</h3>
+      <h3 className="text-sm font-bold">{t('catalog.migration.people.title')}</h3>
       <div className="grid gap-4 md:grid-cols-2">
         <Radios
           legend={t('catalog.migration.people.members_mode')}
@@ -180,7 +181,7 @@ export function PeopleFields({ value, onChange, memberTypes }: { value: PeopleDr
       </div>
       {memberTypes !== undefined && memberTypes.length > 0 && (
         <div className="grid gap-2">
-          <h4 className="text-sm font-medium">{t('catalog.migration.people.groups')}</h4>
+          <h4 className="text-sm font-bold">{t('catalog.migration.people.groups')}</h4>
           <p className="text-xs text-muted-foreground">{t('catalog.migration.people.groups_hint')}</p>
           <table className="text-sm">
             <tbody>
@@ -249,32 +250,32 @@ export function MatchesReport({
       {collisions !== undefined && collisions > 0 && <Notice kind="error">{t('catalog.migration.people.collisions', { count: n(collisions) })}</Notice>}
       {matches !== undefined && (
         <section aria-labelledby={titleId} className="flex flex-col gap-2">
-          <h3 id={titleId} className="text-sm font-semibold">
+          <h3 id={titleId} className="text-sm font-bold">
             {t('catalog.migration.people.matches')}
           </h3>
           <p className="text-xs text-muted-foreground">{t('catalog.migration.people.matches_hint')}</p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className={TABLE.wrap}>
+            <table className={TABLE.table}>
               <thead>
-                <tr className="text-left text-muted-foreground">
-                  <th className="py-1 pr-3 font-medium">{t('catalog.migration.people.col_number')}</th>
-                  <th className="py-1 pr-3 text-right font-medium">SLiMS</th>
-                  <th className="py-1 pr-3 text-right font-medium">ALTIS</th>
-                  <th className="py-1 pr-3 text-right font-medium">{t('catalog.migration.people.col_explained')}</th>
-                  <th className="py-1 font-medium">{t('catalog.migration.people.col_status')}</th>
+                <tr>
+                  <th className={TABLE.th}>{t('catalog.migration.people.col_number')}</th>
+                  <th className={cn(TABLE.th, 'text-right')}>SLiMS</th>
+                  <th className={cn(TABLE.th, 'text-right')}>ALTIS</th>
+                  <th className={cn(TABLE.th, 'text-right')}>{t('catalog.migration.people.col_explained')}</th>
+                  <th className={TABLE.th}>{t('catalog.migration.people.col_status')}</th>
                 </tr>
               </thead>
               <tbody>
                 {matches.map((m) => (
-                  <tr key={`${m.key}:${m.scope}`} className="border-t" data-match={m.ok ? 'ok' : 'diff'}>
-                    <td className="py-1 pr-3">
+                  <tr key={`${m.key}:${m.scope}`} data-match={m.ok ? 'ok' : 'diff'}>
+                    <td className={TABLE.td}>
                       {t(`migration.match.${m.key}`)}
                       {scopeText(m) !== '' && <span className="text-muted-foreground">{` · ${scopeText(m)}`}</span>}
                     </td>
-                    <td className="py-1 pr-3 text-right tabular-nums">{value(m, m.source)}</td>
-                    <td className="py-1 pr-3 text-right tabular-nums">{value(m, m.altis)}</td>
-                    <td className="py-1 pr-3 text-right tabular-nums">{value(m, m.explained)}</td>
-                    <td className="py-1">{m.ok ? <Badge tone="info">{t('catalog.migration.people.match_ok')}</Badge> : <Badge tone="danger">{t('catalog.migration.people.match_diff')}</Badge>}</td>
+                    <td className={cn(TABLE.td, 'text-right')}>{value(m, m.source)}</td>
+                    <td className={cn(TABLE.td, 'text-right')}>{value(m, m.altis)}</td>
+                    <td className={cn(TABLE.td, 'text-right')}>{value(m, m.explained)}</td>
+                    <td className={TABLE.td}>{m.ok ? <Tag tone="ok">{t('catalog.migration.people.match_ok')}</Tag> : <Tag tone="bad">{t('catalog.migration.people.match_diff')}</Tag>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -296,26 +297,26 @@ export function DryListsReport({ lists }: { lists: readonly MigrationDryList[] |
   const missing = lists.find((x) => x.key === 'open_loan_item_missing');
   return (
     <section aria-labelledby={titleId} className="flex flex-col gap-2">
-      <h3 id={titleId} className="text-sm font-semibold">
+      <h3 id={titleId} className="text-sm font-bold">
         {t('catalog.migration.people.dry_lists')}
       </h3>
       <p className="text-xs text-muted-foreground">{t('catalog.migration.people.dry_lists_hint')}</p>
       {missing !== undefined && missing.count > 0 && <Notice kind="error">{t('catalog.migration.people.item_missing_hint')}</Notice>}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className={TABLE.wrap}>
+        <table className={TABLE.table}>
           <thead>
-            <tr className="text-left text-muted-foreground">
-              <th className="py-1 pr-3 font-medium">{t('catalog.migration.people.col_list')}</th>
-              <th className="py-1 pr-3 text-right font-medium">{t('catalog.migration.people.col_count')}</th>
-              <th className="py-1 font-medium">{t('catalog.migration.people.col_samples')}</th>
+            <tr>
+              <th className={TABLE.th}>{t('catalog.migration.people.col_list')}</th>
+              <th className={cn(TABLE.th, 'text-right')}>{t('catalog.migration.people.col_count')}</th>
+              <th className={TABLE.th}>{t('catalog.migration.people.col_samples')}</th>
             </tr>
           </thead>
           <tbody>
             {lists.map((x) => (
-              <tr key={x.key} className="border-t align-top" data-dry-list={x.key}>
-                <td className="py-1 pr-3">{t(`migration.dry.${x.key}`)}</td>
-                <td className="py-1 pr-3 text-right tabular-nums">{number.format(x.count)}</td>
-                <td className="py-1 font-mono text-xs break-words">{x.samples.length === 0 ? '—' : x.samples.join(', ')}</td>
+              <tr key={x.key} data-dry-list={x.key}>
+                <td className={TABLE.td}>{t(`migration.dry.${x.key}`)}</td>
+                <td className={cn(TABLE.td, 'text-right')}>{number.format(x.count)}</td>
+                <td className={cn(TABLE.td, 'text-meta break-words')}>{x.samples.length === 0 ? '—' : x.samples.join(', ')}</td>
               </tr>
             ))}
           </tbody>
@@ -330,8 +331,10 @@ const CUTOVER_KEY = ['catalog', 'migrations', 'slims', 'cutover'] as const;
 function Item({ done, required, children }: { done: boolean; required: boolean; children: ReactNode }) {
   const t = useT();
   return (
-    <li className="flex items-start gap-2" data-done={done ? 'yes' : 'no'}>
-      {done ? <CheckCircle2Icon aria-hidden="true" className="mt-0.5 size-4 text-primary" /> : <CircleIcon aria-hidden="true" className="mt-0.5 size-4 text-muted-foreground" />}
+    <li className="flex items-start gap-2.5" data-done={done ? 'yes' : 'no'}>
+      <Tag tone={done ? 'ok' : 'neutral'} className="mt-px">
+        {t(done ? 'catalog.migration.people.check_done' : 'catalog.migration.people.check_open')}
+      </Tag>
       <span className="text-sm">
         {children}
         {!required && <span className="text-muted-foreground">{` (${t('catalog.migration.people.optional')})`}</span>}
@@ -390,8 +393,8 @@ export function CutoverChecklist() {
   ];
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <h2 id={titleId} className="text-base font-semibold">
+    <section aria-labelledby={titleId} className="grid gap-3 border-t pt-6">
+      <h2 id={titleId} className="text-base font-bold">
         {t('catalog.migration.people.cutover_title')}
       </h2>
       <p className="text-sm text-muted-foreground">{t('catalog.migration.people.cutover_hint')}</p>

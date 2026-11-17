@@ -4,6 +4,7 @@ import { MemberExtendBody, type MemberView } from '@altis/shared/api/members';
 import { useQueryClient } from '@tanstack/react-query';
 import { useId, useState, type FormEvent } from 'react';
 import { Field, ProblemAlert, TEXTAREA_CLASS } from '@/components/form-field';
+import { InlinePanel } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type TKey } from '@/i18n';
@@ -12,7 +13,6 @@ import { FORM_PARSE, fieldErrorKey } from '@/lib/form-errors';
 import { useApiQuery } from '@/lib/me';
 import { isStale } from '@/screens/catalog/masters/master-table';
 import { todayLocal, useCalendarDate, useMemberTypes } from '@/screens/circulation/common';
-import { InlinePanel } from '@/screens/circulation/parts';
 
 /**
  * The member actions more than one screen offers (the member page and the desk): extending the membership, suspending

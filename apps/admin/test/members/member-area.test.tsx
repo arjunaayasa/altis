@@ -112,7 +112,9 @@ describe("the member's OPAC password", () => {
     });
     fireEvent.keyDown(await screen.findByRole('button', { name: 'Tindakan lain' }), { key: 'Enter' });
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Atur kata sandi OPAC…' }));
-    let dialog = await screen.findByRole('dialog');
+    // The form opens in the page under the head, not in a dialog.
+    let dialog = await screen.findByRole('form', { name: 'Kata sandi OPAC' });
+    expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.change(within(dialog).getByLabelText('Kata sandi baru'), { target: { value: 'password123' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan kata sandi' }));
     expect(await within(dialog).findByText('Kata sandi ini terlalu umum dan mudah ditebak. Pilih yang lain.')).toBeTruthy();
@@ -122,7 +124,7 @@ describe("the member's OPAC password", () => {
 
     fireEvent.keyDown(screen.getByRole('button', { name: 'Tindakan lain' }), { key: 'Enter' });
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Atur kata sandi OPAC…' }));
-    dialog = await screen.findByRole('dialog');
+    dialog = await screen.findByRole('form', { name: 'Kata sandi OPAC' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Hapus kata sandi' }));
     expect(await screen.findByText(/Kata sandi OPAC anggota dihapus/)).toBeTruthy();
     const bodies = app.requests.filter((r) => r.method === 'PUT').map((r) => r.body);

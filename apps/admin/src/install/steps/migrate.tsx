@@ -70,7 +70,7 @@ export function MigrateStep({ onDone, recover }: { onDone(): void; recover(error
       </div>
       {state.status === 'failed' ? (
         <div className="space-y-3">
-          <p className="text-sm font-medium text-destructive">{t('migrate.failed')}</p>
+          <p className="text-sm font-semibold text-bad">{t('migrate.failed')}</p>
           <ProblemAlert error={state.error} />
           <Button type="button" onClick={start}>
             {t('app.retry')}

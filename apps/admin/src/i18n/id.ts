@@ -1,6 +1,7 @@
 import { CATALOG_ID } from './catalog';
 import { KOMUNITAS_ID } from './komunitas';
 import { SHELL_ID } from './shell';
+import { SYSTEM_UI_ID } from './system-ui';
 
 /**
  * The admin SPA's own strings, in Indonesian: the default language of ALTIS and the source of truth for
@@ -106,6 +107,8 @@ export const ADMIN_ID = {
   'form.refetch_failed': 'Data terbaru gagal dimuat; yang tampil masih data yang dimuat sebelumnya.',
   'form.yes': 'Ya',
   'form.no': 'Tidak',
+  'form.file.choose': 'Pilih berkas',
+  'form.file.none': 'Belum ada berkas dipilih',
   'form.error.required': 'Wajib diisi.',
   'form.error.taken': 'Sudah dipakai. Gunakan yang lain.',
   'form.error.too_small': 'Terlalu pendek atau belum diisi.',
@@ -136,6 +139,10 @@ export const ADMIN_ID = {
   'table.prev': 'Sebelumnya',
   'table.next': 'Berikutnya',
   'table.retry': 'Coba lagi',
+  'table.selected': '{count} dipilih',
+  'table.clear_selection': 'Batal pilih',
+  'table.filter_apply': 'Terapkan saringan',
+  'table.load_failed': 'Data gagal dimuat',
 
   // ---- users: Pengguna staf (§13.3) ------------------------------------------------------------------------------
   'users.add': 'Tambah pengguna',
@@ -781,6 +788,8 @@ export const ADMIN_ID = {
   'jobs.schedule.diagnostics.exposure': 'Uji keterbukaan berkas',
   'jobs.schedule.diagnostics.ip_trust': 'Pemeriksaan kepercayaan alamat IP',
   'jobs.schedule.diagnostics.usage': 'Pengukuran ruang penyimpanan',
+  'jobs.schedule.update.check': 'Pemeriksaan pembaruan',
+  'jobs.schedule.privacy.anonymize': 'Anonimisasi anggota arsip',
 
   // ---- backups: Cadangan (§13.3 "Backup", §9.9, §9.10; 1c Task 32) --------------------------------------------
   'backups.description':
@@ -1143,6 +1152,7 @@ export const ADMIN_ID = {
   'updates.history.backup': 'Cadangan sebelum pembaruan',
   'updates.history.versions': '{from} → {to}',
   'jobs.type.update.check': 'Memeriksa pembaruan',
+  'jobs.type.privacy.anonymize': 'Menganonimkan anggota arsip yang lewat masa simpan',
   'jobs.type.release.adopt': 'Menyalin rilis terbundel ke folder data',
   'jobs.type.release.retention': 'Menghapus rilis lama',
   // 1d Task 29: the dashboard's Pembaruan card; Diagnostik's releases
@@ -1247,6 +1257,8 @@ export const ADMIN_ID = {
   ...KOMUNITAS_ID,
   // ---- The shell: module bar, sidebar, user menu and theme (i18n/shell.ts) ----
   ...SHELL_ID,
+  // ---- The Sistem module's screens in the shared layout (i18n/system-ui.ts) ----
+  ...SYSTEM_UI_ID,
 } satisfies Record<string, string>;
 
 export type AdminKey = keyof typeof ADMIN_ID;

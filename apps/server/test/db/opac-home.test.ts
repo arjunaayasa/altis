@@ -438,21 +438,22 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
   it('the subject pills above the new titles with their number of titles, and each card says its availability in words', async () => {
     const html = (await get('/')).text;
     const fresh = section(html, 'judul-baru')!;
+    const available = (locale: 'id' | 'en') => `<span class="status status-ok card-status">${esc(opacText(locale, 'search.card.available'))}</span>`;
     expect(fresh).toContain(`<ul class="subject-pills" aria-label="${esc(opacText('id', 'home.pills.label'))}">`);
     expect(fresh).toContain(`<a href="/cari?subjek=${subjectId}">Novel &lt;Indonesia&gt;<span class="pill-count" aria-hidden="true">2</span>`);
-    expect(fresh.split(opacText('id', 'home.card.available')).length - 1).toBe(2);
+    expect(fresh.split(available('id')).length - 1).toBe(2);
     // The popular titles carry the same pills and words.
     const popular = section(html, 'judul-populer')!;
     expect(popular).toContain('class="subject-pills"');
-    expect(popular).toContain(`<span class="status status-ok card-status">${esc(opacText('id', 'home.card.available'))}</span>`);
+    expect(popular).toContain(available('id'));
 
     // A copy under repair: the title has a copy, but none on the shelf.
     await h.db.updateTable('items').set({ status: 'repair' }).where('id', '=', itemIds[0]!).execute();
     await withTx(h, (trx) => indexRecords(trx, records, NOW));
     try {
       const after = section((await get('/?lang=en')).text, 'judul-baru')!;
-      expect(after).toContain(`<span class="status status-muted card-status">${esc(opacText('en', 'home.card.unavailable'))}</span>`);
-      expect(after).toContain(`<span class="status status-ok card-status">${esc(opacText('en', 'home.card.available'))}</span>`);
+      expect(after).toContain(`<span class="status status-muted card-status">${esc(opacText('en', 'search.card.off_shelf'))}</span>`);
+      expect(after).toContain(available('en'));
     } finally {
       await h.db.updateTable('items').set({ status: 'available' }).where('id', '=', itemIds[0]!).execute();
       await withTx(h, (trx) => indexRecords(trx, records, NOW));

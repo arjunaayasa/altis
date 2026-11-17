@@ -15,10 +15,9 @@ import {
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useForm } from 'react-hook-form';
 import { Badge, CheckField, Field, ProblemAlert, RootError, TEXTAREA_CLASS } from '@/components/form-field';
-import { Button } from '@/components/ui/button';
-import { DialogFooter } from '@/components/ui/dialog';
+import { Callout, PageHead } from '@/components/layout';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
 import { useT, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
 import { useDirtyGuard } from '@/lib/dirty-forms';
@@ -26,6 +25,7 @@ import { useMe } from '@/lib/me';
 import { CustomFieldForm } from './custom-field-form';
 import {
   MASTER_SEGMENT,
+  MasterFormButtons,
   MasterTab,
   changedFields,
   optionalText,
@@ -41,7 +41,7 @@ import {
  * Data Induk (Phase 2 spec §13, §2.2, §3.7, §3.8; plan Task 27; the API of Task 12): a tab per master (Jenis Bahan,
  * Bahasa, Tipe Koleksi, Pemasok, Ruas Tambahan), each a table with create, edit and archive (master-table.tsx). The
  * tab lives in the URL (`?tab=languages`; Jenis Bahan without one), so a link can open it. A material type is edited
- * on its own page with the template editor (material-type.tsx); the others in a dialog. Anyone who reads the catalogue
+ * on its own page with the template editor (material-type.tsx); the others in a panel above their table. Anyone who reads the catalogue
  * sees the lists; changing them needs `catalog.masters.manage`.
  */
 
@@ -56,7 +56,7 @@ function tabOf(raw: unknown): MasterKind {
 function codeCell(t: Translate, row: { code: string; archived: boolean }) {
   return (
     <span className="flex flex-wrap items-center gap-2">
-      <span className="font-mono font-medium">{row.code}</span>
+      <span className="font-semibold">{row.code}</span>
       {row.archived && <Badge>{t('catalog.masters.badge.archived')}</Badge>}
     </span>
   );
@@ -68,17 +68,17 @@ function useColumns() {
   const code = { id: 'code', header: t('catalog.masters.col.code'), cell: (r: { code: string; archived: boolean }) => codeCell(t, r) };
   const nameId = { id: 'nameId', header: t('catalog.masters.col.name_id'), cell: (r: { nameId: string }) => r.nameId };
   const nameEn = { id: 'nameEn', header: t('catalog.masters.col.name_en'), cell: (r: { nameEn: string }) => r.nameEn };
-  const usage = (header: string) => ({ id: 'usage', header, className: 'tabular-nums', cell: (r: { usage: number }) => <span>{count(r.usage)}</span> });
+  const usage = (header: string) => ({ id: 'usage', header, className: 'text-right', headClassName: 'text-right', cell: (r: { usage: number }) => <span>{count(r.usage)}</span> });
 
   const materialTypes: MasterColumn<MaterialTypeView>[] = [
     code,
     nameId,
     nameEn,
-    { id: 'marc', header: t('catalog.masters.col.marc'), className: 'font-mono whitespace-nowrap', cell: (r) => <span>{`${r.marcType} / ${r.marcLevel}`}</span> },
+    { id: 'marc', header: t('catalog.masters.col.marc'), className: 'whitespace-nowrap', cell: (r) => <span>{`${r.marcType} / ${r.marcLevel}`}</span> },
     {
       id: 'rda',
       header: t('catalog.masters.col.rda'),
-      className: 'font-mono whitespace-nowrap',
+      className: 'whitespace-nowrap',
       cell: (r) => <span>{`${r.contentType} / ${r.mediaType} / ${r.carrierType}`}</span>,
     },
     usage(t('catalog.masters.col.records')),
@@ -93,8 +93,8 @@ function useColumns() {
       header: t('catalog.masters.col.lending'),
       cell: (r) => (
         <span className="flex flex-wrap gap-1">
-          {r.loanable ? <Badge tone="info">{t('catalog.masters.badge.loanable')}</Badge> : <Badge>{t('catalog.masters.badge.not_loanable')}</Badge>}
-          {r.loanable && r.selfService && <Badge tone="info">{t('catalog.masters.badge.self_service')}</Badge>}
+          {r.loanable ? <Badge>{t('catalog.masters.badge.loanable')}</Badge> : <Badge tone="warning">{t('catalog.masters.badge.not_loanable')}</Badge>}
+          {r.loanable && r.selfService && <Badge>{t('catalog.masters.badge.self_service')}</Badge>}
         </span>
       ),
     },
@@ -135,8 +135,8 @@ function useColumns() {
       header: t('catalog.masters.col.flags'),
       cell: (r) => (
         <span className="flex flex-wrap gap-1">
-          {r.required && <Badge tone="warning">{t('catalog.masters.badge.required')}</Badge>}
-          {r.isPublic && <Badge tone="info">{t('catalog.masters.badge.public')}</Badge>}
+          {r.required && <Badge>{t('catalog.masters.badge.required')}</Badge>}
+          {r.isPublic && <Badge>{t('catalog.masters.badge.public')}</Badge>}
           {r.isSearchable && <Badge>{t('catalog.masters.badge.searchable')}</Badge>}
         </span>
       ),
@@ -156,15 +156,15 @@ export function MastersScreen() {
   const columns = useColumns();
 
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">{t('nav.catalog.masters')}</h1>
-      {!canManage && <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{t('catalog.masters.read_only')}</p>}
+    <div className="grid gap-6">
+      <PageHead title={t('nav.catalog.masters')} />
+      {!canManage && <Callout title={t('catalog.masters.read_only')} />}
       <Tabs
         value={tab}
         onValueChange={(value) => void navigate({ to: '/admin/catalog/masters', search: tabOf(value) === 'material-types' ? {} : { tab: tabOf(value) } })}>
-        <TabsList aria-label={t('catalog.masters.tabs_label')} className="h-auto flex-wrap justify-start">
+        <TabsList aria-label={t('catalog.masters.tabs_label')} className={WRAPPING_TABS.list}>
           {TABS.map((kind) => (
-            <TabsTrigger key={kind} value={kind}>
+            <TabsTrigger key={kind} value={kind} className={WRAPPING_TABS.trigger}>
               {t(`catalog.masters.tab.${MASTER_SEGMENT[kind]}`)}
             </TabsTrigger>
           ))}
@@ -189,24 +189,11 @@ export function MastersScreen() {
   );
 }
 
-// ---- the dialog forms ----------------------------------------------------------------------------------------------
+// ---- the panel forms -----------------------------------------------------------------------------------------------
 
-/** Cancel (or Close, read only) and Save. */
-function FormButtons({ canManage, busy, onCancel }: { canManage: boolean; busy: boolean; onCancel(): void }) {
-  const t = useT();
-  return (
-    <DialogFooter>
-      <Button type="button" variant="outline" onClick={onCancel}>
-        {t(canManage ? 'form.cancel' : 'catalog.masters.close')}
-      </Button>
-      {canManage && (
-        <Button type="submit" disabled={busy}>
-          {t(busy ? 'form.saving' : 'form.save')}
-        </Button>
-      )}
-    </DialogFooter>
-  );
-}
+/** The classes of a panel form, and of its rows of fields. */
+const FORM = 'grid max-w-3xl gap-4';
+const FIELDS = 'grid gap-x-5 gap-y-4 sm:grid-cols-2';
 
 interface LanguageValues {
   code: string;
@@ -233,13 +220,13 @@ function LanguageForm({ row, canManage, onSaved, onCancel }: MasterFormProps<Lan
   });
   const disabled = !canManage;
   return (
-    <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
+    <form noValidate className={FORM} onSubmit={(e) => void submit(e)}>
       <ProblemAlert error={problem} />
       <RootError message={errors.root?.['server']?.message} />
       <Field label={t('catalog.masters.field.code')} hint={t('catalog.masters.field.language_code_hint')} error={errors.code}>
         {(c) => <Input {...c} autoComplete="off" spellCheck={false} maxLength={32} disabled={disabled} {...form.register('code')} />}
       </Field>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className={FIELDS}>
         <Field label={t('catalog.masters.field.name_id')} error={errors.nameId}>
           {(c) => <Input {...c} autoComplete="off" maxLength={191} disabled={disabled} {...form.register('nameId')} />}
         </Field>
@@ -247,7 +234,7 @@ function LanguageForm({ row, canManage, onSaved, onCancel }: MasterFormProps<Lan
           {(c) => <Input {...c} autoComplete="off" maxLength={191} disabled={disabled} {...form.register('nameEn')} />}
         </Field>
       </div>
-      <FormButtons canManage={canManage} busy={isSubmitting} onCancel={onCancel} />
+      <MasterFormButtons canManage={canManage} busy={isSubmitting} onCancel={onCancel} />
     </form>
   );
 }
@@ -290,13 +277,13 @@ function CollectionTypeForm({ row, canManage, onSaved, onCancel }: MasterFormPro
   });
   const disabled = !canManage;
   return (
-    <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
+    <form noValidate className={FORM} onSubmit={(e) => void submit(e)}>
       <ProblemAlert error={problem} />
       <RootError message={errors.root?.['server']?.message} />
       <Field label={t('catalog.masters.field.code')} hint={t('catalog.masters.field.code_hint')} error={errors.code}>
         {(c) => <Input {...c} autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={32} disabled={disabled} {...form.register('code')} />}
       </Field>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className={FIELDS}>
         <Field label={t('catalog.masters.field.name_id')} error={errors.nameId}>
           {(c) => <Input {...c} autoComplete="off" maxLength={191} disabled={disabled} {...form.register('nameId')} />}
         </Field>
@@ -311,7 +298,7 @@ function CollectionTypeForm({ row, canManage, onSaved, onCancel }: MasterFormPro
       <Field label={t('catalog.masters.field.sort_order')} hint={t('catalog.masters.field.sort_order_hint')} error={errors.sortOrder} className="max-w-40">
         {(c) => <Input {...c} type="number" inputMode="numeric" min={0} step={1} disabled={disabled} {...form.register('sortOrder')} />}
       </Field>
-      <FormButtons canManage={canManage} busy={isSubmitting} onCancel={onCancel} />
+      <MasterFormButtons canManage={canManage} busy={isSubmitting} onCancel={onCancel} />
     </form>
   );
 }
@@ -364,10 +351,10 @@ function SupplierForm({ row, canManage, onSaved, onCancel }: MasterFormProps<Sup
   });
   const disabled = !canManage;
   return (
-    <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
+    <form noValidate className={FORM} onSubmit={(e) => void submit(e)}>
       <ProblemAlert error={problem} />
       <RootError message={errors.root?.['server']?.message} />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className={FIELDS}>
         <Field label={t('catalog.masters.field.code')} hint={t('catalog.masters.field.code_hint')} error={errors.code}>
           {(c) => <Input {...c} autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={32} disabled={disabled} {...form.register('code')} />}
         </Field>
@@ -376,7 +363,7 @@ function SupplierForm({ row, canManage, onSaved, onCancel }: MasterFormProps<Sup
         </Field>
       </div>
       <p className="text-xs text-muted-foreground">{t('catalog.masters.field.contact_hint')}</p>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className={FIELDS}>
         <Field label={t('catalog.masters.field.contact_name')} error={errors.contactName}>
           {(c) => <Input {...c} autoComplete="off" maxLength={191} disabled={disabled} {...form.register('contactName')} />}
         </Field>
@@ -393,7 +380,7 @@ function SupplierForm({ row, canManage, onSaved, onCancel }: MasterFormProps<Sup
           {(c) => <textarea {...c} className={TEXTAREA_CLASS} disabled={disabled} {...form.register('note')} />}
         </Field>
       </div>
-      <FormButtons canManage={canManage} busy={isSubmitting} onCancel={onCancel} />
+      <MasterFormButtons canManage={canManage} busy={isSubmitting} onCancel={onCancel} />
     </form>
   );
 }

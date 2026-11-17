@@ -3,14 +3,11 @@ import type { CustomFieldView, MasterListResponse } from '@altis/shared/api/cata
 import { MEMBER_PHOTO_HEIGHT, MEMBER_PHOTO_MAX_BYTES, MEMBER_PHOTO_WIDTH } from '@altis/shared/api/member-ops';
 import type { MemberView } from '@altis/shared/api/members';
 import { useQueryClient } from '@tanstack/react-query';
-import { CameraIcon, ImageIcon, TrashIcon } from 'lucide-react';
-import { useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Field, Notice, ProblemAlert } from '@/components/form-field';
-import { useReturnFocus } from '@/components/return-focus';
+import { InlinePanel, MemberPhoto, SideSection } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
@@ -26,7 +23,8 @@ import { saveBlob } from './tools';
  * The member page's extras: the photo (a file or the camera, cropped in the browser to 300 × 400 JPEG, at most
  * 500 KB, then uploaded as `members.photo` and claimed with `PUT members/:id/photo`), restoring an archived member, and
  * the personal-data actions (the member's data as a JSON download, and anonymisation after typing the member number).
- * Both personal-data actions need a fresh password confirmation, which the API client asks for.
+ * Both personal-data actions need a fresh password confirmation, which the API client asks for. The camera and the
+ * crop are steps inside the photo's panel, and anonymisation asks its question in a panel under its button: no dialog.
  */
 
 /** Draws `img` into the 300 × 400 canvas: covering it at `zoom`, moved by `dx`/`dy` (-1…1 of the spare room). */
@@ -65,9 +63,11 @@ async function sourceOfFile(file: Blob): Promise<Source> {
   return canvas;
 }
 
-function CropDialog({ source, onCancel, onSave }: { source: Source; onCancel(): void; onSave(blob: Blob): Promise<void> }) {
+/** A step inside the photo's panel (the camera, the crop): an inline panel without a frame of its own, a rule above it. */
+const STEP = 'rounded-none border-0 border-t bg-transparent px-0 pt-4 pb-0';
+
+function CropStep({ source, onCancel, onSave }: { source: Source; onCancel(): void; onSave(blob: Blob): Promise<void> }) {
   const t = useT();
-  const focus = useReturnFocus();
   const canvas = useRef<HTMLCanvasElement>(null);
   const [zoom, setZoom] = useState(1);
   const [dx, setDx] = useState(0);
@@ -93,14 +93,11 @@ function CropDialog({ source, onCancel, onSave }: { source: Source; onCancel(): 
   };
 
   return (
-    <Dialog open onOpenChange={(next) => (next || busy ? undefined : onCancel())}>
-      <DialogContent closeLabel={t('form.cancel')} onOpenAutoFocus={focus.onOpenAutoFocus} onCloseAutoFocus={focus.onCloseAutoFocus}>
-        <DialogHeader>
-          <DialogTitle>{t('members.tools.photo.crop_title')}</DialogTitle>
-          <DialogDescription>{t('members.tools.photo.crop_hint')}</DialogDescription>
-        </DialogHeader>
-        <form noValidate className="grid gap-3" onSubmit={(e) => void save(e)}>
-          <canvas ref={canvas} width={MEMBER_PHOTO_WIDTH} height={MEMBER_PHOTO_HEIGHT} className="mx-auto h-64 w-48 rounded border" />
+    <InlinePanel title={t('members.tools.photo.crop_title')} onSubmit={(e) => void save(e)} onCancel={busy ? undefined : onCancel} className={STEP}>
+      <p className="-mt-1.5 text-sm text-muted-foreground">{t('members.tools.photo.crop_hint')}</p>
+      <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
+        <canvas ref={canvas} width={MEMBER_PHOTO_WIDTH} height={MEMBER_PHOTO_HEIGHT} className="h-64 w-48 shrink-0 rounded border" />
+        <div className="grid max-w-md min-w-0 flex-[1_1_12rem] content-start gap-4">
           {(
             [
               ['members.tools.photo.zoom', zoom, setZoom, 1, 3],
@@ -109,27 +106,26 @@ function CropDialog({ source, onCancel, onSave }: { source: Source; onCancel(): 
             ] as const
           ).map(([key, value, set, min, max]) => (
             <Field key={key} label={t(key)}>
-              {(c) => <input {...c} type="range" min={min} max={max} step={0.01} value={value} onChange={(e) => set(Number(e.target.value))} />}
+              {(c) => <input {...c} type="range" min={min} max={max} step={0.01} value={value} className="w-full accent-primary" onChange={(e) => set(Number(e.target.value))} />}
             </Field>
           ))}
-          <ProblemAlert error={problem} />
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
-              {t('form.cancel')}
-            </Button>
-            <Button type="submit" disabled={busy}>
-              {t(busy ? 'form.saving' : 'members.tools.photo.save')}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </div>
+      <ProblemAlert error={problem} />
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" size="sm" disabled={busy}>
+          {t(busy ? 'form.saving' : 'members.tools.photo.save')}
+        </Button>
+        <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onCancel}>
+          {t('form.cancel')}
+        </Button>
+      </div>
+    </InlinePanel>
   );
 }
 
-function CameraDialog({ onCancel, onFrame }: { onCancel(): void; onFrame(source: Source): void }) {
+function CameraStep({ onCancel, onFrame }: { onCancel(): void; onFrame(source: Source): void }) {
   const t = useT();
-  const focus = useReturnFocus();
   const video = useRef<HTMLVideoElement>(null);
   const [problem, setProblem] = useState<unknown>(null);
 
@@ -167,23 +163,18 @@ function CameraDialog({ onCancel, onFrame }: { onCancel(): void; onFrame(source:
   };
 
   return (
-    <Dialog open onOpenChange={(next) => (next ? undefined : onCancel())}>
-      <DialogContent closeLabel={t('form.cancel')} onOpenAutoFocus={focus.onOpenAutoFocus} onCloseAutoFocus={focus.onCloseAutoFocus}>
-        <DialogHeader>
-          <DialogTitle>{t('members.tools.photo.camera')}</DialogTitle>
-        </DialogHeader>
-        <video ref={video} muted playsInline className="mx-auto max-h-80 rounded border" />
-        {problem !== null && <Notice kind="error">{t('members.tools.photo.camera_unavailable')}</Notice>}
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onCancel}>
-            {t('form.cancel')}
-          </Button>
-          <Button type="button" onClick={capture}>
-            {t('members.tools.photo.capture')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <InlinePanel title={t('members.tools.photo.camera')} onCancel={onCancel} className={STEP}>
+      <video ref={video} muted playsInline className="max-h-80 w-fit max-w-full rounded border" />
+      {problem !== null && <Notice kind="error">{t('members.tools.photo.camera_unavailable')}</Notice>}
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" data-autofocus onClick={capture}>
+          {t('members.tools.photo.capture')}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+          {t('form.cancel')}
+        </Button>
+      </div>
+    </InlinePanel>
   );
 }
 
@@ -191,7 +182,6 @@ function CameraDialog({ onCancel, onFrame }: { onCancel(): void; onFrame(source:
 export function MemberPhotoPanel({ member, canManage, onDone }: { member: MemberView; canManage: boolean; onDone(text: string): void }) {
   const t = useT();
   const queryClient = useQueryClient();
-  const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
   const [source, setSource] = useState<Source | null>(null);
   const [camera, setCamera] = useState(false);
@@ -237,47 +227,36 @@ export function MemberPhotoPanel({ member, canManage, onDone }: { member: Member
   };
 
   return (
-    <section className="grid gap-2" aria-label={t('members.tools.photo.title')}>
-      {member.photoFileId === null ? (
-        <div className="flex aspect-[3/4] w-32 items-center justify-center rounded border bg-layer-2 text-muted-foreground">
-          <ImageIcon className="size-6" aria-hidden="true" />
-          <span className="sr-only">{t('members.tools.photo.none')}</span>
-        </div>
-      ) : (
-        <img src={`/files/${encodeURIComponent(member.photoFileId)}`} alt={t('members.tools.photo.alt', { name: member.name })} className="aspect-[3/4] w-32 rounded border object-cover" />
-      )}
-      {canManage && (
-        <div className="grid gap-2">
-          <Label htmlFor={inputId} className="text-xs">
-            {t('members.tools.photo.choose')}
-          </Label>
-          <input ref={input} id={inputId} type="file" accept="image/jpeg,image/png,image/webp" className="text-xs" onChange={(e) => void choose(e)} />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => (cameraAvailable ? setCamera(true) : setError(t('members.tools.photo.camera_unavailable')))}
-            >
-              <CameraIcon aria-hidden="true" />
-              {t('members.tools.photo.camera')}
-            </Button>
-            {member.photoFileId !== null && (
-              <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void remove()}>
-                <TrashIcon aria-hidden="true" />
-                {t('members.tools.photo.remove')}
+    <section className="grid gap-4" aria-label={t('members.tools.photo.title')}>
+      <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
+        <MemberPhoto name={member.name} fileId={member.photoFileId} size="lg" alt={member.photoFileId === null ? t('members.tools.photo.none') : t('members.tools.photo.alt', { name: member.name })} />
+        {canManage && (
+          <div className="grid min-w-0 flex-[1_1_14rem] grid-cols-[minmax(0,1fr)] content-start gap-3">
+            {/* The browser's own file control would speak the browser's language: a button of ours opens it. */}
+            <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(e) => void choose(e)} />
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" data-autofocus onClick={() => input.current?.click()}>
+                {t('members.tools.photo.choose')}
               </Button>
-            )}
+              <Button type="button" size="sm" variant="outline" onClick={() => (cameraAvailable ? setCamera(true) : setError(t('members.tools.photo.camera_unavailable')))}>
+                {t('members.tools.photo.camera')}
+              </Button>
+              {member.photoFileId !== null && (
+                <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void remove()}>
+                  {t('members.tools.photo.remove')}
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
       {error !== null && (
-        <p role="alert" className="text-xs text-bad">
+        <p role="alert" className="text-meta font-semibold text-bad">
           {error}
         </p>
       )}
       {camera && (
-        <CameraDialog
+        <CameraStep
           onCancel={() => setCamera(false)}
           onFrame={(frame) => {
             setCamera(false);
@@ -285,7 +264,7 @@ export function MemberPhotoPanel({ member, canManage, onDone }: { member: Member
           }}
         />
       )}
-      {source !== null && <CropDialog source={source} onCancel={() => setSource(null)} onSave={save} />}
+      {source !== null && <CropStep source={source} onCancel={() => setSource(null)} onSave={save} />}
     </section>
   );
 }
@@ -324,7 +303,6 @@ export function MemberPrivacyPanel({ member, onDone }: { member: MemberView; onD
   const t = useT();
   const me = useMe();
   const queryClient = useQueryClient();
-  const focus = useReturnFocus();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
@@ -358,47 +336,37 @@ export function MemberPrivacyPanel({ member, onDone }: { member: MemberView; onD
   };
 
   return (
-    <section className="grid gap-x-8 gap-y-3 border-t pt-5 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1fr)]" aria-label={t('members.tools.privacy.title')}>
-      <div className="grid content-start gap-1">
-        <h2 className="text-base font-bold">{t('members.tools.privacy.title')}</h2>
-        <p className="text-sm text-muted-foreground">{t('members.tools.privacy.intro')}</p>
+    <SideSection title={t('members.tools.privacy.title')} intro={t('members.tools.privacy.intro')}>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" onClick={() => void download()}>
+          {t('members.tools.privacy.export')}
+        </Button>
+        <Button size="sm" variant="outline" className="text-bad" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          {t('members.tools.privacy.anonymize')}
+        </Button>
       </div>
-      <div className="grid content-start gap-3">
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={() => void download()}>
-            {t('members.tools.privacy.export')}
-          </Button>
-          <Button size="sm" variant="outline" className="text-bad" onClick={() => setOpen(true)}>
-            {t('members.tools.privacy.anonymize')}
-          </Button>
-        </div>
-        {!open && <ProblemAlert error={problem} />}
-      </div>
+      {!open && <ProblemAlert error={problem} />}
       {open && (
-        <Dialog open onOpenChange={(next) => (next || busy ? undefined : setOpen(false))}>
-          <DialogContent closeLabel={t('form.cancel')} onOpenAutoFocus={focus.onOpenAutoFocus} onCloseAutoFocus={focus.onCloseAutoFocus}>
-            <DialogHeader>
-              <DialogTitle>{t('members.tools.privacy.anonymize_title', { name: member.name })}</DialogTitle>
-              <DialogDescription>{t('members.tools.privacy.anonymize_intro')}</DialogDescription>
-            </DialogHeader>
-            <form noValidate className="grid gap-3" onSubmit={(e) => void anonymize(e)}>
-              <Field label={t('members.tools.privacy.confirm_no', { no: member.memberNo })}>
-                {(c) => <Input {...c} autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)} />}
-              </Field>
-              <ProblemAlert error={problem} />
-              <DialogFooter>
-                <Button type="button" variant="outline" disabled={busy} onClick={() => setOpen(false)}>
-                  {t('form.cancel')}
-                </Button>
-                <Button type="submit" variant="destructive" disabled={busy || typed.trim() === ''}>
-                  {t('members.tools.privacy.anonymize_submit')}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <InlinePanel
+          title={t('members.tools.privacy.anonymize_title', { name: member.name })}
+          onSubmit={(e) => void anonymize(e)}
+          onCancel={busy ? undefined : () => setOpen(false)}>
+          <p className="-mt-1.5 max-w-[75ch] text-sm text-muted-foreground">{t('members.tools.privacy.anonymize_intro')}</p>
+          <Field label={t('members.tools.privacy.confirm_no', { no: member.memberNo })} className="max-w-md">
+            {(c) => <Input {...c} autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)} />}
+          </Field>
+          <ProblemAlert error={problem} />
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" size="sm" variant="destructive" disabled={busy || typed.trim() === ''}>
+              {t('members.tools.privacy.anonymize_submit')}
+            </Button>
+            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setOpen(false)}>
+              {t('form.cancel')}
+            </Button>
+          </div>
+        </InlinePanel>
       )}
-    </section>
+    </SideSection>
   );
 }
 
@@ -441,14 +409,18 @@ export function MemberCustomPanel({ member, canManage, onDone }: { member: Membe
   };
 
   return (
-    <form noValidate onSubmit={(e) => void save(e)} className="grid gap-3 rounded-lg border bg-card p-4">
-      <CustomFieldInputs defs={defs} values={values} disabled={!canManage} onChange={(code, value) => setValues((prev) => ({ ...prev, [code]: value }))} />
-      <ProblemAlert error={problem} />
-      {canManage && (
-        <Button type="submit" className="w-fit" disabled={busy}>
-          {t(busy ? 'form.saving' : 'form.save')}
-        </Button>
-      )}
-    </form>
+    <SideSection title={t('catalog.records.section.custom')}>
+      <form noValidate onSubmit={(e) => void save(e)} aria-label={t('catalog.records.section.custom')} className="grid min-w-0 content-start gap-4">
+        <CustomFieldInputs defs={defs} values={values} disabled={!canManage} onChange={(code, value) => setValues((prev) => ({ ...prev, [code]: value }))} />
+        <ProblemAlert error={problem} />
+        {canManage && (
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" disabled={busy}>
+              {t(busy ? 'form.saving' : 'form.save')}
+            </Button>
+          </div>
+        )}
+      </form>
+    </SideSection>
   );
 }

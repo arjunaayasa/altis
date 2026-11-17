@@ -1,7 +1,8 @@
 import { EDUCATION_LEVELS, EMPLOYMENTS, STAFF_ROLES, vocabKey, type EducationLevel, type Employment, type StaffRole } from '@altis/shared';
 import { StaffBody, StaffPatchBody, type StaffView } from '@altis/shared/api/accreditation';
 import { useForm } from 'react-hook-form';
-import { Badge, CheckField, Field, ProblemAlert, RootError } from '@/components/form-field';
+import { CheckField, Field, ProblemAlert, RootError } from '@/components/form-field';
+import { Tag } from '@/components/layout';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
 import { useDirtyGuard } from '@/lib/dirty-forms';
@@ -28,7 +29,7 @@ import { TrainingsPanel } from './trainings';
  * The staff register (`accreditation/staff`): the people who run the library, with their role, whether they are a
  * functional librarian (whatever their role), their employment, education, training and certificates, the number of
  * their appointment decree and when they served. A person's trainings (continuing professional development) are kept
- * inline, in that person's dialog (trainings.tsx); the list shows them under each person.
+ * inline, in that person's panel (trainings.tsx); the list shows them under each person.
  */
 
 interface StaffValues {
@@ -117,7 +118,7 @@ function StaffForm({ row, canManage, onSaved, onCancel }: RegisterFormProps<Staf
     <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
       <ProblemAlert error={problem} />
       <RootError message={errors.root?.['server']?.message} />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
         <Field label={t('accreditation.registers.staff.field.name')} error={errors.name}>
           {(c) => <Input {...c} autoComplete="off" maxLength={191} disabled={disabled} {...form.register('name')} />}
         </Field>
@@ -191,7 +192,7 @@ export function StaffRegister() {
       header: t('accreditation.registers.staff.col.name'),
       cell: (r) => (
         <span className="grid">
-          <span className="font-medium">{r.name}</span>
+          <span className="font-semibold">{r.name}</span>
           {r.position !== null && <span className="text-muted-foreground">{r.position}</span>}
         </span>
       ),
@@ -202,7 +203,7 @@ export function StaffRegister() {
       cell: (r) => (
         <span className="flex flex-wrap items-center gap-1">
           <span>{t(vocabKey('staff_role', r.role))}</span>
-          {r.isLibrarian && <Badge tone="info">{t('accreditation.registers.staff.badge.librarian')}</Badge>}
+          {r.isLibrarian && <Tag>{t('accreditation.registers.staff.badge.librarian')}</Tag>}
         </span>
       ),
     },

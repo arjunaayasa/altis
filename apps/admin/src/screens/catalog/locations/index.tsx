@@ -5,17 +5,14 @@ import type { LocationListResponse, LocationView } from '@altis/shared/api/catal
 import type { MeResponse } from '@altis/shared/api/auth';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { MapIcon, PlusIcon } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useId, useMemo, useState, type ReactNode } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { CheckField, Field, Notice, NoticeAlert, SELECT_CLASS } from '@/components/form-field';
-import { useReturnFocus } from '@/components/return-focus';
+import { CheckField, Notice, NoticeAlert, SELECT_CLASS } from '@/components/form-field';
+import { Callout, EmptyState, ErrorState, FilterField, FilterRow, InlinePanel, LoadingState, PageHead } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useT } from '@/i18n';
 import { holdsAt } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
-import { problemText } from '@/lib/form-errors';
 import { isWritableBranch } from '@/lib/branches';
 import { useApiQuery, useMe } from '@/lib/me';
 import { countsIn, isStale } from '@/screens/catalog/masters/master-table';
@@ -37,6 +34,7 @@ import { LocationTree, boxesMovedBy, buildTree } from './tree';
  *   CATALOG_IN_USE (Review Focus 2) and the screen says what it holds: the counts of the problem's `detail` (Task 14
  *   writes them there), else what the tree shows. After a stale version (CONFLICT_STALE) the tree is read again, so
  *   confirming again, or the form opened again, works on the location as it is now.
+ * - A location's form opens in the page, above the tree (an inline panel); archiving asks in a confirmation dialog.
  * - The open shelf map's unsaved boxes are never dropped without a question (L15): closing the map, opening another
  *   room's map or another branch asks first ({@link useDiscardGuard}); the "Tampilkan arsip" toggle keeps the tree (and
  *   the map) shown while the list is read again.
@@ -98,40 +96,23 @@ export function LocationsScreen() {
   const list = branches.data?.items ?? [];
   const branch = list.find((b) => b.id === wanted) ?? preferredBranch(list, me);
 
+  const ids = useId();
+  const head = (actions?: ReactNode) => <PageHead title={t('nav.catalog.locations')} intro={t('catalog.locations.intro')} actions={actions} />;
+
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">{t('nav.catalog.locations')}</h1>
-      <p className="max-w-3xl text-sm text-muted-foreground">{t('catalog.locations.intro')}</p>
+    <div className="grid gap-6">
       {branches.data === undefined ? (
-        branches.isError ? (
-          <Notice kind="error">{problemText(t, branches.error)}</Notice>
-        ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
-        )
+        <>
+          {head()}
+          {branches.isError ? <ErrorState error={branches.error} onRetry={() => void branches.refetch()} retrying={branches.isFetching} /> : <LoadingState />}
+        </>
       ) : branch === undefined ? (
-        <p className="text-sm text-muted-foreground">{t('catalog.locations.no_branches')}</p>
+        <>
+          {head()}
+          <EmptyState title={t('catalog.locations.no_branches')} />
+        </>
       ) : (
         <>
-          <Field label={t('catalog.locations.branch')} className="max-w-sm">
-            {(c) => (
-              <select
-                {...c}
-                className={SELECT_CLASS}
-                value={branch.id}
-                onChange={(e) => {
-                  const branchId = e.target.value;
-                  discard.guard(() => void navigate({ to: '/admin/catalog/locations', search: { branchId } }));
-                }}>
-                {list.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} ({b.code})
-                  </option>
-                ))}
-              </select>
-            )}
-          </Field>
           <BranchLocations
             key={branch.id}
             branch={branch}
@@ -139,6 +120,25 @@ export function LocationsScreen() {
             outside={!isWritableBranch(branch)}
             guard={discard.guard}
             onMapDrafts={setMapDrafts}
+            head={head}
+            branchFilter={
+              <FilterField wide id={`${ids}-branch`} label={t('catalog.locations.branch')} className="max-w-md">
+                <select
+                  id={`${ids}-branch`}
+                  className={SELECT_CLASS}
+                  value={branch.id}
+                  onChange={(e) => {
+                    const branchId = e.target.value;
+                    discard.guard(() => void navigate({ to: '/admin/catalog/locations', search: { branchId } }));
+                  }}>
+                  {list.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.code})
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+            }
           />
           {discard.dialog}
         </>
@@ -150,8 +150,10 @@ export function LocationsScreen() {
 type Editing = { mode: 'create'; kind: LocationKind; parentId: string | null } | { mode: 'edit'; location: LocationView };
 
 /**
- * One branch's tree, its dialogs and its map; everything here starts over when the branch changes. `guard` runs an
- * action that closes or replaces the open map (asking first while it has unsaved boxes, which `onMapDrafts` hears).
+ * One branch's page: its head (`head`, with "Tambah ruang" where the user may manage), the filters (the branch select
+ * `branchFilter` and the archived switch), the form panel, the tree and its map; everything here starts over when the
+ * branch changes. `guard` runs an action that closes or replaces the open map (asking first while it has unsaved
+ * boxes, which `onMapDrafts` hears).
  */
 function BranchLocations({
   branch,
@@ -159,16 +161,19 @@ function BranchLocations({
   outside,
   guard,
   onMapDrafts,
+  head,
+  branchFilter,
 }: {
   branch: BranchView;
   canManage: boolean;
   outside: boolean;
   guard(action: () => void): void;
   onMapDrafts(count: number): void;
+  head(actions?: ReactNode): ReactNode;
+  branchFilter: ReactNode;
 }) {
   const t = useT();
   const queryClient = useQueryClient();
-  const focus = useReturnFocus();
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [archiving, setArchiving] = useState<LocationView | null>(null);
@@ -251,50 +256,56 @@ function BranchLocations({
           ? t('catalog.locations.form.edit_title')
           : t('catalog.locations.form.view_title', { name: editing.location.name });
 
+  const adding = editing !== null && editing.mode === 'create' && editing.parentId === null;
+
   return (
-    <div className="flex flex-col gap-4">
-      {!canManage && (
-        <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{t(outside ? 'catalog.locations.outside_limit' : 'catalog.locations.read_only')}</p>
-      )}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <CheckField label={t('catalog.locations.show_archived')} checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-        {canManage && (
-          <Button onClick={() => open({ mode: 'create', kind: 'room', parentId: null })}>
-            <PlusIcon aria-hidden="true" />
+    <>
+      {head(
+        canManage ? (
+          <Button aria-expanded={adding} onClick={() => open({ mode: 'create', kind: 'room', parentId: null })}>
             {t('catalog.locations.add_room')}
           </Button>
-        )}
-      </div>
+        ) : undefined,
+      )}
       {notice !== null && <Notice kind={notice.tone}>{notice.text}</Notice>}
       {stillMoved !== null && (
         <NoticeAlert>
           <span className="flex flex-wrap items-center gap-2">
             <span>{t('catalog.locations.redraw', { name: stillMoved.name, room: stillMoved.roomName })}</span>
-            <Button type="button" variant="outline" size="sm" onClick={() => showMap(stillMoved.roomId)}>
-              <MapIcon aria-hidden="true" />
+            <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => showMap(stillMoved.roomId)}>
               {t('catalog.locations.redraw_open', { room: stillMoved.roomName })}
             </Button>
           </span>
         </NoticeAlert>
       )}
+      {!canManage && <Callout title={t(outside ? 'catalog.locations.outside_limit' : 'catalog.locations.read_only')} />}
+      <FilterRow label={t('catalog.locations.filters')}>
+        {branchFilter}
+        <div className="flex h-8.5 items-center">
+          <CheckField label={t('catalog.locations.show_archived')} checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+        </div>
+      </FilterRow>
+      {editing !== null && (
+        <InlinePanel key={editing.mode === 'edit' ? editing.location.id : `new-${editing.parentId ?? ''}`} title={title} onCancel={() => setEditing(null)}>
+          <LocationForm
+            branchId={branch.id}
+            rows={rows}
+            location={editing.mode === 'edit' ? editing.location : null}
+            start={editing.mode === 'create' ? { kind: editing.kind, parentId: editing.parentId } : { kind: 'room', parentId: null }}
+            canManage={canManage}
+            onSaved={saved}
+            onCancel={() => setEditing(null)}
+          />
+        </InlinePanel>
+      )}
       {locations.data === undefined ? (
         locations.isError ? (
-          <Notice
-            kind="error"
-            action={
-              <Button variant="outline" size="sm" onClick={() => void locations.refetch()}>
-                {t('table.retry')}
-              </Button>
-            }>
-            {problemText(t, locations.error)}
-          </Notice>
+          <ErrorState error={locations.error} onRetry={() => void locations.refetch()} retrying={locations.isFetching} />
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <LoadingState />
         )
       ) : nodes.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t('catalog.locations.empty')}</p>
+        <EmptyState title={t('catalog.locations.empty')} />
       ) : (
         <LocationTree
           nodes={nodes}
@@ -322,29 +333,6 @@ function BranchLocations({
           onDraftsChange={onMapDrafts}
         />
       )}
-      <Dialog open={editing !== null} onOpenChange={(next) => (next ? undefined : setEditing(null))}>
-        {editing !== null && (
-          <DialogContent
-            closeLabel={t('catalog.locations.form.close')}
-            onOpenAutoFocus={focus.onOpenAutoFocus}
-            onCloseAutoFocus={focus.onCloseAutoFocus}
-            className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{title}</DialogTitle>
-              <DialogDescription>{t('catalog.locations.intro')}</DialogDescription>
-            </DialogHeader>
-            <LocationForm
-              branchId={branch.id}
-              rows={rows}
-              location={editing.mode === 'edit' ? editing.location : null}
-              start={editing.mode === 'create' ? { kind: editing.kind, parentId: editing.parentId } : { kind: 'room', parentId: null }}
-              canManage={canManage}
-              onSaved={saved}
-              onCancel={() => setEditing(null)}
-            />
-          </DialogContent>
-        )}
-      </Dialog>
       {archiving !== null && (
         <ConfirmDialog
           open
@@ -356,6 +344,6 @@ function BranchLocations({
           onClose={() => setArchiving(null)}
         />
       )}
-    </div>
+    </>
   );
 }

@@ -79,15 +79,17 @@ export function DuplicatesPanel({ control, excludeId }: { control: Control<Recor
   const candidates = check.data?.candidates ?? [];
 
   return (
-    <section aria-labelledby={headingId} className="grid content-start gap-3 rounded-lg border bg-card p-4">
-      <h2 id={headingId} className="text-base font-semibold">
-        {t('catalog.records.dup.title')}
-      </h2>
-      <p className="text-xs text-muted-foreground">{t('catalog.records.dup.hint')}</p>
+    <section aria-labelledby={headingId} className="grid content-start gap-3 p-4">
+      <div className="grid gap-1">
+        <h2 id={headingId} className="text-base font-bold">
+          {t('catalog.records.dup.title')}
+        </h2>
+        <p className="text-meta text-muted-foreground">{t('catalog.records.dup.hint')}</p>
+      </div>
       {body === null ? (
         <p className="text-sm text-muted-foreground">{t('catalog.records.dup.wait')}</p>
       ) : check.isError && check.data === undefined ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm font-semibold text-bad">
           {t('catalog.records.dup.failed')} {problemText(t, check.error)}
         </p>
       ) : check.data === undefined ? (
@@ -101,13 +103,13 @@ export function DuplicatesPanel({ control, excludeId }: { control: Control<Recor
       ) : (
         <ul className="grid gap-2" aria-busy={check.isFetching || undefined}>
           {candidates.map((c) => (
-            <li key={c.recordId} className="grid gap-1 rounded-md border p-2 text-sm">
+            <li key={c.recordId} className="grid gap-1 rounded-md border bg-background px-3 py-2.5 text-sm">
               <a
                 href={`/admin/catalog/records/${encodeURIComponent(c.recordId)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={t('catalog.records.dup.open', { title: c.title })}
-                className="font-medium text-primary underline-offset-4 hover:underline"
+                className="font-semibold text-accent-text underline-offset-4 hover:underline"
               >
                 {c.title}
               </a>

@@ -10,14 +10,15 @@ import {
 } from '@altis/shared/api/opac-pages';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { ArrowLeftIcon, ExternalLinkIcon, EyeIcon, ImageIcon } from 'lucide-react';
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useForm, useWatch, type FieldPath, type UseFormReturn } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { CheckField, Field, Notice, ProblemAlert, RefetchProblem, RootError, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
+import { BackLink, Callout, ErrorState, FORM_FULL, FormBar, FormSection, LAYER, LoadingState, PageHead } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
+import { FileInput } from '@/components/file-input';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
@@ -25,6 +26,7 @@ import { useDirtyGuard } from '@/lib/dirty-forms';
 import { FORM_PARSE, ROOT_ERROR, applyServerErrors, problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { uploadFile } from '@/lib/upload';
+import { cn } from '@/lib/utils';
 import { PAGES_KEY, fromLocalInput, kindOf, opacPath, pageHref, pagesListHref, pagesListTarget, slugify, toLocalInput } from './shared';
 
 /**
@@ -230,14 +232,14 @@ function ImageInsert({ format, onInsert, disabled }: { format: BodyFormat; onIns
 
   const busy = disabled || progress !== null;
   return (
-    <div role="group" aria-label={t('pages.image.title')} className="grid gap-3 rounded-md border p-3 sm:grid-cols-2" onKeyDown={enterRuns(() => void insert())}>
-      <h3 className="text-sm font-semibold sm:col-span-2">{t('pages.image.title')}</h3>
+    <div role="group" aria-label={t('pages.image.title')} className={cn('grid gap-x-5 gap-y-4 rounded-lg border p-4 sm:grid-cols-2', LAYER)} onKeyDown={enterRuns(() => void insert())}>
+      <h3 className="text-sm font-bold sm:col-span-2">{t('pages.image.title')}</h3>
       <Field id={ids.file} label={t('pages.image.file')} hint={t('pages.image.file_hint')} error={errors.file}>
         {(c) => (
-          <Input
+          <FileInput
             {...c}
             ref={fileInput}
-            type="file"
+            chosen={file?.name ?? null}
             accept="image/jpeg,image/png,image/webp,image/gif"
             disabled={busy}
             onChange={(e) => {
@@ -252,11 +254,10 @@ function ImageInsert({ format, onInsert, disabled }: { format: BodyFormat; onIns
       </Field>
       <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void insert()}>
-          <ImageIcon aria-hidden="true" />
           {t('pages.image.insert')}
         </Button>
         {progress !== null && (
-          <span role="status" className="text-sm text-muted-foreground tabular-nums">
+          <span role="status" className="text-meta text-muted-foreground tabular-nums">
             {t(progress.phase === 'hashing' ? 'pages.image.hashing' : 'pages.image.uploading', { percent: progress.percent })}
           </span>
         )}
@@ -360,11 +361,10 @@ function TranslationFields({
       </Field>
       <div className="flex flex-wrap items-center gap-3">
         <Button type="button" variant="outline" size="sm" disabled={previewBusy} onClick={() => void showPreview()}>
-          <EyeIcon aria-hidden="true" />
           {t('pages.preview.button')}
         </Button>
         {previewBusy && (
-          <span role="status" className="text-sm text-muted-foreground">
+          <span role="status" className="text-meta text-muted-foreground">
             {t('pages.preview.loading')}
           </span>
         )}
@@ -382,14 +382,9 @@ function TranslationFields({
   );
 }
 
-function BackLink({ kind }: { kind: PageKind }) {
+function PagesBackLink({ kind }: { kind: PageKind }) {
   const t = useT();
-  return (
-    <Link {...pagesListTarget(kind)} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-      <ArrowLeftIcon className="size-4" aria-hidden="true" />
-      {t('pages.back')}
-    </Link>
-  );
+  return <BackLink {...pagesListTarget(kind)}>{t('pages.back')}</BackLink>;
 }
 
 /** The editor of a new page (`page` null) or of an existing one. */
@@ -414,7 +409,6 @@ function PageEditor({ page, kind, onReload }: { page: PageView | null; kind: Pag
           if (!slugTyped.current) form.setValue('slug', slugify(title), { shouldDirty: true });
         }
       : undefined;
-  const ids = { settings: useId(), translations: useId() };
   const [slug, hasEnglish] = useWatch({ control: form.control, name: ['slug', 'hasEnglish'] });
 
   /** Puts field errors (`{path, code, message}`) on their fields and opens the tab of the first. */
@@ -486,12 +480,9 @@ function PageEditor({ page, kind, onReload }: { page: PageView | null; kind: Pag
           {problem.text}
         </Notice>
       )}
-      <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
-        <fieldset disabled={readOnly || isSubmitting} className="flex min-w-0 flex-col gap-4">
-          <section aria-labelledby={ids.settings} className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2">
-            <h2 id={ids.settings} className="text-base font-semibold sm:col-span-2">
-              {t('pages.settings')}
-            </h2>
+      <form noValidate onSubmit={(e) => void submit(e)}>
+        <fieldset disabled={readOnly || isSubmitting} className="grid min-w-0 content-start gap-y-2">
+          <FormSection title={t('pages.settings')} className="xl:[&>fieldset]:grid-cols-2">
             <Field label={t('pages.field.slug')} hint={t('pages.field.slug_hint', { path: opacPath(kind, slug === '' ? '…' : slug) })} error={errors.slug}>
               {(c) => (
                 <Input
@@ -525,17 +516,14 @@ function PageEditor({ page, kind, onReload }: { page: PageView | null; kind: Pag
             <Field label={t('pages.field.sort_order')} hint={t('pages.field.sort_order_hint')} error={errors.sortOrder}>
               {(c) => <Input {...c} type="number" inputMode="numeric" min={0} step={1} {...form.register('sortOrder')} />}
             </Field>
-            <CheckField className="sm:col-span-2" label={t('pages.field.show_in_nav')} hint={t('pages.field.show_in_nav_hint')} {...form.register('showInNav')} />
-          </section>
+            <CheckField className={FORM_FULL} label={t('pages.field.show_in_nav')} hint={t('pages.field.show_in_nav_hint')} {...form.register('showInNav')} />
+          </FormSection>
 
-          <section aria-labelledby={ids.translations} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-            <h2 id={ids.translations} className="text-base font-semibold">
-              {t('pages.translations')}
-            </h2>
-            <Tabs value={tab} onValueChange={(value) => setTab(value as PageLocale)}>
-              <TabsList aria-label={t('pages.translations')}>
+          <FormSection title={t('pages.translations')}>
+            <Tabs value={tab} onValueChange={(value) => setTab(value as PageLocale)} className={cn('min-w-0', FORM_FULL)}>
+              <TabsList aria-label={t('pages.translations')} className={WRAPPING_TABS.list}>
                 {PAGE_LOCALES.map((locale) => (
-                  <TabsTrigger key={locale} value={locale}>
+                  <TabsTrigger key={locale} value={locale} className={WRAPPING_TABS.trigger}>
                     {t(`vocab.page_locale.${locale}`)}
                   </TabsTrigger>
                 ))}
@@ -548,33 +536,32 @@ function PageEditor({ page, kind, onReload }: { page: PageView | null; kind: Pag
                 {hasEnglish && <TranslationFields form={form} locale="en" disabled={readOnly} />}
               </TabsContent>
             </Tabs>
-          </section>
+          </FormSection>
           <RootError message={errors.root?.server?.message} />
           {!readOnly && (
-            <div className="flex flex-wrap gap-2">
+            <FormBar>
               <Button type="submit" disabled={isSubmitting}>
                 {t(isSubmitting ? 'form.saving' : 'form.save')}
               </Button>
               <Button asChild variant="outline">
                 <Link {...pagesListTarget(kind)}>{t('form.cancel')}</Link>
               </Button>
+              {savedPublished && (
+                <Button asChild variant="outline">
+                  <a href={opacPath(kind, baseline.values.slug)} target="_blank" rel="noopener noreferrer">
+                    {t('pages.action.view')}
+                  </a>
+                </Button>
+              )}
               {page !== null && (
                 <Button type="button" variant="outline" className="sm:ml-auto" onClick={() => setArchiving(true)}>
                   {t('pages.action.archive')}
                 </Button>
               )}
-            </div>
+            </FormBar>
           )}
         </fieldset>
       </form>
-      {savedPublished && !readOnly && (
-        <p>
-          <a href={opacPath(kind, baseline.values.slug)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline">
-            <ExternalLinkIcon className="size-4" aria-hidden="true" />
-            {t('pages.action.view')}
-          </a>
-        </p>
-      )}
       {page !== null && (
         <ConfirmDialog
           open={archiving}
@@ -601,9 +588,9 @@ export function PageCreateScreen() {
   const canManage = holds(me, 'opac.pages.manage');
   const kind = kindOf(useSearch({ strict: false }));
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
-      <BackLink kind={kind} />
-      <h1 className="text-2xl font-semibold">{t(`pages.new.${kind}`)}</h1>
+    <div className="grid max-w-5xl gap-6">
+      <PagesBackLink kind={kind} />
+      <PageHead title={t(`pages.new.${kind}`)} />
       {/* Every route of the area needs the permission: say so before anything is typed. */}
       {canManage ? <PageEditor key={kind} page={null} kind={kind} /> : <ProblemAlert error={new ApiError(403, 'AUTHZ_DENIED')} />}
     </div>
@@ -626,30 +613,28 @@ export function PageEditScreen() {
 
   if (!canManage) {
     return (
-      <div className="flex max-w-4xl flex-col gap-4">
-        <BackLink kind="page" />
+      <div className="grid max-w-5xl gap-6">
+        <PagesBackLink kind="page" />
         <ProblemAlert error={new ApiError(403, 'AUTHZ_DENIED')} />
       </div>
     );
   }
   const data = page.data;
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
-      <BackLink kind={data?.kind ?? 'page'} />
+    <div className="grid max-w-5xl gap-6">
+      <PagesBackLink kind={data?.kind ?? 'page'} />
       {/* The data wins over an error: a failed background refetch keeps the form and what was typed. */}
       {data === undefined ? (
         page.isError ? (
-          <Notice kind="error">{problemText(t, page.error)}</Notice>
+          <ErrorState error={page.error} onRetry={() => void page.refetch()} retrying={page.isFetching} />
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <LoadingState />
         )
       ) : (
         <>
-          <h1 className="text-2xl font-semibold break-words">{data.translations.id.title === '' ? t('pages.untitled') : data.translations.id.title}</h1>
+          <PageHead title={<span className="break-words">{data.translations.id.title === '' ? t('pages.untitled') : data.translations.id.title}</span>} />
           <RefetchProblem query={page} />
-          {data.archived && <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{t('pages.archived_notice')}</p>}
+          {data.archived && <Callout title={t('pages.archived_notice')} />}
           <PageEditor key={`${data.id}:${generation}`} page={data} kind={data.kind} onReload={reload} />
         </>
       )}

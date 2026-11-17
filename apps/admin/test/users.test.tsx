@@ -50,6 +50,20 @@ function usersRoutes(o: { users?: UserDetail[]; total?: number; extra?: Record<s
 
 const rowOf = (text: string): HTMLElement => screen.getByRole('link', { name: text }).closest('tr')!;
 
+/** Opens the ⋯ menu of a row and answers the names of its actions. */
+async function rowMenu(text: string): Promise<string[]> {
+  const trigger = within(rowOf(text)).getByRole('button', { name: /^Tindakan untuk / });
+  trigger.focus();
+  fireEvent.keyDown(trigger, { key: 'Enter' });
+  await screen.findByRole('menu');
+  return screen.getAllByRole('menuitem').map((i) => i.textContent ?? '');
+}
+
+/** Chooses an action of the open row menu. */
+function choose(name: string): void {
+  fireEvent.click(screen.getByRole('menuitem', { name }));
+}
+
 describe('users list', () => {
   it('with only system.users.read the table renders and no row actions show', async () => {
     startApp({ me: signedIn({ permissions: ['system.users.read'] }), path: '/admin/users', routes: usersRoutes() });
@@ -62,18 +76,17 @@ describe('users list', () => {
     expect(screen.queryByRole('link', { name: 'Tambah pengguna' })).toBeNull();
   });
 
-  it('with system.users.manage each row offers its actions, but not on the signed-in user', async () => {
+  it('with system.users.manage each row offers its actions in its ⋯ menu, but not on the signed-in user', async () => {
     startApp({ me: adminMe(), path: '/admin/users', routes: usersRoutes() });
     await screen.findByRole('link', { name: 'budi' });
     expect(within(screen.getByRole('table')).getByRole('columnheader', { name: 'Tindakan' })).toBeTruthy();
-    const budi = within(rowOf('budi'));
-    expect(budi.getByRole('button', { name: 'Nonaktifkan' })).toBeTruthy();
-    expect(budi.getByRole('button', { name: 'Atur ulang kata sandi' })).toBeTruthy();
-    expect(budi.getByRole('button', { name: 'Atur ulang 2FA' })).toBeTruthy();
-    const citra = within(rowOf('citra'));
-    expect(citra.getByRole('button', { name: 'Aktifkan' })).toBeTruthy();
-    expect(citra.queryByRole('button', { name: 'Nonaktifkan' })).toBeNull();
-    expect(citra.queryByRole('button', { name: 'Atur ulang 2FA' })).toBeNull(); // no 2FA to reset
+    expect(await rowMenu('budi')).toEqual(['Atur ulang kata sandi', 'Atur ulang 2FA', 'Nonaktifkan']);
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    // Citra is disabled and has no 2FA to reset.
+    expect(await rowMenu('citra')).toEqual(['Aktifkan', 'Atur ulang kata sandi']);
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     expect(within(rowOf('ani')).queryByRole('button')).toBeNull();
     expect(screen.getByRole('link', { name: 'Tambah pengguna' }).getAttribute('href')).toBe('/admin/users/new');
   });
@@ -101,7 +114,8 @@ describe('users list', () => {
       routes: usersRoutes({ extra: { 'POST users/:id/disable': () => ({ ...USER_BUDI, status: 'disabled' }) } }),
     });
     await screen.findByRole('link', { name: 'budi' });
-    fireEvent.click(within(rowOf('budi')).getByRole('button', { name: 'Nonaktifkan' }));
+    await rowMenu('budi');
+    choose('Nonaktifkan');
     const dialog = await screen.findByRole('alertdialog', { name: 'Nonaktifkan Budi Santoso?' });
     expect(writes()).toEqual([]);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Nonaktifkan' }));
@@ -120,7 +134,8 @@ describe('temporary password', () => {
       routes: usersRoutes({ extra: { 'POST users/:id/reset-password': () => ({ temporaryPassword: SECRET }) } }),
     });
     await screen.findByRole('link', { name: 'budi' });
-    fireEvent.click(within(rowOf('budi')).getByRole('button', { name: 'Atur ulang kata sandi' }));
+    await rowMenu('budi');
+    choose('Atur ulang kata sandi');
     const confirm = await screen.findByRole('alertdialog', { name: 'Atur ulang kata sandi Budi Santoso?' });
     fireEvent.click(within(confirm).getByRole('button', { name: 'Atur ulang kata sandi' }));
 

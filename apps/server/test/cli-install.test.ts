@@ -158,6 +158,8 @@ describe('install --config: success', () => {
       ['library.locale', '"id"', 'data', 0],
       ['library.name', '"Perpustakaan"', 'data', 0],
       ['library.timezone', '"Asia/Jakarta"', 'data', 0],
+      // A fresh install starts with the blue OPAC accent (stored; the setting's default stays the older one).
+      ['opac.accent', '"blue"', 'data', 0],
     ]);
     // The community edition records no licence or trial: no releases/clock.json, no license_state row.
     expect(await exists(path.join(dirs.dataDir, 'releases', 'clock.json'))).toBe(false);
@@ -188,7 +190,7 @@ describe('install --config: success', () => {
     expect((await config()).trustProxy).toEqual({ hops: 2 });
     const db = await seeded();
     expect(db.branches[0]).toMatchObject({ name: 'Perpustakaan SMA 1', timezone: 'Asia/Makassar' });
-    expect(db.settings.map((s) => s.value)).toEqual(['"en"', '"Perpustakaan SMA 1"', '"Asia/Makassar"']);
+    expect(db.settings.map((s) => s.value)).toEqual(['"en"', '"Perpustakaan SMA 1"', '"Asia/Makassar"', '"blue"']);
   });
 
   it('defaults trustProxy.hops from the runtime: passenger, litespeed and pm2 1, the others 0', async () => {
@@ -547,7 +549,8 @@ describe('install --config: an interrupted install resumes (P7, ruling R55)', ()
     expect(cfg.install.id).toBe(half.install.id);
     const db = await seeded();
     expect(db.branches).toHaveLength(1);
-    expect(db.settings.map((s) => s.key)).toEqual(['library.locale', 'library.name', 'library.timezone']);
+    // The accent row is written once: a resumed install keeps the one row it finds.
+    expect(db.settings.map((s) => s.key)).toEqual(['library.locale', 'library.name', 'library.timezone', 'opac.accent']);
     expect(db.license).toEqual([]);
     // Still one admin, one super_admin assignment and one users.create (the seeds' upserts, D33).
     expect(db.users).toHaveLength(1);

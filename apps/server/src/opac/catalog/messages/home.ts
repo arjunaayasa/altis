@@ -58,6 +58,8 @@ export const HOME_MESSAGES = defineOpacMessages(
     'home.rules.days': '{count} hari',
     'home.rules.days_one': '{count} hari',
     'home.rules.same_day': 'kembali hari itu juga',
+    // ---- Komunitas (OPAC look): the visit block's contact ----
+    'home.visit.contact': 'Kontak',
   },
   {
     'home.search.titles': '{count} titles',
@@ -110,5 +112,6 @@ export const HOME_MESSAGES = defineOpacMessages(
     'home.rules.days': '{count} days',
     'home.rules.days_one': '{count} day',
     'home.rules.same_day': 'due the same day',
+    'home.visit.contact': 'Contact',
   },
 );

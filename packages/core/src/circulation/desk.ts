@@ -14,6 +14,7 @@ import {
 } from '@altis/shared';
 import type {
   CirculationWarningView,
+  DeskItemGlance,
   DeskLoanView,
   DeskMemberSearchResponse,
   DeskMemberView,
@@ -33,8 +34,8 @@ import { findLiveMemberByNo, memberQueryWhere } from '../members/members.js';
 import { writeItemEvents } from '../catalog/items/events.js';
 import { indexRecords } from '../search/index-records.js';
 import { branchToday, dueDateFor } from './dates.js';
-import { checkKeptCopy, fulfilHoldOnLoan, memberHolds, renewalHeldBack, trapOnReturn } from './holds.js';
-import { resolvePolicy } from './policies.js';
+import { checkKeptCopy, fulfilHoldOnLoan, keptItems, memberHolds, renewalHeldBack, trapOnReturn } from './holds.js';
+import { resolvePolicy, typeLoanRules } from './policies.js';
 import { chargeSeam } from './seams.js';
 // ---- Komunitas K2 (visits) ----
 import { recordMemberDayVisit } from '../visits/visits.js';
@@ -501,7 +502,7 @@ export async function returnItem(tx: TxCtx, input: { branchId: string; barcode: 
     const b = await trx.selectFrom('branches').select('code_display').where('id', '=', itemRow.branch_id).executeTakeFirst();
     warnings.push({ code: 'return_to_branch', branchCode: b?.code_display ?? '?' });
   }
-  const member = loan.member_id === null ? undefined : await trx.selectFrom('members').select('member_no_display').where('id', '=', loan.member_id).executeTakeFirst();
+  const member = loan.member_id === null ? undefined : await trx.selectFrom('members').select(['member_no_display', 'name']).where('id', '=', loan.member_id).executeTakeFirst();
   const hold = await trapOnReturn(tx, { itemId: locked.id, returnBranchId: input.branchId });
   await indexRecords(trx, [locked.record_id], tx.now);
   // ---- Komunitas K2 (visits) ----
@@ -518,6 +519,8 @@ export async function returnItem(tx: TxCtx, input: { branchId: string; barcode: 
     version: ok(loan.version) + 1,
     memberId: loan.member_id,
     memberNo: member?.member_no_display ?? null,
+    // ---- Komunitas (staff screens' data): the desk sees members ----
+    memberName: member?.name ?? null,
     item,
     record,
     loanedOn: loan.loaned_on,
@@ -774,6 +777,8 @@ export async function deskMemberView(db: Db, input: { branchId: string; memberId
     holds,
     warnings: memberWarnings(m.expires_on, today),
     charges,
+    // ---- Komunitas (staff screens' data): the loan period and renewals of the type's general rule ----
+    loanRule: (await typeLoanRules(db, [m.member_type_id])).get(m.member_type_id) ?? null,
   };
 }
 
@@ -811,5 +816,40 @@ export async function deskMemberSearch(db: Db, input: { branchId: string; q: str
       className: r.class_name,
       status: memberStatusOf({ status: r.status, expires_on: r.expires_on, archived_at: null, anonymized_at: null }, today),
     })),
+  };
+}
+
+// ---- Komunitas (staff screens' data) ----
+
+/**
+ * What the desk may say about the scanned item `barcode` under a refusal (DeskItemGlance): its title, barcode, status
+ * and branch, the due date of its open loan and whether a copy is kept on the hold shelf. Never the member who holds it
+ * or waits for it. Reads only.
+ *
+ * @throws DomainError NOT_FOUND (no live item); VALIDATION_FAILED `isbn_not_barcode`
+ */
+export async function deskItemGlance(db: Db, input: { barcode: string }): Promise<DeskItemGlance> {
+  const key = scannedBarcode(input.barcode);
+  const row =
+    key === null
+      ? undefined
+      : await db
+          .selectFrom('items as i')
+          .innerJoin('records as r', 'r.id', 'i.record_id')
+          .leftJoin('branches as b', 'b.id', 'i.branch_id')
+          .select(['i.id', 'i.barcode_display', 'i.status', 'r.title', 'b.code_display as branch_code'])
+          .where('i.barcode_key', '=', key)
+          .where('i.archived_at', 'is', null)
+          .executeTakeFirst();
+  if (row === undefined) throw itemNotFound(null);
+  const loan = await db.selectFrom('loans').select('due_on').where('open_item_id', '=', row.id).executeTakeFirst();
+  const kept = await keptItems(db, [row.id]);
+  return {
+    barcode: row.barcode_display,
+    title: row.title,
+    status: row.status,
+    branchCode: row.branch_code ?? '?',
+    dueOn: loan?.due_on ?? null,
+    onHoldShelf: kept.has(row.id),
   };
 }

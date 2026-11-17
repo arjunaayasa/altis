@@ -3,16 +3,19 @@ import type { SubjectRelationsBody, SubjectView } from '@altis/shared/api/catalo
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Badge, Field, Notice, SELECT_CLASS } from '@/components/form-field';
+import { Callout, DenseTable, LAYER, PageError, Section, type DenseColumn } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import { useT, type AdminKey } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
 import { fieldErrorKey, problemText } from '@/lib/form-errors';
+import { cn } from '@/lib/utils';
 import { useDirtyGuard } from '@/lib/dirty-forms';
 import { useMe } from '@/lib/me';
 import {
+  AUTHORITY_LINK,
   authorityHref,
   authorityKey,
   authorityKindKey,
@@ -94,14 +97,13 @@ function Cycles({ subject }: { subject: SubjectView }) {
   const termOf = (id: string): string => known.get(id) ?? reads[unknown.indexOf(id)]?.data?.term ?? '…';
   if (subject.cycles.length === 0) return null;
   return (
-    <div role="note" className="flex flex-col gap-1 rounded-md border border-warning-foreground/30 bg-warning px-3 py-2 text-sm text-warning-foreground">
-      <p>{t('catalog.authorities.thesaurus.cycles')}</p>
+    <Callout tone="warn" title={t('catalog.authorities.thesaurus.cycles')}>
       <ul className="list-inside list-disc">
         {subject.cycles.map((cycle) => (
           <li key={cycle.join('>')}>{cycle.map(termOf).join(' → ')}</li>
         ))}
       </ul>
-    </div>
+    </Callout>
   );
 }
 
@@ -118,7 +120,6 @@ export function ThesaurusEditor({
 }) {
   const t = useT();
   const queryClient = useQueryClient();
-  const headingId = useId();
   /** The relations as last read or saved, and the version they were read with. */
   const [saved, setSaved] = useState<{ relations: Relation[]; version: number }>(() => ({ relations: relationsOf(subject), version: subject.version }));
   const [rows, setRows] = useState<Relation[]>(saved.relations);
@@ -244,96 +245,71 @@ export function ThesaurusEditor({
   const stale = problem instanceof ApiError && problem.code === 'CONFLICT_STALE';
   const reciprocal = (r: Relation): string => t('catalog.authorities.thesaurus.reciprocal', { term: r.term, rel: relAbbr(THESAURUS_RECIPROCAL[r.rel]) });
 
+  const columns: DenseColumn<Relation>[] = [
+    { id: 'rel', header: t('catalog.authorities.thesaurus.col.rel'), className: 'whitespace-nowrap', cell: (r) => t(vocabKey('thesaurus_rel', r.rel)) },
+    {
+      id: 'subject',
+      header: t('catalog.authorities.thesaurus.col.subject'),
+      cell: (r) => {
+        const error = rowErrors.get(keyOf(r));
+        return (
+          <>
+            <span className="flex flex-wrap items-center gap-2">
+              <Link to={authorityHref('subjects', r.subjectId)} className={AUTHORITY_LINK}>
+                {r.term}
+              </Link>
+              <span className="text-muted-foreground">{typeLabel(t, r.type)}</span>
+              {!savedKeys.has(keyOf(r)) && <Badge tone="neutral">{t('catalog.authorities.thesaurus.added')}</Badge>}
+            </span>
+            {error !== undefined && (
+              <p role="alert" className="mt-1 text-meta font-semibold text-bad">
+                {t(error)}
+              </p>
+            )}
+          </>
+        );
+      },
+    },
+  ];
+  if (canEdit) {
+    columns.push({
+      id: 'remove',
+      header: <span className="sr-only">{t('catalog.authorities.thesaurus.remove')}</span>,
+      className: 'w-px py-1.5 text-right whitespace-nowrap',
+      cell: (r) => (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          aria-label={t('catalog.authorities.thesaurus.remove_label', { rel: relAbbr(r.rel), term: r.term })}
+          onClick={() => remove(r)}>
+          {t('catalog.authorities.thesaurus.remove')}
+        </Button>
+      ),
+    });
+  }
+
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      <h2 id={headingId} className="text-base font-semibold">
-        {t('catalog.authorities.thesaurus.title')}
-      </h2>
-      <p className="text-sm text-muted-foreground">{t('catalog.authorities.thesaurus.description')}</p>
+    <Section title={t('catalog.authorities.thesaurus.title')}>
+      <p className="max-w-[75ch] text-sm text-muted-foreground">{t('catalog.authorities.thesaurus.description')}</p>
       <Cycles subject={subject} />
       {done && <Notice kind="success">{t('catalog.authorities.thesaurus.saved')}</Notice>}
       {problem !== null && (
-        <Notice
-          kind="error"
+        <PageError
+          error={problem}
           action={
             stale ? (
-              <Button type="button" variant="outline" size="sm" onClick={() => void reloadData()}>
+              <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => void reloadData()}>
                 {t('form.reload_data')}
               </Button>
             ) : undefined
           }
-        >
-          {problemText(t, problem)}
-        </Notice>
+        />
       )}
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
-          <caption className="sr-only">{t('catalog.authorities.thesaurus.caption')}</caption>
-          <thead className="bg-muted/50 text-left">
-            <tr>
-              <th scope="col" className="px-3 py-2 font-medium whitespace-nowrap text-muted-foreground">
-                {t('catalog.authorities.thesaurus.col.rel')}
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium whitespace-nowrap text-muted-foreground">
-                {t('catalog.authorities.thesaurus.col.subject')}
-              </th>
-              {canEdit && (
-                <th scope="col" className="px-3 py-2">
-                  <span className="sr-only">{t('catalog.authorities.thesaurus.remove')}</span>
-                </th>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={canEdit ? 3 : 2} className="px-3 py-6 text-center text-muted-foreground">
-                  {t('catalog.authorities.thesaurus.empty')}
-                </td>
-              </tr>
-            ) : (
-              rows.map((r) => {
-                const error = rowErrors.get(keyOf(r));
-                return (
-                  <tr key={keyOf(r)} className="border-t align-top">
-                    <td className="px-3 py-2 whitespace-nowrap">{t(vocabKey('thesaurus_rel', r.rel))}</td>
-                    <td className="px-3 py-2">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <Link to={authorityHref('subjects', r.subjectId)} className="font-medium text-primary underline-offset-4 hover:underline">
-                          {r.term}
-                        </Link>
-                        <span className="text-muted-foreground">{typeLabel(t, r.type)}</span>
-                        {!savedKeys.has(keyOf(r)) && <Badge tone="neutral">{t('catalog.authorities.thesaurus.added')}</Badge>}
-                      </span>
-                      {error !== undefined && (
-                        <p role="alert" className="mt-1 text-sm text-destructive">
-                          {t(error)}
-                        </p>
-                      )}
-                    </td>
-                    {canEdit && (
-                      <td className="px-3 py-2 text-right">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={busy}
-                          aria-label={t('catalog.authorities.thesaurus.remove_label', { rel: relAbbr(r.rel), term: r.term })}
-                          onClick={() => remove(r)}
-                        >
-                          {t('catalog.authorities.thesaurus.remove')}
-                        </Button>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DenseTable caption={t('catalog.authorities.thesaurus.caption')} columns={columns} rows={rows} rowKey={keyOf} empty={t('catalog.authorities.thesaurus.empty')} />
       {canEdit && (
-        <div className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)_auto] sm:items-end">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)_auto] sm:items-end">
           <Field label={t('catalog.authorities.thesaurus.rel')}>
             {(c) => (
               <select
@@ -344,8 +320,7 @@ export function ThesaurusEditor({
                 onChange={(e) => {
                   setAddError(null);
                   setRel(e.target.value as ThesaurusRel);
-                }}
-              >
+                }}>
                 {THESAURUS_RELS.map((value) => (
                   <option key={value} value={value}>
                     {t(vocabKey('thesaurus_rel', value))}
@@ -388,13 +363,13 @@ export function ThesaurusEditor({
           </Button>
         </div>
       )}
-      <div className="flex flex-col gap-2 rounded-lg border bg-card p-4">
-        <h3 className="text-sm font-semibold">{t('catalog.authorities.thesaurus.preview')}</h3>
-        <p className="text-xs text-muted-foreground">{t('catalog.authorities.thesaurus.preview_hint')}</p>
+      <div className={cn('grid gap-2 rounded-lg border p-4', LAYER)}>
+        <h3 className="text-sm font-bold">{t('catalog.authorities.thesaurus.preview')}</h3>
+        <p className="text-meta text-muted-foreground">{t('catalog.authorities.thesaurus.preview_hint')}</p>
         {rows.length === 0 && removed.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('catalog.authorities.thesaurus.preview_empty')}</p>
         ) : (
-          <ul className="flex flex-col gap-1 text-sm">
+          <ul className="grid gap-1 text-sm">
             {rows.map((r) => (
               <li key={keyOf(r)} className="flex flex-wrap items-center gap-2">
                 <span>{reciprocal(r)}</span>
@@ -411,7 +386,7 @@ export function ThesaurusEditor({
         )}
       </div>
       {canEdit && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2 border-t pt-4">
           <Button type="button" disabled={!dirty || busy} onClick={() => void save()}>
             {t(busy ? 'form.saving' : 'catalog.authorities.thesaurus.save')}
           </Button>
@@ -422,6 +397,6 @@ export function ThesaurusEditor({
           )}
         </div>
       )}
-    </section>
+    </Section>
   );
 }

@@ -3,11 +3,11 @@ import { localeField, personNameField } from '@altis/shared/api/common';
 import type { MeUser } from '@altis/shared/api/auth';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
 import { useId, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Field, NoticeAlert, ProblemAlert, RootError, describedBy } from '@/components/form-field';
+import { LinkTabs, PageHead, SideSection } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type AdminKey } from '@/i18n';
@@ -36,45 +36,15 @@ export function ProfilePage({ children }: { children: ReactNode }) {
   const me = useMe();
   const mustChange = me?.authenticated === true && me.mustChangePassword;
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
-      <header className="flex flex-col gap-4">
-        <h1 className="text-2xl font-semibold">{t('profile.title')}</h1>
+    <div className="grid max-w-5xl gap-6">
+      <div className="grid gap-4">
+        <PageHead title={t('profile.title')} />
         {!mustChange && (
-          <nav aria-label={t('profile.sections')}>
-            <ul className="flex flex-wrap gap-1 border-b">
-              {SECTIONS.map((section) => (
-                <li key={section.to}>
-                  <Link
-                    to={section.to}
-                    activeOptions={{ exact: true }}
-                    className="-mb-px block border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:font-medium data-[status=active]:text-foreground"
-                  >
-                    {t(section.labelKey)}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <LinkTabs label={t('profile.sections')} items={SECTIONS.map((section) => ({ to: section.to, label: t(section.labelKey) }))} />
         )}
-      </header>
-      {children}
+      </div>
+      <div className="grid min-w-0 gap-6">{children}</div>
     </div>
-  );
-}
-
-/** A titled section of a profile page. */
-export function ProfileSection({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
-  const id = useId();
-  return (
-    <section aria-labelledby={id} className="flex flex-col gap-4 rounded-lg border bg-card p-5 text-card-foreground">
-      <header className="flex flex-col gap-1">
-        <h2 id={id} className="text-lg font-semibold">
-          {title}
-        </h2>
-        {description !== undefined && <p className="text-sm text-muted-foreground">{description}</p>}
-      </header>
-      {children}
-    </section>
   );
 }
 
@@ -92,14 +62,14 @@ export function ProfileScreen() {
   if (user === null || me === undefined) return null;
   return (
     <ProfilePage>
-      <ProfileSection title={t('profile.account')} description={t('profile.account_hint')}>
+      <SideSection title={t('profile.account')} intro={t('profile.account_hint')}>
         <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]">
           <dt className="text-muted-foreground">{t('profile.username')}</dt>
-          <dd className="font-medium break-all">{user.username}</dd>
+          <dd className="font-semibold break-all">{user.username}</dd>
           <dt className="text-muted-foreground">{t('profile.email')}</dt>
           <dd className="break-all">{user.email ?? t('profile.email_none')}</dd>
         </dl>
-      </ProfileSection>
+      </SideSection>
       <ProfileDetails user={user} libraryLocale={me.library.locale} />
     </ProfilePage>
   );
@@ -133,7 +103,7 @@ function ProfileDetails({ user, libraryLocale }: { user: MeUser; libraryLocale: 
 
   const language = (locale: Locale): string => t(`palette.language.${locale}`);
   return (
-    <ProfileSection title={t('profile.details')}>
+    <SideSection title={t('profile.details')}>
       <form noValidate className="grid max-w-md gap-4" onSubmit={(e) => void submit(e)} onChange={() => setSaved(false)}>
         <Field id={ids.name} label={t('profile.name')} error={errors.name?.message}>
           <Input
@@ -169,6 +139,6 @@ function ProfileDetails({ user, libraryLocale }: { user: MeUser; libraryLocale: 
           </Button>
         </div>
       </form>
-    </ProfileSection>
+    </SideSection>
   );
 }

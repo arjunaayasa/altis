@@ -34,6 +34,9 @@ export interface AuthorityListFilters {
   includeArchived: boolean;
 }
 
+/** The look of a link to an authority (a name in a list, a related subject). */
+export const AUTHORITY_LINK = 'font-semibold text-accent-text underline-offset-4 hover:underline';
+
 /** Everything of one kind: its lists, pages and searches. */
 export const authorityKindKey = (kind: AuthorityKind): readonly ['catalog', AuthorityKind] => ['catalog', kind];
 

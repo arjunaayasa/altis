@@ -139,7 +139,7 @@ describe('LocationsScreen', () => {
     const { requests } = startLocations({ routes: { 'POST branches/:branchId/locations': () => ({ id: NEW_ID, version: 0 }) } });
     await screen.findByText('Area Anak', { selector: '[data-location-name]' });
     fireEvent.click(within(node('Area Anak')).getByRole('button', { name: 'Tambah lokasi di dalam Area Anak' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tambah lokasi' });
+    const dialog = await screen.findByRole('region', { name: 'Tambah lokasi' });
     expect((within(dialog).getByLabelText('Jenis') as HTMLSelectElement).value).toBe('shelf');
     expect((within(dialog).getByLabelText('Di dalam') as HTMLSelectElement).value).toBe(AREA);
     fireEvent.change(within(dialog).getByLabelText('Kode'), { target: { value: 'RAK-810' } });
@@ -166,7 +166,7 @@ describe('LocationsScreen', () => {
     startLocations();
     await screen.findByText('Area Anak', { selector: '[data-location-name]' });
     fireEvent.click(screen.getByRole('button', { name: 'Tambah ruang' }));
-    let dialog = await screen.findByRole('dialog', { name: 'Tambah lokasi' });
+    let dialog = await screen.findByRole('region', { name: 'Tambah lokasi' });
     expect((within(dialog).getByLabelText('Jenis') as HTMLSelectElement).value).toBe('room');
     expect(within(dialog).queryByLabelText('Di dalam')).toBeNull();
     fireEvent.change(within(dialog).getByLabelText('Jenis'), { target: { value: 'area' } });
@@ -176,11 +176,11 @@ describe('LocationsScreen', () => {
     const shelfParents = [...(within(dialog).getByLabelText('Di dalam') as HTMLSelectElement).options].map((o) => o.textContent);
     expect(shelfParents).toEqual(['Ruang Baca (R1)', '— Area Anak (A1)', 'Ruang Referensi (R2)']);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Batal' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Tambah lokasi' })).toBeNull());
 
     // Editing an area never offers itself or anything below it as its parent.
     fireEvent.click(within(node('Area Anak')).getByRole('button', { name: 'Ubah Area Anak' }));
-    dialog = await screen.findByRole('dialog', { name: 'Ubah lokasi' });
+    dialog = await screen.findByRole('region', { name: 'Ubah lokasi' });
     expect([...(within(dialog).getByLabelText('Di dalam') as HTMLSelectElement).options].map((o) => o.value)).toEqual([ROOM, ROOM2]);
   });
 
@@ -244,16 +244,16 @@ describe('LocationsScreen', () => {
     });
     await screen.findByText('Rak 900', { selector: '[data-location-name]' });
     fireEvent.click(within(node('Rak 900')).getByRole('button', { name: 'Ubah Rak 900' }));
-    let dialog = await screen.findByRole('dialog', { name: 'Ubah lokasi' });
+    let dialog = await screen.findByRole('region', { name: 'Ubah lokasi' });
     fireEvent.change(within(dialog).getByLabelText('Nama'), { target: { value: 'Rak 900-999' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan' }));
     expect(await within(dialog).findByText('Data ini sudah diubah oleh orang lain. Muat ulang, lalu coba lagi.')).toBeTruthy();
     await waitFor(() => expect(within(node('Rak 900')).getByText('RAK-901')).toBeTruthy());
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Batal' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Ubah lokasi' })).toBeNull());
     fireEvent.click(within(node('Rak 900')).getByRole('button', { name: 'Ubah Rak 900' }));
-    dialog = await screen.findByRole('dialog', { name: 'Ubah lokasi' });
+    dialog = await screen.findByRole('region', { name: 'Ubah lokasi' });
     expect((within(dialog).getByLabelText('Kode') as HTMLInputElement).value).toBe('RAK-901');
     fireEvent.change(within(dialog).getByLabelText('Nama'), { target: { value: 'Rak 900-999' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan' }));
@@ -308,7 +308,7 @@ describe('LocationsScreen', () => {
     });
     await screen.findByText('Rak 800', { selector: '[data-location-name]' });
     fireEvent.click(within(node('Rak 800')).getByRole('button', { name: 'Ubah Rak 800' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah lokasi' });
+    const dialog = await screen.findByRole('region', { name: 'Ubah lokasi' });
     fireEvent.change(within(dialog).getByLabelText('Di dalam'), { target: { value: ROOM2 } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan' }));
     await waitFor(() => expect(sent(requests, 'PATCH', `branches/${BRANCH_A}/locations/${SHELF}`)).toHaveLength(1));
@@ -348,7 +348,7 @@ describe('LocationsScreen', () => {
     });
     await screen.findByText('Area Anak', { selector: '[data-location-name]' });
     fireEvent.click(within(node('Area Anak')).getByRole('button', { name: 'Ubah Area Anak' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah lokasi' });
+    const dialog = await screen.findByRole('region', { name: 'Ubah lokasi' });
     fireEvent.change(within(dialog).getByLabelText('Jenis'), { target: { value: 'room' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan' }));
     await waitFor(() => expect(sent(requests, 'PATCH', `branches/${BRANCH_A}/locations/${AREA}`)).toHaveLength(1));
@@ -379,7 +379,7 @@ describe('LocationsScreen', () => {
     });
     await screen.findByText('Rak 900', { selector: '[data-location-name]' });
     fireEvent.click(within(node('Rak 900')).getByRole('button', { name: 'Ubah Rak 900' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Ubah lokasi' });
+    const dialog = await screen.findByRole('region', { name: 'Ubah lokasi' });
     fireEvent.change(within(dialog).getByLabelText('Di dalam'), { target: { value: AREA } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan' }));
     expect(await within(dialog).findByText('Lokasi induk ini tidak dapat dipakai: sudah diarsipkan, di cabang lain, atau jenisnya tidak sesuai.')).toBeTruthy();

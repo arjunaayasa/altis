@@ -1,3 +1,6 @@
+import { MEMBER_IMPORT_COLUMNS, MEMBER_IMPORT_REQUIRED_COLUMNS, SLIMS_MEMBER_EXPORT_COLUMNS, type MemberImportColumn } from '@altis/shared/api/members';
+import type { MemberImportFormat } from '@altis/shared';
+
 /**
  * The member import's look at a file before anything is sent: the browser reads its head so the mapping step can show
  * what the server will make of it. The server stays the judge (it reads the whole file again); these rules follow it:
@@ -9,33 +12,17 @@
  * - The first row is the header; column names are matched without regard to case, an empty header cell is ignored, an
  *   unknown or repeated column refuses the file, and `member_no`, `name` and `member_type` are required.
  * - Rows whose cells are all empty are not counted.
+ * - The admin then maps the columns: each column feeds one field or is ignored, by position (the server takes that
+ *   mapping in place of the header's names). It starts from the header's names (`csv-members`) or the fixed order of a
+ *   SLiMS member export (`slims-members`, whose first row is a header only when it names the columns).
  */
 
 /** The columns of the `csv-members` format, in the template's order. */
-export const MEMBER_CSV_COLUMNS = Object.freeze([
-  'member_no',
-  'name',
-  'member_type',
-  'class_name',
-  'identity_no',
-  'gender',
-  'birth_date',
-  'email',
-  'phone',
-  'address',
-  'postal_code',
-  'mailing_address',
-  'institution',
-  'joined_on',
-  'expires_on',
-  'home_branch',
-  'notes',
-  'locale',
-] as const);
+export const MEMBER_CSV_COLUMNS = MEMBER_IMPORT_COLUMNS;
 
-export type MemberCsvColumn = (typeof MEMBER_CSV_COLUMNS)[number];
+export type MemberCsvColumn = MemberImportColumn;
 
-const REQUIRED: readonly MemberCsvColumn[] = ['member_no', 'name', 'member_type'];
+const REQUIRED: readonly MemberCsvColumn[] = MEMBER_IMPORT_REQUIRED_COLUMNS;
 
 export interface CsvHead {
   encoding: 'utf-8' | 'windows-1252';
@@ -174,4 +161,40 @@ export function checkMemberCsvHeader(header: readonly string[]): {
   });
   const missing = REQUIRED.filter((c) => !seen.has(c));
   return { columns, missing, unknown, duplicate, ok: missing.length === 0 && unknown.length === 0 && duplicate.length === 0 };
+}
+
+// ---- Komunitas (staff screens' data): the format and the admin's mapping ----
+
+/**
+ * The head of a SLiMS member export: its first row is the header only when its first cell is the export's first column
+ * name; otherwise that row is data too and the header is the export's column names.
+ */
+export function slimsHead(head: CsvHead): CsvHead {
+  if (head.header[0]?.trim().toLowerCase() === SLIMS_MEMBER_EXPORT_COLUMNS[0]![0]) return head;
+  const names = SLIMS_MEMBER_EXPORT_COLUMNS.map(([name]) => name);
+  // As many sample rows as before: one more when the sample held every data row.
+  const keep = head.rows.length < head.total ? head.rows.length : head.rows.length + 1;
+  return {
+    ...head,
+    header: names,
+    rows: [head.header, ...head.rows].slice(0, keep),
+    lines: [1, ...head.lines].slice(0, keep),
+    total: head.total + 1,
+  };
+}
+
+/** The field each column feeds at first: by its header name (each field once), or the SLiMS export's order. */
+export function initialMapping(format: MemberImportFormat, header: readonly string[]): (MemberCsvColumn | null)[] {
+  if (format === 'slims-members') return header.map((_, i) => SLIMS_MEMBER_EXPORT_COLUMNS[i]?.[1] ?? null);
+  return checkMemberCsvHeader(header).columns.map((c) => (c === null || c === 'unknown' || c === 'duplicate' ? null : c));
+}
+
+/** `mapping` with column `index` feeding `field`; a column that fed it before is ignored from now on (each field once). */
+export function remap(mapping: readonly (MemberCsvColumn | null)[], index: number, field: MemberCsvColumn | null): (MemberCsvColumn | null)[] {
+  return mapping.map((c, i) => (i === index ? field : field !== null && c === field ? null : c));
+}
+
+/** The required fields no column feeds. */
+export function missingFields(mapping: readonly (MemberCsvColumn | null)[]): MemberCsvColumn[] {
+  return REQUIRED.filter((c) => !mapping.includes(c));
 }

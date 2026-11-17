@@ -458,7 +458,9 @@ describe('RecordEditScreen', () => {
       },
     });
     expect(await screen.findByText(/digit pemeriksanya salah/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Arsipkan' }));
+    // Archiving is in the page head's ⋯ menu.
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Tindakan lain untuk cantuman ini' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Arsipkan' }));
     const dialog = await screen.findByRole('alertdialog');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Arsipkan' }));
     await waitFor(() => expect(posts(requests, `catalog/records/${RECORD}`).map((r) => [r.method, r.body])).toEqual([['DELETE', { version: 3 }]]));

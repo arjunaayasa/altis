@@ -55,6 +55,8 @@ async function saveMemberCustom(tx: TxCtx, id: string, values: Record<string, un
 }
 // ---- Komunitas (member area) ----
 import { revokeMemberSessions } from './area/sessions.js';
+// ---- Komunitas (staff screens' data) ----
+import { CLASS_LIST_MAX, openLoanCounts } from '../circulation/loans.js';
 
 // Members: create, edit (suspend and reactivate are an edit of `status`), extend, archive, read, look up by number,
 // search, and the member's history.
@@ -440,7 +442,10 @@ function memberView(row: MemberRow, type: MemberTypeRef, today: string, openLoan
 
 async function viewOf(db: Db, row: MemberRow, now: number): Promise<MemberView> {
   const type = (await typeRefs(db, [row.member_type_id])).get(row.member_type_id) ?? missingType(row.member_type_id);
-  const view = memberView(row, type, await libraryToday(db, now), await openLoanCount(db, row.id));
+  // ---- Komunitas (staff screens' data): the open loans and the overdue ones, in one read ----
+  const loans = (await openLoanCounts(db, [row.id], now)).get(row.id) ?? { open: 0, overdue: 0 };
+  const view = memberView(row, type, await libraryToday(db, now), loans.open);
+  view.overdueLoans = loans.overdue;
   // ---- Komunitas K2 (members extended) ----
   view.custom = (await readCustomValues(db, 'members', [row.id])).get(row.id) ?? {};
   return view;
@@ -544,8 +549,36 @@ export async function searchMembers(db: Db, body: MemberSearchBody, now: number)
     expiresOn: r.expires_on,
     photoFileId: r.photo_file_id,
   }));
+  // ---- Komunitas (staff screens' data): the page's open and overdue loans, one grouped read ----
+  const loans = await openLoanCounts(
+    db,
+    page.map((r) => r.id),
+    now,
+  );
+  for (const item of items) {
+    const c = loans.get(item.id);
+    item.openLoans = c?.open ?? 0;
+    item.overdueLoans = c?.overdue ?? 0;
+  }
   const last = page[page.length - 1];
   return { items, nextCursor: rows.length > body.limit && last !== undefined ? `k.${last.id}` : null };
+}
+
+// ---- Komunitas (staff screens' data) ----
+
+/** The class names of the live members (not archived, not anonymised), by name, at most CLASS_LIST_MAX. */
+export async function memberClassNames(db: Db): Promise<string[]> {
+  const rows = await db
+    .selectFrom('members as m')
+    .select('m.class_name')
+    .distinct()
+    .where('m.class_name', 'is not', null)
+    .where('m.archived_at', 'is', null)
+    .where('m.anonymized_at', 'is', null)
+    .orderBy('m.class_name')
+    .limit(CLASS_LIST_MAX)
+    .execute();
+  return rows.flatMap((r) => (r.class_name === null || r.class_name.trim() === '' ? [] : [r.class_name]));
 }
 
 /**

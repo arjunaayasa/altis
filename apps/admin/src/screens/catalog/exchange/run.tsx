@@ -2,16 +2,16 @@ import { isUlid, vocabKey } from '@altis/shared';
 import type { RunView } from '@altis/shared/api/catalog/runs';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
-import { ArrowLeftIcon, CopyIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useDateTime } from '@/components/data-table';
-import { Badge, Notice, ProblemAlert } from '@/components/form-field';
+import { Badge, ProblemAlert } from '@/components/form-field';
+import { BackLink, FactList, LoadingState, PageError, PageHead, Section } from '@/components/layout';
 import { JobProgress } from '@/components/job-progress';
 import { useT } from '@/i18n';
 import { ApiError } from '@/lib/api';
 import { useApiQuery, useMe } from '@/lib/me';
 import { OptionsList, RealRunAction, continuable, importOptionsOf } from './import-wizard';
-import { RUNS_KEY, RunStatusBadge, SummaryView, formatLabel, isRunActive, runKey } from './summary-view';
+import { RUNS_KEY, RUN_LINK, RunStatusBadge, SummaryView, formatLabel, isRunActive, runKey } from './summary-view';
 
 /**
  * One catalog run (Phase 2 spec §13, §5.3, §5.4, §3.3; plan Task 29), `/admin/catalog/runs/$runId`: what it is (kind,
@@ -38,16 +38,7 @@ function Facts({ run }: { run: RunView }) {
   if (format !== null) rows.push([t('catalog.exchange.runs.col.format'), format]);
   rows.push([t('catalog.exchange.runs.col.created'), dateTime(run.createdAt)]);
   if (run.finishedAt !== null) rows.push([t('catalog.exchange.runs.col.finished'), dateTime(run.finishedAt)]);
-  return (
-    <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
-      {rows.map(([label, value]) => (
-        <div key={label} className="contents">
-          <dt className="text-muted-foreground">{label}</dt>
-          <dd>{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
+  return <FactList className="max-w-xl" items={rows.map(([label, value]) => ({ key: label, label, value }))} />;
 }
 
 export function RunDetailScreen() {
@@ -63,33 +54,25 @@ export function RunDetailScreen() {
   const realRun = r === undefined ? null : continuable(r, me, Date.now());
 
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
-      <div>
-        <Link to={EXCHANGE_PATH} search={{ tab: 'runs' }} className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline">
-          <ArrowLeftIcon className="size-4" aria-hidden="true" />
-          {t('catalog.exchange.run.back')}
-        </Link>
-      </div>
-      <header className="flex flex-wrap items-center gap-2">
-        <h1 className="text-2xl font-semibold">{t('catalog.exchange.run.title')}</h1>
-        {r?.dryRun === true && <Badge>{t('catalog.exchange.runs.dry_run')}</Badge>}
-      </header>
+    <div className="grid max-w-5xl gap-6">
+      <BackLink to={EXCHANGE_PATH} search={{ tab: 'runs' }}>
+        {t('catalog.exchange.run.back')}
+      </BackLink>
+      <PageHead title={t('catalog.exchange.run.title')} intro={r?.dryRun === true ? <Badge>{t('catalog.exchange.runs.dry_run')}</Badge> : undefined} />
       {notFound ? (
-        <Notice kind="error">{t('catalog.exchange.run.not_found')}</Notice>
+        <PageError title={t('catalog.exchange.run.not_found')} />
       ) : run.isError && r === undefined ? (
         <ProblemAlert error={run.error} />
       ) : r === undefined ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
+        <LoadingState />
       ) : (
         <>
-          <section aria-label={t('catalog.exchange.run.facts')} className="grid gap-3 rounded-lg border bg-card p-4">
+          <section aria-label={t('catalog.exchange.run.facts')} className="grid gap-3">
             <Facts run={r} />
             {options !== null && <OptionsList options={options} />}
           </section>
           {isRunActive(r.status) && r.jobId !== null && (
-            <section aria-label={t('catalog.exchange.run.progress')} className="grid gap-2 rounded-lg border p-4">
+            <section aria-label={t('catalog.exchange.run.progress')} className="grid gap-2">
               <JobProgress
                 jobId={r.jobId}
                 onDone={() => {
@@ -99,18 +82,14 @@ export function RunDetailScreen() {
               <p className="text-sm text-muted-foreground">{t('catalog.exchange.leave_hint')}</p>
             </section>
           )}
-          <section aria-label={t('catalog.exchange.summary.title')} className="grid gap-3">
-            <h2 className="text-lg font-semibold">{t('catalog.exchange.summary.title')}</h2>
+          <Section title={t('catalog.exchange.summary.title')}>
             <SummaryView run={r} />
-          </section>
+          </Section>
           {realRun !== null && <RealRunAction key={r.id} dryRunId={r.id} options={realRun} />}
           {r.kind === 'dedupe_scan' && (
-            <div>
-              <Link to="/admin/catalog/duplicates" className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline">
-                <CopyIcon className="size-4" aria-hidden="true" />
-                {t('catalog.exchange.run.duplicates')}
-              </Link>
-            </div>
+            <Link to="/admin/catalog/duplicates" className={RUN_LINK}>
+              {t('catalog.exchange.run.duplicates')}
+            </Link>
           )}
         </>
       )}

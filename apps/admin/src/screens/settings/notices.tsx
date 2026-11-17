@@ -2,11 +2,12 @@ import { LOCALES, type Locale } from '@altis/shared';
 import type { CirculationSettingsBody, CirculationSettingsView, EmailSettings, EmailSettingsBody, EmailTemplate } from '@altis/shared/api/settings';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
+import { SideSection } from '@/components/layout';
 import { Field, TEXTAREA_CLASS } from '@/components/form-field';
 import { Input } from '@/components/ui/input';
 import { translate, useT, type TKey } from '@/i18n';
 import { useDirtyGuard } from '@/lib/dirty-forms';
-import { SettingsFooter, SettingsSection, saveSettings, type SaveOutcome } from './library';
+import { SettingsFooter, saveSettings, type SaveOutcome } from './library';
 
 /**
  * The member notices' settings, two more forms:
@@ -87,7 +88,7 @@ export function NoticesSettingsForm({ initial, canManage }: { initial: Circulati
   );
 
   return (
-    <SettingsSection title={t('notices.settings.title')} description={t('notices.settings.intro')}>
+    <SideSection title={t('notices.settings.title')} intro={t('notices.settings.intro')}>
       <form noValidate className="grid gap-4 sm:grid-cols-3" onSubmit={(e) => void submit(e)}>
         <fieldset disabled={!canManage} className="contents">
           {number('dueSoonDays', 'notices.settings.due_soon_days', 'notices.settings.due_soon_hint')}
@@ -102,7 +103,7 @@ export function NoticesSettingsForm({ initial, canManage }: { initial: Circulati
           <SettingsFooter canManage={canManage} busy={busy} outcome={outcome} problem={problem} rootError={undefined} />
         </div>
       </form>
-    </SettingsSection>
+    </SideSection>
   );
 }
 
@@ -179,7 +180,7 @@ export function NoticeTemplatesForm({ initial, canManage }: { initial: EmailSett
   };
 
   return (
-    <SettingsSection title={t('notices.templates.title')} description={t('notices.templates.intro', { placeholders: NOTICE_PLACEHOLDERS })}>
+    <SideSection title={t('notices.templates.title')} intro={t('notices.templates.intro', { placeholders: NOTICE_PLACEHOLDERS })}>
       <form noValidate className="grid gap-6" onSubmit={(e) => void submit(e)}>
         <fieldset disabled={!canManage} className="contents">
           {TEMPLATES.map(({ name, kind, label }) => (
@@ -219,6 +220,6 @@ export function NoticeTemplatesForm({ initial, canManage }: { initial: EmailSett
         </fieldset>
         <SettingsFooter canManage={canManage} busy={busy} outcome={outcome} problem={problem} rootError={undefined} />
       </form>
-    </SettingsSection>
+    </SideSection>
   );
 }

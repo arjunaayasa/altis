@@ -218,8 +218,13 @@ describe('RecordsListScreen', () => {
     await screen.findByRole('link', { name: 'Bumi Manusia' });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pilih Bumi Manusia' }));
     fireEvent.click(screen.getByRole('button', { name: 'Ekspor terpilih' }));
-    await waitFor(() => expect(sessionStorage.getItem(EXPORT_SELECTION_KEY)).not.toBeNull());
-    expect(JSON.parse(sessionStorage.getItem(EXPORT_SELECTION_KEY)!)).toEqual({ ids: [R2], archived: true });
+    // Read where it is written: the export page that opens next reads the selection and clears it.
+    const stored = await waitFor(() => {
+      const text = sessionStorage.getItem(EXPORT_SELECTION_KEY);
+      expect(text).not.toBeNull();
+      return text!;
+    });
+    expect(JSON.parse(stored)).toEqual({ ids: [R2], archived: true });
   });
 
   it('M2: with sessionStorage throwing, it shows a notice instead and stays on the list', async () => {

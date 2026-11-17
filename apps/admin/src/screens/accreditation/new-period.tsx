@@ -1,16 +1,17 @@
 import { addDays, addMonths, endOfMonth, vocabKey, type PeriodKind, type SchoolLevel } from '@altis/shared';
 import type { InstrumentsResponse, InstrumentView, PeriodCreateBody, PeriodSummaryView } from '@altis/shared/api/accreditation';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
-import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowLeftIcon } from 'lucide-react';
+import { useNavigate } from '@tanstack/react-router';
 import { useState, type FormEvent, type JSX } from 'react';
 import { ProblemAlert } from '@/components/form-field';
+import { BackLink, Callout, ErrorState, FORM_FULL, FormBar, LoadingState, PageHead } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
 import { fieldErrorKey } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
+import { cn } from '@/lib/utils';
 import { useFormats, useInstruments, usePeriods, useRefreshPeriods, type Formats } from './data';
 import { SelectField, TextField } from './period-form';
 
@@ -137,29 +138,16 @@ export function PeriodCreateScreen(): JSX.Element {
   const canManage = holds(me, 'accreditation.workspace.manage');
 
   let body: JSX.Element;
-  if (!canManage) body = <p className="text-sm">{t('accreditation.new.forbidden')}</p>;
+  if (!canManage) body = <Callout tone="bad" role="alert" title={t('accreditation.new.forbidden')} />;
   else if (instruments.data === undefined || periods.data === undefined) {
     const failed = instruments.isError ? instruments : periods.isError ? periods : null;
-    body =
-      failed !== null ? (
-        <ProblemAlert error={failed.error} />
-      ) : (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
-      );
+    body = failed !== null ? <ErrorState error={failed.error} onRetry={() => void failed.refetch()} retrying={failed.isFetching} /> : <LoadingState />;
   } else body = <CreateForm instruments={instruments.data} periods={periods.data.periods} />;
 
   return (
-    <div className="flex max-w-2xl flex-col gap-6">
-      <header className="flex flex-col gap-2">
-        <Link to={BASE} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeftIcon className="size-4" aria-hidden="true" />
-          {t('accreditation.new.back')}
-        </Link>
-        <h1 className="text-2xl font-semibold">{t('accreditation.new.title')}</h1>
-        <p className="text-sm text-muted-foreground">{t('accreditation.new.description')}</p>
-      </header>
+    <div className="grid max-w-3xl gap-6">
+      <BackLink to={BASE}>{t('accreditation.new.back')}</BackLink>
+      <PageHead title={t('accreditation.new.title')} intro={t('accreditation.new.description')} />
       {body}
     </div>
   );
@@ -255,68 +243,77 @@ function CreateForm({ instruments, periods }: { instruments: InstrumentsResponse
   const showLevel = levels.length > 0 && (school || libraryType === null || libraryType === 'sekolah');
 
   return (
-    <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
-      <TextField
-        label={t('accreditation.new.name')}
-        value={draft.name}
-        error={errors.name}
-        disabled={busy}
-        maxLength={191}
-        onChange={(v) => set('name', v)}
-      />
-      <SelectField
-        label={t('accreditation.new.instrument')}
-        value={draft.instrumentId}
-        error={errors.instrumentId}
-        disabled={busy}
-        options={instruments.instruments.map((i) => [i.id, instrumentLabel(t, i)] as const)}
-        onChange={(id) => {
-          setDraft((d) => forInstrument(d, instruments.instruments.find((i) => i.id === id), startMonth));
-          setErrors({});
-        }}
-      />
-      {instrument?.sourceStatus === 'P-copy' && <p className="-mt-2 text-xs text-muted-foreground">{t('accred.source.copy')}</p>}
-      {instrument !== undefined && (
-        <SelectField
-          label={t('accreditation.new.kind')}
-          value={draft.kind}
-          error={errors.kind}
+    <form noValidate onSubmit={(e) => void submit(e)} className="grid gap-4">
+      <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+        <TextField
+          label={t('accreditation.new.name')}
+          value={draft.name}
+          error={errors.name}
           disabled={busy}
-          options={instrument.periodKinds.map((k) => [k, t(vocabKey('period_kind', k))] as const)}
-          onChange={(k) => setKind(k as PeriodKind)}
+          maxLength={191}
+          className={FORM_FULL}
+          onChange={(v) => set('name', v)}
         />
-      )}
-      <SpanInputs draft={draft} errors={errors} busy={busy} set={set} />
-      {span !== null && <p className="text-sm text-muted-foreground">{t('accreditation.new.span', spanText(f, span))}</p>}
-      {draft.kind === 'custom' && <p className="text-xs text-muted-foreground">{t('accreditation.new.custom_hint')}</p>}
-      {showLevel && (
         <SelectField
-          label={t('accreditation.new.school_level')}
-          value={draft.schoolLevel}
-          error={errors.schoolLevel}
+          label={t('accreditation.new.instrument')}
+          {...(instrument?.sourceStatus === 'P-copy' ? { hint: t('accred.source.copy') } : {})}
+          value={draft.instrumentId}
+          error={errors.instrumentId}
           disabled={busy}
-          options={[
-            ...(school ? [] : ([['', t('accreditation.new.school_level_none')]] as const)),
-            ...levels.map((l) => [l, t(vocabKey('school_level', l))] as const),
-          ]}
-          onChange={(l) => set('schoolLevel', l as SchoolLevel | '')}
+          className={FORM_FULL}
+          options={instruments.instruments.map((i) => [i.id, instrumentLabel(t, i)] as const)}
+          onChange={(id) => {
+            setDraft((d) => forInstrument(d, instruments.instruments.find((i) => i.id === id), startMonth));
+            setErrors({});
+          }}
         />
-      )}
-      <SelectField
-        label={t('accreditation.new.copy_from')}
-        value={draft.copyFrom}
-        error={errors.copyFrom}
-        disabled={busy}
-        options={[['', t('accreditation.new.copy_latest')], ...periods.map((p) => [p.id, p.name] as const)]}
-        onChange={(id) => set('copyFrom', id)}
-      />
-      <p className="-mt-2 text-xs text-muted-foreground">{t('accreditation.new.copy_hint')}</p>
+        {instrument !== undefined && (
+          <SelectField
+            label={t('accreditation.new.kind')}
+            value={draft.kind}
+            error={errors.kind}
+            disabled={busy}
+            options={instrument.periodKinds.map((k) => [k, t(vocabKey('period_kind', k))] as const)}
+            onChange={(k) => setKind(k as PeriodKind)}
+          />
+        )}
+        <SpanInputs draft={draft} errors={errors} busy={busy} set={set} />
+        {(span !== null || draft.kind === 'custom') && (
+          <div className={cn('grid gap-1', FORM_FULL)}>
+            {span !== null && <p className="text-sm text-muted-foreground">{t('accreditation.new.span', spanText(f, span))}</p>}
+            {draft.kind === 'custom' && <p className="text-xs text-muted-foreground">{t('accreditation.new.custom_hint')}</p>}
+          </div>
+        )}
+        {showLevel && (
+          <SelectField
+            label={t('accreditation.new.school_level')}
+            value={draft.schoolLevel}
+            error={errors.schoolLevel}
+            disabled={busy}
+            options={[
+              ...(school ? [] : ([['', t('accreditation.new.school_level_none')]] as const)),
+              ...levels.map((l) => [l, t(vocabKey('school_level', l))] as const),
+            ]}
+            onChange={(l) => set('schoolLevel', l as SchoolLevel | '')}
+          />
+        )}
+        <SelectField
+          label={t('accreditation.new.copy_from')}
+          hint={t('accreditation.new.copy_hint')}
+          value={draft.copyFrom}
+          error={errors.copyFrom}
+          disabled={busy}
+          className={FORM_FULL}
+          options={[['', t('accreditation.new.copy_latest')], ...periods.map((p) => [p.id, p.name] as const)]}
+          onChange={(id) => set('copyFrom', id)}
+        />
+      </div>
       <ProblemAlert error={problem} />
-      <div>
+      <FormBar>
         <Button type="submit" disabled={busy}>
           {t(busy ? 'accreditation.new.submitting' : 'accreditation.new.submit')}
         </Button>
-      </div>
+      </FormBar>
     </form>
   );
 }
@@ -362,7 +359,7 @@ function SpanInputs({
       );
     case 'custom':
       return (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <>
           <TextField
             type="date"
             label={t('accreditation.new.starts_on')}
@@ -379,7 +376,7 @@ function SpanInputs({
             disabled={busy}
             onChange={(v) => set('endsOn', v)}
           />
-        </div>
+        </>
       );
     default:
       return null;

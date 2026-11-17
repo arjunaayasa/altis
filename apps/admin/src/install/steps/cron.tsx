@@ -45,18 +45,18 @@ function CommandLine({ id, label, text, note }: { id: string; label: string; tex
 
   return (
     <div className="space-y-1.5">
-      <p id={`${id}-label`} className="text-sm font-medium">
+      <p id={`${id}-label`} className="text-sm font-semibold">
         {label}
       </p>
       <div className="flex items-start gap-2">
-        <code id={id} aria-labelledby={`${id}-label`} className="block min-w-0 flex-1 rounded-md bg-muted px-3 py-2 font-mono text-xs break-all select-all">
+        <code id={id} aria-labelledby={`${id}-label`} className="block min-w-0 flex-1 rounded-md border bg-layer px-3 py-2 font-mono text-xs break-all select-all">
           {text}
         </code>
         <Button type="button" size="sm" variant="outline" aria-describedby={id} onClick={() => void copyText()}>
           {copy === 'copied' ? t('cron.copied') : t('cron.copy')}
         </Button>
       </div>
-      {copy === 'failed' ? <p className="text-xs text-destructive">{t('cron.copy_failed')}</p> : null}
+      {copy === 'failed' ? <p className="text-xs font-semibold text-bad">{t('cron.copy_failed')}</p> : null}
       {note === undefined ? null : <p className="text-xs text-muted-foreground">{note}</p>}
     </div>
   );
@@ -122,7 +122,7 @@ export function CronStep({
       <StepHeading title={t('cron.title')} intro={t('cron.intro')} />
       {status === null ? null : (
         <>
-          <p className="text-sm font-medium">{status.required ? t('cron.required') : t('cron.optional')}</p>
+          <p className="text-sm font-semibold">{status.required ? t('cron.required') : t('cron.optional')}</p>
           <p className="text-sm">{guidance}</p>
           <CommandLine id="install-cron-line" label={t('cron.cron_line')} text={status.cronLine} />
           <CommandLine id="install-curl-line" label={t('cron.curl_line')} text={status.curlLine} note={t('cron.secret_note')} />

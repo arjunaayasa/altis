@@ -2,13 +2,11 @@ import type { ItemDetail } from '@altis/shared/api/catalog/items';
 import type { LabelBody } from '@altis/shared/api/catalog/labels';
 import type { CatalogConfigView } from '@altis/shared/api/settings';
 import { useQueryClient } from '@tanstack/react-query';
-import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
-import { DownloadIcon, ExternalLinkIcon, FileTextIcon, PlusIcon, Trash2Icon } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { PRINT_QUEUE_MAX, usePrintQueue, type QueueEntry } from '@/components/catalog/print-queue';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { DataTable } from '@/components/data-table';
 import { Badge, Field, Notice, NoticeAlert, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { DenseTable, ErrorState, LoadingState, PageHead, SectionHead, type DenseColumn } from '@/components/layout';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT, type TKey } from '@/i18n';
@@ -36,9 +34,6 @@ import { useScannerInput } from '@/lib/scanner';
  *   dicetak" takes them out. A 422 `CATALOG_LABEL_LIMIT` (more than 1 000 labels, records counted with their items)
  *   is explained; a profile that is gone (`profileId not_found`) is said at its field.
  */
-
-const features = tableFeatures({});
-const column = createColumnHelper<typeof features, QueueEntry>();
 
 const LABELS_PATH = 'catalog/labels';
 /** The longest barcode the lookup takes (`ItemByBarcodeQuery`). */
@@ -159,17 +154,14 @@ function ScanPanel({ add }: { add(e: QueueEntry[]): { added: number; dropped: nu
   };
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <h2 id={titleId} className="text-base font-semibold">
-        {t('catalog.labels.scan.title')}
-      </h2>
+    <section aria-labelledby={titleId} className="grid gap-3">
+      <SectionHead id={titleId} title={t('catalog.labels.scan.title')} />
       <form noValidate onSubmit={submit} className="max-w-xl">
         <Field label={t('catalog.labels.scan.barcode')} hint={t('catalog.labels.scan.hint')}>
           {(c) => (
             <div className="flex gap-2">
               <Input {...c} value={barcode} maxLength={BARCODE_MAX} autoComplete="off" spellCheck={false} onChange={(e) => setBarcode(e.target.value)} />
               <Button type="submit" variant="outline">
-                <PlusIcon aria-hidden="true" />
                 {t('catalog.labels.scan.submit')}
               </Button>
             </div>
@@ -203,53 +195,38 @@ function QueuePanel({ entries, remove, clear }: { entries: QueueEntry[]; remove(
   const titleId = useId();
   const [clearing, setClearing] = useState(false);
 
-  const columns = useMemo(
-    () =>
-      column.columns([
-        column.accessor('kind', {
-          header: () => t('catalog.labels.queue.col.kind'),
-          cell: (c) => <Badge tone={c.getValue() === 'record' ? 'info' : 'neutral'}>{t(`catalog.labels.queue.kind.${c.getValue()}`)}</Badge>,
-        }),
-        column.accessor('label', { header: () => t('catalog.labels.queue.col.label'), cell: (c) => <span className="break-words">{c.getValue()}</span> }),
-        column.display({
-          id: 'actions',
-          header: () => t('catalog.labels.queue.col.actions'),
-          cell: (c) => (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              aria-label={t('catalog.labels.queue.remove_label', { label: c.row.original.label })}
-              onClick={() => remove([c.row.original.id])}
-            >
-              {t('catalog.labels.queue.remove')}
-            </Button>
-          ),
-        }),
-      ]),
-    [t, remove],
-  );
-  const table = useTable({ features, columns, data: entries, getRowId: (e) => `${e.kind}:${e.id}` });
+  const columns: DenseColumn<QueueEntry>[] = [
+    { id: 'kind', header: t('catalog.labels.queue.col.kind'), className: 'w-px', cell: (e) => <Badge>{t(`catalog.labels.queue.kind.${e.kind}`)}</Badge> },
+    { id: 'label', header: t('catalog.labels.queue.col.label'), cell: (e) => <span className="break-words">{e.label}</span> },
+    {
+      id: 'actions',
+      header: <span className="sr-only">{t('catalog.labels.queue.col.actions')}</span>,
+      className: 'w-px py-1.5 text-right',
+      cell: (e) => (
+        <Button type="button" variant="ghost" size="sm" aria-label={t('catalog.labels.queue.remove_label', { label: e.label })} onClick={() => remove([e.id])}>
+          {t('catalog.labels.queue.remove')}
+        </Button>
+      ),
+    },
+  ];
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-col gap-1">
-          <h2 id={titleId} className="text-base font-semibold">
-            {t('catalog.labels.queue.title')}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {t('catalog.labels.queue.count', { count: number.format(entries.length), max: number.format(PRINT_QUEUE_MAX) })}
-          </p>
-        </div>
-        {entries.length > 0 && (
-          <Button type="button" variant="outline" size="sm" onClick={() => setClearing(true)}>
-            <Trash2Icon aria-hidden="true" />
-            {t('catalog.labels.queue.clear')}
-          </Button>
-        )}
-      </div>
-      <DataTable table={table} caption={t('catalog.labels.queue.title')} empty={t('catalog.labels.queue.empty')} />
+    <section aria-labelledby={titleId} className="grid gap-3">
+      <SectionHead
+        id={titleId}
+        title={t('catalog.labels.queue.title')}
+        aside={
+          <>
+            <span>{t('catalog.labels.queue.count', { count: number.format(entries.length), max: number.format(PRINT_QUEUE_MAX) })}</span>
+            {entries.length > 0 && (
+              <Button type="button" variant="outline" size="sm" onClick={() => setClearing(true)}>
+                {t('catalog.labels.queue.clear')}
+              </Button>
+            )}
+          </>
+        }
+      />
+      <DenseTable caption={t('catalog.labels.queue.title')} columns={columns} rows={entries} rowKey={(e) => `${e.kind}:${e.id}`} empty={t('catalog.labels.queue.empty')} />
       <ConfirmDialog
         open={clearing}
         destructive
@@ -363,26 +340,22 @@ function PrintPanel({ entries, remove }: { entries: QueueEntry[]; remove(ids: st
 
   if (config.data === undefined) {
     return config.isError ? (
-      <ProblemAlert error={config.error} />
+      <ErrorState error={config.error} onRetry={() => void config.refetch()} retrying={config.isFetching} />
     ) : (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('catalog.labels.loading')}
-      </p>
+      <LoadingState label={t('catalog.labels.loading')} lines={3} />
     );
   }
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <h2 id={titleId} className="text-base font-semibold">
-        {t('catalog.labels.print.title')}
-      </h2>
+    <section aria-labelledby={titleId} className="grid gap-3">
+      <SectionHead id={titleId} title={t('catalog.labels.print.title')} />
       {profiles.length === 0 ? (
         <NoticeAlert>{t('catalog.labels.print.no_profiles')}</NoticeAlert>
       ) : (
-        <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
+        <form noValidate onSubmit={(e) => void submit(e)} className="grid max-w-5xl gap-4">
           {items.length > 0 && records.length > 0 && (
             <fieldset className="grid gap-2">
-              <legend className="mb-1 text-sm font-medium">{t('catalog.labels.print.source')}</legend>
+              <legend className="mb-1.5 text-meta leading-snug font-semibold">{t('catalog.labels.print.source')}</legend>
               {(['item', 'record'] as const).map((k) => {
                 const id = `${sourceName}-${k}`;
                 return (
@@ -407,7 +380,7 @@ function PrintPanel({ entries, remove }: { entries: QueueEntry[]; remove(ids: st
               <p className="text-xs text-muted-foreground">{t('catalog.labels.print.source_hint')}</p>
             </fieldset>
           )}
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-x-5 gap-y-4 md:grid-cols-3">
             <Field label={t('catalog.labels.print.profile')} hint={t('catalog.labels.print.profile_hint')} error={errors.profileId}>
               {(c) => (
                 <select
@@ -436,7 +409,6 @@ function PrintPanel({ entries, remove }: { entries: QueueEntry[]; remove(ids: st
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button type="submit" disabled={busy || chosen.length === 0}>
-              <FileTextIcon aria-hidden="true" />
               {busy ? t('catalog.labels.print.working') : t('catalog.labels.print.submit')}
             </Button>
             {chosen.length === 0 && <span className="text-sm text-muted-foreground">{t('catalog.labels.print.empty')}</span>}
@@ -449,7 +421,7 @@ function PrintPanel({ entries, remove }: { entries: QueueEntry[]; remove(ids: st
         </Notice>
       )}
       {made !== null && (
-        <div className="flex flex-col gap-2">
+        <div className="grid gap-2">
           <Notice kind="success">{t('catalog.labels.print.ready')}</Notice>
           {made.skipped > 0 && (
             <NoticeAlert>
@@ -459,12 +431,10 @@ function PrintPanel({ entries, remove }: { entries: QueueEntry[]; remove(ids: st
             </NoticeAlert>
           )}
           <div className="flex flex-wrap gap-2">
-            <a href={made.url} target="_blank" rel="noopener noreferrer" className={buttonVariants()}>
-              <ExternalLinkIcon aria-hidden="true" />
+            <a href={made.url} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: 'outline' })}>
               {t('catalog.labels.print.open')}
             </a>
             <a href={made.url} download="label.pdf" className={buttonVariants({ variant: 'outline' })}>
-              <DownloadIcon aria-hidden="true" />
               {t('catalog.labels.print.download')}
             </a>
             {!made.removed && (
@@ -493,11 +463,8 @@ export function LabelsScreen() {
   const allowed = holds(me, 'catalog.records.read');
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">{t('nav.catalog.labels')}</h1>
-        <p className="text-sm text-muted-foreground">{t('catalog.labels.description')}</p>
-      </div>
+    <div className="grid gap-6">
+      <PageHead title={t('nav.catalog.labels')} intro={t('catalog.labels.description')} />
       {/* Every route of the screen needs the permission: say so before anything is asked. */}
       {!allowed ? (
         <ProblemAlert error={new ApiError(403, 'AUTHZ_DENIED')} />

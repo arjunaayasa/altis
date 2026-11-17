@@ -1,7 +1,7 @@
 import type { InstrumentsResponse, InstrumentView, PeriodView } from '@altis/shared/api/accreditation';
 import type { ReactNode } from 'react';
-import { ProblemAlert, RefetchProblem } from '@/components/form-field';
-import { Button } from '@/components/ui/button';
+import { RefetchProblem } from '@/components/form-field';
+import { Callout, ErrorState, LoadingState } from '@/components/layout';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { useMe } from '@/lib/me';
@@ -25,26 +25,13 @@ export interface TabContext {
  * both and what the user may change. A frozen period's data is read only, whoever looks at it.
  */
 export function TabState({ periodId, children }: { periodId: string; children(ctx: TabContext): ReactNode }) {
-  const t = useT();
   const me = useMe();
   const period = usePeriod(periodId);
   const instruments = useInstruments();
   if (period.data === undefined || instruments.data === undefined) {
     const failed = period.data === undefined && period.isError ? period : instruments.isError ? instruments : null;
-    if (failed !== null) {
-      return (
-        <ProblemAlert error={failed.error}>
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => void failed.refetch()}>
-            {t('table.retry')}
-          </Button>
-        </ProblemAlert>
-      );
-    }
-    return (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('shell.loading')}
-      </p>
-    );
+    if (failed !== null) return <ErrorState error={failed.error} onRetry={() => void failed.refetch()} retrying={failed.isFetching} />;
+    return <LoadingState />;
   }
   const canManage = holds(me, 'accreditation.workspace.manage');
   return (
@@ -66,8 +53,6 @@ export function ReadOnlyNote({ ctx }: { ctx: TabContext }) {
   const t = useT();
   if (ctx.canEdit) return null;
   return (
-    <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">
-      {t(ctx.period.status === 'frozen' ? 'accreditation.workspace.form.frozen' : 'accreditation.workspace.form.read_only')}
-    </p>
+    <Callout role="status" title={t(ctx.period.status === 'frozen' ? 'accreditation.workspace.form.frozen' : 'accreditation.workspace.form.read_only')} />
   );
 }

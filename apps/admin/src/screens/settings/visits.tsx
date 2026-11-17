@@ -1,11 +1,12 @@
 import type { PrivacySettingsView, VisitsSettingsView } from '@altis/shared/api/settings';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
+import { SideSection } from '@/components/layout';
 import { CheckField, Field, Notice, ProblemAlert, TEXTAREA_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
-import { SettingsLoader, SettingsPage, SettingsSection, saveSettings } from './library';
+import { SettingsLoader, SettingsPage, saveSettings } from './library';
 
 /**
  * Pengaturan → Kunjungan (`PUT settings/visits`): the repeat window, whether the desk and the OPAC sign-in count as
@@ -57,7 +58,7 @@ function VisitsForm({ view, canManage }: { view: VisitsSettingsView; canManage: 
 
   return (
     <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
-      <SettingsSection title={t('visits.settings.title')}>
+      <SideSection title={t('visits.settings.title')}>
         <Field label={t('visits.settings.dedupe')} hint={t('visits.settings.dedupe_hint')} error={invalid ? 'visits.settings.invalid' : undefined}>
           {(c) => <Input {...c} inputMode="numeric" disabled={!canManage} className="max-w-32" value={dedupe} onChange={(e) => setDedupe(e.target.value)} />}
         </Field>
@@ -71,7 +72,7 @@ function VisitsForm({ view, canManage }: { view: VisitsSettingsView; canManage: 
         <Field label={t('visits.settings.welcome_en')}>
           {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={300} disabled={!canManage} value={welcomeEn} onChange={(e) => setWelcomeEn(e.target.value)} />}
         </Field>
-      </SettingsSection>
+      </SideSection>
       <ProblemAlert error={problem} />
       {saved && <Notice kind="success">{t('visits.settings.saved')}</Notice>}
       {canManage && (
@@ -137,11 +138,11 @@ function PrivacyForm({ view, canManage }: { view: PrivacySettingsView; canManage
 
   return (
     <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
-      <SettingsSection title={t('visits.settings.privacy_title')} description={t('visits.settings.privacy_intro')}>
+      <SideSection title={t('visits.settings.privacy_title')} intro={t('visits.settings.privacy_intro')}>
         {field('loans', t('visits.settings.loans_years'), loans, setLoans)}
         {field('visits', t('visits.settings.visits_years'), visits, setVisits)}
         {field('members', t('visits.settings.members_years'), members, setMembers)}
-      </SettingsSection>
+      </SideSection>
       <ProblemAlert error={problem} />
       {saved && <Notice kind="success">{t('visits.settings.saved')}</Notice>}
       {canManage && (

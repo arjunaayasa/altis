@@ -6,13 +6,16 @@ import {
   OPAC_HOME_DEFAULT,
   OPAC_HOME_MIN_CONTRAST,
   OPAC_HOME_OVERLAY,
+  OpacHomeContact,
   OpacHomeContent,
   OpacHomePutBody,
   brandRgb,
   contrastWithWhite,
   opacHomeBrandField,
+  opacHomeFileIds,
   opacHomeTextIn,
   overlayOnWhite,
+  phoneHref,
 } from '../src/api/opac-home.js';
 
 // The content of the OPAC home page (`opac.home`): the overlay's floor that keeps white text at WCAG AA over any photo,
@@ -122,5 +125,44 @@ describe('the opening hours and the blocks', () => {
     expect(OPAC_HOME_BLOCK_DEFAULTS.readingClasses).toBe(false);
     for (const b of OPAC_HOME_BLOCKS) if (b !== 'readingClasses') expect(OPAC_HOME_BLOCK_DEFAULTS[b], b).toBe(true);
     expect(OPAC_HOME_DEFAULT.blocks).toEqual(OPAC_HOME_BLOCK_DEFAULTS);
+  });
+});
+
+describe('the logo and the public contact', () => {
+  const LOGO = '01JZFXQ0000000000000000009';
+
+  it('a content saved before they existed reads them as none', () => {
+    const old: Record<string, unknown> = { ...OPAC_HOME_DEFAULT };
+    delete old['logo'];
+    delete old['contact'];
+    const parsed = OpacHomeContent.parse(old);
+    expect(parsed.logo).toBeNull();
+    expect(parsed.contact).toEqual({ phone: null, email: null });
+  });
+
+  it('the logo needs its alternative text, and is a file used once', () => {
+    expect(issues(OpacHomeContent, { ...OPAC_HOME_DEFAULT, logo: { fileId: LOGO, alt: '  ' } })).toEqual([{ path: 'logo.alt', code: 'too_small' }]);
+    expect(OpacHomeContent.parse({ ...OPAC_HOME_DEFAULT, logo: { fileId: LOGO, alt: ' Logo perpustakaan ' } }).logo).toEqual({ fileId: LOGO, alt: 'Logo perpustakaan' });
+    const twice = { ...OPAC_HOME_DEFAULT, logo: { fileId: LOGO, alt: 'Logo' }, hero: { fileId: LOGO, alt: 'Gedung', position: 50, overlay: 60 } };
+    expect(issues(OpacHomeContent, twice)).toEqual([{ path: 'logo.fileId', code: 'duplicate' }]);
+    expect(opacHomeFileIds({ ...OPAC_HOME_DEFAULT, logo: { fileId: LOGO, alt: 'Logo' } })).toEqual([LOGO]);
+  });
+
+  it('a telephone number of 6 to 15 digits with spaces, brackets, points or hyphens, a leading + for an international one', () => {
+    for (const ok of ['(021) 555-0101', '+62 21 5550101', '0812.3456.7890', '021-5550101']) {
+      expect(OpacHomeContact.parse({ phone: ` ${ok} `, email: null }).phone, ok).toBe(ok);
+    }
+    for (const bad of ['12345', '0812-3456-7890-1234-5', '62+21 555', 'telepon 021', '021 555 0101 ext 3', '++62215550101']) {
+      expect(issues(OpacHomeContact, { phone: bad, email: null }), bad).toEqual([{ path: 'phone', code: 'invalid_format' }]);
+    }
+    expect(issues(OpacHomeContact, { phone: '0'.repeat(31), email: null }).map((i) => i.code)).toContain('too_big');
+    expect(phoneHref('(021) 555-0101')).toBe('tel:0215550101');
+    expect(phoneHref(' +62 21 5550101')).toBe('tel:+62215550101');
+  });
+
+  it('an e-mail address, trimmed; anything else is refused', () => {
+    expect(OpacHomeContact.parse({ phone: null, email: ' perpustakaan@sekolah.example ' }).email).toBe('perpustakaan@sekolah.example');
+    expect(issues(OpacHomeContact, { phone: null, email: 'perpustakaan' })).toEqual([{ path: 'email', code: 'invalid_format' }]);
+    expect(issues(OpacHomeContact, { phone: null, email: `${'a'.repeat(185)}@x.example` }).map((i) => i.code)).toContain('too_big');
   });
 });

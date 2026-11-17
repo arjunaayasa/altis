@@ -2,10 +2,12 @@ import { ACCRED_GROUPS } from '@altis/shared';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import { MemberTypeBody, MemberTypePatchBody, type MemberTypeView } from '@altis/shared/api/members';
 import { useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { useId, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { CheckField, Field, Notice, ProblemAlert, RootError, SELECT_CLASS } from '@/components/form-field';
+import { Callout, DenseTable, InlinePanel, PageHead, SkeletonTable, StatusText, Tag, type DenseColumn } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
@@ -16,7 +18,6 @@ import { FORM_PARSE, problemText } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
 import { changedFields, countsIn, isFieldProblem, isStale, optionalText, putFieldErrors, serverIssues, zodIssues } from '@/screens/catalog/masters/master-table';
 import { useMemberTypes, useTypeName } from '@/screens/circulation/common';
-import { Callout, DenseTable, InlinePanel, PageHead, SkeletonTable, StatusText, Tag, type DenseColumn } from '@/screens/circulation/parts';
 
 /**
  * Tipe Anggota (`/admin/anggota/tipe`): the member types, each with its code, names, accreditation group, the most open
@@ -24,7 +25,10 @@ import { Callout, DenseTable, InlinePanel, PageHead, SkeletonTable, StatusText, 
  * the membership length ("never expires" explicit too). Saving a type never recalculates its members' dates: a new
  * length applies to a member when the membership is extended. A type live members still use cannot be archived (409
  * MEMBER_TYPE_IN_USE, with how many): said on the page. The loan period and renewals are the loan rules' (Aturan
- * Peminjaman). The list is a dense table; adding or changing a type opens its form in the page, above the table.
+ * Peminjaman): the table shows them read-only from the rule the type's loans of any collection fall under (its own
+ * rule, else the general one), says when more specific rules apply to some of its loans, and links to the rules for a
+ * user who may change them. The list is a dense table; adding or changing a type opens its form in the page, above the
+ * table.
  */
 
 const TYPES_KEY = ['members', 'types'] as const;
@@ -291,7 +295,6 @@ export function MemberTypesScreen() {
     {
       id: 'limit',
       header: t('members.types.col.loan_limit'),
-      className: 'whitespace-nowrap',
       cell: (r) =>
         r.loanLimit === null ? (
           t('members.types.limit.none')
@@ -300,6 +303,38 @@ export function MemberTypesScreen() {
         ) : (
           t('members.types.limit.items', { count: r.loanLimit })
         ),
+    },
+    // ---- Komunitas (staff screens' data): the general rule's loan period and renewals, read-only ----
+    {
+      id: 'loan_days',
+      header: t('members.types.col.loan_days'),
+      headClassName: 'text-right',
+      className: 'text-right',
+      cell: (r) => {
+        const rule = r.loanRule ?? null;
+        if (rule === null) return <span className="text-muted-foreground">{t('members.types.rule.none')}</span>;
+        return (
+          <span className="grid justify-items-end">
+            {!rule.loanable ? (
+              <StatusText tone="warn">{t('members.types.rule.refuses')}</StatusText>
+            ) : (
+              <span className="whitespace-nowrap">{rule.loanDays === 0 ? t('members.types.rule.same_day') : t('members.types.days', { count: rule.loanDays })}</span>
+            )}
+            {rule.others > 0 && <span className="text-xs text-muted-foreground">{t('members.types.rule.others', { count: rule.others })}</span>}
+          </span>
+        );
+      },
+    },
+    {
+      id: 'renewals',
+      header: t('members.types.col.renewals'),
+      headClassName: 'text-right',
+      className: 'text-right whitespace-nowrap',
+      cell: (r) => {
+        const rule = r.loanRule ?? null;
+        if (rule === null || !rule.loanable) return <span className="text-muted-foreground">—</span>;
+        return rule.renewLimit === 0 ? t('members.types.rule.no_renewal') : t('members.types.rule.renewals', { count: rule.renewLimit });
+      },
     },
     {
       id: 'period',
@@ -375,7 +410,7 @@ export function MemberTypesScreen() {
             <p>{problemText(t, list.error)}</p>
           </Callout>
         ) : (
-          <SkeletonTable label={t('shell.loading')} columns={7} rows={4} />
+          <SkeletonTable label={t('shell.loading')} columns={9} rows={4} />
         )
       ) : empty ? (
         <section className="grid max-w-[62ch] gap-3 py-4">
@@ -386,6 +421,14 @@ export function MemberTypesScreen() {
         <div className="grid gap-3">
           <CheckField label={t('members.types.show_archived')} checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
           <DenseTable caption={t('members.types.caption')} columns={columns} rows={list.data.items} rowKey={(r) => r.id} empty={t('members.types.empty')} />
+          <p className="text-meta text-muted-foreground">
+            {t('members.types.rule.note')}{' '}
+            {holds(me, 'circulation.policies.manage') && (
+              <Link to="/admin/layanan/aturan" className="font-semibold text-accent-text underline-offset-4 hover:underline">
+                {t('members.types.rule.open')}
+              </Link>
+            )}
+          </p>
         </div>
       )}
       {archiving !== null && (

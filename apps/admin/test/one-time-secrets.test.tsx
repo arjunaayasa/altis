@@ -46,7 +46,11 @@ describe('the temporary password (Pengguna → Atur ulang kata sandi)', () => {
       },
     });
     const row = (await screen.findByRole('link', { name: 'budi' })).closest('tr')!;
-    fireEvent.click(within(row).getByRole('button', { name: /kata sandi/ }));
+    // The row's actions are in its ⋯ menu.
+    const more = within(row).getByRole('button', { name: /^Tindakan untuk / });
+    more.focus();
+    fireEvent.keyDown(more, { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: /kata sandi/ }));
     const confirm = await screen.findByRole('alertdialog');
     fireEvent.click(within(confirm).getAllByRole('button').at(-1)!);
     const dialog = await screen.findByRole('dialog', { name: 'Kata sandi sementara' });

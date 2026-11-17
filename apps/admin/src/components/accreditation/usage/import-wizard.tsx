@@ -2,7 +2,6 @@ import { ACCRED_GROUPS, isCalendarDate, type AccredGroup } from '@altis/shared';
 import type { SlimsUsageStartBody } from '@altis/shared/api/accreditation';
 import type { RunView } from '@altis/shared/api/catalog/runs';
 import { useQueryClient } from '@tanstack/react-query';
-import { DownloadIcon, XIcon } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Field, Notice, NoticeAlert, SELECT_CLASS } from '@/components/form-field';
 import { JobProgress, type JobOutcome } from '@/components/job-progress';
@@ -82,16 +81,16 @@ export function ImportWizard({ periodId, defaultCutover, unknownDefault, onClose
   const [started, setStarted] = useState<Started | null>(null);
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-4 rounded-lg border bg-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid gap-1">
-          <h2 id={titleId} className="text-base font-semibold">
+    <section aria-labelledby={titleId} className="grid min-w-0 gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="grid max-w-[75ch] gap-1">
+          <h2 id={titleId} className="text-base font-bold">
             {t('accreditation.usage.wizard.title')}
           </h2>
           <p className="text-sm text-muted-foreground">{t('accreditation.usage.wizard.intro')}</p>
         </div>
-        <Button type="button" variant="ghost" size="icon" aria-label={t('accreditation.usage.wizard.close')} onClick={onClose}>
-          <XIcon aria-hidden="true" />
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>
+          {t('accreditation.usage.wizard.close')}
         </Button>
       </div>
       {started === null ? (
@@ -236,7 +235,7 @@ function Setup({
       <div className="flex flex-col gap-4">
         <div className="grid gap-1">
           <p className="text-xs text-muted-foreground">{t('accreditation.usage.wizard.step', { n: 1 })}</p>
-          <h3 className="text-sm font-semibold">{t('accreditation.usage.source.title')}</h3>
+          <h3 className="text-sm font-bold">{t('accreditation.usage.source.title')}</h3>
         </div>
         <SourceForm
           value={source}
@@ -265,11 +264,11 @@ function Setup({
     <div className="flex flex-col gap-4">
       <div className="grid gap-1">
         <p className="text-xs text-muted-foreground">{t('accreditation.usage.wizard.step', { n: 2 })}</p>
-        <h3 className="text-sm font-semibold">{t('accreditation.usage.options.title')}</h3>
+        <h3 className="text-sm font-bold">{t('accreditation.usage.options.title')}</h3>
       </div>
 
       <div className="grid gap-2">
-        <h4 className="text-sm font-medium">{t('accreditation.usage.types.title')}</h4>
+        <h4 className="text-sm font-semibold">{t('accreditation.usage.types.title')}</h4>
         {source.kind === 'dump' ? (
           <p className="text-sm text-muted-foreground">{t('accreditation.usage.types.dump_later')}</p>
         ) : types.length === 0 ? (
@@ -279,12 +278,12 @@ function Setup({
             <p className="text-sm text-muted-foreground">{t('accreditation.usage.types.intro')}</p>
             <div className="overflow-x-auto rounded-md border">
               <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-left">
+                <thead className="bg-layer text-left">
                   <tr>
-                    <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+                    <th scope="col" className="px-3 py-2 font-semibold text-muted-foreground">
                       {t('accreditation.usage.groups.col_type')}
                     </th>
-                    <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+                    <th scope="col" className="px-3 py-2 font-semibold text-muted-foreground">
                       {t('accreditation.usage.groups.col_group')}
                     </th>
                   </tr>
@@ -431,7 +430,7 @@ function ImportRun({
     <div className="flex flex-col gap-4">
       {started.joined === true && <NoticeAlert>{t('accreditation.usage.joined')}</NoticeAlert>}
       <div className="grid gap-2">
-        <h3 className="text-sm font-semibold">{ended === null ? t('accreditation.usage.progress.title') : t('accreditation.usage.summary.title')}</h3>
+        <h3 className="text-sm font-bold">{ended === null ? t('accreditation.usage.progress.title') : t('accreditation.usage.summary.title')}</h3>
         <JobProgress jobId={started.jobId} onDone={done} />
       </div>
       {ended !== null && view === undefined && !run.isError && (
@@ -464,11 +463,10 @@ function ImportRun({
               {cutoverOn !== null && <li>{t('accreditation.usage.summary.cutover', { date: cutoverOn })}</li>}
             </ul>
           )}
-          <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm">{t('accreditation.usage.summary.note')}</p>
+          <p className="rounded-md border bg-layer px-3.5 py-3 text-sm">{t('accreditation.usage.summary.note')}</p>
           {view?.reportFileId !== null && view?.reportFileId !== undefined && (
             <div>
               <a href={`/api/v1/catalog/runs/${encodeURIComponent(view.id)}/report`} download className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-                <DownloadIcon aria-hidden="true" />
                 {t('accreditation.usage.summary.report')}
               </a>
             </div>

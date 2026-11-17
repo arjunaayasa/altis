@@ -1,29 +1,30 @@
 import { MEMBER_STATUSES, type MemberStatus } from '@altis/shared';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
-import type { MemberListItem, MemberSearchBody, MemberSearchResponse, MemberView } from '@altis/shared/api/members';
+import type { MemberClassesResponse, MemberListItem, MemberSearchBody, MemberSearchResponse, MemberView } from '@altis/shared/api/members';
 import { keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Field, Notice, SELECT_CLASS } from '@/components/form-field';
+import { Callout, DenseTable, FILTER_ROW, MoreMenu, MoreMenuItem, MoreMenuRule, PageHead, SkeletonTable, StatusText, type DenseColumn } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
-import { useMe } from '@/lib/me';
+import { useApiQuery, useMe } from '@/lib/me';
 import { MemberStatusBadge, todayLocal, useCalendarDate, useMemberTypes, useTypeName } from '@/screens/circulation/common';
-import { Callout, DenseTable, FILTER_ROW, MoreMenu, MoreMenuItem, MoreMenuRule, PageHead, SkeletonTable, StatusText, type DenseColumn } from '@/screens/circulation/parts';
 // ---- Komunitas K2 (members extended) ----
 import { BulkBar } from './bulk';
 import { refreshMembers } from './common';
 
 /**
- * Daftar Anggota (`/admin/anggota`): search by member number, name, identity number or e-mail, filter by type, class and
- * status (by default every status but archived), 50 at a time by name ("Muat lebih banyak"). The filters sit in one row
- * with their labels and apply as they change (the typed ones a moment after the last key, or at once with Enter). The
- * search text never goes in a URL: it is the body of `POST members/search`. Each name opens the member's page; its ⋯
+ * Daftar Anggota (`/admin/anggota`): search by member number, name, identity number or e-mail, filter by type, class (a
+ * list of the live members' classes) and status (by default every status but archived), 50 at a time by name ("Muat
+ * lebih banyak"). The filters sit in one row with their labels and apply as they change (the search a moment after the
+ * last key, or at once with Enter). The search text never goes in a URL: it is the body of `POST members/search`, whose
+ * rows carry each member's open loans and how many are overdue (column Pinjaman: "n dari batas", "n terlambat"). Each name opens the member's page; its ⋯
  * menu also serves the member at the desk and, for a manager, extends, suspends or reactivates that one member (its page
  * opens with that panel open) or archives it (asked first in a dialog; a member with open loans is refused, said above
  * the table). Selected members get the bulk bar and its panels (bulk.tsx).
@@ -88,12 +89,14 @@ export function MembersListScreen() {
     setNotice(t('members.archive.done', { name: row.name }));
   };
 
-  // The typed filters apply a moment after the last key; the lists apply at once (see `pick`).
+  // The typed filter applies a moment after the last key; the lists apply at once (see `pick`).
   useEffect(() => {
-    if (draft.q === filters.q && draft.className === filters.className) return;
-    const id = setTimeout(() => setFilters((f) => ({ ...f, q: draft.q, className: draft.className })), 350);
+    if (draft.q === filters.q) return;
+    const id = setTimeout(() => setFilters((f) => ({ ...f, q: draft.q })), 350);
     return () => clearTimeout(id);
-  }, [draft.q, draft.className, filters.q, filters.className]);
+  }, [draft.q, filters.q]);
+  // ---- Komunitas (staff screens' data): the classes of the class filter ----
+  const classes = useApiQuery<MemberClassesResponse>({ queryKey: ['members', 'classes'], path: 'members/classes', staleTime: 60_000 });
 
   const list = useInfiniteQuery({
     queryKey: ['members', 'search', filters],
@@ -175,6 +178,22 @@ export function MembersListScreen() {
       },
     },
     { id: 'status', header: t('members.col.status'), cell: (r) => <MemberStatusBadge status={r.status} /> },
+    {
+      id: 'loans',
+      header: t('members.col.loans'),
+      headClassName: 'text-right',
+      className: 'text-right whitespace-nowrap',
+      cell: (r) => (
+        <span className="grid justify-items-end">
+          {r.type.loanLimit === null || r.type.loanLimit === 0 ? String(r.openLoans ?? 0) : t('circulation.member.loans_of', { count: r.openLoans ?? 0, limit: r.type.loanLimit })}
+          {(r.overdueLoans ?? 0) > 0 && (
+            <StatusText tone="bad" className="text-xs">
+              {t('members.list.overdue_count', { count: r.overdueLoans ?? 0 })}
+            </StatusText>
+          )}
+        </span>
+      ),
+    },
     {
       id: 'actions',
       header: <span className="sr-only">{t('table.actions')}</span>,
@@ -260,8 +279,16 @@ export function MembersListScreen() {
             ))}
           </select>
         </Field>
-        <Field label={t('members.filter.class')}>
-          {(c) => <Input {...c} autoComplete="off" maxLength={64} value={draft.className} onChange={(e) => setDraft({ ...draft, className: e.target.value })} />}
+        <Field id={`${ids}-class`} label={t('members.filter.class')}>
+          <select id={`${ids}-class`} className={SELECT_CLASS} value={draft.className} onChange={(e) => pick({ ...draft, className: e.target.value })}>
+            <option value="">{t('members.filter.all_classes')}</option>
+            {/* A class typed before the list came, or no longer held by a live member, stays selectable. */}
+            {[...new Set([...(classes.data?.items ?? []), ...(draft.className === '' ? [] : [draft.className])])].map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
         </Field>
         <Field id={`${ids}-status`} label={t('members.filter.status')}>
           <select id={`${ids}-status`} className={SELECT_CLASS} value={draft.status} onChange={(e) => pick({ ...draft, status: e.target.value as MemberStatus | '' })}>

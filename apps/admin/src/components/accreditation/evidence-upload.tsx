@@ -2,13 +2,12 @@ import type { EvidenceEntity } from '@altis/shared';
 import type { InstrumentsResponse } from '@altis/shared/api/accreditation';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import { useQueryClient } from '@tanstack/react-query';
-import { UploadIcon } from 'lucide-react';
 import { useId, useState, type FormEvent, type JSX } from 'react';
 import { Field } from '@/components/form-field';
-import { useReturnFocus } from '@/components/return-focus';
+import { InlinePanel } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { FileInput } from '@/components/file-input';
 import { useT, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
@@ -24,7 +23,7 @@ import { uploadFile } from '@/lib/upload';
  * before anything is sent, on the bytes that would go up (an image after its conversion), so a refused file costs no
  * upload. The server checks the type by its magic bytes and the size again.
  *
- * - {@link EvidenceUpload}: a button that opens a small dialog (file, caption); "Unggah" prepares the file, uploads it
+ * - {@link EvidenceUpload}: a button that opens a small inline panel under it (file, caption); "Unggah" prepares the file, uploads it
  *   (lib/upload.ts) and, once the upload is complete, records it with `POST accreditation/evidence`, linked to a
  *   period's indicator and evidence item or to a register row. Only a holder of `accreditation.workspace.manage` sees
  *   it.
@@ -145,47 +144,37 @@ type Phase = 'idle' | 'preparing' | 'sending' | 'saving';
 
 /**
  * Uploads one evidence file (PDF, or an image converted to JPEG in the browser) in context `accreditation.evidence` and
- * records it (see the top of this file). A button labelled `label` opens the dialog; after the record the evidence
+ * records it (see the top of this file). A button labelled `label` opens the panel; after the record the evidence
  * lists are read again and `onDone` runs. Nothing is shown to a user without `accreditation.workspace.manage`.
  */
 export function EvidenceUpload(props: EvidenceUploadProps): JSX.Element {
-  const t = useT();
   const me = useMe();
-  const focus = useReturnFocus();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   if (!holds(me, 'accreditation.workspace.manage')) return <></>;
   return (
     <>
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <UploadIcon aria-hidden="true" />
+      <Button type="button" variant="outline" size="sm" aria-expanded={open} onClick={() => (busy ? undefined : setOpen((o) => !o))}>
         {props.label}
       </Button>
-      <Dialog open={open} onOpenChange={(next) => (next || busy ? undefined : setOpen(false))}>
-        {open && (
-          <DialogContent
-            closeLabel={t('accreditation.registers.close')}
-            onOpenAutoFocus={focus.onOpenAutoFocus}
-            onCloseAutoFocus={focus.onCloseAutoFocus}
-            className="sm:max-w-lg">
-            <UploadForm
-              {...props}
-              onBusy={setBusy}
-              onCancel={() => setOpen(false)}
-              onStored={() => {
-                setOpen(false);
-                props.onDone();
-              }}
-            />
-          </DialogContent>
-        )}
-      </Dialog>
+      {open && (
+        <UploadForm
+          {...props}
+          busy={busy}
+          onBusy={setBusy}
+          onCancel={() => setOpen(false)}
+          onStored={() => {
+            setOpen(false);
+            props.onDone();
+          }}
+        />
+      )}
     </>
   );
 }
 
-/** The dialog's content: the limit, the file, the caption, the progress and the outcome. */
-function UploadForm(props: EvidenceUploadProps & { onBusy(busy: boolean): void; onCancel(): void; onStored(): void }) {
+/** The panel: the limit, the file, the caption, the progress and the outcome (Esc or Batal closes it, not while it works). */
+function UploadForm(props: EvidenceUploadProps & { busy: boolean; onBusy(busy: boolean): void; onCancel(): void; onStored(): void }) {
   const t = useT();
   const queryClient = useQueryClient();
   const maxMb = useEvidenceMaxMb();
@@ -251,59 +240,57 @@ function UploadForm(props: EvidenceUploadProps & { onBusy(busy: boolean): void; 
           : null;
 
   return (
-    <>
-      <DialogHeader>
-        <DialogTitle>{props.label}</DialogTitle>
-        <DialogDescription>
-          {props.imagesOnly === true
-            ? maxMb === null
-              ? t('accreditation.registers.upload.hint_image_loading')
-              : t('accreditation.registers.upload.hint_image', { mb: maxMb })
-            : maxMb === null
-              ? t('accreditation.registers.upload.hint_loading')
-              : t('accreditation.registers.upload.hint', { mb: maxMb })}
-        </DialogDescription>
-      </DialogHeader>
-      <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
-        <Field label={t('accreditation.registers.upload.file')}>
-          {(c) => (
-            <input
-              {...c}
-              type="file"
-              accept={props.imagesOnly === true ? EVIDENCE_IMAGE_ACCEPT : EVIDENCE_ACCEPT}
-              disabled={busy}
-              aria-invalid={error?.file === true ? true : undefined}
-              aria-describedby={error?.file === true ? errorId : undefined}
-              className="text-sm file:mr-2 file:rounded-md file:border file:bg-background file:px-2 file:py-1"
-              onChange={(e) => {
-                setFile(e.target.files?.[0] ?? null);
-                setError(null);
-              }}
-            />
-          )}
-        </Field>
-        <Field label={t('accreditation.registers.upload.caption')} hint={t('accreditation.registers.upload.caption_hint')}>
-          {(c) => <Input {...c} autoComplete="off" maxLength={CAPTION_MAX} disabled={busy} value={caption} onChange={(e) => setCaption(e.target.value)} />}
-        </Field>
-        {status !== null && (
-          <p role="status" className="text-sm text-muted-foreground">
-            {status}
-          </p>
+    <InlinePanel
+      title={props.label}
+      onSubmit={(e) => void submit(e)}
+      {...(props.busy ? {} : { onCancel: props.onCancel })}
+      className="w-full max-w-xl basis-full">
+      <p className="text-sm text-muted-foreground">
+        {props.imagesOnly === true
+          ? maxMb === null
+            ? t('accreditation.registers.upload.hint_image_loading')
+            : t('accreditation.registers.upload.hint_image', { mb: maxMb })
+          : maxMb === null
+            ? t('accreditation.registers.upload.hint_loading')
+            : t('accreditation.registers.upload.hint', { mb: maxMb })}
+      </p>
+      <Field label={t('accreditation.registers.upload.file')}>
+        {(c) => (
+          <FileInput
+            {...c}
+            chosen={file?.name ?? null}
+            accept={props.imagesOnly === true ? EVIDENCE_IMAGE_ACCEPT : EVIDENCE_ACCEPT}
+            disabled={busy}
+            aria-invalid={error?.file === true ? true : undefined}
+            aria-describedby={error?.file === true ? errorId : undefined}
+            onChange={(e) => {
+              setFile(e.target.files?.[0] ?? null);
+              setError(null);
+            }}
+          />
         )}
-        {error !== null && (
-          <p id={errorId} role="alert" className="text-sm text-destructive">
-            {error.text}
-          </p>
-        )}
-        <DialogFooter>
-          <Button type="button" variant="outline" disabled={busy} onClick={props.onCancel}>
-            {t('form.cancel')}
-          </Button>
-          <Button type="submit" disabled={busy || maxMb === null}>
-            {t('accreditation.registers.upload.submit')}
-          </Button>
-        </DialogFooter>
-      </form>
-    </>
+      </Field>
+      <Field label={t('accreditation.registers.upload.caption')} hint={t('accreditation.registers.upload.caption_hint')}>
+        {(c) => <Input {...c} autoComplete="off" maxLength={CAPTION_MAX} disabled={busy} value={caption} onChange={(e) => setCaption(e.target.value)} />}
+      </Field>
+      {status !== null && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {status}
+        </p>
+      )}
+      {error !== null && (
+        <p id={errorId} role="alert" className="text-meta font-semibold text-bad">
+          {error.text}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" size="sm" disabled={busy || maxMb === null}>
+          {t('accreditation.registers.upload.submit')}
+        </Button>
+        <Button type="button" size="sm" variant="outline" disabled={busy} onClick={props.onCancel}>
+          {t('form.cancel')}
+        </Button>
+      </div>
+    </InlinePanel>
   );
 }

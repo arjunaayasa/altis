@@ -261,11 +261,12 @@ describe('Migrasi SLiMS', () => {
     const table = await screen.findByRole('table', { name: 'Rekonsiliasi per tabel SLiMS' }, FIRST);
     const rows = within(table).getAllByRole('row');
     const item = rows.find((r) => within(r).queryByRole('rowheader', { name: 'item' }) !== null)!;
-    expect(item.className).toContain('text-destructive');
+    // Tinted with the "bad" surface, its word in the diff cell.
+    expect(item.className).toContain('bg-bad-bg');
     expect(within(item).getByText('3')).toBeTruthy();
     expect(within(item).getByText('Tidak terjelaskan')).toBeTruthy();
     const biblio = rows.find((r) => within(r).queryByRole('rowheader', { name: 'biblio' }) !== null)!;
-    expect(biblio.className).not.toContain('text-destructive');
+    expect(biblio.className).not.toContain('bg-bad-bg');
     const member = rows.find((r) => within(r).queryByRole('rowheader', { name: 'member' }) !== null)!;
     expect(within(member).getByText('Tidak dibaca (belum didukung)')).toBeTruthy();
     expect(screen.getByText(/1 tabel punya selisih yang tidak terjelaskan/)).toBeTruthy();

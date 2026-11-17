@@ -4,12 +4,12 @@ import type { UserListResponse } from '@altis/shared/api/users';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
-import { DownloadIcon, FilterIcon, ShieldAlertIcon, ShieldCheckIcon } from 'lucide-react';
 import { useId, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { DataTable, useDateTime } from '@/components/data-table';
-import { Badge, Field, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { Field, SELECT_CLASS } from '@/components/form-field';
+import { ErrorState, FilterField, FilterRow, PageHead, SkeletonTable, Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type Translate } from '@/i18n';
@@ -141,29 +141,19 @@ function ChainStatus() {
   let hint: string | null = null;
   if (verify.data !== undefined) {
     if (verify.data.ok) {
-      badge = (
-        <Badge tone="info">
-          <ShieldCheckIcon className="mr-1 size-3.5" aria-hidden="true" />
-          {t('auditlog.chain.ok')}
-        </Badge>
-      );
+      badge = <Tag tone="ok">{t('auditlog.chain.ok')}</Tag>;
       hint = t('auditlog.chain.ok_hint', { head: verify.data.head });
     } else {
-      badge = (
-        <Badge tone="danger">
-          <ShieldAlertIcon className="mr-1 size-3.5" aria-hidden="true" />
-          {t('auditlog.chain.broken', { seq: verify.data.brokenAt })}
-        </Badge>
-      );
+      badge = <Tag tone="bad">{t('auditlog.chain.broken', { seq: verify.data.brokenAt })}</Tag>;
       hint = t('auditlog.chain.broken_hint', { seq: verify.data.brokenAt });
     }
   } else if (verify.isError) {
-    badge = <Badge tone="neutral">{t('auditlog.chain.unknown')}</Badge>;
+    badge = <Tag>{t('auditlog.chain.unknown')}</Tag>;
   } else {
-    badge = <Badge tone="neutral">{t('auditlog.chain.checking')}</Badge>;
+    badge = <Tag>{t('auditlog.chain.checking')}</Tag>;
   }
   return (
-    <div role="status" aria-label={t('auditlog.chain.label')} className="flex flex-wrap items-center gap-2 text-sm">
+    <div role="status" aria-label={t('auditlog.chain.label')} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-meta">
       {badge}
       {hint !== null && <span className="text-muted-foreground">{hint}</span>}
       <Button variant="ghost" size="sm" disabled={verify.isFetching} onClick={() => void verify.refetch()}>
@@ -255,18 +245,11 @@ export function AuditLogScreen() {
           const name = actorLabel(t, item);
           const actorId = item.actorType === 'staff' ? item.actorId : null;
           return (
-            <span className="flex items-center gap-1">
+            <span className="flex flex-wrap items-baseline gap-x-2">
               <span>{name}</span>
               {actorId !== null && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-6"
-                  title={t('auditlog.actor.filter', { name })}
-                  aria-label={t('auditlog.actor.filter', { name })}
-                  onClick={() => byActor(actorId)}
-                >
-                  <FilterIcon className="size-3.5" aria-hidden="true" />
+                <Button variant="link" size="sm" className="h-auto p-0 text-xs" aria-label={t('auditlog.actor.filter', { name })} onClick={() => byActor(actorId)}>
+                  {t('auditlog.actor.filter_short')}
                 </Button>
               )}
             </span>
@@ -285,7 +268,8 @@ export function AuditLogScreen() {
           if (entity === null) return <span className="text-muted-foreground">—</span>;
           return (
             <span className="flex flex-col">
-              <span>{entityLabel(t, entity)}</span>
+              {/* A kind without a name of its own is written as the code it is, like a job's type. */}
+              {(ENTITIES as readonly string[]).includes(entity) ? <span>{entityLabel(t, entity)}</span> : <span className="font-mono text-xs">{entity}</span>}
               {entityId !== null && <span className="font-mono text-xs break-all text-muted-foreground">{entityId}</span>}
             </span>
           );
@@ -302,8 +286,8 @@ export function AuditLogScreen() {
           if (Object.keys(meta).length === 0) return <span className="text-muted-foreground">—</span>;
           return (
             <details>
-              <summary className="cursor-pointer text-primary">{t('auditlog.meta.show')}</summary>
-              <pre className="mt-1 max-w-xs overflow-x-auto rounded bg-muted p-2 text-xs whitespace-pre-wrap break-all">
+              <summary className="cursor-pointer font-semibold text-accent-text">{t('auditlog.meta.show')}</summary>
+              <pre className="mt-1 max-w-xs overflow-x-auto rounded border bg-layer p-2 text-xs whitespace-pre-wrap break-all">
                 {JSON.stringify(meta, null, 2)}
               </pre>
             </details>
@@ -316,74 +300,88 @@ export function AuditLogScreen() {
   const table = useTable({ features, columns, data: items, getRowId: (item) => String(item.seq) });
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">{t('nav.audit')}</h1>
-        <p className="text-sm text-muted-foreground">{t('auditlog.description')}</p>
+    <div className="grid gap-6">
+      <div className="grid gap-3">
+        <PageHead title={t('nav.audit')} intro={t('auditlog.description')} />
         <ChainStatus />
-      </header>
+      </div>
 
-      <form
-        noValidate
-        aria-label={t('auditlog.filters')}
-        className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2 lg:grid-cols-3"
-        onSubmit={(e) => void apply(e)}
-      >
-        <Field label={t('auditlog.filter.action')} error={errors.action}>
-          {(c) => (
-            <select {...c} className={SELECT_CLASS} {...form.register('action')}>
-              <option value="">{t('auditlog.filter.action_all')}</option>
-              {AUDIT_ACTIONS.map((action) => (
-                <option key={action} value={action}>
-                  {actionLabel(t, action)}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-        <Field label={t('auditlog.filter.actor')} error={errors.actorId}>
-          {(c) => (
-            <select {...c} className={SELECT_CLASS} {...form.register('actorId')}>
-              <option value="">{t('auditlog.filter.actor_all')}</option>
-              {actors.map(([id, name]) => (
-                <option key={id} value={id}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-        <Field label={t('auditlog.filter.entity')} hint={t('auditlog.filter.entity_hint')} error={errors.entity}>
-          {(c) => (
+      <div className="grid gap-1.5">
+        <FilterRow
+          label={t('auditlog.filters')}
+          onSubmit={(e) => void apply(e)}
+          actions={
             <>
-              <Input {...c} list={entitiesId} autoComplete="off" spellCheck={false} maxLength={64} {...form.register('entity')} />
-              <datalist id={entitiesId}>
-                {ENTITIES.map((entity) => (
-                  <option key={entity} value={entity} label={entityLabel(t, entity)} />
-                ))}
-              </datalist>
+              <Button type="submit" variant="outline">
+                {t('auditlog.filter.apply')}
+              </Button>
+              <Button type="button" variant="link" onClick={clear}>
+                {t('auditlog.filter.reset')}
+              </Button>
             </>
-          )}
-        </Field>
-        <Field label={t('auditlog.filter.entity_id')} error={errors.entityId}>
-          {(c) => <Input {...c} autoComplete="off" spellCheck={false} maxLength={191} {...form.register('entityId')} />}
-        </Field>
-        <Field label={t('auditlog.filter.from')} error={errors.from}>
-          {(c) => <Input {...c} type="date" {...form.register('from')} />}
-        </Field>
-        <Field label={t('auditlog.filter.to')} error={errors.to}>
-          {(c) => <Input {...c} type="date" {...form.register('to')} />}
-        </Field>
-        <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-3">
-          <Button type="submit">{t('auditlog.filter.apply')}</Button>
-          <Button type="button" variant="outline" onClick={clear}>
-            {t('auditlog.filter.reset')}
-          </Button>
-        </div>
-      </form>
+          }
+        >
+          <FilterField label={t('auditlog.filter.action')} error={errors.action}>
+            {(c) => (
+              <select {...c} className={SELECT_CLASS} {...form.register('action')}>
+                <option value="">{t('auditlog.filter.action_all')}</option>
+                {AUDIT_ACTIONS.map((action) => (
+                  <option key={action} value={action}>
+                    {actionLabel(t, action)}
+                  </option>
+                ))}
+              </select>
+            )}
+          </FilterField>
+          <FilterField label={t('auditlog.filter.actor')} error={errors.actorId}>
+            {(c) => (
+              <select {...c} className={SELECT_CLASS} {...form.register('actorId')}>
+                <option value="">{t('auditlog.filter.actor_all')}</option>
+                {actors.map(([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </FilterField>
+          <FilterField label={t('auditlog.filter.entity')} error={errors.entity}>
+            {(c) => (
+              <>
+                <Input
+                  {...c}
+                  aria-describedby={[c['aria-describedby'], `${entitiesId}-hint`].filter(Boolean).join(' ')}
+                  list={entitiesId}
+                  autoComplete="off"
+                  spellCheck={false}
+                  maxLength={64}
+                  {...form.register('entity')}
+                />
+                <datalist id={entitiesId}>
+                  {ENTITIES.map((entity) => (
+                    <option key={entity} value={entity} label={entityLabel(t, entity)} />
+                  ))}
+                </datalist>
+              </>
+            )}
+          </FilterField>
+          <FilterField label={t('auditlog.filter.entity_id')} error={errors.entityId}>
+            {(c) => <Input {...c} autoComplete="off" spellCheck={false} maxLength={191} {...form.register('entityId')} />}
+          </FilterField>
+          <FilterField label={t('auditlog.filter.from')} error={errors.from}>
+            {(c) => <Input {...c} type="date" {...form.register('from')} />}
+          </FilterField>
+          <FilterField label={t('auditlog.filter.to')} error={errors.to}>
+            {(c) => <Input {...c} type="date" {...form.register('to')} />}
+          </FilterField>
+        </FilterRow>
+        <p id={`${entitiesId}-hint`} className="text-xs text-muted-foreground">
+          {t('auditlog.filter.entity_hint')}
+        </p>
+      </div>
 
       {canExport && (
-        <section className="flex flex-wrap items-end gap-3">
+        <section aria-label={t('auditlog.export')} className="flex flex-wrap items-end gap-3">
           <Field label={t('auditlog.export.delimiter')} className="w-full max-w-xs">
             {(c) => (
               <select {...c} className={SELECT_CLASS} value={delimiter} onChange={(e) => setDelimiter(e.target.value as Delimiter)}>
@@ -404,7 +402,6 @@ export function AuditLogScreen() {
                 });
               }}
             >
-              <DownloadIcon aria-hidden="true" />
               {t('auditlog.export')}
             </a>
           </Button>
@@ -412,18 +409,12 @@ export function AuditLogScreen() {
         </section>
       )}
 
-      {list.isError ? (
-        <ProblemAlert error={list.error}>
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => void list.refetch()}>
-            {t('table.retry')}
-          </Button>
-        </ProblemAlert>
+      {list.isError && list.data === undefined ? (
+        <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
       ) : list.data === undefined ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
+        <SkeletonTable label={t('shell.loading')} columns={7} />
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="grid gap-3">
           <DataTable table={table} caption={t('auditlog.caption')} empty={t('auditlog.empty')} />
           {list.hasNextPage ? (
             <div>
@@ -432,7 +423,7 @@ export function AuditLogScreen() {
               </Button>
             </div>
           ) : (
-            items.length > 0 && <p className="text-sm text-muted-foreground">{t('auditlog.end')}</p>
+            items.length > 0 && <p className="text-meta text-muted-foreground">{t('auditlog.end')}</p>
           )}
         </div>
       )}

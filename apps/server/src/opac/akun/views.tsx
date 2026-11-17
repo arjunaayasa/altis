@@ -338,13 +338,14 @@ export function OpenLoans(props: { locale: Locale; keep: Keep; csrf: string; loa
                     <td data-label={col('loaned')}>{day(locale, l.loanedOn)}</td>
                     <td data-label={col('due')}>
                       {day(locale, l.dueOn)}
+                      {/* The days late and the running fine follow the date as the history writes them: " · " between. */}
                       {l.daysLate > 0 ? (
                         <>
-                          {' '}
+                          {' · '}
                           <span class="status status-warn">{lateText(locale, l)}</span>
                           {l.fineMinor > 0 ? (
                             <>
-                              {' '}
+                              {' · '}
                               <span>{opacText(locale, 'akun.loans.fine', { amount: mailMoney(locale, l.fineMinor, l.currency) })}</span>
                             </>
                           ) : null}

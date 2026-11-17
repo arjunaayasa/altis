@@ -1,9 +1,9 @@
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
-import { ImageIcon, TrashIcon } from 'lucide-react';
 import { useId, useRef, useState, type ChangeEvent } from 'react';
 import { Notice } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { FileInput } from '@/components/file-input';
 import { useT } from '@/i18n';
 import { api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
@@ -46,6 +46,7 @@ export function CoverField({
   const t = useT();
   const inputId = useId();
   const hintId = useId();
+  const headingId = useId();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,12 +97,12 @@ export function CoverField({
   };
 
   return (
-    <section className="grid content-start gap-3 rounded-lg border bg-card p-4" aria-busy={busy || undefined}>
-      <h2 className="text-base font-semibold">{t('catalog.records.section.cover')}</h2>
+    <section aria-labelledby={headingId} className="grid content-start gap-3 p-4" aria-busy={busy || undefined}>
+      <h2 id={headingId} className="text-base font-bold">
+        {t('catalog.records.section.cover')}
+      </h2>
       {coverFileId === null ? (
-        <div className="flex h-40 w-28 items-center justify-center rounded border bg-muted text-muted-foreground">
-          <ImageIcon className="size-6" aria-hidden="true" />
-        </div>
+        <div aria-hidden="true" className="h-40 w-28 rounded border bg-layer-2" />
       ) : (
         <img
           src={`/files/${encodeURIComponent(coverFileId)}`}
@@ -112,15 +113,15 @@ export function CoverField({
       {coverFileId === null && <p className="text-sm text-muted-foreground">{t('catalog.records.cover.none')}</p>}
       {canManage && (
         <div className="grid gap-2">
-          <Label htmlFor={inputId}>{t('catalog.records.cover.choose')}</Label>
-          <input
+          <Label htmlFor={inputId} className="text-meta leading-snug">
+            {t('catalog.records.cover.choose')}
+          </Label>
+          <FileInput
             ref={input}
             id={inputId}
-            type="file"
             accept="image/jpeg,image/png,image/webp"
             aria-describedby={hintId}
             disabled={busy}
-            className="text-sm file:mr-2 file:rounded-md file:border file:bg-background file:px-2 file:py-1"
             onChange={(e) => void choose(e)}
           />
           <p id={hintId} className="text-xs text-muted-foreground">
@@ -128,8 +129,7 @@ export function CoverField({
           </p>
           {coverFileId !== null && (
             <div>
-              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void removeCover()}>
-                <TrashIcon aria-hidden="true" />
+              <Button type="button" variant="outline" size="sm" className="bg-background" disabled={busy} onClick={() => void removeCover()}>
                 {t('catalog.records.cover.remove')}
               </Button>
             </div>

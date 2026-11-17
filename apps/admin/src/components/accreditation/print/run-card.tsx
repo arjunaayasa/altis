@@ -1,8 +1,7 @@
 import type { EvidenceView } from '@altis/shared/api/accreditation';
 import type { ReportRunView } from '@altis/shared/api/reports';
 import { useQueryClient } from '@tanstack/react-query';
-import { DownloadIcon } from 'lucide-react';
-import { Badge } from '@/components/form-field';
+import { Tag, type TagTone } from '@/components/layout';
 import { JobProgress } from '@/components/job-progress';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { useDateTime } from '@/components/data-table';
@@ -91,7 +90,7 @@ export function runTitle(t: Translate, run: Pick<ReportRunView, 'reportId' | 'fo
 
 const isActive = (run: Pick<ReportRunView, 'status'>): boolean => run.status === 'queued' || run.status === 'running';
 
-const STATUS_TONE = { queued: 'neutral', running: 'info', succeeded: 'info', failed: 'danger', cancelled: 'neutral' } as const;
+const STATUS_TONE: Readonly<Record<ReportRunView['status'], TagTone>> = { queued: 'neutral', running: 'neutral', succeeded: 'ok', failed: 'bad', cancelled: 'neutral' };
 
 /** The download of a finished run: a link, or a button that confirms the password first for a personal run. */
 function RunDownload({ run, title }: { run: ReportRunView; title: string }) {
@@ -112,13 +111,11 @@ function RunDownload({ run, title }: { run: ReportRunView; title: string }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       {run.personal ? (
-        <Button type="button" size="sm" aria-label={label} onClick={() => void download()}>
-          <DownloadIcon aria-hidden="true" />
+        <Button type="button" size="sm" variant="outline" aria-label={label} onClick={() => void download()}>
           {t('accreditation.print.runs.download')}
         </Button>
       ) : (
-        <a href={href} download aria-label={label} className={buttonVariants({ size: 'sm' })}>
-          <DownloadIcon aria-hidden="true" />
+        <a href={href} download aria-label={label} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
           {t('accreditation.print.runs.download')}
         </a>
       )}
@@ -147,16 +144,16 @@ export function RunCard({ run, limitMb, evidence, onEnded }: RunCardProps) {
   const title = runTitle(t, run);
   const fileName = (fileId: string): string | null => evidence?.find((e) => e.fileId === fileId)?.fileName ?? null;
   return (
-    <li data-run-id={run.id} className="grid gap-2 rounded-md border p-3">
+    <li data-run-id={run.id} className="grid gap-2 border-b py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-medium">{title}</span>
-        <Badge tone={STATUS_TONE[run.status]}>{t(`vocab.report_run_status.${run.status}`)}</Badge>
+        <span className="font-semibold">{title}</span>
+        <Tag tone={STATUS_TONE[run.status]}>{t(`vocab.report_run_status.${run.status}`)}</Tag>
       </div>
       <p className="text-xs text-muted-foreground">{t('accreditation.print.runs.made', { date: dateTime(run.createdAt) })}</p>
       {isActive(run) && run.jobId !== null && <JobProgress jobId={run.jobId} onDone={onEnded} />}
-      {run.status === 'failed' && <p className="text-sm text-destructive">{t('accreditation.print.runs.failed', { reason: failureText(t, run.errorCode) })}</p>}
+      {run.status === 'failed' && <p className="text-sm font-semibold text-bad">{t('accreditation.print.runs.failed', { reason: failureText(t, run.errorCode) })}</p>}
       {run.warnings.map((code) => (
-        <p key={code} data-warning={code} className="rounded-md border border-warning-foreground/30 bg-warning px-3 py-2 text-sm text-warning-foreground">
+        <p key={code} data-warning={code} className="rounded-md border border-warn-line bg-warn-bg px-3.5 py-2.5 text-sm">
           {warningText(t, { bytes, number: (n) => number.format(n), limitMb, fileName }, code)}
         </p>
       ))}
@@ -172,7 +169,7 @@ export function StartedRunCard({ runId, limitMb, evidence }: { runId: string; li
   const query = useApiQuery<ReportRunView>({ queryKey: reportRunKey(runId), path: `reports/runs/${encodeURIComponent(runId)}` });
   if (query.data === undefined) {
     return (
-      <li data-run-id={runId} className="rounded-md border p-3 text-sm text-muted-foreground">
+      <li data-run-id={runId} className="border-b py-3 text-sm text-muted-foreground">
         <span role="status">{t('shell.loading')}</span>
       </li>
     );

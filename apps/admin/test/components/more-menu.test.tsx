@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
+import { InlinePanel, MoreMenu, MoreMenuItem, MoreMenuRule } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { InlinePanel, MoreMenu, MoreMenuItem, MoreMenuRule } from '@/screens/circulation/parts';
 
 // The ⋯ menu of a row or a page head and the inline panels it opens: the menu is the shared dropdown menu (the arrow
 // keys move through its actions, it stays open when the page scrolls), a chosen action runs with the focus back on the

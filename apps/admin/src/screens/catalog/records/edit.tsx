@@ -5,14 +5,14 @@ import { RecordCreateBody, RecordPatchBody, type RecordDetail } from '@altis/sha
 import type { CatalogConfigView } from '@altis/shared/api/settings';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useRouterState, useSearch } from '@tanstack/react-router';
-import { ArchiveIcon, ArchiveRestoreIcon, ArrowLeftIcon, XIcon } from 'lucide-react';
-import { useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useFieldArray, useForm, useWatch, type UseFormReturn } from 'react-hook-form';
 import { AttachmentsPanel } from '@/components/catalog/attachments-panel';
 import { RecordItemsTab } from '@/components/catalog/record-items-tab';
 import { IsbnLookupButton, SruCopyDialog, type CopyPick } from '@/components/catalog/sru-dialog';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Badge, Notice, NoticeAlert, ProblemAlert, RefetchProblem, RootError } from '@/components/form-field';
+import { BackLink, Callout, FormBar, LAYER, LoadingState, MoreMenu, MoreMenuItem, PageError, PageHead, StatusText } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
 import { useT, type TKey } from '@/i18n';
@@ -39,7 +39,7 @@ import {
   type RecordFormValues,
 } from './draft-to-form';
 import { DuplicatesPanel } from './duplicates-panel';
-import { RecordFormSections, type EditorMasters } from './editor-sections';
+import { EditorSection, RecordFormSections, type EditorMasters } from './editor-sections';
 import { MarcTab } from './marc-tab';
 
 /**
@@ -142,14 +142,9 @@ function showFieldErrors(form: UseFormReturn<RecordFormValues>, errors: readonly
   applyServerErrors(form, new ApiError(422, 'VALIDATION_FAILED', { errors: mapped }));
 }
 
-function BackLink() {
+function RecordsBackLink() {
   const t = useT();
-  return (
-    <Link to="/admin/catalog/records" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-      <ArrowLeftIcon className="size-4" aria-hidden="true" />
-      {t('catalog.records.back')}
-    </Link>
-  );
+  return <BackLink to="/admin/catalog/records">{t('catalog.records.back')}</BackLink>;
 }
 
 /**
@@ -171,25 +166,26 @@ function CopiedLinks({ form }: { form: UseFormReturn<RecordFormValues> }) {
   const { fields, remove } = useFieldArray({ control: form.control, name: 'links' });
   if (fields.length === 0) return null;
   return (
-    <section className="grid gap-2 rounded-lg border bg-card p-4">
-      <h2 className="text-base font-semibold">{t('catalog.records.section.links')}</h2>
-      <p className="text-xs text-muted-foreground">{t('catalog.records.links.hint')}</p>
+    <EditorSection list title={t('catalog.records.section.links')} intro={t('catalog.records.links.hint')}>
       <ul className="grid gap-1 text-sm">
         {fields.map((link, i) => (
           <li key={link.id} className="flex items-center gap-2">
             <span className={isHttpUrl(link.url) ? 'break-all' : 'break-all text-muted-foreground line-through'}>{link.url}</span>
             {link.title !== undefined && <span className="text-muted-foreground">{link.title}</span>}
-            <Button type="button" variant="ghost" size="icon" className="ml-auto size-8" aria-label={t('catalog.records.links.remove', { url: link.url })} onClick={() => remove(i)}>
-              <XIcon aria-hidden="true" />
+            <Button type="button" variant="ghost" size="sm" className="ml-auto" aria-label={t('catalog.records.links.remove', { url: link.url })} onClick={() => remove(i)}>
+              {t('catalog.records.row.remove')}
             </Button>
           </li>
         ))}
       </ul>
-    </section>
+    </EditorSection>
   );
 }
 
 interface EditorProps {
+  /** The page's title and the line under it (the record's subtitle and states). */
+  heading: ReactNode;
+  intro?: ReactNode;
   /** The stored record (its latest read), or null for a new one. */
   record: RecordDetail | null;
   masters: LoadedMasters;
@@ -207,7 +203,7 @@ function defaultType(m: LoadedMasters): MaterialTypeView | undefined {
   return live.find((t) => t.id === m.config.defaultMaterialTypeId) ?? live[0];
 }
 
-function RecordEditor({ record, masters, canManage, initialTab, created, reload }: EditorProps) {
+function RecordEditor({ heading, intro, record, masters, canManage, initialTab, created, reload }: EditorProps) {
   const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -348,9 +344,9 @@ function RecordEditor({ record, masters, canManage, initialTab, created, reload 
   }
 
   const formPart = (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-      <form noValidate className="flex min-w-0 flex-col gap-4" onSubmit={onSubmit}>
-        <fieldset disabled={!editable} className="flex min-w-0 flex-col gap-4">
+    <div className="grid gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
+      <form noValidate className="grid min-w-0 content-start" onSubmit={onSubmit}>
+        <fieldset disabled={!editable} className="grid min-w-0 content-start">
           <RecordFormSections
             form={form}
             masters={masters}
@@ -362,33 +358,66 @@ function RecordEditor({ record, masters, canManage, initialTab, created, reload 
             incoming={record?.relations.filter((r) => r.direction === 'in') ?? []}
           />
           {isNew && <CopiedLinks form={form} />}
-          <RootError message={form.formState.errors.root?.['server']?.message} />
-          {problem !== null && <Notice kind="error">{problem}</Notice>}
+          <div className="grid gap-3 empty:hidden">
+            <RootError message={form.formState.errors.root?.['server']?.message} />
+            {problem !== null && <Notice kind="error">{problem}</Notice>}
+          </div>
           {editable && (
-            <div className="flex flex-wrap gap-2">
+            <FormBar className="mt-1">
               <Button type="submit" disabled={isSubmitting}>
                 {t(isSubmitting ? 'form.saving' : 'form.save')}
               </Button>
               <Button asChild variant="outline">
                 <Link to="/admin/catalog/records">{t('form.cancel')}</Link>
               </Button>
-            </div>
+              {isDirty && <StatusText tone="warn">{t('catalog.records.unsaved')}</StatusText>}
+            </FormBar>
           )}
         </fieldset>
       </form>
-      <aside className="flex min-w-0 flex-col gap-4">
+      <aside aria-label={t('catalog.records.side')} className={`grid min-w-0 content-start gap-0 divide-y self-start rounded-lg border ${LAYER}`}>
         {record !== null && (
           <CoverField recordId={record.id} title={record.title} coverFileId={record.coverFileId} version={version} canManage={editable} onChanged={afterOwnWrite} />
         )}
-        {isNew && <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">{t('catalog.records.cover.after_save')}</p>}
+        {isNew && <p className="p-4 text-sm text-muted-foreground">{t('catalog.records.cover.after_save')}</p>}
         {editable && <DuplicatesPanel control={form.control} excludeId={record?.id ?? null} />}
       </aside>
     </div>
   );
 
+  const restore = async (): Promise<void> => {
+    if (record === null) return;
+    setProblem(null);
+    try {
+      const r = await api<StoreResponse>('POST', `${recordPath}/restore`, { version });
+      await queryClient.invalidateQueries({ queryKey: ['catalog', 'records', 'list'] });
+      await afterOwnWrite(r.version);
+      setNotice('restored');
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'CONFLICT_STALE') setStale(true);
+      else setProblem(problemText(t, e));
+    }
+  };
+
+  const headActions =
+    record !== null && editable ? (
+      record.archived ? (
+        <Button type="button" variant="outline" onClick={() => void restore()}>
+          {t('catalog.records.restore')}
+        </Button>
+      ) : (
+        <MoreMenu label={t('catalog.records.more')}>
+          <MoreMenuItem danger onSelect={() => setConfirm(true)}>
+            {t('catalog.records.archive')}
+          </MoreMenuItem>
+        </MoreMenu>
+      )
+    ) : undefined;
+
   return (
     <>
-      {/* While "Salin dari SRU" is open, a scan belongs to the dialog, not to the form behind it. */}
+      <PageHead title={heading} intro={intro} actions={headActions} />
+      {/* While "Salin dari SRU" is open, a scan belongs to its panel, not to the form under it. */}
       {editable && tab === 'data' && !sruOpen && <IsbnScanner onScan={onScan} />}
       {created && notice === null && !stale && <Notice kind="success">{t('catalog.records.created')}</Notice>}
       {notice === 'saved' && <Notice kind="success">{t('catalog.records.saved')}</Notice>}
@@ -398,67 +427,34 @@ function RecordEditor({ record, masters, canManage, initialTab, created, reload 
         <Notice
           kind="error"
           action={
-            <Button type="button" variant="outline" size="sm" onClick={() => void reloadStale()}>
+            <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => void reloadStale()}>
               {t('catalog.records.stale_reload')}
             </Button>
-          }
-        >
+          }>
           {t('catalog.records.stale')}
         </Notice>
       )}
-      {!canManage && <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{t('catalog.records.read_only')}</p>}
+      {!canManage && <Callout title={t('catalog.records.read_only')} />}
       {record?.mergedInto != null && (
-        <p className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
-          {t('catalog.records.merged')}
-          <Link to={`/admin/catalog/records/${encodeURIComponent(record.mergedInto)}`} className="text-primary underline-offset-4 hover:underline">
-            {t('catalog.records.merged_link')}
-          </Link>
-        </p>
+        <Callout
+          title={t('catalog.records.merged')}
+          action={
+            <Link to={`/admin/catalog/records/${encodeURIComponent(record.mergedInto)}`} className="font-semibold text-accent-text underline-offset-4 hover:underline">
+              {t('catalog.records.merged_link')}
+            </Link>
+          }
+        />
       )}
-      {record?.archived === true && record.mergedInto === null && (
-        <p className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">{t('catalog.records.archived_notice')}</p>
-      )}
+      {record?.archived === true && record.mergedInto === null && <Callout title={t('catalog.records.archived_notice')} />}
       {otherWarnings.length > 0 && (
         <NoticeAlert>
-          <p className="font-medium">{t('catalog.records.warnings')}</p>
+          <p className="font-semibold">{t('catalog.records.warnings')}</p>
           <ul className="list-disc pl-5">
             {otherWarnings.map((code, i) => (
               <li key={`${code}-${i}`}>{t(`catalog.records.warning.${code}` as TKey)}</li>
             ))}
           </ul>
         </NoticeAlert>
-      )}
-      {record !== null && editable && (
-        <div className="flex flex-wrap gap-2">
-          {record.archived ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() =>
-                void (async () => {
-                  setProblem(null);
-                  try {
-                    const r = await api<StoreResponse>('POST', `${recordPath}/restore`, { version });
-                    await queryClient.invalidateQueries({ queryKey: ['catalog', 'records', 'list'] });
-                    await afterOwnWrite(r.version);
-                    setNotice('restored');
-                  } catch (e) {
-                    if (e instanceof ApiError && e.code === 'CONFLICT_STALE') setStale(true);
-                    else setProblem(problemText(t, e));
-                  }
-                })()
-              }
-            >
-              <ArchiveRestoreIcon aria-hidden="true" />
-              {t('catalog.records.restore')}
-            </Button>
-          ) : (
-            <Button type="button" variant="outline" onClick={() => setConfirm(true)}>
-              <ArchiveIcon aria-hidden="true" />
-              {t('catalog.records.archive')}
-            </Button>
-          )}
-        </div>
       )}
       {record !== null && (
         <ConfirmDialog
@@ -477,25 +473,40 @@ function RecordEditor({ record, masters, canManage, initialTab, created, reload 
         />
       )}
       {isNew && editable && (
-        <section aria-label={t('catalog.records.copy.label')} className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 p-3">
-          <p className="w-full text-sm text-muted-foreground">{t('catalog.records.copy.hint')}</p>
-          <IsbnLookupButton isbn={firstIsbn} onPick={pick} onExisting={setExisting} />
-          <Button type="button" variant="outline" onClick={() => setSruOpen(true)}>
-            {t('catalog.records.copy.sru')}
-          </Button>
+        <section aria-label={t('catalog.records.copy.label')} className="grid gap-3">
+          <Callout
+            title={t('catalog.records.copy.label')}
+            action={
+              <>
+                <IsbnLookupButton isbn={firstIsbn} onPick={pick} onExisting={setExisting} />
+                <Button type="button" variant="outline" size="sm" className="bg-background" aria-pressed={sruOpen} onClick={() => setSruOpen(!sruOpen)}>
+                  {t('catalog.records.copy.sru')}
+                </Button>
+              </>
+            }>
+            <p>{t('catalog.records.copy.hint')}</p>
+          </Callout>
           <SruCopyDialog open={sruOpen} onOpenChange={setSruOpen} onPick={pick} {...(firstIsbn === '' ? {} : { initialIsbn: firstIsbn })} />
         </section>
       )}
       {existing !== null && (
-        <div role="status" className="flex flex-wrap items-center gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-          <span className="font-medium">{t('catalog.records.existing')}</span>
-          <Link to={`/admin/catalog/records/${encodeURIComponent(existing)}`} className="text-primary underline-offset-4 hover:underline">
-            {t('catalog.records.existing_open')}
-          </Link>
-          <Link to={`/admin/catalog/records/${encodeURIComponent(existing)}`} search={{ tab: 'items' }} className="text-primary underline-offset-4 hover:underline">
-            {t('catalog.records.existing_add_item')}
-          </Link>
-        </div>
+        <Callout
+          role="status"
+          title={t('catalog.records.existing')}
+          action={
+            <>
+              <Link to={`/admin/catalog/records/${encodeURIComponent(existing)}`} className="font-semibold text-accent-text underline-offset-4 hover:underline">
+                {t('catalog.records.existing_open')}
+              </Link>
+              <Link
+                to={`/admin/catalog/records/${encodeURIComponent(existing)}`}
+                search={{ tab: 'items' }}
+                className="font-semibold text-accent-text underline-offset-4 hover:underline">
+                {t('catalog.records.existing_add_item')}
+              </Link>
+            </>
+          }
+        />
       )}
       {copied !== null && (
         <NoticeAlert>
@@ -508,7 +519,7 @@ function RecordEditor({ record, masters, canManage, initialTab, created, reload 
       {record === null ? (
         formPart
       ) : (
-        <Tabs value={tab} onValueChange={(v) => setTab(parseTab(v))}>
+        <Tabs value={tab} onValueChange={(v) => setTab(parseTab(v))} className="gap-5">
           {/* On a narrow screen the tabs wrap onto a second row (WRAPPING_TABS). */}
           <TabsList aria-label={t('catalog.records.tabs')} className={WRAPPING_TABS.list}>
             <TabsTrigger value="data" className={WRAPPING_TABS.trigger}>
@@ -551,24 +562,24 @@ export function RecordCreateScreen() {
   const canManage = holds(me, 'catalog.records.manage');
   const masters = useEditorMasters();
   const live = masters.data?.materialTypes.filter((m) => !m.archived) ?? [];
+  const title = t('catalog.records.new.title');
   return (
-    <div className="flex flex-col gap-4">
-      <BackLink />
-      <h1 className="text-2xl font-semibold">{t('catalog.records.new.title')}</h1>
+    <div className="grid gap-6">
+      <RecordsBackLink />
       {/* The server would refuse (and record the refusal): say so before anything is typed. */}
+      {masters.data === undefined || live.length === 0 ? <PageHead title={title} /> : null}
       {!canManage && <ProblemAlert error={new ApiError(403, 'AUTHZ_DENIED')} />}
       {masters.data === undefined ? (
         masters.error !== null ? (
-          <ProblemAlert error={masters.error} />
+          <PageError error={masters.error} />
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <LoadingState />
         )
       ) : live.length === 0 ? (
         <Notice kind="error">{t('catalog.records.no_types')}</Notice>
       ) : (
         <RecordEditor
+          heading={title}
           record={null}
           masters={masters.data}
           canManage={canManage}
@@ -581,9 +592,22 @@ export function RecordCreateScreen() {
   );
 }
 
+/** The line under a stored record's title: its subtitle and its states, in words. */
+function RecordIntro({ record }: { record: RecordDetail }) {
+  const t = useT();
+  if (record.subtitle === undefined && !record.archived && record.opacVisible && record.mergedInto === null) return undefined;
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      {record.subtitle !== undefined && <span>{record.subtitle}</span>}
+      {record.mergedInto !== null && <Badge tone="warning">{t('catalog.records.badge.merged')}</Badge>}
+      {record.archived && <Badge tone="warning">{t('catalog.records.badge.archived')}</Badge>}
+      {!record.opacVisible && <Badge>{t('catalog.records.badge.hidden')}</Badge>}
+    </span>
+  );
+}
+
 /** `/admin/catalog/records/:id` (`?tab=items|attachments|marc` opens that tab). */
 export function RecordEditScreen() {
-  const t = useT();
   const me = useMe();
   const queryClient = useQueryClient();
   const canManage = holds(me, 'catalog.records.manage');
@@ -597,40 +621,34 @@ export function RecordEditScreen() {
   const record = detail.data;
 
   return (
-    <div className="flex flex-col gap-4">
-      <BackLink />
+    <div className="grid gap-6">
+      <RecordsBackLink />
       {record === undefined ? (
         detail.isError ? (
-          <Notice kind="error">{problemText(t, detail.error)}</Notice>
+          <PageError error={detail.error} />
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <LoadingState />
         )
       ) : (
         <>
-          <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-semibold">{record.title}</h1>
-            {(record.subtitle !== undefined || record.archived || !record.opacVisible || record.mergedInto !== null) && (
-              <p className="flex flex-wrap items-center gap-2 text-muted-foreground">
-                {record.subtitle !== undefined && <span>{record.subtitle}</span>}
-                {record.mergedInto !== null && <Badge tone="warning">{t('catalog.records.badge.merged')}</Badge>}
-                {record.archived && <Badge tone="warning">{t('catalog.records.badge.archived')}</Badge>}
-                {!record.opacVisible && <Badge>{t('catalog.records.badge.hidden')}</Badge>}
-              </p>
-            )}
-          </div>
           <RefetchProblem query={detail} />
           {masters.data === undefined ? (
-            masters.error !== null ? (
-              <ProblemAlert error={masters.error} />
-            ) : (
-              <p role="status" className="text-sm text-muted-foreground">
-                {t('shell.loading')}
-              </p>
-            )
+            <>
+              <PageHead title={record.title} intro={<RecordIntro record={record} />} />
+              {masters.error !== null ? <PageError error={masters.error} /> : <LoadingState />}
+            </>
           ) : (
-            <RecordEditor key={record.id} record={record} masters={masters.data} canManage={canManage} initialTab={initialTab} created={created} reload={reload} />
+            <RecordEditor
+              key={record.id}
+              heading={record.title}
+              intro={<RecordIntro record={record} />}
+              record={record}
+              masters={masters.data}
+              canManage={canManage}
+              initialTab={initialTab}
+              created={created}
+              reload={reload}
+            />
           )}
         </>
       )}

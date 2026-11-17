@@ -1,12 +1,13 @@
 import type { PeriodView } from '@altis/shared/api/accreditation';
 import { Link } from '@tanstack/react-router';
-import { RefreshCwIcon } from 'lucide-react';
 import { useState, type JSX } from 'react';
-import { Badge, ProblemAlert } from '@/components/form-field';
+import { ProblemAlert } from '@/components/form-field';
+import { LAYER, StatusText, Tag } from '@/components/layout';
 import { JobProgress, type JobOutcome } from '@/components/job-progress';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/i18n';
 import { api } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import { periodPath, useFormats, useRefreshPeriods } from '@/screens/accreditation/data';
 
 /** What `POST accreditation/periods/:id/evaluate` answers: the evaluation job (an already running one is joined). */
@@ -56,11 +57,11 @@ export function StatusLine({ period }: { period: PeriodView }): JSX.Element {
 
   const running = jobId !== null && ended === null;
   return (
-    <section aria-label={t('accreditation.status.title')} className="flex flex-col gap-2 rounded-lg border bg-card p-4 text-sm text-card-foreground">
+    <section aria-label={t('accreditation.status.title')} className={cn('grid gap-2 rounded-lg border px-3.5 py-3 text-sm', LAYER)}>
       {period.catalogSyncedAt !== null && (
         <p>
           {t('accred.note.catalogue_synced', { date: f.dateTime(period.catalogSyncedAt) })}{' '}
-          <Link to="/admin/catalog/migration" search={{ catalogMode: 'sync' }} className="text-primary underline-offset-4 hover:underline">
+          <Link to="/admin/catalog/migration" search={{ catalogMode: 'sync' }} className="font-semibold text-accent-text underline-offset-4 hover:underline">
             {t('accreditation.status.sync_link')}
           </Link>
         </p>
@@ -72,19 +73,22 @@ export function StatusLine({ period }: { period: PeriodView }): JSX.Element {
           <span>{t('accreditation.status.computed', { time: f.dateTime(period.computedAt) })}</span>
         )}
         {period.computedAt !== null && period.stale && (
-          <Badge tone="warning" title={t('accreditation.status.stale_hint')}>
+          <Tag tone="warn" title={t('accreditation.status.stale_hint')}>
             {t('accreditation.status.stale')}
-          </Badge>
+          </Tag>
         )}
-        <Button type="button" size="sm" variant="outline" className="ml-auto" disabled={busy || running} onClick={() => void start()}>
-          <RefreshCwIcon aria-hidden="true" />
+        <Button type="button" size="sm" variant="outline" className="ml-auto bg-background" disabled={busy || running} onClick={() => void start()}>
           {t(busy || running ? 'accreditation.status.recomputing' : 'accreditation.status.recompute')}
         </Button>
       </div>
       <ProblemAlert error={problem} />
       {jobId !== null && <JobProgress jobId={jobId} onDone={done} />}
-      {ended !== null && ended !== 'succeeded' && <p role="status">{t('accreditation.status.recompute_failed')}</p>}
-      <p className="text-muted-foreground">{t('accred.note.recompute_after_catalogue')}</p>
+      {ended !== null && ended !== 'succeeded' && (
+        <p role="status">
+          <StatusText tone="bad">{t('accreditation.status.recompute_failed')}</StatusText>
+        </p>
+      )}
+      <p className="text-meta text-muted-foreground">{t('accred.note.recompute_after_catalogue')}</p>
     </section>
   );
 }

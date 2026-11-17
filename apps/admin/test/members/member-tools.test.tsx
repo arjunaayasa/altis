@@ -199,6 +199,30 @@ describe('the member list bulk bar', () => {
   });
 });
 
+describe("the member page's photo panel", () => {
+  it('chooses the file with a button of the page (the focus starts there), never the browser\'s own file control', async () => {
+    startApp({
+      me: adminMe(),
+      path: `/admin/anggota/${member(1).id}`,
+      routes: {
+        'GET members/types': () => ({ items: [SISWA] }),
+        'GET branches': () => ({ items: [BRANCH] }),
+        'GET members/:id': () => view(member(1)),
+        'GET members/:id/events': () => ({ items: [], nextCursor: null }),
+      },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Ganti foto' }));
+    const choose = await screen.findByRole('button', { name: 'Pilih berkas foto' });
+    await waitFor(() => expect(document.activeElement).toBe(choose));
+    const file = document.querySelector<HTMLInputElement>('input[type=file]')!;
+    expect(file.className.split(/\s+/)).toContain('sr-only');
+    expect(file.tabIndex).toBe(-1);
+    const opened = vi.spyOn(file, 'click').mockImplementation(() => undefined);
+    fireEvent.click(choose);
+    expect(opened).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('Perangkat Buku Tamu and Kunjungan', () => {
   it('a new station shows its activation code once', async () => {
     const stations: StationView[] = [];

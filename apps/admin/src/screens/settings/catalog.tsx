@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useForm, useWatch, type UseFormReturn } from 'react-hook-form';
+import { SideSection } from '@/components/layout';
 import { CheckField, Field, Notice, SELECT_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,7 +18,7 @@ import { BarcodePatternsEditor } from './catalog/barcode-patterns';
 import { CatalogForm, catalogBody, catalogFormValues, changedElsewhere, errorAt, ownError, type CatalogFormValues } from './catalog/form';
 import { LabelProfilesEditor, SYMBOLOGY_NAMES } from './catalog/label-profiles';
 import { SruServersEditor } from './catalog/sru-servers';
-import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, saveSettings, type SaveOutcome } from './library';
+import { SettingsFooter, SettingsLoader, SettingsPage, saveSettings, type SaveOutcome } from './library';
 
 /**
  * Pengaturan › Katalog (Phase 2 spec §13 "Pengaturan › Katalog", §12.6, §6.2, §7; plan Task 28), `/admin/settings/catalog`:
@@ -171,7 +172,7 @@ function CatalogSettingsForm({ initial, canManage }: { initial: CatalogSettings;
     <form noValidate className="grid gap-6" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
       <p className="text-sm text-muted-foreground">{t('catalog.settings.description')}</p>
 
-      <SettingsSection title={t('catalog.settings.general.title')}>
+      <SideSection title={t('catalog.settings.general.title')}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t('catalog.settings.marc_org_code')} hint={t('catalog.settings.marc_org_code_hint')} error={fieldError('marcOrgCode')}>
             {(c) => <Input {...c} className="font-mono" maxLength={16} autoComplete="off" spellCheck={false} {...form.register('marcOrgCode')} disabled={readOnly} />}
@@ -236,9 +237,9 @@ function CatalogSettingsForm({ initial, canManage }: { initial: CatalogSettings;
             )}
           </Field>
         </div>
-      </SettingsSection>
+      </SideSection>
 
-      <SettingsSection title={t('catalog.settings.barcode.title')} description={t('catalog.settings.barcode.description')}>
+      <SideSection title={t('catalog.settings.barcode.title')} intro={t('catalog.settings.barcode.description')}>
         <Field
           label={t('catalog.settings.barcode.symbology')}
           hint={t('catalog.settings.barcode.symbology_hint')}
@@ -256,13 +257,13 @@ function CatalogSettingsForm({ initial, canManage }: { initial: CatalogSettings;
           )}
         </Field>
         <BarcodePatternsEditor form={form} readOnly={readOnly} />
-      </SettingsSection>
+      </SideSection>
 
-      <SettingsSection title={t('catalog.settings.labels.title')} description={t('catalog.settings.labels.description')}>
+      <SideSection title={t('catalog.settings.labels.title')} intro={t('catalog.settings.labels.description')}>
         <LabelProfilesEditor form={form} readOnly={readOnly} />
-      </SettingsSection>
+      </SideSection>
 
-      <SettingsSection title={t('catalog.settings.sru.title')} description={t('catalog.settings.sru.description')}>
+      <SideSection title={t('catalog.settings.sru.title')} intro={t('catalog.settings.sru.description')}>
         <SruServersEditor form={form} readOnly={readOnly} />
         <div className="grid gap-3 border-t pt-4">
           <CheckField
@@ -271,9 +272,9 @@ function CatalogSettingsForm({ initial, canManage }: { initial: CatalogSettings;
             {...form.register('sru.allowPrivateHosts')}
             disabled={readOnly || !superAdmin}
           />
-          {!superAdmin && <p className="pl-6 text-xs font-medium text-muted-foreground">{t('catalog.settings.sru.allow_private_super_only')}</p>}
+          {!superAdmin && <p className="pl-6 text-xs font-semibold text-muted-foreground">{t('catalog.settings.sru.allow_private_super_only')}</p>}
         </div>
-      </SettingsSection>
+      </SideSection>
 
       {newer !== null && (
         <Notice

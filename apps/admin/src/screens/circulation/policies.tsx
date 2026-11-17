@@ -2,23 +2,22 @@ import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import type { CollectionTypeView, MaterialTypeView } from '@altis/shared/api/catalog/masters';
 import { PolicyBody, PolicyPatchBody, type PolicyListResponse, type PolicyResolveResponse, type PolicyView } from '@altis/shared/api/circulation';
 import { useQueryClient } from '@tanstack/react-query';
-import { PlusIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { Badge, CheckField, Field, Notice, ProblemAlert, RootError, SELECT_CLASS } from '@/components/form-field';
-import { useReturnFocus } from '@/components/return-focus';
+import { CheckField, Field, Notice, ProblemAlert, RootError, SELECT_CLASS } from '@/components/form-field';
+import { DenseTable, ErrorState, FilterField, FilterRow, InlinePanel, MoreMenu, MoreMenuItem, MoreMenuRule, PageError, PageHead, Section, SkeletonTable, StatusText, Tag, type DenseColumn } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT, type TKey } from '@/i18n';
 import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
 import { useDirtyGuard } from '@/lib/dirty-forms';
-import { FORM_PARSE, problemText } from '@/lib/form-errors';
+import { FORM_PARSE } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
-import { MasterTable, changedFields, isFieldProblem, isStale, putFieldErrors, serverIssues, useMasterList, zodIssues, type MasterColumn } from '@/screens/catalog/masters/master-table';
+import { changedFields, isFieldProblem, isStale, putFieldErrors, serverIssues, useMasterList, zodIssues } from '@/screens/catalog/masters/master-table';
 import { cn } from '@/lib/utils';
+import { useMoney } from './charges';
 import { useMemberTypes, useTypeName } from './common';
 
 /**
@@ -29,7 +28,7 @@ import { useMemberTypes, useTypeName } from './common';
  * collection type, then material type). With none the desk refuses (CIRC_NO_POLICY). A rule's terms are copied into
  * each loan: editing a rule never changes a running loan, and a new rule counts its limit from zero.
  *
- * "Aturan mana yang berlaku?" below the table asks the server for the ranking of a combination
+ * Adding or changing a rule opens its form in the page, above the table. "Aturan mana yang berlaku?" below the table asks the server for the ranking of a combination
  * (`GET circulation/policies/resolve`), so the librarian sees the winner and why the others lose.
  */
 
@@ -137,7 +136,7 @@ function useDimensions() {
   return { collections: (collections.data?.items ?? []) as Named[], materials: (materials.data?.items ?? []) as Named[] };
 }
 
-function PolicyFormDialog({ row, canManage, onSaved, onCancel }: { row: PolicyView | null; canManage: boolean; onSaved(code: string): Promise<void>; onCancel(): void }) {
+function PolicyForm({ row, canManage, onSaved, onCancel }: { row: PolicyView | null; canManage: boolean; onSaved(code: string): Promise<void>; onCancel(): void }) {
   const t = useT();
   const typeName = useTypeName();
   const types = useMemberTypes();
@@ -179,13 +178,15 @@ function PolicyFormDialog({ row, canManage, onSaved, onCancel }: { row: PolicyVi
   });
 
   return (
-    <form
-      noValidate
+    <InlinePanel
+      title={row === null ? t('circulation.policies.add') : t('circulation.policies.edit_title', { code: row.code })}
+      onCancel={onCancel}
       onSubmit={(e) => {
         form.clearErrors();
         void submit(e);
       }}>
-      <fieldset disabled={!canManage} className="grid min-w-0 gap-4 sm:grid-cols-2">
+      <p className="-mt-1.5 max-w-[75ch] text-sm text-muted-foreground">{t('circulation.policies.form_intro')}</p>
+      <fieldset disabled={!canManage} className="grid max-w-4xl min-w-0 gap-x-5 gap-y-4 sm:grid-cols-2">
         <Field label={t('circulation.policies.field.code')} error={errors.code}>
           {(c) => <Input {...c} autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={32} {...form.register('code')} />}
         </Field>
@@ -277,30 +278,30 @@ function PolicyFormDialog({ row, canManage, onSaved, onCancel }: { row: PolicyVi
           <ProblemAlert error={problem} />
         </div>
       </fieldset>
-      <DialogFooter className="mt-4">
-        <Button type="button" variant="outline" onClick={onCancel}>
-          {t(canManage ? 'form.cancel' : 'circulation.policies.close')}
-        </Button>
+      <div className="flex flex-wrap gap-2">
         {canManage && (
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" size="sm" disabled={isSubmitting}>
             {t(isSubmitting ? 'form.saving' : 'form.save')}
           </Button>
         )}
-      </DialogFooter>
-    </form>
+        <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+          {t(canManage ? 'form.cancel' : 'circulation.policies.close')}
+        </Button>
+      </div>
+    </InlinePanel>
   );
 }
 
 export function PoliciesScreen() {
   const t = useT();
   const me = useMe();
+  const money = useMoney();
   const typeName = useTypeName();
   const types = useMemberTypes(true);
   const queryClient = useQueryClient();
-  const focus = useReturnFocus();
   const canManage = holds(me, 'circulation.policies.manage');
   const list = useApiQuery<PolicyListResponse>({ queryKey: [...POLICIES_KEY], path: 'circulation/policies' });
-  const [dialog, setDialog] = useState<{ row: PolicyView | null } | null>(null);
+  const [editing, setEditing] = useState<{ row: PolicyView | null } | null>(null);
   const [archiving, setArchiving] = useState<PolicyView | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -334,18 +335,32 @@ export function PoliciesScreen() {
     await refresh();
   };
 
-  const columns: MasterColumn<PolicyView>[] = [
-    { id: 'code', header: t('circulation.policies.col.code'), cell: (r) => <span className="font-mono font-medium">{r.code}</span> },
-    { id: 'name', header: t('circulation.policies.col.name'), cell: (r) => r.name },
+  const open = (row: PolicyView | null): void => {
+    setNotice(null);
+    setEditing({ row });
+  };
+
+  const columns: DenseColumn<PolicyView>[] = [
+    {
+      id: 'rule',
+      header: t('circulation.policies.col.rule'),
+      className: 'min-w-40',
+      cell: (r) => (
+        <>
+          <p className="font-semibold tracking-wide">{r.code}</p>
+          <p className="text-meta text-muted-foreground">{r.name}</p>
+        </>
+      ),
+    },
     {
       id: 'scope',
       header: t('circulation.rules.col.scope'),
-      cell: (r) => (r.specificity === 0 ? <Badge tone="info">{t('circulation.rules.general')}</Badge> : scopeOf(r)),
+      cell: (r) => (r.specificity === 0 ? <Tag>{t('circulation.rules.general')}</Tag> : scopeOf(r)),
     },
     {
       id: 'loanable',
       header: t('circulation.policies.col.loanable'),
-      cell: (r) => (r.loanable ? t('circulation.policies.yes') : <Badge tone="warning">{t('circulation.policies.no')}</Badge>),
+      cell: (r) => (r.loanable ? t('circulation.policies.yes') : <StatusText tone="warn">{t('circulation.policies.no')}</StatusText>),
     },
     {
       id: 'days',
@@ -356,7 +371,7 @@ export function PoliciesScreen() {
     {
       id: 'limit',
       header: t('circulation.policies.col.loan_limit'),
-      cell: (r) => (r.loanLimit === null ? <Badge tone="neutral">{t('circulation.policies.limit.none')}</Badge> : String(r.loanLimit)),
+      cell: (r) => (r.loanLimit === null ? t('circulation.policies.limit.none') : String(r.loanLimit)),
     },
     {
       id: 'renew',
@@ -366,35 +381,30 @@ export function PoliciesScreen() {
     {
       id: 'fine',
       header: t('circulation.rules.col.fine'),
-      className: 'whitespace-nowrap',
       cell: (r) =>
         Number(r.finePerDay) === 0
           ? t('circulation.rules.no_fine')
-          : t('circulation.rules.fine_value', { amount: typed(r.finePerDay), currency: r.currency, grace: r.graceDays }),
+          : t('circulation.rules.fine_value', { amount: money(r.finePerDay, r.currency), grace: r.graceDays }),
     },
-    { id: 'open', header: t('circulation.policies.col.open_loans'), cell: (r) => String(r.openLoans) },
+    { id: 'open', header: t('circulation.policies.col.open_loans'), headClassName: 'text-right', className: 'text-right', cell: (r) => String(r.openLoans) },
     {
       id: 'actions',
-      header: t('table.actions'),
-      className: 'whitespace-nowrap',
+      header: <span className="sr-only">{t('table.actions')}</span>,
+      className: 'w-px py-1.5 text-right',
       cell: (r) => (
-        <div className="flex flex-wrap gap-1">
-          <Button
-            variant="outline"
-            size="sm"
-            aria-label={t('circulation.policies.edit_named', { code: r.code })}
-            onClick={() => {
-              setNotice(null);
-              setDialog({ row: r });
-            }}>
+        <MoreMenu small label={t('circulation.policies.more_named', { code: r.code })}>
+          <MoreMenuItem aria-label={t('circulation.policies.edit_named', { code: r.code })} onSelect={() => open(r)}>
             {t(canManage ? 'circulation.policies.edit' : 'circulation.policies.view')}
-          </Button>
+          </MoreMenuItem>
           {canManage && !r.archived && (
-            <Button variant="outline" size="sm" aria-label={t('circulation.policies.archive_named', { code: r.code })} onClick={() => setArchiving(r)}>
-              {t('circulation.policies.archive')}
-            </Button>
+            <>
+              <MoreMenuRule />
+              <MoreMenuItem danger aria-label={t('circulation.policies.archive_named', { code: r.code })} onSelect={() => setArchiving(r)}>
+                {t('circulation.policies.archive')}
+              </MoreMenuItem>
+            </>
           )}
-        </div>
+        </MoreMenu>
       ),
     },
   ];
@@ -402,65 +412,43 @@ export function PoliciesScreen() {
   const hasGeneral = list.data?.items.some((r) => r.specificity === 0 && !r.archived) ?? true;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="grid gap-1">
-          <h1 className="text-2xl font-semibold">{t('nav.circulation.policies')}</h1>
-          <p className="max-w-3xl text-sm text-muted-foreground">{t('circulation.rules.intro')}</p>
-        </div>
-        {canManage && (
-          <Button
-            onClick={() => {
-              setNotice(null);
-              setDialog({ row: null });
-            }}>
-            <PlusIcon aria-hidden="true" />
-            {t('circulation.policies.add')}
-          </Button>
-        )}
-      </div>
+    <div className="grid gap-6">
+      <PageHead
+        title={t('nav.circulation.policies')}
+        intro={t('circulation.rules.intro')}
+        actions={
+          canManage && (
+            <Button aria-expanded={editing !== null && editing.row === null} onClick={() => open(null)}>
+              {t('circulation.policies.add')}
+            </Button>
+          )
+        }
+      />
       {!hasGeneral && <Notice kind="error">{t('circulation.policies.no_general')}</Notice>}
       {notice !== null && <Notice kind="success">{notice}</Notice>}
+      {editing !== null && (
+        <PolicyForm
+          key={editing.row?.id ?? 'new'}
+          row={editing.row}
+          canManage={canManage}
+          onCancel={() => setEditing(null)}
+          onSaved={async (code) => {
+            await refresh();
+            setNotice(t('circulation.policies.saved', { code }));
+            setEditing(null);
+          }}
+        />
+      )}
       {list.data === undefined ? (
         list.isError ? (
-          <Notice
-            kind="error"
-            action={
-              <Button variant="outline" size="sm" onClick={() => void list.refetch()}>
-                {t('table.retry')}
-              </Button>
-            }>
-            {problemText(t, list.error)}
-          </Notice>
+          <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <SkeletonTable label={t('shell.loading')} columns={8} rows={3} />
         )
       ) : (
-        <MasterTable caption={t('circulation.policies.caption')} columns={columns} rows={list.data.items} empty={t('circulation.policies.empty')} />
+        <DenseTable caption={t('circulation.policies.caption')} columns={columns} rows={list.data.items} rowKey={(r) => r.id} empty={t('circulation.policies.empty')} />
       )}
       <ResolveTool collections={dims.collections} materials={dims.materials} scopeOf={scopeOf} />
-      <Dialog open={dialog !== null} onOpenChange={(open) => (open ? undefined : setDialog(null))}>
-        {dialog !== null && (
-          <DialogContent closeLabel={t('form.cancel')} onOpenAutoFocus={focus.onOpenAutoFocus} onCloseAutoFocus={focus.onCloseAutoFocus} className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{dialog.row === null ? t('circulation.policies.add') : t('circulation.policies.edit_title', { code: dialog.row.code })}</DialogTitle>
-              <DialogDescription>{t('circulation.policies.form_intro')}</DialogDescription>
-            </DialogHeader>
-            <PolicyFormDialog
-              row={dialog.row}
-              canManage={canManage}
-              onCancel={() => setDialog(null)}
-              onSaved={async (code) => {
-                await refresh();
-                setNotice(t('circulation.policies.saved', { code }));
-                setDialog(null);
-              }}
-            />
-          </DialogContent>
-        )}
-      </Dialog>
       {archiving !== null && (
         <ConfirmDialog
           open
@@ -495,15 +483,10 @@ function ResolveTool({ collections, materials, scopeOf }: { collections: readonl
   const result = useApiQuery<PolicyResolveResponse>({ queryKey: ['circulation', 'policies', 'resolve', dims], path: `circulation/policies/resolve?${query.toString()}` });
   const pick = (key: keyof typeof dims) => (e: { target: { value: string } }) => setDims((d) => ({ ...d, [key]: e.target.value }));
   return (
-    <section aria-labelledby={`${ids}-title`} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <div className="grid gap-1">
-        <h2 id={`${ids}-title`} className="text-lg font-semibold">
-          {t('circulation.rules.resolve.title')}
-        </h2>
-        <p className="text-sm text-muted-foreground">{t('circulation.rules.resolve.intro')}</p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field id={`${ids}-m`} label={t('circulation.policies.field.member_type')}>
+    <Section title={t('circulation.rules.resolve.title')}>
+      <p className="-mt-1 max-w-[75ch] text-sm text-muted-foreground">{t('circulation.rules.resolve.intro')}</p>
+      <FilterRow label={t('circulation.rules.resolve.title')}>
+        <FilterField id={`${ids}-m`} label={t('circulation.policies.field.member_type')}>
           <select id={`${ids}-m`} className={SELECT_CLASS} value={dims.memberTypeId} onChange={pick('memberTypeId')}>
             <option value="">{t('circulation.rules.resolve.none')}</option>
             {(types.data?.items ?? []).map((x) => (
@@ -512,8 +495,8 @@ function ResolveTool({ collections, materials, scopeOf }: { collections: readonl
               </option>
             ))}
           </select>
-        </Field>
-        <Field id={`${ids}-c`} label={t('circulation.rules.field.collection_type')}>
+        </FilterField>
+        <FilterField id={`${ids}-c`} label={t('circulation.rules.field.collection_type')}>
           <select id={`${ids}-c`} className={SELECT_CLASS} value={dims.collectionTypeId} onChange={pick('collectionTypeId')}>
             <option value="">{t('circulation.rules.resolve.none')}</option>
             {collections
@@ -524,8 +507,8 @@ function ResolveTool({ collections, materials, scopeOf }: { collections: readonl
                 </option>
               ))}
           </select>
-        </Field>
-        <Field id={`${ids}-t`} label={t('circulation.rules.field.material_type')}>
+        </FilterField>
+        <FilterField id={`${ids}-t`} label={t('circulation.rules.field.material_type')}>
           <select id={`${ids}-t`} className={SELECT_CLASS} value={dims.materialTypeId} onChange={pick('materialTypeId')}>
             <option value="">{t('circulation.rules.resolve.none')}</option>
             {materials
@@ -536,27 +519,27 @@ function ResolveTool({ collections, materials, scopeOf }: { collections: readonl
                 </option>
               ))}
           </select>
-        </Field>
-      </div>
-      {result.isError && <Notice kind="error">{problemText(t, result.error)}</Notice>}
+        </FilterField>
+      </FilterRow>
+      {result.isError && <ErrorState error={result.error} onRetry={() => void result.refetch()} retrying={result.isFetching} />}
       {result.data !== undefined &&
         (result.data.winner === null ? (
-          <Notice kind="error">{t('circulation.rules.resolve.no_rule')}</Notice>
+          <PageError title={t('circulation.rules.resolve.no_rule')} />
         ) : (
-          <ol aria-label={t('circulation.rules.resolve.ranking')} className="flex flex-col divide-y rounded-md border text-sm">
+          <ol aria-label={t('circulation.rules.resolve.ranking')} className="grid rounded-lg border text-sm">
             {result.data.candidates.map((c) => (
-              <li key={c.policy.id} className={cn('flex flex-wrap items-center justify-between gap-2 px-3 py-2', c.rank === 1 && 'bg-accent/50')}>
+              <li key={c.policy.id} className={cn('flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b px-3 py-2.5 last:border-b-0', c.rank === 1 && 'bg-accent-soft')}>
                 <span className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="text-muted-foreground tabular-nums">{c.rank}.</span>
-                  <span className="font-mono font-medium">{c.policy.code}</span>
+                  <span className="font-semibold tracking-wide">{c.policy.code}</span>
                   <span>{c.policy.specificity === 0 ? t('circulation.rules.general') : scopeOf(c.policy)}</span>
-                  {c.rank === 1 && <Badge tone="info">{t('circulation.rules.resolve.applies')}</Badge>}
+                  {c.rank === 1 && <Tag tone="ok">{t('circulation.rules.resolve.applies')}</Tag>}
                 </span>
-                <span className="text-muted-foreground">{t(`vocab.policy_rank_reason.${c.reason}`)}</span>
+                <span className="text-meta text-muted-foreground">{t(`vocab.policy_rank_reason.${c.reason}`)}</span>
               </li>
             ))}
           </ol>
         ))}
-    </section>
+    </Section>
   );
 }

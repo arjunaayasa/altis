@@ -226,7 +226,7 @@ describe('Indikator', () => {
     });
     const item = await screen.findByRole('region', { name: 'K7 · Koleksi butir 7' }, FIRST);
     fireEvent.click(within(item).getByRole('button', { name: 'Lampirkan berita acara inventarisasi' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Lampirkan berita acara inventarisasi' });
+    const dialog = await screen.findByRole('form', { name: 'Lampirkan berita acara inventarisasi' });
     const select = (await within(dialog).findByLabelText('Sesi inventarisasi')) as HTMLSelectElement;
     await waitFor(() => expect(select.disabled).toBe(false));
     // Nothing chosen: nothing is sent.
@@ -236,7 +236,7 @@ describe('Indikator', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Lampirkan' }));
     await waitFor(() => expect(app.writes()).toEqual(['POST accreditation/evidence/stocktake-minutes']));
     expect(app.requests.find((r) => r.method === 'POST')?.body).toEqual({ stocktakeId: SESSION, periodId: PERIOD_ID, indicatorCode: 'SCH-K7' });
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Lampirkan berita acara inventarisasi' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Lampirkan berita acara inventarisasi' })).toBeNull());
   });
 
   it('a reader sees the files of an item but cannot remove them', async () => {

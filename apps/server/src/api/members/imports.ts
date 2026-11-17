@@ -67,7 +67,13 @@ const importsCreate = route({
     }
     const bytes = await readBytes(staged, IMPORT_MAX_BYTES);
     if (bytes === null) throw uploadNotFound();
-    const result = await runMemberImport(tx, { bytes, mode: rc.body.mode, dryRun: rc.body.dryRun });
+    const result = await runMemberImport(tx, {
+      bytes,
+      mode: rc.body.mode,
+      dryRun: rc.body.dryRun,
+      format: rc.body.format,
+      ...(rc.body.columns === undefined ? {} : { columns: rc.body.columns }),
+    });
     const uploadId = rc.body.uploadId;
     const dryRun = rc.body.dryRun;
     const now = rc.now;

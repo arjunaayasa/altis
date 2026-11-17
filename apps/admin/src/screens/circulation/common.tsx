@@ -5,11 +5,11 @@ import type { ItemCirculation } from '@altis/shared/api/catalog/items';
 import type { MemberTypeListResponse, MemberTypeRef, MemberTypeView } from '@altis/shared/api/members';
 import { useCallback, useMemo, useState } from 'react';
 import { Badge } from '@/components/form-field';
+import { StatusText, Tag, type TagTone } from '@/components/layout';
 import { useLocale, useT, type Translate } from '@/i18n';
 import { holdsAt } from '@/lib/access';
 import { isWritableBranch } from '@/lib/branches';
 import { useApiQuery, useMe } from '@/lib/me';
-import { StatusText, Tag, type TagTone } from './parts';
 
 /**
  * What the circulation and member screens share: the desk branch (chosen once, kept per browser), calendar dates in the
@@ -162,11 +162,12 @@ export function MemberStatusBadge({ status }: { status: MemberStatus }) {
 }
 
 /** The member types (live ones; archived too on request), read once a minute at most. */
-export function useMemberTypes(includeArchived = false) {
+export function useMemberTypes(includeArchived = false, enabled = true) {
   return useApiQuery<MemberTypeListResponse>({
     queryKey: ['members', 'types', { includeArchived }],
     path: includeArchived ? 'members/types?includeArchived=true' : 'members/types',
     staleTime: 60_000,
+    enabled,
   });
 }
 

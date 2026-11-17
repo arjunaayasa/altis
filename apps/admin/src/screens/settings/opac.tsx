@@ -2,17 +2,16 @@ import { LOCALES, type Locale } from '@altis/shared';
 import { OPAC_ACCENTS, OpacSettingsBody, oaiAdminEmailField, type OpacSettings } from '@altis/shared/api/settings';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { TriangleAlertIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useForm, useWatch, type Control } from 'react-hook-form';
 import { z } from 'zod';
 import { CheckField, Field, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Callout, SideSection } from '@/components/layout';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
 import { useDirtyGuard } from '@/lib/dirty-forms';
 import { FORM_PARSE, applyServerErrors, hasFieldErrors } from '@/lib/form-errors';
-import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, blankToNull, saveSettings, wholeNumberIn, type SaveOutcome } from './library';
+import { SettingsFooter, SettingsLoader, SettingsPage, blankToNull, saveSettings, wholeNumberIn, type SaveOutcome } from './library';
 
 /**
  * Pengaturan → Tampilan OPAC (spec §13.3 "penampilan OPAC"; `PUT settings/opac`): the welcome text of the OPAC home
@@ -67,10 +66,7 @@ function OaiWarning({ control }: { control: Control<OpacInput, unknown, OpacValu
   const [enabled, adminEmail] = useWatch({ control, name: ['oai.enabled', 'oai.adminEmail'] });
   if (!enabled || adminEmail.trim() !== '') return null;
   return (
-    <Alert className="border-warning-foreground/30 bg-warning text-warning-foreground">
-      <TriangleAlertIcon aria-hidden="true" />
-      <AlertDescription className="text-current">{t('catalog.settings.opac.oai_warning')}</AlertDescription>
-    </Alert>
+    <Callout role="status" tone="warn" title={t('catalog.settings.opac.oai_warning')} />
   );
 }
 
@@ -128,7 +124,7 @@ function OpacSettingsForm({ initial, canManage }: { initial: OpacSettings; canMa
   });
 
   return (
-    <SettingsSection title={t('settings.tab.opac')} description={t('settings.opac.description')}>
+    <SideSection title={t('settings.tab.opac')} intro={t('settings.opac.description')}>
       <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
         <Field label={t('settings.opac.accent')} hint={t('settings.opac.accent_hint')} error={errors.accent} className="max-w-xs">
           {(c) => (
@@ -162,7 +158,7 @@ function OpacSettingsForm({ initial, canManage }: { initial: OpacSettings; canMa
         ))}
         {/* ---- Phase 2 (catalog): Task 28 ---- */}
         <fieldset className="min-w-0 pt-2">
-          <legend className="mb-3 text-base font-semibold">{t('catalog.settings.opac.search_title')}</legend>
+          <legend className="mb-3 text-sm font-bold">{t('catalog.settings.opac.search_title')}</legend>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label={t('catalog.settings.opac.results_per_page')}
@@ -215,7 +211,7 @@ function OpacSettingsForm({ initial, canManage }: { initial: OpacSettings; canMa
           </div>
         </fieldset>
         <fieldset className="min-w-0 pt-2">
-          <legend className="mb-3 text-base font-semibold">{t('catalog.settings.opac.oai_title')}</legend>
+          <legend className="mb-3 text-sm font-bold">{t('catalog.settings.opac.oai_title')}</legend>
           <div className="grid gap-4">
             <CheckField
               label={t('catalog.settings.opac.oai_enabled')}
@@ -231,7 +227,7 @@ function OpacSettingsForm({ initial, canManage }: { initial: OpacSettings; canMa
         </fieldset>
         <SettingsFooter canManage={canManage} busy={isSubmitting} outcome={outcome} problem={problem} rootError={errors.root?.['server']?.message} />
       </form>
-    </SettingsSection>
+    </SideSection>
   );
 }
 

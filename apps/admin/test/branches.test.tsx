@@ -22,13 +22,29 @@ function branchesRoutes(extra: Record<string, FakeHandler> = {}): Record<string,
 
 const rowOf = (code: string): HTMLElement => screen.getByText(code).closest('tr')!;
 
+/** Opens the ⋯ menu of a row and answers the names of its actions. */
+async function rowMenu(code: string): Promise<string[]> {
+  const trigger = within(rowOf(code)).getByRole('button', { name: /^Tindakan untuk / });
+  trigger.focus();
+  fireEvent.keyDown(trigger, { key: 'Enter' });
+  await screen.findByRole('menu');
+  return screen.getAllByRole('menuitem').map((i) => i.textContent ?? '');
+}
+
+async function closeMenu(): Promise<void> {
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+}
+
 describe('branches list', () => {
-  it('the default branch row has no archive button', async () => {
+  it('the default branch row has no archive action', async () => {
     startApp({ me: adminMe(), path: '/admin/branches', routes: branchesRoutes() });
     await screen.findByText('PUSAT');
-    expect(within(rowOf('PUSAT')).queryByRole('button', { name: 'Arsipkan' })).toBeNull();
     expect(within(rowOf('PUSAT')).getByText('Utama')).toBeTruthy();
-    expect(within(rowOf('UTARA')).getByRole('button', { name: 'Arsipkan' })).toBeTruthy();
+    expect(await rowMenu('PUSAT')).toEqual(['Ubah']);
+    await closeMenu();
+    expect(await rowMenu('UTARA')).toEqual(['Ubah', 'Arsipkan']);
+    await closeMenu();
     expect(screen.getByRole('link', { name: 'Tambah cabang' }).getAttribute('href')).toBe('/admin/branches/new');
   });
 
@@ -39,7 +55,8 @@ describe('branches list', () => {
       routes: branchesRoutes({ 'DELETE branches/:id': (): BranchItem => ({ ...BRANCH_NORTH, archivedAt: 1, version: 3 }) }),
     });
     await screen.findByText('UTARA');
-    fireEvent.click(within(rowOf('UTARA')).getByRole('button', { name: 'Arsipkan' }));
+    await rowMenu('UTARA');
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Arsipkan' }));
     const dialog = await screen.findByRole('alertdialog', { name: 'Arsipkan Cabang Utara?' });
     expect(writes()).toEqual([]);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Arsipkan' }));
@@ -55,7 +72,7 @@ describe('branches list', () => {
     await screen.findByText('LAMA');
     expect(requests.at(-1)?.query.get('includeArchived')).toBe('true');
     expect(within(rowOf('LAMA')).getByText('Diarsipkan')).toBeTruthy();
-    expect(within(rowOf('LAMA')).queryByRole('button', { name: 'Arsipkan' })).toBeNull();
+    expect(await rowMenu('LAMA')).toEqual(['Ubah']);
   });
 
   it('the community edition has no branch limit: no limit notice, no "Pilih cabang aktif", every live branch Aktif', async () => {
@@ -75,7 +92,7 @@ describe('branches list', () => {
   it('without system.branches.manage the list has no actions', async () => {
     startApp({ me: signedIn({ permissions: [] }), path: '/admin/branches', routes: branchesRoutes() });
     await screen.findByText('UTARA');
-    expect(screen.queryByRole('button', { name: 'Arsipkan' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Tindakan untuk / })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Tambah cabang' })).toBeNull();
   });
 });

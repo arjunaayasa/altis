@@ -2,6 +2,7 @@ import type { PeriodPatchBody, PeriodView } from '@altis/shared/api/accreditatio
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import { useCallback, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { Field, NoticeAlert, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { Callout, FormBar, FormSection as LayoutFormSection } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
@@ -184,12 +185,16 @@ export function StaleNote({ values }: { values: Pick<PeriodValues<unknown>, 'sta
   const t = useT();
   if (!values.stale) return null;
   return (
-    <div role="status" className="flex flex-col items-start gap-2 rounded-md border border-warning-foreground/30 bg-warning px-3 py-2 text-sm text-warning-foreground">
-      <p>{t('accreditation.workspace.form.stale')}</p>
-      <Button type="button" variant="outline" size="sm" onClick={values.reload}>
-        {t('accreditation.workspace.form.reload')}
-      </Button>
-    </div>
+    <Callout
+      role="status"
+      tone="warn"
+      title={t('accreditation.workspace.form.stale')}
+      action={
+        <Button type="button" variant="outline" size="sm" className="bg-background" onClick={values.reload}>
+          {t('accreditation.workspace.form.reload')}
+        </Button>
+      }
+    />
   );
 }
 
@@ -202,24 +207,22 @@ export function PeriodFormFooter({ canEdit, busy, problem, outcome }: { canEdit:
       {outcome === 'saved' && <NoticeAlert tone="success">{t('form.saved')}</NoticeAlert>}
       {outcome === 'unchanged' && <NoticeAlert>{t('settings.unchanged')}</NoticeAlert>}
       {canEdit && (
-        <div>
+        <FormBar>
           <Button type="submit" disabled={busy}>
             {t(busy ? 'form.saving' : 'form.save')}
           </Button>
-        </div>
+        </FormBar>
       )}
     </>
   );
 }
 
-/** A titled group of a period form. */
+/** A titled group of a period form: the layout's form section (title and hint left, fields right). */
 export function FormSection({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
-    <fieldset className="flex flex-col gap-4 rounded-lg border bg-card p-4 text-card-foreground">
-      <legend className="px-1 text-base font-semibold">{title}</legend>
-      {hint !== undefined && <p className="-mt-2 text-sm text-muted-foreground">{hint}</p>}
-      <div className="grid gap-4 sm:grid-cols-2">{children}</div>
-    </fieldset>
+    <LayoutFormSection title={title} {...(hint === undefined ? {} : { intro: hint })}>
+      {children}
+    </LayoutFormSection>
   );
 }
 
@@ -232,10 +235,12 @@ export function TextField({
   disabled,
   type = 'text',
   maxLength,
+  className,
   onChange,
 }: {
   label: string;
   hint?: string;
+  className?: string;
   value: string;
   error: string | undefined;
   disabled: boolean;
@@ -244,7 +249,7 @@ export function TextField({
   onChange(value: string): void;
 }) {
   return (
-    <Field label={label} hint={hint} error={error}>
+    <Field label={label} hint={hint} error={error} className={className}>
       {(control) => (
         <Input
           {...control}
@@ -264,13 +269,17 @@ export function TextField({
 /** A select of a period form; `options` are `[value, label]`, the empty value meaning none. */
 export function SelectField({
   label,
+  hint,
   value,
   error,
   disabled,
   options,
+  className,
   onChange,
 }: {
   label: string;
+  hint?: string;
+  className?: string;
   value: string;
   error: string | undefined;
   disabled: boolean;
@@ -278,7 +287,7 @@ export function SelectField({
   onChange(value: string): void;
 }) {
   return (
-    <Field label={label} error={error}>
+    <Field label={label} hint={hint} error={error} className={className}>
       {(control) => (
         <select {...control} className={SELECT_CLASS} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
           {options.map(([v, text]) => (

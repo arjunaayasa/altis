@@ -34,6 +34,12 @@ export interface CatalogSearchQuery {
     classDigit?: number;
     yearFrom?: number;
     yearTo?: number;
+    // ---- Komunitas (OPAC look) ----
+    /**
+     * Only the records holding this ISBN or ISSN, exactly: the text as typed (hyphens, spaces and an `ISBN`/`ISSN` label
+     * ignored, an ISBN-10 read as its ISBN-13) against the stored identifiers. A text that is neither matches nothing.
+     */
+    identifier?: string;
     /** Admin only. */
     includeArchived?: boolean;
     /** Admin only: records with `opac_visible = 0`. */

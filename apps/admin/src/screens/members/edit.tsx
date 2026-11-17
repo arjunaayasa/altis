@@ -5,12 +5,12 @@ import type { LoanListResponse } from '@altis/shared/api/circulation';
 import { MemberBody, MemberPatchBody, type MemberEventsResponse, type MemberView } from '@altis/shared/api/members';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeftIcon } from 'lucide-react';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useDateTime } from '@/components/data-table';
 import { Field, Notice, ProblemAlert, RefetchProblem, RootError, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
+import { BackLink, Callout, FormBar, FormSection, InlinePanel, MemberPhoto, MoreMenu, MoreMenuItem, MoreMenuRule, StatStrip, StatusText, TABLE } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
@@ -22,11 +22,10 @@ import { FORM_PARSE, problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { changedFields, isFieldProblem, isStale, optionalText, putFieldErrors, serverIssues, zodIssues } from '@/screens/catalog/masters/master-table';
 import { DueBadge, MemberStatusBadge, limitText, todayLocal, useCalendarDate, useMemberTypes, useTypeName } from '@/screens/circulation/common';
-import { Callout, InlinePanel, MemberPhoto, MoreMenu, MoreMenuItem, MoreMenuRule, StatStrip, StatusText, TABLE } from '@/screens/circulation/parts';
 import { ExtendPanel, ReactivatePanel, SuspendPanel, refreshMembers, useMember } from './common';
 import { MemberCustomPanel, MemberPhotoPanel, MemberPrivacyPanel, RestoreButton } from './member-extras';
 // ---- Komunitas (member area) ----
-import { MemberPasswordDialog } from './password';
+import { MemberPasswordPanel } from './password';
 // ---- Komunitas (charges and payments) ----
 import { MemberChargesTab } from '@/screens/circulation/charges';
 
@@ -43,8 +42,9 @@ import { MemberChargesTab } from '@/screens/circulation/charges';
  *   status) and its actions, then a strip of figures (on loan, valid until, joined, valid from, source), then the tabs:
  *   Data anggota (the form, one section per part), Pinjaman aktif, Riwayat pinjaman (both need
  *   `circulation.records.read`), Denda and Riwayat keanggotaan (the member's events).
- * - **Actions** for `members.records.manage`: extend the membership, suspend (a note is required) or reactivate, each
- *   opened in place under the head (already open when a row of the member list asked for it); archive asks first (a
+ * - **Actions** for `members.records.manage`: extend the membership, suspend (a note is required) or reactivate, and set
+ *   the member's OPAC password, each opened in place under the head (the first three already open when a row of the
+ *   member list asked for it); archive asks first (a
  *   dialog: it removes the member from the lists) and a refusal while loans are open (MEMBER_IN_USE) is said on the
  *   page, with the way to the desk. "Layani di Meja Layanan" opens the member at the desk.
  */
@@ -181,6 +181,14 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
     form.reset(base.current.values, { keepDirtyValues: true, keepDirty: true, keepErrors: true });
   }, [member, form]);
   useDirtyGuard(isDirty);
+  // A list that arrives after the form put its value in the select leaves the select on its first option: once the
+  // list is in, the select takes the form's value again (the form stays unchanged).
+  useEffect(() => {
+    if (types.data !== undefined) form.setValue('memberTypeId', form.getValues('memberTypeId'));
+  }, [types.data, form]);
+  useEffect(() => {
+    if (branches.data !== undefined) form.setValue('homeBranchId', form.getValues('homeBranchId'));
+  }, [branches.data, form]);
   const typeId = form.watch('memberTypeId');
   const type = types.data?.items.find((x) => x.id === typeId);
 
@@ -338,7 +346,7 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
       </FormSection>
       <RootError message={errors.root?.server?.message} />
       {canManage && (
-        <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+        <FormBar>
           <Button type="submit" disabled={isSubmitting}>
             {t(isSubmitting ? 'form.saving' : 'form.save')}
           </Button>
@@ -346,41 +354,9 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
             <Link to="/admin/anggota">{t('form.cancel')}</Link>
           </Button>
           {isDirty && <StatusText tone="warn" className="text-sm">{t('members.form.unsaved')}</StatusText>}
-        </div>
+        </FormBar>
       )}
     </form>
-  );
-}
-
-/**
- * One part of the member form: its title and a sentence on the left (above on a narrow screen), its fields on the
- * right in two columns (three on a wide screen), a thin rule above every part but the first.
- */
-function FormSection({ title, intro, disabled, children }: { title: string; intro: string; disabled: boolean; children: ReactNode }) {
-  const id = useId();
-  return (
-    <section aria-labelledby={id} className="grid gap-x-8 gap-y-4 border-t py-5 first:border-t-0 first:pt-1 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1fr)]">
-      <div className="grid content-start gap-1">
-        <h2 id={id} className="text-base font-bold">
-          {title}
-        </h2>
-        <p className="text-sm text-muted-foreground">{intro}</p>
-      </div>
-      <fieldset disabled={disabled} className="grid min-w-0 content-start gap-x-5 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
-        <legend className="sr-only">{title}</legend>
-        {children}
-      </fieldset>
-    </section>
-  );
-}
-
-function BackLink() {
-  const t = useT();
-  return (
-    <Link to="/admin/anggota" className="inline-flex w-fit items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground">
-      <ArrowLeftIcon className="size-4" aria-hidden="true" />
-      {t('members.back')}
-    </Link>
   );
 }
 
@@ -391,7 +367,7 @@ export function MemberCreateScreen() {
   const canManage = holds(me, 'members.records.manage');
   return (
     <div className="grid max-w-5xl gap-6">
-      <BackLink />
+      <BackLink to="/admin/anggota">{t('members.back')}</BackLink>
       <div className="grid gap-1">
         <h1 className="text-xl leading-tight font-bold">{t('members.new.title')}</h1>
         <p className="text-sm text-muted-foreground">{t('members.new.intro')}</p>
@@ -405,7 +381,7 @@ export function MemberCreateScreen() {
 type DetailTab = 'data' | 'loans' | 'history' | 'charges' | 'events';
 
 /** The panel open under the member's head (one at a time). */
-type HeadPanel = 'extend' | 'suspend' | 'reactivate' | 'photo';
+type HeadPanel = 'extend' | 'suspend' | 'reactivate' | 'photo' | 'password';
 
 export function MemberDetailScreen() {
   const t = useT();
@@ -420,7 +396,7 @@ export function MemberDetailScreen() {
   const [tab, setTab] = useState<DetailTab>('data');
   // Opened from a row of the member list to extend, suspend or reactivate: that panel is open at once.
   const [panel, setPanel] = useState<HeadPanel | null>(location.state.memberPanel ?? null);
-  const [dialog, setDialog] = useState<'archive' | 'password' | null>(null);
+  const [dialog, setDialog] = useState<'archive' | null>(null);
   const [notice, setNotice] = useState<string | null>(location.state.created === true ? t('members.created') : null);
   const [archiveRefused, setArchiveRefused] = useState(false);
   const canManage = holds(me, 'members.records.manage');
@@ -431,7 +407,7 @@ export function MemberDetailScreen() {
   if (member.data === undefined) {
     return (
       <div className="grid max-w-6xl gap-6">
-        <BackLink />
+        <BackLink to="/admin/anggota">{t('members.back')}</BackLink>
         {member.isError ? (
           member.error instanceof ApiError && member.error.status === 404 ? (
             <Callout tone="bad" role="alert" title={t('members.not_found')}>
@@ -483,7 +459,7 @@ export function MemberDetailScreen() {
 
   return (
     <div className="grid max-w-6xl gap-6">
-      <BackLink />
+      <BackLink to="/admin/anggota">{t('members.back')}</BackLink>
       <RefetchProblem query={member} />
       {notice !== null && <Notice kind="success">{notice}</Notice>}
       {archiveRefused && (
@@ -541,7 +517,7 @@ export function MemberDetailScreen() {
                 <MoreMenuItem onSelect={() => setPanel('suspend')}>{t('members.action.suspend_ellipsis')}</MoreMenuItem>
               )}
               {/* Komunitas (member area) */}
-              <MoreMenuItem onSelect={() => setDialog('password')}>{t('members.password.open')}</MoreMenuItem>
+              <MoreMenuItem onSelect={() => setPanel('password')}>{t('members.password.open')}</MoreMenuItem>
               <MoreMenuRule />
               <MoreMenuItem danger onSelect={() => setDialog('archive')}>
                 {t('members.action.archive')}
@@ -563,6 +539,7 @@ export function MemberDetailScreen() {
         />
       )}
       {statusPanel === 'suspend' && canManage && live && <SuspendPanel member={m} onClose={() => setPanel(null)} onDone={() => setNotice(t('members.suspended'))} />}
+      {panel === 'password' && canManage && live && <MemberPasswordPanel member={m} onClose={() => setPanel(null)} onDone={setNotice} />}
       {statusPanel === 'reactivate' && canManage && live && <ReactivatePanel member={m} onClose={() => setPanel(null)} onDone={() => setNotice(t('members.reactivated'))} />}
       {panel === 'photo' && canManage && live && (
         <InlinePanel title={t('members.tools.photo.title')} onCancel={() => setPanel(null)} focusOnOpen>
@@ -583,6 +560,13 @@ export function MemberDetailScreen() {
             label: t('members.summary.on_loan'),
             value: m.type.loanLimit === null ? String(m.openLoans) : t('circulation.member.loans_of', { count: m.openLoans, limit: m.type.loanLimit }),
           },
+          // ---- Komunitas (staff screens' data): the overdue loans, red when there are any ----
+          {
+            key: 'overdue',
+            label: t('circulation.member.overdue'),
+            value: String(m.overdueLoans ?? 0),
+            ...((m.overdueLoans ?? 0) > 0 ? { tone: 'bad' as const } : {}),
+          },
           {
             key: 'until',
             label: t('members.col.valid_until'),
@@ -591,7 +575,6 @@ export function MemberDetailScreen() {
             ...(m.status === 'expired' ? { tone: 'bad' as const } : {}),
           },
           { key: 'joined', label: t('members.summary.joined'), value: day(m.joinedOn) },
-          { key: 'from', label: t('members.summary.valid_from'), value: day(m.validFrom) },
           { key: 'source', label: t('members.summary.source'), value: <span className="text-sm font-normal">{sourceText(t, m.source)}</span> },
         ]}
       />
@@ -645,7 +628,6 @@ export function MemberDetailScreen() {
           <MemberEvents memberId={m.id} />
         </TabsContent>
       </Tabs>
-      <MemberPasswordDialog member={m} open={dialog === 'password'} onClose={() => setDialog(null)} onDone={setNotice} />
       {dialog === 'archive' && (
         <ConfirmDialog
           open

@@ -93,6 +93,16 @@ describe('the bar chart', () => {
     // Only the first and the last label of many bars.
     expect([...many.container.querySelectorAll('text')].map((t) => t.textContent)).toEqual(['B1', '40', 'B40']);
   });
+
+  it('is drawn as wide as its box, one unit a pixel, so its labels keep their size on a phone and clip shorter', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 300, height: 150 } as DOMRect);
+    const titles = ['Logika Pemrograman Dasar', 'Mengelola Emosi Remaja', 'Belajar Jaringan dari Nol', 'Aljabar Tanpa Takut', 'Gizi Seimbang Keluarga'];
+    const { container } = draw(titles.map((label, k) => ({ label, value: 5 - k })));
+    expect(container.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 300 150');
+    // A slot of 60 px holds a label of 10 characters.
+    const labels = [...container.querySelectorAll('text')].map((t) => t.textContent).filter((s) => s !== '5');
+    expect(labels).toEqual(['Logika Pe…', 'Mengelola…', 'Belajar J…', 'Aljabar T…', 'Gizi Seim…']);
+  });
 });
 
 /** A preview answer of `visits.daily` with `rows`. */

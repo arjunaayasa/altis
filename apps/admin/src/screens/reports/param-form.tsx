@@ -6,9 +6,9 @@ import type { StocktakeListResponse, StocktakeView } from '@altis/shared/api/sto
 import { useQuery } from '@tanstack/react-query';
 import type { CollectionTypeView, LanguageView, MasterListResponse, MaterialTypeView } from '@altis/shared/api/catalog/masters';
 import type { ReportCatalogEntry, ReportParamKind, ReportParamSpec } from '@altis/shared/api/reports';
-import { RotateCcwIcon } from 'lucide-react';
 import { useCallback, useId, useMemo, type FormEvent } from 'react';
 import { CheckField, Field, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
+import { SectionHead } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT, type TKey, type Translate } from '@/i18n';
@@ -544,14 +544,12 @@ export function ParamForm({ entry, values, errors, options, onChange, onApply, o
   };
 
   return (
-    <form noValidate aria-label={t('reports.params.title')} className="grid gap-4 rounded-lg border bg-card p-4" onSubmit={submit}>
-      <h2 id={headingId} className="text-lg font-semibold">
-        {t('reports.params.title')}
-      </h2>
+    <form noValidate aria-label={t('reports.params.title')} className="grid gap-3" onSubmit={submit}>
+      <SectionHead id={headingId} title={t('reports.params.title')} />
       {entry.params.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('reports.params.none')}</p>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid max-w-5xl items-start gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
           {entry.params.map((spec) => (
             <ParamControl
               key={spec.name}
@@ -564,15 +562,16 @@ export function ParamForm({ entry, values, errors, options, onChange, onApply, o
           ))}
         </div>
       )}
-      <div className="flex flex-wrap gap-2">
-        {previews && <Button type="submit">{t('reports.params.apply')}</Button>}
-        {entry.params.length > 0 && (
-          <Button type="button" variant="outline" onClick={onReset}>
-            <RotateCcwIcon aria-hidden="true" />
-            {t('reports.params.reset')}
-          </Button>
-        )}
-      </div>
+      {(previews || entry.params.length > 0) && (
+        <div className="flex flex-wrap gap-2">
+          {previews && <Button type="submit">{t('reports.params.apply')}</Button>}
+          {entry.params.length > 0 && (
+            <Button type="button" variant="outline" onClick={onReset}>
+              {t('reports.params.reset')}
+            </Button>
+          )}
+        </div>
+      )}
     </form>
   );
 }
@@ -603,8 +602,8 @@ function ParamControl({
   if (spec.kind === 'dateRange') {
     const range = asRange(value);
     return (
-      <fieldset data-param={spec.name} className="grid gap-3 rounded-md border p-3 sm:col-span-2 sm:grid-cols-2">
-        <legend className="px-1 text-sm font-medium">{label}</legend>
+      <fieldset data-param={spec.name} className="grid min-w-0 gap-x-5 gap-y-4 sm:col-span-2 sm:grid-cols-2">
+        <legend className="mb-1.5 text-meta leading-snug font-semibold">{label}</legend>
         <Field label={t('reports.params.from')} error={errors[`${spec.name}.from`]}>
           {(c) => <Input {...c} type="date" value={range.from} onChange={(e) => onChange({ ...range, from: e.target.value })} />}
         </Field>
@@ -617,7 +616,7 @@ function ParamControl({
 
   if (spec.kind === 'bool') {
     return (
-      <div data-param={spec.name} className="self-end">
+      <div data-param={spec.name} className="pt-7">
         <CheckField label={label} checked={value === true} onChange={(e) => onChange(e.target.checked)} />
       </div>
     );
@@ -631,14 +630,14 @@ function ParamControl({
       onChange((spec.options ?? []).filter((o) => next.includes(o)));
     };
     return (
-      <fieldset data-param={spec.name} className="grid gap-2 rounded-md border p-3 sm:col-span-2" aria-invalid={error === undefined ? undefined : true}>
-        <legend className="px-1 text-sm font-medium">{label}</legend>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <fieldset data-param={spec.name} className="grid min-w-0 gap-2 sm:col-span-full" aria-invalid={error === undefined ? undefined : true}>
+        <legend className="mb-1.5 text-meta leading-snug font-semibold">{label}</legend>
+        <div className="grid gap-x-5 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
           {list.map((c) => (
             <CheckField key={c.value} label={c.label} checked={checked.includes(c.value)} onChange={(e) => toggle(c.value, e.target.checked)} />
           ))}
         </div>
-        {error !== undefined && <p className="text-sm text-destructive">{isMessageKey(error) ? t(error) : t('form.error.invalid')}</p>}
+        {error !== undefined && <p className="text-meta font-semibold text-bad">{isMessageKey(error) ? t(error) : t('form.error.invalid')}</p>}
         <p className="text-xs text-muted-foreground">{t('reports.params.multi_hint')}</p>
       </fieldset>
     );

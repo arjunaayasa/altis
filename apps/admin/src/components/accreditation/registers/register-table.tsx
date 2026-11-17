@@ -3,7 +3,6 @@ import type { EvidenceListResponse, EvidenceView, RegisterKind } from '@altis/sh
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
-import { PlusIcon } from 'lucide-react';
 import { useId, useMemo, useRef, useState, type BaseSyntheticEvent, type ComponentProps, type ReactNode } from 'react';
 import type { FieldValues, UseFormReturn } from 'react-hook-form';
 import type { z } from 'zod';
@@ -19,9 +18,9 @@ import {
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { DataTable } from '@/components/data-table';
 import { CheckField, Notice, SELECT_CLASS } from '@/components/form-field';
-import { useReturnFocus } from '@/components/return-focus';
+import { ErrorState, InlinePanel, MoreMenu, MoreMenuItem, MoreMenuRule, SkeletonTable } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { FileInput } from '@/components/file-input';
 import { useLocale, useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
@@ -33,9 +32,10 @@ import { isFieldProblem, isStale, putFieldErrors, serverIssues, zodIssues, type 
  * The parts the five registers of the Register tab share (spec §6, §10.6; the register API of `accreditation/<kind>`):
  *
  * - {@link RegisterSection}: one register's list (`GET accreditation/<kind>` → `{rows}`) as a table, "Tambah …", and a
- *   dialog per row with its form and its attachments; archive after a confirmation (`DELETE accreditation/<kind>/:id`,
- *   no body). Writes answer `{id, version}` only, so the list is read again after each. A new row's dialog stays open
- *   on the row once it is saved, so its attachments (and a staff member's trainings) can be added at once.
+ *   panel above the table for one row with its form and its attachments (opened from "Tambah …" or the row's ⋯ menu;
+ *   Esc or Batal closes it); archive after a confirmation (`DELETE accreditation/<kind>/:id`, no body). Writes answer
+ *   `{id, version}` only, so the list is read again after each. A new row's panel stays open on the row once it is
+ *   saved, so its attachments (and a staff member's trainings) can be added at once.
  * - {@link useRegisterSave}: a form's save: the shared strict contract checks the body first (FORM_PARSE keys), a file
  *   chosen for the row goes up next (`accreditation.evidence`) and its upload id joins the body, the server's
  *   VALIDATION_FAILED lands on the fields. An edit sends `{version, …}` with only what changed.
@@ -218,14 +218,13 @@ export function RegisterFileField({
       )}
       {!disabled && (
         <>
-          <input
+          <FileInput
             ref={input}
             id={id}
-            type="file"
+            chosen={choice.kind === 'new' ? choice.file.name : null}
             accept={EVIDENCE_ACCEPT}
             aria-invalid={error === null ? undefined : true}
             aria-describedby={`${id}-hint${error === null ? '' : ` ${id}-error`}`}
-            className="text-sm file:mr-2 file:rounded-md file:border file:bg-background file:px-2 file:py-1"
             onChange={(e) => {
               const file = e.target.files?.[0];
               onChoice(file === undefined ? KEEP_FILE : { kind: 'new', file });
@@ -357,20 +356,20 @@ export function useRegisterSave<F extends FieldValues>(o: {
   return { submit, problem, fileError };
 }
 
-/** Cancel (or Close, read only) and Save. */
+/** Save, then Cancel (or Close, read only). */
 export function FormButtons({ canManage, busy, onCancel, saveLabel }: { canManage: boolean; busy: boolean; onCancel(): void; saveLabel?: string }) {
   const t = useT();
   return (
-    <DialogFooter>
-      <Button type="button" variant="outline" onClick={onCancel}>
-        {t(canManage ? 'form.cancel' : 'accreditation.registers.close')}
-      </Button>
+    <div className="flex flex-wrap gap-2">
       {canManage && (
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" size="sm" disabled={busy}>
           {busy ? t('form.saving') : (saveLabel ?? t('form.save'))}
         </Button>
       )}
-    </DialogFooter>
+      <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+        {t(canManage ? 'form.cancel' : 'accreditation.registers.close')}
+      </Button>
+    </div>
   );
 }
 
@@ -404,7 +403,7 @@ export function RowEvidence({ entity, entityId, canManage }: { entity: EvidenceE
     <section aria-labelledby={headingId} className="grid gap-3 border-t pt-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="grid gap-1">
-          <h3 id={headingId} className="text-base font-semibold">
+          <h3 id={headingId} className="text-sm font-bold">
             {t('accreditation.registers.evidence.title')}
           </h3>
           <p className="text-sm text-muted-foreground">{t('accreditation.registers.evidence.intro')}</p>
@@ -423,9 +422,9 @@ export function RowEvidence({ entity, entityId, canManage }: { entity: EvidenceE
       ) : files.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('accreditation.registers.evidence.empty')}</p>
       ) : (
-        <ul className="grid gap-2">
+        <ul className="grid border-t">
           {files.map((e) => (
-            <li key={e.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
+            <li key={e.id} className="flex flex-wrap items-center justify-between gap-2 border-b py-2 text-sm">
               <span className="grid gap-0.5">
                 <FileLink id={e.fileId} name={e.fileName} />
                 {e.caption !== '' && <span>{e.caption}</span>}
@@ -434,7 +433,7 @@ export function RowEvidence({ entity, entityId, canManage }: { entity: EvidenceE
               {canManage && (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   aria-label={t('accreditation.registers.evidence.remove_named', { name: e.fileName })}
                   onClick={() => setRemoving(e)}>
@@ -465,11 +464,11 @@ export function RowEvidence({ entity, entityId, canManage }: { entity: EvidenceE
 /** One column of a register table. */
 export interface RegisterColumn<T> {
   id: string;
-  header: string;
+  header: ReactNode;
   cell(row: T): ReactNode;
 }
 
-/** What a register's dialog form gets. */
+/** What a register's row form gets. */
 export interface RegisterFormProps<T> {
   /** Null: a new row. */
   row: T | null;
@@ -487,14 +486,14 @@ function RowsTable<T extends RegisterRow>({ kind, rows, columns }: { kind: Regis
   const t = useT();
   const defs = useMemo(() => {
     const helper = createColumnHelper<typeof features, T>();
-    return helper.columns(columns.map((c) => helper.display({ id: c.id, header: c.header, cell: (info) => c.cell(info.row.original) })));
+    return helper.columns(columns.map((c) => helper.display({ id: c.id, header: () => c.header, cell: (info) => c.cell(info.row.original) })));
   }, [columns]);
   const table = useTable({ features, columns: defs, data: rows, getRowId: (row) => row.id });
   return <DataTable table={table} caption={t(`accreditation.registers.${kind}.caption`)} empty={t(`accreditation.registers.${kind}.empty`)} />;
 }
 
 /**
- * One register: its intro, "Tambah …", the table with each row's actions, the row dialog (the form, `extra` for a saved
+ * One register: its intro, "Tambah …", the table with each row's actions, the row panel (the form, `extra` for a saved
  * row, its attachments) and the archive confirmation.
  */
 export function RegisterSection<T extends RegisterRow>({
@@ -512,12 +511,11 @@ export function RegisterSection<T extends RegisterRow>({
   /** How a row is named in the actions, the notices and the confirmation. */
   nameOf(row: T): string;
   form: (props: RegisterFormProps<T>) => ReactNode;
-  /** What a saved row's dialog shows between its form and its attachments (a staff member's trainings). */
+  /** What a saved row's panel shows between its form and its attachments (a staff member's trainings). */
   extra?: (row: T, canManage: boolean) => ReactNode;
 }) {
   const t = useT();
   const queryClient = useQueryClient();
-  const focus = useReturnFocus();
   const canManage = useCanManage();
   const list = useRegisterList<T>(kind);
   const [dialog, setDialog] = useState<{ id: string | null; created: boolean } | null>(null);
@@ -552,26 +550,26 @@ export function RegisterSection<T extends RegisterRow>({
 
   const actions: RegisterColumn<T> = {
     id: 'actions',
-    header: t('accreditation.registers.col.actions'),
+    header: <span className="sr-only">{t('accreditation.registers.col.actions')}</span>,
     cell: (row) => (
-      <span className="flex flex-wrap gap-1 whitespace-nowrap">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
+      <MoreMenu small label={t('accreditation.registers.action.more_named', { name: nameOf(row) })}>
+        <MoreMenuItem
           aria-label={t(canManage ? 'accreditation.registers.action.edit_named' : 'accreditation.registers.action.view_named', { name: nameOf(row) })}
-          onClick={() => {
+          onSelect={() => {
             setNotice(null);
             setDialog({ id: row.id, created: false });
           }}>
           {t(canManage ? 'accreditation.registers.action.edit' : 'accreditation.registers.action.view')}
-        </Button>
+        </MoreMenuItem>
         {canManage && (
-          <Button type="button" variant="outline" size="sm" aria-label={t('accreditation.registers.action.archive_named', { name: nameOf(row) })} onClick={() => setArchiving(row)}>
-            {t('accreditation.registers.action.archive')}
-          </Button>
+          <>
+            <MoreMenuRule />
+            <MoreMenuItem danger aria-label={t('accreditation.registers.action.archive_named', { name: nameOf(row) })} onSelect={() => setArchiving(row)}>
+              {t('accreditation.registers.action.archive')}
+            </MoreMenuItem>
+          </>
         )}
-      </span>
+      </MoreMenu>
     ),
   };
 
@@ -582,53 +580,32 @@ export function RegisterSection<T extends RegisterRow>({
   };
 
   return (
-    <section className="flex flex-col gap-4 pt-2">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="max-w-3xl text-sm text-muted-foreground">{t(`accreditation.registers.${kind}.intro`)}</p>
+    <section className="grid min-w-0 gap-4 pt-2">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-[75ch] text-sm text-muted-foreground">{t(`accreditation.registers.${kind}.intro`)}</p>
         {canManage && (
           <Button
             type="button"
+            aria-expanded={dialog !== null && dialog.id === null}
             onClick={() => {
               setNotice(null);
               setDialog({ id: null, created: false });
             }}>
-            <PlusIcon aria-hidden="true" />
             {t(`accreditation.registers.${kind}.add`)}
           </Button>
         )}
       </div>
       {notice !== null && <Notice kind="success">{notice}</Notice>}
-      {list.data === undefined ? (
-        list.isError ? (
-          <Notice
-            kind="error"
-            action={
-              <Button variant="outline" size="sm" onClick={() => void list.refetch()}>
-                {t('table.retry')}
-              </Button>
-            }>
-            {problemText(t, list.error)}
-          </Notice>
-        ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
-        )
-      ) : (
-        <RowsTable kind={kind} rows={rows} columns={[...columns, actions]} />
-      )}
-      <Dialog open={dialog !== null} onOpenChange={(open) => (open ? undefined : setDialog(null))}>
-        {dialog !== null && (
-          <DialogContent
-            closeLabel={t('accreditation.registers.close')}
-            onOpenAutoFocus={focus.onOpenAutoFocus}
-            onCloseAutoFocus={focus.onCloseAutoFocus}
-            className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>{title()}</DialogTitle>
-              <DialogDescription>{t(`accreditation.registers.${kind}.intro`)}</DialogDescription>
-            </DialogHeader>
-            {dialog.created && row !== null && <Notice kind="success">{t('accreditation.registers.done.created', { name: nameOf(row) })}</Notice>}
+      {dialog !== null && (
+        <InlinePanel title={title()} onCancel={() => setDialog(null)} className="max-w-4xl">
+          {/* The register's intro stands right above the panel already: not said twice. */}
+          {dialog.created && row !== null && <Notice kind="success">{t('accreditation.registers.done.created', { name: nameOf(row) })}</Notice>}
+          {/* Esc in a confirmation opened from the panel closes that confirmation only, not the panel. */}
+          <div
+            className="grid gap-3.5"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && !e.currentTarget.contains(e.target as Node)) e.stopPropagation();
+            }}>
             {dialog.id !== null && row === null ? (
               <p role="status" className="text-sm text-muted-foreground">
                 {list.isFetching ? t('shell.loading') : t('form.error.not_found')}
@@ -638,9 +615,18 @@ export function RegisterSection<T extends RegisterRow>({
             )}
             {row !== null && extra?.(row, canManage)}
             {row !== null && <RowEvidence entity={entity} entityId={row.id} canManage={canManage} />}
-          </DialogContent>
-        )}
-      </Dialog>
+          </div>
+        </InlinePanel>
+      )}
+      {list.data === undefined ? (
+        list.isError ? (
+          <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
+        ) : (
+          <SkeletonTable label={t('shell.loading')} rows={3} />
+        )
+      ) : (
+        <RowsTable kind={kind} rows={rows} columns={[...columns, actions]} />
+      )}
       {archiving !== null && (
         <ConfirmDialog
           open

@@ -3,20 +3,21 @@ import { AgentBody, PublisherBody, SubjectBody, type AgentView, type AuthorityKi
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
-import { ArrowLeftIcon } from 'lucide-react';
-import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useForm, type FieldErrors, type Resolver } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Field, Notice, ProblemAlert, RefetchProblem, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
+import { BackLink, Callout, FORM_FULL, FormBar, FormSection, LoadingState, PageError, PageHead, Section } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type AdminKey } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
 import { useDirtyGuard } from '@/lib/dirty-forms';
-import { FORM_PARSE, applyServerErrors, problemText } from '@/lib/form-errors';
+import { FORM_PARSE, applyServerErrors } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import {
+  AUTHORITY_LINK,
   AuthorityBadges,
   authorityHref,
   authorityKey,
@@ -30,7 +31,7 @@ import {
   type AuthorityViewOf,
   type VersionChain,
 } from './common';
-import { MergeDialog } from './merge-dialog';
+import { MergePanel } from './merge-panel';
 import { isAuthorityKind, type AuthorityTypeFilter } from './search';
 import { ThesaurusEditor } from './thesaurus-editor';
 
@@ -42,7 +43,7 @@ import { ThesaurusEditor } from './thesaurus-editor';
  *   (`AgentBody`, ...), creates with `POST catalog/<kind>` (201, or 200 when the server brought back an archived
  *   authority of the same key) and edits with `PATCH catalog/<kind>/:id`, sending the row's version and only what
  *   changed. The writes answer `{id, version}` only (S15), so the page reads the authority again afterwards.
- * - "Gabungkan ke otoritas lain…" opens the merge dialog (merge-dialog.tsx); a subject also has the thesaurus editor
+ * - "Gabungkan ke otoritas lain…" opens the merge panel (merge-panel.tsx); a subject also has the thesaurus editor
  *   (thesaurus-editor.tsx); "Arsipkan" archives one that no live record uses (the server answers 409 CATALOG_IN_USE
  *   otherwise; the page says to merge it instead).
  * - A merged authority is read-only, with a link to its target. Without `catalog.authorities.manage` everything is
@@ -177,8 +178,7 @@ function AuthorityFields({ kind, form, disabled }: { kind: AuthorityKind; form: 
           label={t(f.label)}
           {...(f.hint === undefined ? {} : { hint: t(f.hint) })}
           error={errors[f.name]}
-          className={f.multiline === true || f.required === true ? 'sm:col-span-2' : undefined}
-        >
+          className={f.multiline === true || f.required === true ? FORM_FULL : undefined}>
           {(c) =>
             f.options !== undefined ? (
               <select {...c} className={SELECT_CLASS} disabled={disabled} {...form.register(f.name)}>
@@ -200,17 +200,13 @@ function AuthorityFields({ kind, form, disabled }: { kind: AuthorityKind; form: 
   );
 }
 
-function BackLink({ kind }: { kind: AuthorityKind }) {
+/** The way back to the list of the kind's tab. */
+function AuthoritiesBackLink({ kind }: { kind: AuthorityKind }) {
   const t = useT();
   return (
-    <Link
-      to="/admin/catalog/authorities"
-      search={kind === 'agents' ? {} : { kind }}
-      className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-    >
-      <ArrowLeftIcon className="size-4" aria-hidden="true" />
+    <BackLink to="/admin/catalog/authorities" search={kind === 'agents' ? {} : { kind }}>
       {t('catalog.authorities.back')}
-    </Link>
+    </BackLink>
   );
 }
 
@@ -285,37 +281,32 @@ function EditForm({
 
   const stale = problem instanceof ApiError && problem.code === 'CONFLICT_STALE';
   return (
-    <section aria-labelledby={`${view.id}-data`} className="flex flex-col gap-3">
-      <h2 id={`${view.id}-data`} className="text-base font-semibold">
-        {t('catalog.authorities.section.data')}
-      </h2>
+    <form noValidate className="grid gap-3" onSubmit={(e) => void submit(e)}>
       {problem !== null && (
-        <Notice
-          kind="error"
+        <PageError
+          error={problem}
           action={
             stale ? (
-              <Button type="button" variant="outline" size="sm" onClick={() => void reloadData()}>
+              <Button type="button" variant="outline" size="sm" className="bg-background" onClick={() => void reloadData()}>
                 {t('form.reload_data')}
               </Button>
             ) : undefined
           }
-        >
-          {problemText(t, problem)}
-        </Notice>
+        />
       )}
-      <form noValidate onSubmit={(e) => void submit(e)}>
-        <fieldset disabled={!canEdit} className="grid min-w-0 gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2">
+      <div>
+        <FormSection title={t('catalog.authorities.section.data')} disabled={!canEdit}>
           <AuthorityFields kind={kind} form={form} disabled={!canEdit} />
-          {canEdit && (
-            <div className="flex gap-2 sm:col-span-2">
-              <Button type="submit" disabled={isSubmitting}>
-                {t(isSubmitting ? 'form.saving' : 'form.save')}
-              </Button>
-            </div>
-          )}
-        </fieldset>
-      </form>
-    </section>
+        </FormSection>
+        {canEdit && (
+          <FormBar>
+            <Button type="submit" disabled={isSubmitting}>
+              {t(isSubmitting ? 'form.saving' : 'form.save')}
+            </Button>
+          </FormBar>
+        )}
+      </div>
+    </form>
   );
 }
 
@@ -333,7 +324,6 @@ function Actions({
 }) {
   const t = useT();
   const queryClient = useQueryClient();
-  const headingId = useId();
   const [merging, setMerging] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const name = authorityName(view);
@@ -348,12 +338,9 @@ function Actions({
   };
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <h2 id={headingId} className="text-base font-semibold">
-        {t('catalog.authorities.section.actions')}
-      </h2>
+    <Section title={t('catalog.authorities.section.actions')}>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => setMerging(true)}>
+        <Button variant="outline" aria-expanded={merging} onClick={() => setMerging(!merging)}>
           {t('catalog.authorities.merge.open')}
         </Button>
         {!view.archived && (
@@ -362,20 +349,21 @@ function Actions({
           </Button>
         )}
       </div>
-      {!view.archived && inUse && <p className="text-sm text-muted-foreground">{t('catalog.authorities.archive_in_use', { count: view.usage })}</p>}
-      <MergeDialog
-        kind={kind}
-        source={view}
-        open={merging}
-        onOpenChange={setMerging}
-        version={() => versions.advance(view.version)}
-        onMerged={(sent, saved, target) => {
-          versions.record(sent, saved.version);
-          setMerging(false);
-          onDone(t('catalog.authorities.merge.done', { target: authorityName(target) }));
-          void Promise.all([queryClient.invalidateQueries({ queryKey: authorityKindKey(kind) }), queryClient.invalidateQueries({ queryKey: orphansKey(kind) })]);
-        }}
-      />
+      {!view.archived && inUse && <p className="max-w-[75ch] text-sm text-muted-foreground">{t('catalog.authorities.archive_in_use', { count: view.usage })}</p>}
+      {merging && (
+        <MergePanel
+          kind={kind}
+          source={view}
+          onClose={() => setMerging(false)}
+          version={() => versions.advance(view.version)}
+          onMerged={(sent, saved, target) => {
+            versions.record(sent, saved.version);
+            setMerging(false);
+            onDone(t('catalog.authorities.merge.done', { target: authorityName(target) }));
+            void Promise.all([queryClient.invalidateQueries({ queryKey: authorityKindKey(kind) }), queryClient.invalidateQueries({ queryKey: orphansKey(kind) })]);
+          }}
+        />
+      )}
       {archiving && (
         <ConfirmDialog
           open
@@ -387,7 +375,7 @@ function Actions({
           onClose={() => setArchiving(false)}
         />
       )}
-    </section>
+    </Section>
   );
 }
 
@@ -405,13 +393,7 @@ function AuthorityPage({ kind, id }: { kind: AuthorityKind; id: string }) {
 
   const view = query.data;
   if (view === undefined) {
-    return query.isError ? (
-      <Notice kind="error">{problemText(t, query.error)}</Notice>
-    ) : (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('shell.loading')}
-      </p>
-    );
+    return query.isError ? <PageError error={query.error} /> : <LoadingState />;
   }
 
   const merged = view.mergedInto !== null;
@@ -421,32 +403,36 @@ function AuthorityPage({ kind, id }: { kind: AuthorityKind; id: string }) {
 
   return (
     <>
-      <header className="flex flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold">{authorityName(view)}</h1>
-          <AuthorityBadges view={view} />
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {t(`catalog.authorities.kind.${kind}`)}
-          {type !== null && ` · ${type}`}
-          {kind === 'agents' && (view as AgentView).dates !== null && ` · ${(view as AgentView).dates}`}
-        </p>
-        <p className="text-sm">{t('catalog.authorities.usage', { count: view.usage })}</p>
-      </header>
+      <PageHead
+        title={authorityName(view)}
+        intro={
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>
+              {t(`catalog.authorities.kind.${kind}`)}
+              {type !== null && ` · ${type}`}
+              {kind === 'agents' && (view as AgentView).dates !== null && ` · ${(view as AgentView).dates}`}
+            </span>
+            <span className="text-foreground">{t('catalog.authorities.usage', { count: view.usage })}</span>
+            <AuthorityBadges view={view} />
+          </span>
+        }
+      />
       <RefetchProblem query={query} />
       {created && outcome === null && <Notice kind="success">{t('catalog.authorities.saved')}</Notice>}
       {outcome !== null && <Notice kind="success">{outcome}</Notice>}
       {merged ? (
-        <p className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
-          <span>{t('catalog.authorities.merged_notice')}</span>
-          <Link to={authorityHref(kind, view.mergedInto!)} className="font-medium text-primary underline-offset-4 hover:underline">
-            {t('catalog.authorities.merged_open')}
-          </Link>
-        </p>
+        <Callout
+          title={t('catalog.authorities.merged_notice')}
+          action={
+            <Link to={authorityHref(kind, view.mergedInto!)} className={AUTHORITY_LINK}>
+              {t('catalog.authorities.merged_open')}
+            </Link>
+          }
+        />
       ) : (
-        view.archived && <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{t('catalog.authorities.archived_notice')}</p>
+        view.archived && <Callout title={t('catalog.authorities.archived_notice')} />
       )}
-      {!canManage && <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{t('catalog.authorities.read_only')}</p>}
+      {!canManage && <Callout title={t('catalog.authorities.read_only')} />}
       <EditForm kind={kind} view={view} canEdit={canEdit} versions={versions} reload={reload} onSaved={setOutcome} />
       {subject !== null && <ThesaurusEditor subject={subject} canEdit={canEdit} versions={versions} reload={reload as () => Promise<SubjectView | undefined>} />}
       {canEdit && <Actions kind={kind} view={view} versions={versions} onDone={setOutcome} />}
@@ -483,27 +469,26 @@ function AuthorityCreate({ kind }: { kind: AuthorityKind }) {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold">{t(`catalog.authorities.new.${kind}`)}</h1>
-      <p className="text-sm text-muted-foreground">{t('catalog.authorities.new.revive_hint')}</p>
+      <PageHead title={t(`catalog.authorities.new.${kind}`)} intro={t('catalog.authorities.new.revive_hint')} />
       {/* The server would refuse (and record the refusal): say so before anything is typed. */}
       {!canManage && <ProblemAlert error={new ApiError(403, 'AUTHZ_DENIED')} />}
-      {problem !== null && <Notice kind="error">{problemText(t, problem)}</Notice>}
+      <PageError error={problem} />
       <form noValidate onSubmit={(e) => void submit(e)}>
-        <fieldset disabled={!canManage} className="grid min-w-0 gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2">
+        <FormSection title={t('catalog.authorities.section.data')} disabled={!canManage}>
           <AuthorityFields kind={kind} form={form} disabled={!canManage} />
-          {canManage && (
-            <div className="flex gap-2 sm:col-span-2">
-              <Button type="submit" disabled={isSubmitting}>
-                {t(isSubmitting ? 'form.saving' : 'form.save')}
-              </Button>
-              <Button asChild variant="outline">
-                <Link to="/admin/catalog/authorities" search={kind === 'agents' ? {} : { kind }}>
-                  {t('form.cancel')}
-                </Link>
-              </Button>
-            </div>
-          )}
-        </fieldset>
+        </FormSection>
+        {canManage && (
+          <FormBar>
+            <Button type="submit" disabled={isSubmitting}>
+              {t(isSubmitting ? 'form.saving' : 'form.save')}
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/admin/catalog/authorities" search={kind === 'agents' ? {} : { kind }}>
+                {t('form.cancel')}
+              </Link>
+            </Button>
+          </FormBar>
+        )}
       </form>
     </>
   );
@@ -515,10 +500,10 @@ export function AuthorityEditScreen() {
   // `$id` is `new` or a ULID as `ulidField` takes it; anything else would only be refused by the server.
   const valid = isAuthorityKind(kind) && (id === 'new' || isUlid(id));
   return (
-    <div className="flex max-w-3xl flex-col gap-4">
-      <BackLink kind={isAuthorityKind(kind) ? kind : 'agents'} />
+    <div className="grid max-w-5xl gap-6">
+      <AuthoritiesBackLink kind={isAuthorityKind(kind) ? kind : 'agents'} />
       {!valid ? (
-        <Notice kind="error">{t('error.NOT_FOUND')}</Notice>
+        <PageError title={t('error.NOT_FOUND')} />
       ) : id === 'new' ? (
         <AuthorityCreate key={kind} kind={kind} />
       ) : (

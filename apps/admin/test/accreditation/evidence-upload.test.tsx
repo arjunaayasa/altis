@@ -55,11 +55,11 @@ function start(o: { maxMb?: number; post?: () => unknown; reader?: boolean; prop
   return { ...harness, onDone };
 }
 
-/** Opens the dialog, chooses `file`, types `caption` and presses Unggah. */
+/** Opens the panel, chooses `file`, types `caption` and presses Unggah. */
 async function upload(file: File, caption?: string): Promise<HTMLElement> {
   fireEvent.click(await screen.findByRole('button', { name: 'Unggah tangkapan layar' }));
-  const dialog = await screen.findByRole('dialog', { name: 'Unggah tangkapan layar' });
-  // The limit comes from the workspace configuration: wait until the dialog says it.
+  const dialog = await screen.findByRole('form', { name: 'Unggah tangkapan layar' });
+  // The limit comes from the workspace configuration: wait until the panel says it.
   await within(dialog).findByText(/paling besar \d+ MB/);
   fireEvent.change(within(dialog).getByLabelText('Berkas'), { target: { files: [file] } });
   if (caption !== undefined) fireEvent.change(within(dialog).getByLabelText('Keterangan'), { target: { value: caption } });
@@ -89,7 +89,7 @@ describe('the evidence upload', () => {
     expect(vi.mocked(uploadFile).mock.invocationCallOrder[0]).toBeLessThan(post.order);
     expect(post.body).toEqual({ uploadId: UPLOAD, periodId: PERIOD, indicatorCode: 'SCH-K1', evidenceCode: 'catalogue_screenshot', caption: 'Tampilan OPAC' });
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Unggah tangkapan layar' })).toBeNull());
   });
 
   it('a PDF goes up as it is, with an empty caption when none is typed', async () => {
@@ -146,7 +146,7 @@ describe('the evidence upload', () => {
   it('asks for a file before it uploads anything', async () => {
     start();
     fireEvent.click(await screen.findByRole('button', { name: 'Unggah tangkapan layar' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Unggah tangkapan layar' });
+    const dialog = await screen.findByRole('form', { name: 'Unggah tangkapan layar' });
     await within(dialog).findByText(/paling besar 2 MB/);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Unggah' }));
     expect(await within(dialog).findByText('Pilih berkas dulu.')).toBeTruthy();
@@ -161,12 +161,12 @@ describe('the evidence upload', () => {
     expect(sent('POST', 'accreditation/evidence')[0]!.body).toEqual({ uploadId: UPLOAD, entity: 'library_documents', entityId: ROW, caption: 'SK kepala sekolah' });
   });
 
-  it('a refused record shows the reason and keeps the dialog open', async () => {
+  it('a refused record shows the reason and keeps the panel open', async () => {
     vi.mocked(uploadFile).mockResolvedValue({ uploadId: UPLOAD });
     const { onDone } = start({ post: () => problem(409, 'ACCRED_PERIOD_FROZEN') });
     const dialog = await upload(new File([new Uint8Array(10)], 'a.pdf', { type: 'application/pdf' }));
     await waitFor(() => expect(within(dialog).getByRole('alert')).toBeTruthy());
-    expect(screen.getByRole('dialog', { name: 'Unggah tangkapan layar' })).toBeTruthy();
+    expect(screen.getByRole('form', { name: 'Unggah tangkapan layar' })).toBeTruthy();
     expect(onDone).not.toHaveBeenCalled();
   });
 
