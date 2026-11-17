@@ -10,16 +10,15 @@ import type {
 import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useId, useState, type FormEvent } from 'react';
-import { Badge, Field, Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
 import { useDateTime } from '@/components/data-table';
+import { Callout, DenseTable, ErrorState, FilterField, FilterRow, LAYER, PageHead, Section, SkeletonTable, StatStrip, Tag, type DenseColumn, type TagTone } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
 import { holds, holdsAt } from '@/lib/access';
 import { api } from '@/lib/api';
-import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
-import { MasterTable, type MasterColumn } from '@/screens/catalog/masters/master-table';
 import { SettingsLoader } from '@/screens/settings/library';
 import { NoticeTemplatesForm } from '@/screens/settings/notices';
 import { newTransactionKey } from './common';
@@ -44,12 +43,12 @@ interface Filters {
 
 const NO_FILTERS: Filters = { status: '', kind: '', from: '', to: '' };
 
-const STATUS_TONE: Record<NoticeStatus, 'neutral' | 'info' | 'warning' | 'danger'> = {
+const STATUS_TONE: Record<NoticeStatus, TagTone> = {
   queued: 'neutral',
   sending: 'neutral',
-  sent: 'info',
-  failed: 'danger',
-  skipped: 'warning',
+  sent: 'ok',
+  failed: 'bad',
+  skipped: 'warn',
 };
 
 function listPath(f: Filters, cursor: string | null): string {
@@ -68,33 +67,23 @@ function StatusPanel() {
   const status = useApiQuery<NoticeStatusResponse>({ queryKey: ['circulation', 'notices', 'status'], path: 'circulation/notices/status' });
   if (status.data === undefined) return null;
   const s = status.data;
+  const week =
+    NOTICE_STATUSES.filter((x) => s.lastWeek[x] > 0)
+      .map((x) => `${t(`vocab.notice_status.${x}`)} ${s.lastWeek[x]}`)
+      .join(' · ') || '0';
   return (
-    <section className="grid gap-3 rounded-lg border bg-card p-4" aria-labelledby="notices-status">
-      <h2 id="notices-status" className="text-lg font-semibold">
-        {t('notices.status.title')}
-      </h2>
-      <Notice kind={s.smtpConfigured ? 'success' : 'error'}>{t(s.smtpConfigured ? 'notices.status.smtp_ok' : 'notices.status.smtp_missing')}</Notice>
-      <dl className="grid gap-2 text-sm sm:grid-cols-3">
-        <div>
-          <dt className="text-muted-foreground">{t('notices.status.last_build')}</dt>
-          <dd>{s.lastBuildAt === null ? t('notices.status.never') : at(s.lastBuildAt)}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">{t('notices.status.last_send')}</dt>
-          <dd>{s.lastSendAt === null ? t('notices.status.never') : at(s.lastSendAt)}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">{t('notices.status.waiting')}</dt>
-          <dd>{s.waiting}</dd>
-        </div>
-      </dl>
-      <p className="text-sm">
-        <span className="text-muted-foreground">{t('notices.status.week')}: </span>
-        {NOTICE_STATUSES.filter((x) => s.lastWeek[x] > 0)
-          .map((x) => `${t(`vocab.notice_status.${x}`)} ${s.lastWeek[x]}`)
-          .join(' · ') || '0'}
-      </p>
-    </section>
+    <Section title={t('notices.status.title')}>
+      <Callout tone={s.smtpConfigured ? 'ok' : 'bad'} role={s.smtpConfigured ? 'status' : 'alert'} title={t(s.smtpConfigured ? 'notices.status.smtp_ok' : 'notices.status.smtp_missing')} />
+      <StatStrip
+        label={t('notices.status.title')}
+        items={[
+          { key: 'build', label: t('notices.status.last_build'), value: <span className="text-sm">{s.lastBuildAt === null ? t('notices.status.never') : at(s.lastBuildAt)}</span> },
+          { key: 'send', label: t('notices.status.last_send'), value: <span className="text-sm">{s.lastSendAt === null ? t('notices.status.never') : at(s.lastSendAt)}</span> },
+          { key: 'waiting', label: t('notices.status.waiting'), value: s.waiting },
+          { key: 'week', label: t('notices.status.week'), value: <span className="text-sm">{week}</span> },
+        ]}
+      />
+    </Section>
   );
 }
 
@@ -121,7 +110,7 @@ function NoticeLog() {
     setFilters(draft);
   };
 
-  const columns: MasterColumn<NoticeListItem>[] = [
+  const columns: DenseColumn<NoticeListItem>[] = [
     { id: 'created', header: t('notices.col.created'), className: 'whitespace-nowrap', cell: (r) => at(r.createdAt) },
     {
       id: 'member',
@@ -132,13 +121,13 @@ function NoticeLog() {
         ) : (
           <div>
             {canOpenMember ? (
-              <Link to={`/admin/anggota/${encodeURIComponent(r.member.id)}`} className="font-medium text-primary underline-offset-4 hover:underline">
+              <Link to={`/admin/anggota/${encodeURIComponent(r.member.id)}`} className="font-semibold text-accent-text underline-offset-4 hover:underline">
                 {r.member.name}
               </Link>
             ) : (
-              <span className="font-medium">{r.member.name}</span>
+              <span className="font-semibold">{r.member.name}</span>
             )}
-            <p className="font-mono text-xs text-muted-foreground">{r.member.memberNo}</p>
+            <p className="text-meta tracking-wide text-muted-foreground">{r.member.memberNo}</p>
           </div>
         ),
     },
@@ -148,7 +137,7 @@ function NoticeLog() {
       cell: (r) => (
         <div>
           <p>{t(`vocab.notice_kind.${r.kind}`)}</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-meta text-muted-foreground">
             {r.kind !== 'hold_ready' && t('notices.loans', { count: r.loanCount })}
             {r.manual && ` · ${t('notices.manual')}`}
           </p>
@@ -160,22 +149,38 @@ function NoticeLog() {
       header: t('notices.col.status'),
       cell: (r) => (
         <div className="grid gap-1">
-          <Badge tone={STATUS_TONE[r.status]}>{t(`vocab.notice_status.${r.status}`)}</Badge>
-          {r.reason !== null && <span className="text-xs text-muted-foreground">{t(`vocab.notice_reason.${r.reason}`)}</span>}
-          {r.status === 'failed' && <span className="text-xs text-muted-foreground">{t('notices.attempts', { count: r.attempts })}</span>}
+          <Tag tone={STATUS_TONE[r.status]}>{t(`vocab.notice_status.${r.status}`)}</Tag>
+          {r.reason !== null && <span className="text-meta text-muted-foreground">{t(`vocab.notice_reason.${r.reason}`)}</span>}
+          {r.status === 'failed' && <span className="text-meta text-muted-foreground">{t('notices.attempts', { count: r.attempts })}</span>}
         </div>
       ),
     },
     { id: 'sent', header: t('notices.col.sent'), className: 'whitespace-nowrap', cell: (r) => (r.sentAt === null ? '—' : at(r.sentAt)) },
   ];
 
+  const clear = (): void => {
+    setDraft(NO_FILTERS);
+    setFilters(NO_FILTERS);
+  };
+
   return (
-    <section className="grid gap-3" aria-labelledby="notices-log">
-      <h2 id="notices-log" className="text-lg font-semibold">
-        {t('notices.log.title')}
-      </h2>
-      <form noValidate onSubmit={apply} className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-5" aria-label={t('notices.log.title')}>
-        <Field id={`${ids}-status`} label={t('notices.filter.status')}>
+    <Section title={t('notices.log.title')}>
+      <FilterRow
+        label={t('notices.log.title')}
+        onSubmit={apply}
+        actions={
+          <>
+            <Button type="submit" variant="outline">
+              {t('notices.filter.apply')}
+            </Button>
+            {filtered && (
+              <Button type="button" variant="link" onClick={clear}>
+                {t('notices.filter.clear')}
+              </Button>
+            )}
+          </>
+        }>
+        <FilterField id={`${ids}-status`} label={t('notices.filter.status')}>
           <select id={`${ids}-status`} className={SELECT_CLASS} value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value })}>
             <option value="">{t('notices.filter.all')}</option>
             {NOTICE_STATUSES.map((s) => (
@@ -184,8 +189,8 @@ function NoticeLog() {
               </option>
             ))}
           </select>
-        </Field>
-        <Field id={`${ids}-kind`} label={t('notices.filter.kind')}>
+        </FilterField>
+        <FilterField id={`${ids}-kind`} label={t('notices.filter.kind')}>
           <select id={`${ids}-kind`} className={SELECT_CLASS} value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
             <option value="">{t('notices.filter.all')}</option>
             {NOTICE_KINDS.map((k) => (
@@ -194,41 +199,34 @@ function NoticeLog() {
               </option>
             ))}
           </select>
-        </Field>
-        <Field label={t('notices.filter.from')}>{(c) => <Input {...c} type="date" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />}</Field>
-        <Field label={t('notices.filter.to')}>{(c) => <Input {...c} type="date" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />}</Field>
-        <div className="flex items-end gap-2">
-          <Button type="submit">{t('notices.filter.apply')}</Button>
-          {filtered && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setDraft(NO_FILTERS);
-                setFilters(NO_FILTERS);
-              }}>
-              {t('notices.filter.clear')}
-            </Button>
-          )}
-        </div>
-      </form>
+        </FilterField>
+        <FilterField label={t('notices.filter.from')}>{(c) => <Input {...c} type="date" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />}</FilterField>
+        <FilterField label={t('notices.filter.to')}>{(c) => <Input {...c} type="date" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />}</FilterField>
+      </FilterRow>
       {list.isError && list.data === undefined ? (
-        <Notice
-          kind="error"
-          action={
-            <Button variant="outline" size="sm" onClick={() => void list.refetch()}>
-              {t('table.retry')}
-            </Button>
-          }>
-          {problemText(t, list.error)}
-        </Notice>
+        <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
       ) : list.data === undefined ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
+        <SkeletonTable label={t('shell.loading')} columns={5} rows={4} />
       ) : (
         <>
-          <MasterTable caption={t('notices.log.caption')} columns={columns} rows={rows} empty={t(filtered ? 'notices.log.empty_filtered' : 'notices.log.empty')} />
+          <DenseTable
+            caption={t('notices.log.caption')}
+            columns={columns}
+            rows={rows}
+            rowKey={(r) => r.id}
+            empty={
+              filtered ? (
+                <span className="flex flex-wrap items-center gap-2">
+                  {t('notices.log.empty_filtered')}
+                  <Button type="button" variant="link" className="h-auto p-0" onClick={clear}>
+                    {t('notices.filter.clear')}
+                  </Button>
+                </span>
+              ) : (
+                t('notices.log.empty')
+              )
+            }
+          />
           {list.hasNextPage && (
             <Button variant="outline" className="w-fit" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
               {t('notices.load_more')}
@@ -236,7 +234,7 @@ function NoticeLog() {
           )}
         </>
       )}
-    </section>
+    </Section>
   );
 }
 
@@ -273,19 +271,17 @@ function PreviewAndTest() {
   };
 
   return (
-    <section className="grid gap-3 rounded-lg border bg-card p-4" aria-labelledby="notices-test">
-      <h2 id="notices-test" className="text-lg font-semibold">
-        {t('notices.test.title')}
-      </h2>
-      <p className="text-sm text-muted-foreground">{t('notices.test.intro')}</p>
+    <Section title={t('notices.test.title')}>
+      <p className="-mt-1 max-w-[75ch] text-sm text-muted-foreground">{t('notices.test.intro')}</p>
       <form
         noValidate
-        className="grid gap-3 sm:grid-cols-4"
+        aria-label={t('notices.test.title')}
+        className="flex flex-wrap items-end gap-3"
         onSubmit={(e) => {
           e.preventDefault();
           void run(false);
         }}>
-        <Field id={`${ids}-kind`} label={t('notices.test.kind')}>
+        <FilterField id={`${ids}-kind`} label={t('notices.test.kind')}>
           <select id={`${ids}-kind`} className={SELECT_CLASS} value={kind} onChange={(e) => setKind(e.target.value as NoticeKind)}>
             {NOTICE_KINDS.map((k) => (
               <option key={k} value={k}>
@@ -293,8 +289,8 @@ function PreviewAndTest() {
               </option>
             ))}
           </select>
-        </Field>
-        <Field id={`${ids}-locale`} label={t('notices.test.locale')}>
+        </FilterField>
+        <FilterField id={`${ids}-locale`} label={t('notices.test.locale')}>
           <select id={`${ids}-locale`} className={SELECT_CLASS} value={locale} onChange={(e) => setLocale(e.target.value as Locale)}>
             {LOCALES.map((l) => (
               <option key={l} value={l}>
@@ -302,32 +298,31 @@ function PreviewAndTest() {
               </option>
             ))}
           </select>
-        </Field>
-        <Field label={t('notices.test.to')}>
+        </FilterField>
+        <FilterField wide label={t('notices.test.to')} hint={canManage ? undefined : t('notices.test.no_permission')}>
           {(c) => <Input {...c} type="email" autoComplete="email" maxLength={191} value={to} disabled={!canManage} onChange={(e) => setTo(e.target.value)} />}
-        </Field>
-        <div className="flex items-end gap-2">
+        </FilterField>
+        <div className="flex flex-wrap items-center gap-2">
           <Button type="submit" variant="outline" disabled={busy}>
             {t('notices.test.preview')}
           </Button>
-          <Button type="button" disabled={busy || !canManage || to.trim() === ''} onClick={() => void run(true)}>
+          <Button type="button" variant="outline" disabled={busy || !canManage || to.trim() === ''} onClick={() => void run(true)}>
             {t('notices.test.send')}
           </Button>
         </div>
       </form>
-      {!canManage && <p className="text-xs text-muted-foreground">{t('notices.test.no_permission')}</p>}
       {sentTo !== null && <Notice kind="success">{t('notices.test.sent', { to: sentTo })}</Notice>}
       {problem !== null && <ProblemAlert error={problem} />}
       {preview !== null && (
-        <div className="grid gap-2 rounded-md border bg-muted/30 p-3">
+        <div className={`grid max-w-[75ch] gap-2 rounded-lg border p-4 ${LAYER}`}>
           <p className="text-sm">
             <span className="text-muted-foreground">{t('notices.test.subject')}: </span>
-            <span className="font-medium">{preview.subject}</span>
+            <span className="font-semibold">{preview.subject}</span>
           </p>
-          <pre className="text-sm whitespace-pre-wrap">{preview.text}</pre>
+          <pre className="font-sans text-sm whitespace-pre-wrap">{preview.text}</pre>
         </div>
       )}
-    </section>
+    </Section>
   );
 }
 
@@ -335,11 +330,8 @@ function PreviewAndTest() {
 export function NoticesScreen() {
   const t = useT();
   return (
-    <div className="flex flex-col gap-6">
-      <div className="grid gap-1">
-        <h1 className="text-2xl font-semibold">{t('nav.circulation.notices')}</h1>
-        <p className="text-sm text-muted-foreground">{t('notices.intro')}</p>
-      </div>
+    <div className="grid gap-6">
+      <PageHead title={t('nav.circulation.notices')} intro={t('notices.intro')} />
       <StatusPanel />
       <NoticeLog />
       <PreviewAndTest />
@@ -418,7 +410,7 @@ export function SendRemindersButton({ loans, label }: { loans: readonly Reminder
         {t(label)}
       </Button>
       {result !== null && (
-        <p role="status" className="text-xs text-muted-foreground">
+        <p role="status" className="text-meta text-muted-foreground">
           {t('notices.send.result', { queued: result.queued, existing: result.existing, nothing: result.nothing })}
           {result.refused.length > 0 && ` ${t('notices.send.result_refused', { count: result.refused.length })}`}
         </p>

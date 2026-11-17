@@ -11,20 +11,18 @@ import type {
 import type { DeskMemberView } from '@altis/shared/api/circulation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { PrinterIcon } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Badge, Field, Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { Field, Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { DenseTable, ErrorState, FilterField, FilterRow, InlinePanel, LoadingState, PageHead, Section, SectionHead, SkeletonTable, StatusText, TABLE, Tag } from '@/components/layout';
 import { useReturnFocus } from '@/components/return-focus';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
 import { useLocale, useT, type TKey } from '@/i18n';
 import { holds, holdsAt } from '@/lib/access';
 import { ApiError, api, csrfToken, setCsrfToken } from '@/lib/api';
 import { buildSync } from '@/lib/build-sync';
-import { problemText } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
 import { cn } from '@/lib/utils';
 import { amountOf } from './desk-dialogs';
@@ -43,7 +41,7 @@ import { ReportLinks } from '@/screens/reports/report-links';
  *   their receipts and "Batalkan" (voiding, with the waive permission). A charge or payment of another branch is shown
  *   but not changed here.
  * - Denda & Pembayaran (`/admin/layanan/denda`, `circulation.records.read`): the members who owe, the daily cash summary
- *   (per day, per method and per staff member, printable) and the payments.
+ *   (per day, per method and per staff member, printable) and the payments ("Batalkan" opens its panel above the list).
  * - The member page's Denda tab (MemberChargesTab): every charge, waive and payment of the member, read only.
  *
  * Money is typed as a decimal (`5000`, `5.000`, `2,5`) and sent as the API's decimal string; it is shown in the
@@ -193,16 +191,12 @@ export function MemberChargesPanel({
 
   const chosen = here.filter((c) => selected.has(c.id));
   return (
-    <div className="flex flex-col gap-3">
+    <div className="grid gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm">
+        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
           <span className="text-muted-foreground">{t('charges.member.balance')}: </span>
-          <span className="text-lg font-semibold">{money(view.balance, view.currency)}</span>
-          {view.blocked !== null && (
-            <Badge tone="danger" className="ml-2">
-              {t('charges.member.blocked', { reason: t(`vocab.member_block_reason.${view.blocked}`) })}
-            </Badge>
-          )}
+          <span className="text-base font-bold tabular-nums">{money(view.balance, view.currency)}</span>
+          {view.blocked !== null && <Tag tone="bad">{t('charges.member.blocked', { reason: t(`vocab.member_block_reason.${view.blocked}`) })}</Tag>}
         </p>
         <div className="flex flex-wrap gap-2">
           <Button type="button" size="sm" disabled={here.length === 0} onClick={() => setPaying(chosen.length > 0 ? chosen : here)}>
@@ -213,24 +207,24 @@ export function MemberChargesPanel({
           </Button>
         </div>
       </div>
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
+      <div className={TABLE.wrap}>
+        <table className={TABLE.table}>
           <caption className="sr-only">{t('charges.panel.caption', { name: member.name })}</caption>
-          <thead className="bg-muted/50 text-left">
+          <thead>
             <tr>
-              <th scope="col" className="w-8 px-3 py-2">
+              <th scope="col" className={cn(TABLE.th, 'w-8')}>
                 <span className="sr-only">{t('charges.panel.select_all')}</span>
               </th>
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+              <th scope="col" className={TABLE.th}>
                 {t('charges.col.charge')}
               </th>
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+              <th scope="col" className={TABLE.th}>
                 {t('charges.col.charged_on')}
               </th>
-              <th scope="col" className="px-3 py-2 text-right font-medium text-muted-foreground">
+              <th scope="col" className={cn(TABLE.th, 'text-right')}>
                 {t('charges.col.balance')}
               </th>
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+              <th scope="col" className={TABLE.th}>
                 <span className="sr-only">{t('table.actions')}</span>
               </th>
             </tr>
@@ -238,7 +232,7 @@ export function MemberChargesPanel({
           <tbody>
             {view.charges.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
+                <td colSpan={5} className={TABLE.empty}>
                   {t('charges.panel.empty')}
                 </td>
               </tr>
@@ -254,8 +248,8 @@ export function MemberChargesPanel({
                     tabIndex={0}
                     aria-label={t('charges.panel.row', { description: c.description, amount: money(c.balance, c.currency) })}
                     onKeyDown={(e) => onRowKey(e, i, c)}
-                    className="border-t align-top outline-none focus-visible:bg-accent">
-                    <td className="px-3 py-2">
+                    className={cn(TABLE.focusRow, selected.has(c.id) && 'bg-accent-soft')}>
+                    <td className={TABLE.td}>
                       <input
                         type="checkbox"
                         tabIndex={-1}
@@ -266,23 +260,23 @@ export function MemberChargesPanel({
                         onChange={() => toggle(c.id)}
                       />
                     </td>
-                    <td className="px-3 py-2">
-                      <p className="font-medium">{t(`vocab.charge_kind.${c.kind}`)}</p>
-                      <p className="text-xs text-muted-foreground">{c.description}</p>
-                      {!mine && <p className="text-xs text-muted-foreground">{t('charges.panel.other_branch')}</p>}
+                    <td className={TABLE.td}>
+                      <p className="font-semibold">{t(`vocab.charge_kind.${c.kind}`)}</p>
+                      <p className="text-meta text-muted-foreground">{c.description}</p>
+                      {!mine && <p className="text-meta text-muted-foreground">{t('charges.panel.other_branch')}</p>}
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap">{day(c.chargedOn)}</td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap">
-                      <p className="font-medium">{money(c.balance, c.currency)}</p>
-                      {c.balance !== c.amount && <p className="text-xs text-muted-foreground">{money(c.amount, c.currency)}</p>}
+                    <td className={cn(TABLE.td, 'whitespace-nowrap')}>{day(c.chargedOn)}</td>
+                    <td className={cn(TABLE.td, 'text-right whitespace-nowrap')}>
+                      <p className="font-semibold">{money(c.balance, c.currency)}</p>
+                      {c.balance !== c.amount && <p className="text-meta text-muted-foreground">{money(c.amount, c.currency)}</p>}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className={cn(TABLE.td, 'py-1.5')}>
                       <div className="flex flex-wrap justify-end gap-1">
-                        <Button type="button" size="sm" variant="outline" tabIndex={-1} disabled={!mine} onClick={() => setPaying([c])}>
+                        <Button type="button" size="sm" variant="ghost" tabIndex={-1} disabled={!mine} onClick={() => setPaying([c])}>
                           {t('charges.action.pay')}
                         </Button>
                         {canWaive && (
-                          <Button type="button" size="sm" variant="outline" tabIndex={-1} disabled={!mine} onClick={() => setWaiving(c)}>
+                          <Button type="button" size="sm" variant="ghost" tabIndex={-1} disabled={!mine} onClick={() => setWaiving(c)}>
                             {t('charges.action.waive')}
                           </Button>
                         )}
@@ -295,7 +289,9 @@ export function MemberChargesPanel({
           </tbody>
         </table>
       </div>
-      <PaymentsTable payments={view.payments} branchId={branchId} canWaive={canWaive} onVoid={setVoiding} caption={t('charges.payments.caption')} />
+      <Section title={t('charges.payments.caption')}>
+        <PaymentsTable payments={view.payments} branchId={branchId} canWaive={canWaive} onVoid={setVoiding} caption={t('charges.payments.caption')} />
+      </Section>
 
       <PayDialog
         branchId={branchId}
@@ -352,6 +348,7 @@ function PaymentsTable({
   onVoid,
   caption,
   showMember = false,
+  voidingId,
 }: {
   payments: readonly (PaymentView & { member?: { memberNo: string; name: string } | null })[];
   branchId: string | null;
@@ -359,88 +356,99 @@ function PaymentsTable({
   onVoid?(p: PaymentView): void;
   caption: string;
   showMember?: boolean;
+  /** The payment whose void panel is open in the page (its row takes the selection colour). */
+  voidingId?: string | null;
 }) {
   const t = useT();
   const day = useCalendarDate();
   const money = useMoney();
   const me = useMe();
-  if (payments.length === 0) return <p className="rounded-md border px-3 py-4 text-center text-sm text-muted-foreground">{t('charges.payments.empty')}</p>;
   return (
-    <div className="overflow-x-auto rounded-md border">
-      <table className="w-full text-sm">
-        <caption className="px-3 py-2 text-left text-sm font-medium">{caption}</caption>
-        <thead className="bg-muted/50 text-left">
+    <div className={TABLE.wrap}>
+      <table className={TABLE.table}>
+        <caption className="sr-only">{caption}</caption>
+        <thead>
           <tr>
-            <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+            <th scope="col" className={TABLE.th}>
               {t('charges.col.receipt')}
             </th>
             {showMember && (
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+              <th scope="col" className={TABLE.th}>
                 {t('charges.col.member')}
               </th>
             )}
-            <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+            <th scope="col" className={TABLE.th}>
               {t('charges.col.method')}
             </th>
-            <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+            <th scope="col" className={TABLE.th}>
               {t('charges.col.staff')}
             </th>
-            <th scope="col" className="px-3 py-2 text-right font-medium text-muted-foreground">
+            <th scope="col" className={cn(TABLE.th, 'text-right')}>
               {t('charges.col.amount')}
             </th>
-            <th scope="col" className="px-3 py-2">
+            <th scope="col" className={TABLE.th}>
               <span className="sr-only">{t('table.actions')}</span>
             </th>
           </tr>
         </thead>
         <tbody>
-          {payments.map((p) => {
-            const atBranch = branchId === null ? p.branchId : branchId;
-            const mine = p.branchId === atBranch;
-            const printable = mine && holdsAt(me, 'circulation.desk.use', p.branchId);
-            return (
-              <tr key={p.id} className="border-t align-top">
-                <td className="px-3 py-2">
-                  <p className="font-mono text-xs">{p.receiptNo ?? '-'}</p>
-                  <p className="text-xs text-muted-foreground">{day(p.paidOn)}</p>
-                  {p.voided && (
-                    <Badge tone="danger" className="mt-1">
-                      {t('charges.payments.voided')}
-                    </Badge>
-                  )}
-                </td>
-                {showMember && (
-                  <td className="px-3 py-2">
-                    {p.member === null || p.member === undefined ? '-' : (
-                      <>
-                        <p>{p.member.name}</p>
-                        <p className="font-mono text-xs text-muted-foreground">{p.member.memberNo}</p>
-                      </>
+          {payments.length === 0 ? (
+            <tr>
+              <td colSpan={showMember ? 6 : 5} className={TABLE.empty}>
+                {t('charges.payments.empty')}
+              </td>
+            </tr>
+          ) : (
+            payments.map((p) => {
+              const atBranch = branchId === null ? p.branchId : branchId;
+              const mine = p.branchId === atBranch;
+              const printable = mine && holdsAt(me, 'circulation.desk.use', p.branchId);
+              return (
+                <tr key={p.id} className={cn(voidingId === p.id && 'bg-accent-soft')}>
+                  <td className={TABLE.td}>
+                    <p className="tracking-wide whitespace-nowrap">{p.receiptNo ?? '-'}</p>
+                    <p className="text-meta text-muted-foreground">{day(p.paidOn)}</p>
+                    {p.voided && (
+                      <Tag tone="bad" className="mt-1">
+                        {t('charges.payments.voided')}
+                      </Tag>
                     )}
                   </td>
-                )}
-                <td className="px-3 py-2">{t(`vocab.payment_method.${p.method}`)}</td>
-                <td className="px-3 py-2">{p.receivedBy ?? '-'}</td>
-                <td className={cn('px-3 py-2 text-right whitespace-nowrap', p.voided && 'line-through')}>{money(p.amount, p.currency)}</td>
-                <td className="px-3 py-2">
-                  <div className="flex flex-wrap justify-end gap-1">
-                    {printable && p.receiptNo !== null && (
-                      <Button asChild size="sm" variant="outline">
-                        <a href={receiptHref(p.branchId, p.id)} target="_blank" rel="noopener" aria-label={t('charges.action.receipt_named', { number: p.receiptNo })}>
-                          {t('charges.action.receipt')}
-                        </a>
-                      </Button>
-                    )}
-                    {onVoid !== undefined && canWaive && mine && !p.voided && holdsAt(me, 'circulation.charges.waive', p.branchId) && (
-                      <Button type="button" size="sm" variant="outline" onClick={() => onVoid(p)}>
-                        {t('charges.action.void')}
-                      </Button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
+                  {showMember && (
+                    <td className={TABLE.td}>
+                      {p.member === null || p.member === undefined ? (
+                        '-'
+                      ) : (
+                        <>
+                          <p>{p.member.name}</p>
+                          <p className="text-meta tracking-wide text-muted-foreground">{p.member.memberNo}</p>
+                        </>
+                      )}
+                    </td>
+                  )}
+                  <td className={TABLE.td}>{t(`vocab.payment_method.${p.method}`)}</td>
+                  <td className={TABLE.td}>{p.receivedBy ?? '-'}</td>
+                  <td className={cn(TABLE.td, 'text-right whitespace-nowrap', p.voided && 'line-through')}>{money(p.amount, p.currency)}</td>
+                  <td className={cn(TABLE.td, 'py-1.5')}>
+                    <div className="flex flex-wrap justify-end gap-1">
+                      {printable && p.receiptNo !== null && (
+                        <Button asChild size="sm" variant="ghost">
+                          <a href={receiptHref(p.branchId, p.id)} target="_blank" rel="noopener" aria-label={t('charges.action.receipt_named', { number: p.receiptNo })}>
+                            {t('charges.action.receipt')}
+                          </a>
+                        </Button>
+                      )}
+                      {onVoid !== undefined && canWaive && mine && !p.voided && holdsAt(me, 'circulation.charges.waive', p.branchId) && (
+                        <Button type="button" size="sm" variant="ghost" aria-expanded={voidingId === undefined ? undefined : voidingId === p.id} onClick={() => onVoid(p)}>
+                          {t('charges.action.void')}
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })
+          )}
         </tbody>
       </table>
     </div>
@@ -744,8 +752,23 @@ function ManualChargeDialog({
   );
 }
 
-/** "Batalkan" a payment: with a reason; what it paid is owed again. */
-function VoidPaymentDialog({ branchId, payment, onClose, onDone }: { branchId: string; payment: PaymentView | null; onClose(): void; onDone(p: PaymentView): Promise<void> }) {
+/**
+ * "Batalkan" a payment: with a reason; what it paid is owed again. A dialog at the desk (whose scanner waits while one is
+ * open); `inline` on the payments page, as a panel above the list.
+ */
+function VoidPaymentDialog({
+  branchId,
+  payment,
+  onClose,
+  onDone,
+  inline = false,
+}: {
+  branchId: string;
+  payment: PaymentView | null;
+  onClose(): void;
+  onDone(p: PaymentView): Promise<void>;
+  inline?: boolean;
+}) {
   const t = useT();
   const money = useMoney();
   const focus = useReturnFocus();
@@ -782,6 +805,27 @@ function VoidPaymentDialog({ branchId, payment, onClose, onDone }: { branchId: s
       s.setProblem(err);
     }
   };
+
+  if (inline) {
+    if (payment === null) return null;
+    return (
+      <InlinePanel title={t('charges.void.title')} onSubmit={(e) => void submit(e)} onCancel={s.busy ? undefined : onClose}>
+        <p className="-mt-1.5 max-w-[75ch] text-sm text-muted-foreground">{t('charges.void.intro', { number: payment.receiptNo ?? '-', amount: money(payment.amount, payment.currency) })}</p>
+        <Field label={t('charges.void.reason')} error={error ?? undefined} className="max-w-md">
+          {(c) => <Input {...c} maxLength={191} autoComplete="off" value={reason} onChange={(e) => setReason(e.target.value)} />}
+        </Field>
+        <ProblemAlert error={s.problem} />
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" size="sm" variant="destructive" disabled={s.busy}>
+            {t('charges.void.submit')}
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={onClose} disabled={s.busy}>
+            {t('form.cancel')}
+          </Button>
+        </div>
+      </InlinePanel>
+    );
+  }
 
   return (
     <Dialog open={payment !== null} onOpenChange={(open) => (open || s.busy ? undefined : onClose())}>
@@ -820,25 +864,28 @@ export function ChargesScreen() {
   const t = useT();
   const [tab, setTab] = useState<PageTab>('open');
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-1">
-        <h1 className="text-2xl font-semibold">{t('nav.circulation.charges')}</h1>
-        <p className="text-sm text-muted-foreground">{t('charges.page.intro')}</p>
-      </div>
+    <div className="grid gap-6">
+      <PageHead title={t('nav.circulation.charges')} intro={t('charges.page.intro')} />
       <ReportLinks reports={[{ id: 'circulation.payments_daily', permission: 'circulation.records.read' }, { id: 'circulation.charges', permission: 'circulation.records.read' }]} />
-      <Tabs value={tab} onValueChange={(v) => setTab(v as PageTab)}>
-        <TabsList className="print:hidden">
-          <TabsTrigger value="open">{t('charges.page.tab.open')}</TabsTrigger>
-          <TabsTrigger value="summary">{t('charges.page.tab.summary')}</TabsTrigger>
-          <TabsTrigger value="payments">{t('charges.page.tab.payments')}</TabsTrigger>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as PageTab)} className="min-w-0">
+        <TabsList className={cn(WRAPPING_TABS.list, 'print:hidden')} aria-label={t('nav.circulation.charges')}>
+          <TabsTrigger value="open" className={WRAPPING_TABS.trigger}>
+            {t('charges.page.tab.open')}
+          </TabsTrigger>
+          <TabsTrigger value="summary" className={WRAPPING_TABS.trigger}>
+            {t('charges.page.tab.summary')}
+          </TabsTrigger>
+          <TabsTrigger value="payments" className={WRAPPING_TABS.trigger}>
+            {t('charges.page.tab.payments')}
+          </TabsTrigger>
         </TabsList>
-        <TabsContent value="open">
+        <TabsContent value="open" className="pt-3">
           <OpenBalances />
         </TabsContent>
-        <TabsContent value="summary">
+        <TabsContent value="summary" className="pt-3">
           <CashSummary />
         </TabsContent>
-        <TabsContent value="payments">
+        <TabsContent value="payments" className="pt-3">
           <PaymentList />
         </TabsContent>
       </Tabs>
@@ -853,68 +900,48 @@ function OpenBalances() {
   const me = useMe();
   const canServe = holds(me, 'circulation.desk.use') || Object.values(me?.authenticated === true ? me.branchPermissions : {}).some((p) => p.includes('circulation.desk.use'));
   const q = useQuery({ queryKey: ['circulation', 'charges', 'open'], queryFn: () => api<OpenBalancesResponse>('GET', 'circulation/charges/open') });
-  if (q.isError) return <Notice kind="error">{problemText(t, q.error)}</Notice>;
-  if (q.data === undefined) return <p className="text-sm text-muted-foreground">{t('shell.loading')}</p>;
+  if (q.isError && q.data === undefined) return <ErrorState error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />;
+  if (q.data === undefined) return <SkeletonTable label={t('shell.loading')} columns={5} rows={4} />;
   const d = q.data;
   return (
-    <div className="flex flex-col gap-2">
-      <p className="text-sm font-medium">{t('charges.open.total', { amount: money(d.total, d.currency) })}</p>
-      {d.truncated && <p className="text-sm text-muted-foreground">{t('charges.open.truncated')}</p>}
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
-          <caption className="sr-only">{t('charges.open.caption')}</caption>
-          <thead className="bg-muted/50 text-left">
-            <tr>
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                {t('charges.col.member')}
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                {t('charges.col.open_charges')}
-              </th>
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                {t('charges.col.oldest')}
-              </th>
-              <th scope="col" className="px-3 py-2 text-right font-medium text-muted-foreground">
-                {t('charges.col.balance')}
-              </th>
-              <th scope="col" className="px-3 py-2">
-                <span className="sr-only">{t('table.actions')}</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {d.items.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
-                  {t('charges.open.empty')}
-                </td>
-              </tr>
-            ) : (
-              d.items.map((i) => (
-                <tr key={i.member.id} className="border-t">
-                  <td className="px-3 py-2">
-                    <p className="font-medium">{i.member.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      <span className="font-mono">{i.member.memberNo}</span>
-                      {i.member.className !== null && ` · ${i.member.className}`}
-                    </p>
-                  </td>
-                  <td className="px-3 py-2">{i.openCharges}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{day(i.oldestChargedOn)}</td>
-                  <td className="px-3 py-2 text-right font-medium whitespace-nowrap">{money(i.balance, d.currency)}</td>
-                  <td className="px-3 py-2 text-right">
-                    {canServe && (
-                      <Button asChild size="sm" variant="outline">
-                        <Link to={`/admin/layanan?member=${encodeURIComponent(i.member.id)}`}>{t('charges.action.serve')}</Link>
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+    <div className="grid gap-3">
+      <p className="text-sm font-semibold tabular-nums">{t('charges.open.total', { amount: money(d.total, d.currency) })}</p>
+      {d.truncated && <p className="text-meta text-muted-foreground">{t('charges.open.truncated')}</p>}
+      <DenseTable
+        caption={t('charges.open.caption')}
+        columns={[
+          {
+            id: 'member',
+            header: t('charges.col.member'),
+            cell: (i) => (
+              <>
+                <p className="font-semibold">{i.member.name}</p>
+                <p className="text-meta text-muted-foreground">
+                  <span className="tracking-wide">{i.member.memberNo}</span>
+                  {i.member.className !== null && ` · ${i.member.className}`}
+                </p>
+              </>
+            ),
+          },
+          { id: 'count', header: t('charges.col.open_charges'), headClassName: 'text-right', className: 'text-right', cell: (i) => i.openCharges },
+          { id: 'oldest', header: t('charges.col.oldest'), className: 'whitespace-nowrap', cell: (i) => day(i.oldestChargedOn) },
+          { id: 'balance', header: t('charges.col.balance'), headClassName: 'text-right', className: 'text-right font-semibold whitespace-nowrap', cell: (i) => money(i.balance, d.currency) },
+          {
+            id: 'actions',
+            header: <span className="sr-only">{t('table.actions')}</span>,
+            className: 'w-px py-1.5 text-right whitespace-nowrap',
+            cell: (i) =>
+              canServe ? (
+                <Button asChild size="sm" variant="ghost">
+                  <Link to={`/admin/layanan?member=${encodeURIComponent(i.member.id)}`}>{t('charges.action.serve')}</Link>
+                </Button>
+              ) : null,
+          },
+        ]}
+        rows={d.items}
+        rowKey={(i) => i.member.id}
+        empty={t('charges.open.empty')}
+      />
     </div>
   );
 }
@@ -925,24 +952,26 @@ function RangeFilter({ value, onApply }: { value: { from: string; to: string; me
   const ids = useId();
   const [draft, setDraft] = useState(value);
   return (
-    <form
-      noValidate
-      className="flex flex-wrap items-end gap-2 print:hidden"
+    <FilterRow
+      label={t('charges.summary.show')}
+      className="print:hidden"
       onSubmit={(e) => {
         e.preventDefault();
         onApply(draft);
-      }}>
-      <div className="grid gap-1">
-        <Label htmlFor={`${ids}-from`}>{t('charges.summary.from')}</Label>
-        <Input id={`${ids}-from`} type="date" value={draft.from} onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))} className="w-44" />
-      </div>
-      <div className="grid gap-1">
-        <Label htmlFor={`${ids}-to`}>{t('charges.summary.to')}</Label>
-        <Input id={`${ids}-to`} type="date" value={draft.to} onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))} className="w-44" />
-      </div>
-      <div className="grid gap-1">
-        <Label htmlFor={`${ids}-method`}>{t('charges.summary.method')}</Label>
-        <select id={`${ids}-method`} className={cn(SELECT_CLASS, 'w-44')} value={draft.method} onChange={(e) => setDraft((d) => ({ ...d, method: e.target.value }))}>
+      }}
+      actions={
+        <Button type="submit" variant="outline">
+          {t('charges.summary.show')}
+        </Button>
+      }>
+      <FilterField id={`${ids}-from`} label={t('charges.summary.from')}>
+        <Input id={`${ids}-from`} type="date" value={draft.from} onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))} />
+      </FilterField>
+      <FilterField id={`${ids}-to`} label={t('charges.summary.to')}>
+        <Input id={`${ids}-to`} type="date" value={draft.to} onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))} />
+      </FilterField>
+      <FilterField id={`${ids}-method`} label={t('charges.summary.method')}>
+        <select id={`${ids}-method`} className={SELECT_CLASS} value={draft.method} onChange={(e) => setDraft((d) => ({ ...d, method: e.target.value }))}>
           <option value="">{t('charges.summary.all_methods')}</option>
           {PAYMENT_METHODS.map((m) => (
             <option key={m} value={m}>
@@ -950,9 +979,8 @@ function RangeFilter({ value, onApply }: { value: { from: string; to: string; me
             </option>
           ))}
         </select>
-      </div>
-      <Button type="submit">{t('charges.summary.show')}</Button>
-    </form>
+      </FilterField>
+    </FilterRow>
   );
 }
 
@@ -967,6 +995,7 @@ function rangeQuery(v: { from: string; to: string; method: string }): URLSearchP
 /** The daily cash summary: per day and per staff member, per method; printable. */
 function CashSummary() {
   const t = useT();
+  const ids = useId();
   const day = useCalendarDate();
   const money = useMoney();
   const today = todayLocal();
@@ -977,89 +1006,102 @@ function CashSummary() {
   });
   const d = q.data;
   const head = (key: TKey, right = false) => (
-    <th scope="col" className={cn('px-3 py-2 font-medium text-muted-foreground', right && 'text-right')}>
+    <th key={key} scope="col" className={cn(TABLE.th, right && 'text-right')}>
       {t(key)}
     </th>
   );
-  const methodCells = (byMethod: Record<PaymentMethod, string>, currency: string) =>
+  const methodCells = (byMethod: Record<PaymentMethod, string>, currency: string, total = false) =>
     PAYMENT_METHODS.map((m) => (
-      <td key={m} className="px-3 py-2 text-right whitespace-nowrap">
+      <td key={m} className={cn(total ? TABLE.group : TABLE.td, 'text-right whitespace-nowrap')}>
         {money(byMethod[m], currency)}
       </td>
     ));
   return (
-    <div className="flex flex-col gap-3">
+    <div className="grid gap-4">
       <RangeFilter value={range} onApply={setRange} />
-      {q.isError && <Notice kind="error">{problemText(t, q.error)}</Notice>}
+      {q.isError && d === undefined && <ErrorState error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />}
+      {d === undefined && !q.isError && <LoadingState />}
       {d !== undefined && (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">{t('charges.summary.title', { from: day(d.from), to: day(d.to) })}</h2>
-            <Button type="button" variant="outline" className="print:hidden" onClick={() => window.print()}>
-              <PrinterIcon aria-hidden="true" />
-              {t('charges.summary.print')}
-            </Button>
+        <section aria-labelledby={`${ids}-summary`} className="grid gap-3">
+          <SectionHead
+            id={`${ids}-summary`}
+            title={t('charges.summary.title', { from: day(d.from), to: day(d.to) })}
+            aside={
+              <Button type="button" variant="outline" size="sm" className="print:hidden" onClick={() => window.print()}>
+                {t('charges.summary.print')}
+              </Button>
+            }
+          />
+          <div className={TABLE.wrap}>
+            <table className={TABLE.table}>
+              <caption className="sr-only">{t('charges.summary.caption')}</caption>
+              <thead>
+                <tr>
+                  {head('charges.col.day')}
+                  {head('charges.col.count', true)}
+                  {PAYMENT_METHODS.map((m) => head(`vocab.payment_method.${m}`, true))}
+                  {head('charges.col.total', true)}
+                </tr>
+              </thead>
+              <tbody>
+                {d.days.length === 0 ? (
+                  <tr>
+                    <td colSpan={PAYMENT_METHODS.length + 3} className={TABLE.empty}>
+                      {t('charges.summary.empty')}
+                    </td>
+                  </tr>
+                ) : (
+                  <>
+                    {d.days.map((x) => (
+                      <tr key={x.day}>
+                        <td className={cn(TABLE.td, 'whitespace-nowrap')}>{day(x.day)}</td>
+                        <td className={cn(TABLE.td, 'text-right')}>{x.count}</td>
+                        {methodCells(x.byMethod, d.currency)}
+                        <td className={cn(TABLE.td, 'text-right font-semibold whitespace-nowrap')}>{money(x.total, d.currency)}</td>
+                      </tr>
+                    ))}
+                    <tr className="font-bold">
+                      <th scope="row" className={cn(TABLE.group, 'text-left')}>
+                        {t('charges.summary.total_row')}
+                      </th>
+                      <td className={cn(TABLE.group, 'text-right')}>{d.all.count}</td>
+                      {methodCells(d.all.byMethod, d.currency, true)}
+                      <td className={cn(TABLE.group, 'text-right whitespace-nowrap')}>{money(d.all.total, d.currency)}</td>
+                    </tr>
+                  </>
+                )}
+              </tbody>
+            </table>
           </div>
-          {d.days.length === 0 ? (
-            <p className="rounded-md border px-3 py-6 text-center text-sm text-muted-foreground">{t('charges.summary.empty')}</p>
-          ) : (
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full text-sm">
-                <caption className="px-3 py-2 text-left font-medium">{t('charges.summary.caption')}</caption>
-                <thead className="bg-muted/50 text-left">
-                  <tr>
-                    {head('charges.col.day')}
-                    {head('charges.col.count', true)}
-                    {PAYMENT_METHODS.map((m) => head(`vocab.payment_method.${m}`, true))}
-                    {head('charges.col.total', true)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.days.map((x) => (
-                    <tr key={x.day} className="border-t">
-                      <td className="px-3 py-2 whitespace-nowrap">{day(x.day)}</td>
-                      <td className="px-3 py-2 text-right">{x.count}</td>
-                      {methodCells(x.byMethod, d.currency)}
-                      <td className="px-3 py-2 text-right font-medium whitespace-nowrap">{money(x.total, d.currency)}</td>
-                    </tr>
-                  ))}
-                  <tr className="border-t bg-muted/30 font-semibold">
-                    <td className="px-3 py-2">{t('charges.summary.total_row')}</td>
-                    <td className="px-3 py-2 text-right">{d.all.count}</td>
-                    {methodCells(d.all.byMethod, d.currency)}
-                    <td className="px-3 py-2 text-right whitespace-nowrap">{money(d.all.total, d.currency)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
           {d.byStaff.length > 0 && (
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full text-sm">
-                <caption className="px-3 py-2 text-left font-medium">{t('charges.summary.staff_caption')}</caption>
-                <thead className="bg-muted/50 text-left">
-                  <tr>
-                    {head('charges.col.staff')}
-                    {head('charges.col.count', true)}
-                    {PAYMENT_METHODS.map((m) => head(`vocab.payment_method.${m}`, true))}
-                    {head('charges.col.total', true)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.byStaff.map((x) => (
-                    <tr key={x.staffId ?? ''} className="border-t">
-                      <td className="px-3 py-2">{x.name ?? t('charges.summary.unknown_staff')}</td>
-                      <td className="px-3 py-2 text-right">{x.count}</td>
-                      {methodCells(x.byMethod, d.currency)}
-                      <td className="px-3 py-2 text-right font-medium whitespace-nowrap">{money(x.total, d.currency)}</td>
+            <>
+              <SectionHead id={`${ids}-staff`} title={t('charges.summary.staff_caption')} className="mt-3" />
+              <div className={TABLE.wrap}>
+                <table className={TABLE.table} aria-labelledby={`${ids}-staff`}>
+                  <thead>
+                    <tr>
+                      {head('charges.col.staff')}
+                      {head('charges.col.count', true)}
+                      {PAYMENT_METHODS.map((m) => head(`vocab.payment_method.${m}`, true))}
+                      {head('charges.col.total', true)}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {d.byStaff.map((x) => (
+                      <tr key={x.staffId ?? ''}>
+                        <td className={TABLE.td}>{x.name ?? t('charges.summary.unknown_staff')}</td>
+                        <td className={cn(TABLE.td, 'text-right')}>{x.count}</td>
+                        {methodCells(x.byMethod, d.currency)}
+                        <td className={cn(TABLE.td, 'text-right font-semibold whitespace-nowrap')}>{money(x.total, d.currency)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
-          {d.voided.count > 0 && <p className="text-sm text-muted-foreground">{t('charges.summary.voided', { count: d.voided.count, amount: money(d.voided.total, d.currency) })}</p>}
-        </>
+          {d.voided.count > 0 && <p className="text-meta text-muted-foreground">{t('charges.summary.voided', { count: d.voided.count, amount: money(d.voided.total, d.currency) })}</p>}
+        </section>
       )}
     </div>
   );
@@ -1087,18 +1129,13 @@ function PaymentList() {
   const items = q.data?.pages.flatMap((p) => p.items) ?? [];
   const canWaiveAnywhere = holds(me, 'circulation.charges.waive') || Object.values(me?.authenticated === true ? me.branchPermissions : {}).some((p) => p.includes('circulation.charges.waive'));
   return (
-    <div className="flex flex-col gap-3">
+    <div className="grid gap-3">
       <RangeFilter value={range} onApply={setRange} />
       {notice !== null && <Notice kind="success">{notice}</Notice>}
-      {q.isError && <Notice kind="error">{problemText(t, q.error)}</Notice>}
-      {q.data !== undefined && <PaymentsTable payments={items} branchId={null} canWaive={canWaiveAnywhere} onVoid={setVoiding} caption={t('charges.list.caption')} showMember />}
-      {q.hasNextPage && (
-        <Button type="button" variant="outline" className="w-fit" disabled={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>
-          {t('charges.list.more')}
-        </Button>
-      )}
       {voiding !== null && (
         <VoidPaymentDialog
+          inline
+          key={voiding.id}
           branchId={voiding.branchId}
           payment={voiding}
           onClose={() => setVoiding(null)}
@@ -1108,6 +1145,27 @@ function PaymentList() {
             await q.refetch();
           }}
         />
+      )}
+      {q.isError && q.data === undefined && <ErrorState error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />}
+      {q.data === undefined && !q.isError && <SkeletonTable label={t('shell.loading')} columns={6} rows={4} />}
+      {q.data !== undefined && (
+        <PaymentsTable
+          payments={items}
+          branchId={null}
+          canWaive={canWaiveAnywhere}
+          onVoid={(p) => {
+            setNotice(null);
+            setVoiding(p);
+          }}
+          voidingId={voiding?.id ?? null}
+          caption={t('charges.list.caption')}
+          showMember
+        />
+      )}
+      {q.hasNextPage && (
+        <Button type="button" variant="outline" className="w-fit" disabled={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>
+          {t('charges.list.more')}
+        </Button>
       )}
     </div>
   );
@@ -1124,73 +1182,58 @@ export function MemberChargesTab({ memberId }: { memberId: string }) {
     queryKey: ['circulation', 'charges', 'member', memberId],
     queryFn: () => api<MemberChargesResponse>('GET', `circulation/members/${encodeURIComponent(memberId)}/charges`),
   });
-  if (q.isError) return <Notice kind="error">{problemText(t, q.error)}</Notice>;
-  if (q.data === undefined) return <p className="text-sm text-muted-foreground">{t('shell.loading')}</p>;
+  if (q.isError && q.data === undefined) return <ErrorState error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />;
+  if (q.data === undefined) return <SkeletonTable label={t('shell.loading')} columns={5} rows={3} />;
   const d = q.data;
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-sm">
+    <div className="grid gap-6">
+      <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
         <span className="text-muted-foreground">{t('charges.member.balance')}: </span>
-        <span className="text-lg font-semibold">{money(d.balance, d.currency)}</span>
+        <span className="text-base font-bold tabular-nums">{money(d.balance, d.currency)}</span>
       </p>
-      {d.charges.length === 0 ? (
-        <p className="rounded-md border px-3 py-6 text-center text-sm text-muted-foreground">{t('charges.member_page.empty')}</p>
-      ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-sm">
-            <caption className="px-3 py-2 text-left font-medium">{t('charges.member_page.caption')}</caption>
-            <thead className="bg-muted/50 text-left">
-              <tr>
-                <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                  {t('charges.col.charge')}
-                </th>
-                <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                  {t('charges.col.charged_on')}
-                </th>
-                <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                  {t('charges.col.status')}
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium text-muted-foreground">
-                  {t('charges.col.amount')}
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium text-muted-foreground">
-                  {t('charges.col.balance')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {d.charges.map((c) => (
-                <tr key={c.id} className="border-t align-top">
-                  <td className="px-3 py-2">
-                    <p className="font-medium">{t(`vocab.charge_kind.${c.kind}`)}</p>
-                    <p className="text-xs text-muted-foreground">{c.description}</p>
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">{day(c.chargedOn)}</td>
-                  <td className="px-3 py-2">
-                    <Badge tone={c.status === 'open' ? 'warning' : 'neutral'}>{t(`vocab.charge_status.${c.status}`)}</Badge>
-                  </td>
-                  <td className="px-3 py-2 text-right whitespace-nowrap">{money(c.amount, c.currency)}</td>
-                  <td className="px-3 py-2 text-right font-medium whitespace-nowrap">{money(c.balance, c.currency)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <Section title={t('charges.member_page.caption')}>
+        <DenseTable
+          caption={t('charges.member_page.caption')}
+          columns={[
+            {
+              id: 'charge',
+              header: t('charges.col.charge'),
+              cell: (c) => (
+                <>
+                  <p className="font-semibold">{t(`vocab.charge_kind.${c.kind}`)}</p>
+                  <p className="text-meta text-muted-foreground">{c.description}</p>
+                </>
+              ),
+            },
+            { id: 'on', header: t('charges.col.charged_on'), className: 'whitespace-nowrap', cell: (c) => day(c.chargedOn) },
+            {
+              id: 'status',
+              header: t('charges.col.status'),
+              cell: (c) => (c.status === 'open' ? <StatusText tone="warn">{t(`vocab.charge_status.${c.status}`)}</StatusText> : <Tag>{t(`vocab.charge_status.${c.status}`)}</Tag>),
+            },
+            { id: 'amount', header: t('charges.col.amount'), headClassName: 'text-right', className: 'text-right whitespace-nowrap', cell: (c) => money(c.amount, c.currency) },
+            { id: 'balance', header: t('charges.col.balance'), headClassName: 'text-right', className: 'text-right font-semibold whitespace-nowrap', cell: (c) => money(c.balance, c.currency) },
+          ]}
+          rows={d.charges}
+          rowKey={(c) => c.id}
+          empty={t('charges.member_page.empty')}
+        />
+      </Section>
       {d.adjustments.length > 0 && (
-        <div className="rounded-md border p-3 text-sm">
-          <p className="mb-2 font-medium">{t('charges.member_page.adjustments')}</p>
-          <ul className="grid gap-1">
+        <Section title={t('charges.member_page.adjustments')}>
+          <ul className="grid rounded-lg border text-sm">
             {d.adjustments.map((a) => (
-              <li key={a.id}>
-                {t(`vocab.charge_adjustment_kind.${a.kind}`)} {money(a.amount, d.currency)} — {a.reason}
+              <li key={a.id} className="border-b px-3 py-2.5 last:border-b-0">
+                {t(`vocab.charge_adjustment_kind.${a.kind}`)} <span className="font-semibold tabular-nums">{money(a.amount, d.currency)}</span> — {a.reason}
                 {a.by !== null && <span className="text-muted-foreground"> {t('charges.member_page.by', { name: a.by })}</span>}
               </li>
             ))}
           </ul>
-        </div>
+        </Section>
       )}
-      <PaymentsTable payments={d.payments} branchId={null} canWaive={false} caption={t('charges.payments.caption')} />
+      <Section title={t('charges.payments.caption')}>
+        <PaymentsTable payments={d.payments} branchId={null} canWaive={false} caption={t('charges.payments.caption')} />
+      </Section>
     </div>
   );
 }

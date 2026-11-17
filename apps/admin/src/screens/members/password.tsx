@@ -1,7 +1,8 @@
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import type { MemberView } from '@altis/shared/api/members';
-import { useState, type FormEvent } from 'react';
-import { Field, ProblemAlert } from '@/components/form-field';
+import { useState, type FormEvent, type ReactNode } from 'react';
+import { CheckField, Field, ProblemAlert } from '@/components/form-field';
+import { InlinePanel } from '@/components/layout';
 import { useReturnFocus } from '@/components/return-focus';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -15,10 +16,26 @@ import { passwordWeaknessKey } from '@/lib/form-errors';
  * remove it, optionally asking the member for a new one at the next sign-in (`PUT members/:id/password`, which asks for
  * the staff user's own password first: the API client opens the re-authentication dialog on 401 and sends again).
  * Every session of the member ends. The password is never shown again; a refusal of the policy says why.
+ *
+ * Two ways to show the same form: {@link MemberPasswordPanel}, a panel in the member page (the layout guide's way: no
+ * dialog for a form), and {@link MemberPasswordDialog}, a dialog for a page that has no place for the panel yet.
  */
-export function MemberPasswordDialog({ member, open, onClose, onDone }: { member: MemberView; open: boolean; onClose(): void; onDone(text: string): void }) {
+
+interface PasswordForm {
+  password: string;
+  setPassword(value: string): void;
+  mustReset: boolean;
+  setMustReset(value: boolean): void;
+  error: TKey | null;
+  problem: unknown;
+  busy: boolean;
+  submit(event: FormEvent<HTMLFormElement>): void;
+  clear(): void;
+  close(): void;
+}
+
+function usePasswordForm(member: MemberView, onClose: () => void, onDone: (text: string) => void): PasswordForm {
   const t = useT();
-  const focus = useReturnFocus();
   const [password, setPassword] = useState('');
   const [mustReset, setMustReset] = useState(true);
   const [error, setError] = useState<TKey | null>(null);
@@ -60,32 +77,70 @@ export function MemberPasswordDialog({ member, open, onClose, onDone }: { member
     void send({ password, mustReset });
   };
 
+  return { password, setPassword, mustReset, setMustReset, error, problem, busy, submit, clear: () => void send({ password: null, mustReset: false }), close };
+}
+
+/** The new password, "ask for a new one at the next sign-in", and the refusal. */
+function PasswordFields({ form }: { form: PasswordForm }): ReactNode {
+  const t = useT();
   return (
-    <Dialog open={open} onOpenChange={(next) => (next ? undefined : close())}>
+    <>
+      <Field label={t('members.password.field')} hint={t('members.password.hint')} error={form.error ?? undefined} className="max-w-md">
+        {(c) => <Input {...c} type="password" autoComplete="new-password" maxLength={256} value={form.password} onChange={(e) => form.setPassword(e.target.value)} />}
+      </Field>
+      <CheckField label={t('members.password.must_reset')} checked={form.mustReset} onChange={(e) => form.setMustReset(e.target.checked)} />
+      <ProblemAlert error={form.problem} />
+    </>
+  );
+}
+
+/** The password form as a panel in the member page, under the head whose menu opened it. */
+export function MemberPasswordPanel({ member, onClose, onDone }: { member: MemberView; onClose(): void; onDone(text: string): void }) {
+  const t = useT();
+  const form = usePasswordForm(member, onClose, onDone);
+  return (
+    <InlinePanel title={t('members.password.title')} onSubmit={form.submit} onCancel={form.close}>
+      <p className="-mt-1.5 max-w-[75ch] text-sm text-muted-foreground">{t('members.password.intro')}</p>
+      <PasswordFields form={form} />
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" size="sm" disabled={form.busy}>
+          {t(form.busy ? 'form.saving' : 'members.password.save')}
+        </Button>
+        <Button type="button" size="sm" variant="outline" disabled={form.busy} onClick={form.clear}>
+          {t('members.password.clear')}
+        </Button>
+        <Button type="button" size="sm" variant="outline" disabled={form.busy} onClick={form.close}>
+          {t('form.cancel')}
+        </Button>
+      </div>
+    </InlinePanel>
+  );
+}
+
+/** The password form as a dialog (`open` shows it). */
+export function MemberPasswordDialog({ member, open, onClose, onDone }: { member: MemberView; open: boolean; onClose(): void; onDone(text: string): void }) {
+  const t = useT();
+  const focus = useReturnFocus();
+  const form = usePasswordForm(member, onClose, onDone);
+  return (
+    <Dialog open={open} onOpenChange={(next) => (next ? undefined : form.close())}>
       {open && (
         <DialogContent closeLabel={t('form.cancel')} onOpenAutoFocus={focus.onOpenAutoFocus} onCloseAutoFocus={focus.onCloseAutoFocus} className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{t('members.password.title')}</DialogTitle>
             <DialogDescription>{t('members.password.intro')}</DialogDescription>
           </DialogHeader>
-          <form noValidate className="grid gap-4" onSubmit={submit}>
-            <Field label={t('members.password.field')} hint={t('members.password.hint')} error={error ?? undefined}>
-              {(c) => <Input {...c} type="password" autoComplete="new-password" maxLength={256} value={password} onChange={(e) => setPassword(e.target.value)} />}
-            </Field>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" className="size-4 accent-primary" checked={mustReset} onChange={(e) => setMustReset(e.target.checked)} />
-              {t('members.password.must_reset')}
-            </label>
-            <ProblemAlert error={problem} />
+          <form noValidate className="grid gap-4" onSubmit={form.submit}>
+            <PasswordFields form={form} />
             <DialogFooter className="flex-wrap">
-              <Button type="button" variant="outline" disabled={busy} onClick={() => void send({ password: null, mustReset: false })}>
+              <Button type="button" variant="outline" disabled={form.busy} onClick={form.clear}>
                 {t('members.password.clear')}
               </Button>
-              <Button type="button" variant="outline" disabled={busy} onClick={close}>
+              <Button type="button" variant="outline" disabled={form.busy} onClick={form.close}>
                 {t('form.cancel')}
               </Button>
-              <Button type="submit" disabled={busy}>
-                {t(busy ? 'form.saving' : 'members.password.save')}
+              <Button type="submit" disabled={form.busy}>
+                {t(form.busy ? 'form.saving' : 'members.password.save')}
               </Button>
             </DialogFooter>
           </form>
