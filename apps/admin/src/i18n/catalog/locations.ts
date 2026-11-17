@@ -95,6 +95,7 @@ export const LOCATIONS_ID = {
   'catalog.locations.map.discard_title': 'Buang kotak yang belum disimpan?',
   'catalog.locations.map.discard_body': '{count} kotak di peta ini belum disimpan. Bila dilanjutkan, perubahan itu hilang.',
   'catalog.locations.map.discard_confirm': 'Buang perubahan',
+  'catalog.locations.filters': 'Saringan lokasi',
 } as const;
 
 export const LOCATIONS_EN: Record<keyof typeof LOCATIONS_ID, string> = {
@@ -188,4 +189,5 @@ export const LOCATIONS_EN: Record<keyof typeof LOCATIONS_ID, string> = {
   'catalog.locations.map.discard_title': 'Discard the unsaved boxes?',
   'catalog.locations.map.discard_body': '{count} box(es) on this map are not saved yet. If you go on, those changes are lost.',
   'catalog.locations.map.discard_confirm': 'Discard the changes',
+  'catalog.locations.filters': 'Location filters',
 };
