@@ -4,7 +4,7 @@ import type { MemberListItem } from '@altis/shared/api/members';
 import { useQueryClient } from '@tanstack/react-query';
 import { useId, useState, type FormEvent } from 'react';
 import { Field, Notice, ProblemAlert, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
-import { Callout, InlinePanel, SelectionBar } from '@/components/layout';
+import { Callout, InlinePanel, PageError, SelectionBar } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
@@ -142,7 +142,7 @@ export function BulkBar({ selected, onClear, canManage }: { selected: MemberList
         title={panel === 'promote' ? t('members.tools.bulk.promote') : t('members.tools.bulk.panel_title', { action: t(`members.tools.bulk.${panel}`), count })}
         onSubmit={(e) => void submit(e)}
         onCancel={() => setPanel(null)}>
-        <div className="grid max-w-3xl gap-3 sm:grid-cols-2">
+        <div className="grid max-w-3xl gap-x-5 gap-y-4 sm:grid-cols-2">
           {panel === 'extend' && (
             <>
               <Field id={`${ids}-from`} label={t('members.tools.bulk.from')}>
@@ -195,11 +195,7 @@ export function BulkBar({ selected, onClear, canManage }: { selected: MemberList
             </Field>
           )}
         </div>
-        {error !== null && (
-          <p role="alert" className="text-sm text-bad">
-            {error}
-          </p>
-        )}
+        {error !== null && <PageError title={error} />}
         <ProblemAlert error={problem} />
         {result !== null && (
           <Callout tone={result.refused.length > 0 ? 'warn' : 'ok'} role="status" title={t('members.tools.bulk.done', { done: result.done })}>
