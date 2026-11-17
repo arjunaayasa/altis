@@ -29,7 +29,7 @@ import { AKUN_CSS } from './akun.js';
 // ---- Komunitas (OPAC home page) ----
 import { HOME_CSS } from './home.js';
 
-export { ACCENTS, ACCENT_COLORS, BAR_COLORS, DEFAULT_ACCENT, SCHEME_COLORS, isAccent } from './base.js';
+export { ACCENTS, ACCENT_COLORS, BAR_COLORS, DEFAULT_ACCENT, FRESH_INSTALL_ACCENT, SCHEME_COLORS, isAccent } from './base.js';
 export type { AccentName } from './base.js';
 export { contrastRatio, hexRgb, oklchHex, oklchToRgb, rgbHex } from './color.js';
 export type { Rgb } from './color.js';

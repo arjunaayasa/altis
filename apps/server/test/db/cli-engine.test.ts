@@ -95,6 +95,8 @@ describe.skipIf(!engine.available)(`CLI against the database [${engineLabel()}]`
         { key: 'library.locale', value: '"id"', scope: 'data', is_secret: 0 },
         { key: 'library.name', value: '"Pustaka Engine"', scope: 'data', is_secret: 0 },
         { key: 'library.timezone', value: '"Asia/Jakarta"', scope: 'data', is_secret: 0 },
+        // A fresh install starts with the design's blue accent (stored; the setting's default stays the older one).
+        { key: 'opac.accent', value: '"blue"', scope: 'data', is_secret: 0 },
       ]);
       expect((await h.db.selectFrom('schema_meta').select('install_id').executeTakeFirstOrThrow()).install_id).toBe(id);
       // The community edition records no licence or trial.
