@@ -124,6 +124,28 @@ describe('Meja Layanan', () => {
     expect(await screen.findByRole('tab', { name: 'Dipinjam (1)' })).toBeTruthy();
   });
 
+  it('a member with overdue loans loads as a warning that names them; one without loads as a success', async () => {
+    let member = deskMember({ counts: { openLoans: 2, overdue: 1, holdsReady: 0 } });
+    start({
+      'POST branches/:branchId/circulation/members/lookup': () => member,
+      'GET branches/:branchId/circulation/members/:memberId': () => member,
+    });
+    await scan('A001');
+    expect(await screen.findByText('Anggota dimuat: Budi Santoso')).toBeTruthy();
+    const card = screen.getByTestId('desk-feedback');
+    expect(card.getAttribute('data-tone')).toBe('warning');
+    expect(within(card).getByText('Pindai eksemplar untuk dipinjam. 1 pinjaman terlambat. Peminjaman tetap bisa. Lihat tab Dipinjam (F7).')).toBeTruthy();
+    await waitFor(() => expect(within(screen.getAllByRole('status')[0]!).queryByText(/1 pinjaman terlambat\./)).toBeTruthy());
+
+    member = deskMember({ id: '01JZ0000000000000000000A02', memberNo: 'A002', name: 'Siti Aminah' });
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await screen.findByText('Belum ada anggota');
+    await scan('A002');
+    expect(await screen.findByText('Anggota dimuat: Siti Aminah')).toBeTruthy();
+    expect(screen.getByTestId('desk-feedback').getAttribute('data-tone')).toBe('success');
+    expect(within(screen.getByTestId('desk-feedback')).getByText('Pindai eksemplar untuk dipinjam.')).toBeTruthy();
+  });
+
   it('Ctrl+Z voids the last loan, and the slip (F9) then leaves that loan out', async () => {
     let member = deskMember();
     const app = start({

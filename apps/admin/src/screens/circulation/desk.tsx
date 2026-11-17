@@ -449,7 +449,9 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
     setReceipt(null);
     setVisitPayments([]);
     const refusal = borrowRefusalText(t, view);
-    const notes = warningTexts(t, day, view.warnings);
+    // Overdue loans do not stop lending, but the desk should see them at once: the card turns to a warning and says so.
+    const late = view.counts.overdue > 0 ? [`${t('circulation.member.late_title', { count: view.counts.overdue })}.`, t('circulation.member.late_body')] : [];
+    const notes = [...late, ...warningTexts(t, day, view.warnings)];
     if (refusal !== null) say(view.borrowRefusal === 'CIRC_LIMIT_REACHED' || view.borrowRefusal === 'MEMBER_SUSPENDED' ? 'warning' : 'error', t('circulation.feedback.member_loaded', { name: view.name }), refusal);
     else say(notes.length > 0 ? 'warning' : 'success', t('circulation.feedback.member_loaded', { name: view.name }), [t('circulation.feedback.scan_items'), ...notes].join(' '));
   };
@@ -1274,8 +1276,8 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
             ) : (
               member !== null && (
                 <Tabs value={tab} onValueChange={(v) => setTab(v as PanelTab)} className="min-w-0">
-                  <div className="flex flex-wrap items-end justify-between gap-2">
-                    <TabsList className={WRAPPING_TABS.list} aria-label={t('circulation.tabs.label')}>
+                  <div className="flex items-end gap-2 border-b">
+                    <TabsList className={cn(WRAPPING_TABS.list, 'w-auto min-w-0 flex-1 border-b-0')} aria-label={t('circulation.tabs.label')}>
                       <TabsTrigger value="visit" className={WRAPPING_TABS.trigger}>
                         {t('circulation.tab.visit', { count: visit.length })}
                       </TabsTrigger>
