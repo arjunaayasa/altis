@@ -263,11 +263,14 @@ export function ContactLines(props: { locale: Locale; phone: string | null | und
 function Footer(props: { locale: Locale; libraryName: string | undefined; footer: SiteFooter | undefined; logo: SiteLogo | null; year: number }) {
   const { locale, libraryName, footer, logo } = props;
   const hasContact = footer !== undefined && ((footer.phone ?? '').trim() !== '' || (footer.email ?? '').trim() !== '');
+  const showContact = footer !== undefined && libraryName !== undefined && (footer.address !== null || hasContact || logo !== null);
+  // The wide grid has a column per block: without the contact or the hours the others share the row.
+  const blocks = footer === undefined ? 0 : 2 + (showContact ? 1 : 0) + (footer.hours.length === 0 ? 0 : 1);
   return (
     <footer class="site-footer">
       {footer === undefined ? null : (
-        <div class="foot-grid">
-          {libraryName === undefined || (footer.address === null && !hasContact && logo === null) ? null : (
+        <div class={blocks === 4 ? 'foot-grid' : `foot-grid foot-grid-${blocks}`}>
+          {!showContact ? null : (
             <div class="foot-block">
               {logo === null ? null : <LogoImage logo={logo} class="foot-logo" />}
               <h2>{libraryName}</h2>
