@@ -106,4 +106,18 @@ describe('InlinePanel', () => {
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Alasan' })).toBeNull());
     expect(document.activeElement).toBe(open);
   });
+
+  it('gives it back too when the focus fell out of it before it closed (a browser drops it from a button disabled while saving)', async () => {
+    render(<Row />);
+    const open = screen.getByRole('button', { name: 'Catatan…' });
+    open.focus();
+    fireEvent.click(open);
+    const field = await screen.findByRole('textbox', { name: 'Alasan' });
+    await waitFor(() => expect(document.activeElement).toBe(field));
+    field.blur();
+    expect(document.activeElement).toBe(document.body);
+    fireEvent.submit(field.closest('form')!);
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Alasan' })).toBeNull());
+    expect(document.activeElement).toBe(open);
+  });
 });

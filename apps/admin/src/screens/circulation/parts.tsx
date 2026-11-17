@@ -86,9 +86,10 @@ export function Callout({
 /**
  * A panel opened in the page instead of a dialog: a heading, its fields and its buttons, on the neutral layer. As a
  * form (`onSubmit`) it is labelled by its heading. On opening, the focus moves to the first field (or the element marked
- * `data-autofocus`); Esc inside it calls `onCancel`. When it closes (cancelled, Esc, saved) with the focus inside, the
- * focus goes back to the element that had it when the panel opened, as a dialog gives it back to its trigger; to the
- * page's main region (`#main` of the shell) when that element is gone meanwhile.
+ * `data-autofocus`); Esc inside it calls `onCancel`. When it closes (cancelled, Esc, saved) with the focus inside, or
+ * with the focus on nothing (a browser drops it from a button disabled while saving), the focus goes back to the element
+ * that had it when the panel opened, as a dialog gives it back to its trigger; to the page's main region (`#main` of
+ * the shell) when that element is gone meanwhile.
  */
 export function InlinePanel({
   title,
@@ -114,7 +115,8 @@ export function InlinePanel({
     const active = document.activeElement;
     if (active instanceof HTMLElement && active !== document.body && root?.contains(active) !== true) opener.current = active;
     return () => {
-      if (root === null || !root.contains(document.activeElement)) return;
+      const now = document.activeElement;
+      if (root === null || (now !== null && now !== document.body && !root.contains(now))) return;
       const target = opener.current;
       if (target !== null && target.isConnected && !root.contains(target)) target.focus();
       else document.getElementById('main')?.focus();
