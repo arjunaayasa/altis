@@ -1,5 +1,5 @@
 import type { Alert as SystemAlert, AlertSeverity } from '@altis/shared/api/dashboard';
-import { DASHBOARD_EXPIRING_DAYS, DASHBOARD_LONG_OVERDUE_DAYS } from '@altis/shared/api/dashboard-home';
+import { DASHBOARD_DUE_SOON_DAYS, DASHBOARD_EXPIRING_DAYS, DASHBOARD_LONG_OVERDUE_DAYS } from '@altis/shared/api/dashboard-home';
 import { useId } from 'react';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/i18n';
@@ -16,7 +16,8 @@ import { useCount, useDeskToday, useLibraryToday } from '@/screens/dashboard-tod
  * carry, so each line shows only to a user who may read its data and open its screen:
  *
  * - the system dashboard's alerts (`GET dashboard`, filtered there by permission), errors first;
- * - loans more than 14 days overdue at any branch (`circulation.records.read`) → the overdue list;
+ * - loans more than 14 days overdue at any branch (`circulation.records.read`) → the overdue list; loans due within
+ *   two days → its due-soon tab;
  * - at the desk's branch (`circulation.desk.use` there): copies on the hold shelf to clear (past their pickup date,
  *   expired or cancelled), and holds ready for pickup → the hold shelf;
  * - active memberships ending within 14 days (`members.records.read`) → the expiring members report, set to 14 days
@@ -76,6 +77,13 @@ export function useAttentionItems(): Item[] {
       holds(me, 'circulation.records.read') ? '/admin/layanan/terlambat' : null,
       'bad',
     ),
+    // ---- Komunitas (staff screens' data) ----
+    ...counted(
+      'due_soon',
+      t('dashboard.home.attention.due_soon', { days: DASHBOARD_DUE_SOON_DAYS }),
+      library.data?.loans?.dueSoon,
+      holds(me, 'circulation.records.read') ? '/admin/layanan/terlambat' : null,
+    ).map((item) => ({ ...item, search: { tab: 'due_soon' } })),
     ...counted('holds_to_clear', t('dashboard.home.attention.holds_to_clear'), d?.holdsToClear, '/admin/layanan/rak-tunggu', 'warn'),
     ...counted('holds_ready', t('dashboard.today.holds_ready'), d?.holdsReady, '/admin/layanan/rak-tunggu'),
     ...counted(

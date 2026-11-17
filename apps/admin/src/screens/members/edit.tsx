@@ -550,6 +550,13 @@ export function MemberDetailScreen() {
             label: t('members.summary.on_loan'),
             value: m.type.loanLimit === null ? String(m.openLoans) : t('circulation.member.loans_of', { count: m.openLoans, limit: m.type.loanLimit }),
           },
+          // ---- Komunitas (staff screens' data): the overdue loans, red when there are any ----
+          {
+            key: 'overdue',
+            label: t('circulation.member.overdue'),
+            value: String(m.overdueLoans ?? 0),
+            ...((m.overdueLoans ?? 0) > 0 ? { tone: 'bad' as const } : {}),
+          },
           {
             key: 'until',
             label: t('members.col.valid_until'),
@@ -558,7 +565,6 @@ export function MemberDetailScreen() {
             ...(m.status === 'expired' ? { tone: 'bad' as const } : {}),
           },
           { key: 'joined', label: t('members.summary.joined'), value: day(m.joinedOn) },
-          { key: 'from', label: t('members.summary.valid_from'), value: day(m.validFrom) },
           { key: 'source', label: t('members.summary.source'), value: <span className="text-sm font-normal">{sourceText(t, m.source)}</span> },
         ]}
       />

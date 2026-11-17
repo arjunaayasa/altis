@@ -38,6 +38,8 @@ import {
 import type { RunStatus } from '../catalog-vocab.js';
 import { emailField, localeField, ulidField, versionField } from './common.js';
 import { codeField, cursorQuery, customValuesField, dateField, longText, shortText, sortOrderField, type Paged } from './catalog/common.js';
+// ---- Komunitas (staff screens' data) ----
+import type { TypeLoanRule } from './circulation.js';
 
 // ---- fields ----------------------------------------------------------------------------------------------------------
 
@@ -118,6 +120,9 @@ export interface MemberTypeView {
   memberCount: number;
   archived: boolean;
   version: number;
+  // ---- Komunitas (staff screens' data) ----
+  /** The loan period and renewals of the type's general loan rule (read-only here); null when no rule covers it. */
+  loanRule?: TypeLoanRule | null;
 }
 
 /** `GET members/types` (at most a few hundred rows). */
@@ -227,6 +232,11 @@ export const MemberSearchBody = z.strictObject({
 
 export type MemberSearchBody = z.infer<typeof MemberSearchBody>;
 
+/** `GET members/classes` (`members.records.read`): the classes of the live members, by name (at most a few thousand). */
+export interface MemberClassesResponse {
+  items: string[];
+}
+
 /** `POST members/lookup` (a POST read) → `MemberView`; 404 NOT_FOUND when no live member has the number. */
 export const MemberLookupBody = z.strictObject({ no: rawMemberNoField });
 
@@ -257,6 +267,10 @@ export interface MemberListItem {
   status: MemberStatus;
   expiresOn: string | null;
   photoFileId: string | null;
+  // ---- Komunitas (staff screens' data) ----
+  /** The member's open loans now, and how many of them are past due (each by its own branch's today). */
+  openLoans?: number;
+  overdueLoans?: number;
 }
 
 /** `POST members/search`. */
@@ -292,6 +306,8 @@ export interface MemberView {
   expiresOn: string | null;
   /** The member's open loans now (a count; the loans themselves are `GET circulation/loans?memberId=`). */
   openLoans: number;
+  /** How many of those are past due, each by its own branch's today. */
+  overdueLoans?: number;
   /** `manual`, `import:<runId>` or `slims:<id>`. */
   source: string | null;
   archived: boolean;
@@ -320,6 +336,61 @@ export type MemberEventsResponse = Paged<MemberEventView>;
 
 // ---- the CSV member import -------------------------------------------------------------------------------------------
 
+/** The fields an import column can feed, as the `csv-members` header names them, in the template's order. */
+export const MEMBER_IMPORT_COLUMNS = Object.freeze([
+  'member_no',
+  'name',
+  'member_type',
+  'class_name',
+  'identity_no',
+  'gender',
+  'birth_date',
+  'email',
+  'phone',
+  'address',
+  'postal_code',
+  'mailing_address',
+  'institution',
+  'joined_on',
+  'expires_on',
+  'home_branch',
+  'notes',
+  'locale',
+] as const);
+
+export type MemberImportColumn = (typeof MEMBER_IMPORT_COLUMNS)[number];
+
+/** The fields every import must fill. */
+export const MEMBER_IMPORT_REQUIRED_COLUMNS: readonly MemberImportColumn[] = Object.freeze(['member_no', 'name', 'member_type'] as const);
+
+/** The most columns an import mapping may name. */
+export const MEMBER_IMPORT_COLUMNS_MAX = 200;
+
+/**
+ * The columns of a SLiMS member export, in their fixed order, and the field each feeds by default (null: ignored).
+ * The type column holds the type's name; the gender (a number there), the PIN, the photo and the fax are not taken.
+ */
+export const SLIMS_MEMBER_EXPORT_COLUMNS: readonly (readonly [string, MemberImportColumn | null])[] = Object.freeze([
+  ['member_id', 'member_no'],
+  ['member_name', 'name'],
+  ['gender', null],
+  ['member_type_name', 'member_type'],
+  ['member_email', 'email'],
+  ['member_address', 'address'],
+  ['postal_code', 'postal_code'],
+  ['inst_name', 'institution'],
+  ['is_new', null],
+  ['member_image', null],
+  ['pin', null],
+  ['member_phone', 'phone'],
+  ['member_fax', null],
+  ['member_since_date', 'joined_on'],
+  ['register_date', null],
+  ['expire_date', 'expires_on'],
+  ['birth_date', 'birth_date'],
+  ['member_notes', 'notes'],
+] as const);
+
 /**
  * `POST members/imports` → 202 `MemberImportStartResponse`. The file is a completed upload of the staged context
  * `members.import` (`uploadId`; text or CSV, at most 50 MB, at most 50 000 rows). The reader accepts `,` or `;` as the
@@ -340,6 +411,22 @@ export const MemberImportBody = z.strictObject({
   format: z.enum(MEMBER_IMPORT_FORMATS).default('csv-members'),
   mode: z.enum(MEMBER_IMPORT_MODES).default('create_only'),
   dryRun: z.boolean().default(true),
+  // ---- Komunitas (staff screens' data) ----
+  /**
+   * The field each column of the file feeds, by position (null: the column is ignored), in place of the header's
+   * names (`csv-members`) or the fixed order (`slims-members`). Each field once (`duplicate`), the required ones
+   * present (`required`).
+   */
+  columns: z
+    .array(z.enum(MEMBER_IMPORT_COLUMNS).nullable())
+    .min(1)
+    .max(MEMBER_IMPORT_COLUMNS_MAX)
+    .superRefine((list, ctx) => {
+      const named = list.filter((c): c is MemberImportColumn => c !== null);
+      if (new Set(named).size !== named.length) ctx.addIssue({ code: 'custom', message: 'duplicate', params: { code: 'duplicate' } });
+      if (MEMBER_IMPORT_REQUIRED_COLUMNS.some((c) => !named.includes(c))) ctx.addIssue({ code: 'custom', message: 'required', params: { code: 'required' } });
+    })
+    .optional(),
 });
 
 export type MemberImportBody = z.infer<typeof MemberImportBody>;

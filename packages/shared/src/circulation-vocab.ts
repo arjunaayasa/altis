@@ -53,8 +53,11 @@ export type Gender = (typeof GENDERS)[number];
 
 // ---- the CSV member import -------------------------------------------------------------------------------------------
 
-/** The member import's file formats: the ALTIS CSV layout (a header row naming the columns, in any order). */
-export const MEMBER_IMPORT_FORMATS = Object.freeze(['csv-members'] as const);
+/**
+ * The member import's file formats: the ALTIS CSV layout (a header row naming the columns, in any order) and the
+ * member export of a SLiMS library (its 18 columns in their fixed order, with or without their names in the first row).
+ */
+export const MEMBER_IMPORT_FORMATS = Object.freeze(['csv-members', 'slims-members'] as const);
 
 export type MemberImportFormat = (typeof MEMBER_IMPORT_FORMATS)[number];
 

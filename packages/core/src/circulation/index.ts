@@ -172,3 +172,9 @@ export {
 } from './notices-jobs.js';
 export type { NoticesBuildCounts, NoticesBuildPayload } from './notices-jobs.js';
 export { NOTICE_RETENTION_DAYS, noticesRetentionStep } from './notices-retention.js';
+// ---- Komunitas (staff screens' data) ----
+// The overdue and due-soon search, the classes of borrowing members, the open and overdue loans of a list of members,
+// a type's general loan terms, and what the desk may say about a scanned item.
+export { CLASS_LIST_MAX, loanClassNames, openLoanCounts, searchLoans } from './loans.js';
+export { typeLoanRules } from './policies.js';
+export { deskItemGlance } from './desk.js';

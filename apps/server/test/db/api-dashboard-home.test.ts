@@ -71,20 +71,22 @@ describe.skipIf(!ctx.available)(`Beranda's library figures through the API [${en
   it('the library sections: each only for a holder of its permission', async () => {
     const none = await getter('tanpa_izin', [{ permissions: ['catalog.records.read'] }]);
     const res = await none('/api/v1/dashboard/library');
-    expect([res.status, res.headers.get('cache-control'), res.json]).toEqual([200, 'no-store', { today: '2026-03-15', members: null, loans: null, usage: null }]);
+    expect([res.status, res.headers.get('cache-control'), res.json]).toEqual([200, 'no-store', { today: '2026-03-15', members: null, loans: null, usage: null, openToday: null }]);
     const members = await getter('anggota', [{ permissions: ['members.records.read'] }]);
     expect((await members('/api/v1/dashboard/library')).json).toEqual({
       today: '2026-03-15',
       members: { active: 0, joinedThisMonth: 0, expiringSoon: 0 },
       loans: null,
       usage: null,
+      openToday: null,
     } satisfies LibraryDashboard);
     const stats = await getter('statistik', [{ permissions: ['reports.statistics.read', 'circulation.records.read'] }]);
     expect((await stats('/api/v1/dashboard/library')).json).toEqual({
       today: '2026-03-15',
       members: null,
-      loans: { longOverdue: 0 },
+      loans: { longOverdue: 0, dueSoon: 0 },
       usage: { from: '2026-02-14', to: '2026-03-15', bySubject: [], topTitles: [] },
+      openToday: null,
     } satisfies LibraryDashboard);
   });
 });

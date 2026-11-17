@@ -91,3 +91,5 @@ export type {
 } from './area/account.js';
 export { MAIL_MEMBER_PASSWORD_RESET, enqueueMemberResetMail, memberResetMailJob } from './area/mail.js';
 export type { MemberResetMail } from './area/mail.js';
+// ---- Komunitas (staff screens' data) ----
+export { memberClassNames } from './members.js';

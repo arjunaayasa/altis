@@ -27,6 +27,8 @@ import { MATRIX as Usage } from './komunitas-usage.js';
 import { MATRIX as LibraryStatistics } from './komunitas-library-statistics.js';
 // ---- Komunitas (Beranda's library figures) ----
 import { MATRIX as DashboardHome } from './komunitas-dashboard.js';
+// ---- Komunitas (staff screens' data) ----
+import { MATRIX as StaffData } from './komunitas-staff-data.js';
 import { mergeAreaMatrices, type AreaMatrix } from './catalog.js';
 
 // The community rows of the permission matrix (reports and accreditation): one file per area
@@ -74,6 +76,8 @@ const AREAS: Readonly<Record<string, AreaMatrix>> = Object.freeze({
   'opac-home': OpacHome,
   // ---- Komunitas (Beranda's library figures) ----
   'dashboard-home': DashboardHome,
+  // ---- Komunitas (staff screens' data) ----
+  'staff-data': StaffData,
 });
 
 /** Every community area, merged. */

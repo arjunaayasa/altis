@@ -156,13 +156,13 @@ describe.skipIf(!ctx.available)(`Beranda's library figures [${engineLabel()}]`, 
   });
 
   it('the library sections, each only for its readers', async () => {
-    expect(await libraryDashboard(h.db, grantsOf([]), NOW)).toEqual({ today: '2026-03-15', members: null, loans: null, usage: null });
+    expect(await libraryDashboard(h.db, grantsOf([]), NOW)).toEqual({ today: '2026-03-15', members: null, loans: null, usage: null, openToday: null });
     const all = await libraryDashboard(h.db, grantsOf(['members.records.read', 'circulation.records.read', 'reports.statistics.read']), NOW);
     // Valid today: Ana, Budi, Cici, Gita (Dodi expired, Eka and Hadi suspended, Fajar archived); ending by 29 March:
     // Budi, Gita.
     expect(all.members).toEqual({ active: 4, joinedThisMonth: 2, expiringSoon: 2 });
     // More than 14 days late: due 27 Feb (UT, 16 days) and 23 Feb (CB); not 1 March (14 days) nor 14 March.
-    expect(all.loans).toEqual({ longOverdue: 2 });
+    expect(all.loans).toEqual({ longOverdue: 2, dueSoon: 0 });
     expect(all.usage).toEqual({
       from: '2026-02-14',
       to: '2026-03-15',
