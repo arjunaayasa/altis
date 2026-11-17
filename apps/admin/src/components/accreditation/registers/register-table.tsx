@@ -598,7 +598,7 @@ export function RegisterSection<T extends RegisterRow>({
       {notice !== null && <Notice kind="success">{notice}</Notice>}
       {dialog !== null && (
         <InlinePanel title={title()} onCancel={() => setDialog(null)} className="max-w-4xl">
-          <p className="text-sm text-muted-foreground">{t(`accreditation.registers.${kind}.intro`)}</p>
+          {/* The register's intro stands right above the panel already: not said twice. */}
           {dialog.created && row !== null && <Notice kind="success">{t('accreditation.registers.done.created', { name: nameOf(row) })}</Notice>}
           {/* Esc in a confirmation opened from the panel closes that confirmation only, not the panel. */}
           <div

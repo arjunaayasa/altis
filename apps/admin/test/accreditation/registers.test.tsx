@@ -269,6 +269,9 @@ describe('the Register tab', () => {
     await screen.findByRole('table', { name: 'Daftar kegiatan' });
     fireEvent.click(screen.getByRole('button', { name: 'Tambah kegiatan' }));
     const dialog = await screen.findByRole('region', { name: 'Tambah kegiatan' });
+    // The register's intro stands above the panel, once: the panel does not say it again.
+    expect(screen.getAllByText(/^Kegiatan perpustakaan: promosi, bimbingan/)).toHaveLength(1);
+    expect(within(dialog).queryByText(/^Kegiatan perpustakaan: promosi, bimbingan/)).toBeNull();
     fireEvent.change(within(dialog).getByLabelText('Jenis kegiatan'), { target: { value: 'reading_guidance' } });
     fireEvent.change(within(dialog).getByLabelText('Judul'), { target: { value: 'Bimbingan membaca kelas 7' } });
     fireEvent.change(within(dialog).getByLabelText('Tanggal pelaksanaan'), { target: { value: '2026-08-12' } });
