@@ -223,7 +223,8 @@ describe('Aturan Peminjaman', () => {
       expect.stringContaining('DEFAULT'),
     ]);
     expect(within(ranking).getByText('Paling banyak dimensi terisi')).toBeTruthy();
-    expect(screen.getByText('500 IDR (tenggang 1 hari)')).toBeTruthy();
+    // The fine is money in the library's currency, as everywhere else (not a bare amount and a code).
+    expect(screen.getByText('Rp 500 (tenggang 1 hari)')).toBeTruthy();
   });
 });
 
