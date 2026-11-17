@@ -5,7 +5,7 @@ import { ModuleBar, ModuleMenu, RouterAnchor, itemLabel, moduleLabel } from '@/c
 import { UserMenu } from '@/components/shell/user-menu';
 import { Button } from '@/components/ui/button';
 import { useLocale, useT } from '@/i18n';
-import { activeModule, activeNavPath, visibleModules, visibleShortcuts } from '@/lib/nav';
+import { activeModule, activeNavPath, visibleModules, visibleShortcuts, type ModuleView } from '@/lib/nav';
 import { cn } from '@/lib/utils';
 
 type SignedIn = Extract<MeResponse, { authenticated: true }>;
@@ -41,8 +41,9 @@ export function ShellFrame({ me, pathname, onPalette, onLogout, children }: { me
 
   const modules = visibleModules(me);
   const active = activeModule(modules, pathname);
-  // Beranda is always there (it needs no permission).
-  const view = modules.find((m) => m.module === active) ?? modules[0]!;
+  // Beranda is there for a fully signed-in session (it needs no permission). A session that now owes the second factor
+  // (signed in again in another tab) sees no module at all, and an empty Beranda while the shell sends it to sign in.
+  const view: ModuleView = modules.find((m) => m.module === active) ?? modules[0] ?? { module: 'home', items: [] };
   const current = activeNavPath(view.items, pathname);
   const page = view.items.find((item) => item.to === current);
   const date = today(locale);
