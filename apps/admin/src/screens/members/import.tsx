@@ -419,8 +419,7 @@ export function MemberImportScreen() {
                   const c = mapping[i] ?? null;
                   const label = head.header[i] === '' ? t('members.import.column_n', { n: i + 1 }) : head.header[i]!;
                   return (
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      <select
+                    <select
                         aria-label={t('members.import.field_for', { column: label })}
                         className={cn(SELECT_CLASS, 'h-8 w-auto min-w-[180px] text-meta')}
                         disabled={!canRun || busy}
@@ -432,9 +431,7 @@ export function MemberImportScreen() {
                           </option>
                         ))}
                         <option value="">{t('members.import.ignore')}</option>
-                      </select>
-                      {c !== null && REQUIRED.has(c) && <Tag tone="accent">{t('members.import.required')}</Tag>}
-                    </span>
+                    </select>
                   );
                 },
               },

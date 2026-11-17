@@ -295,7 +295,6 @@ export function MemberTypesScreen() {
     {
       id: 'limit',
       header: t('members.types.col.loan_limit'),
-      className: 'whitespace-nowrap',
       cell: (r) =>
         r.loanLimit === null ? (
           t('members.types.limit.none')
@@ -310,7 +309,7 @@ export function MemberTypesScreen() {
       id: 'loan_days',
       header: t('members.types.col.loan_days'),
       headClassName: 'text-right',
-      className: 'text-right whitespace-nowrap',
+      className: 'text-right',
       cell: (r) => {
         const rule = r.loanRule ?? null;
         if (rule === null) return <span className="text-muted-foreground">{t('members.types.rule.none')}</span>;
@@ -318,10 +317,8 @@ export function MemberTypesScreen() {
           <span className="grid justify-items-end">
             {!rule.loanable ? (
               <StatusText tone="warn">{t('members.types.rule.refuses')}</StatusText>
-            ) : rule.loanDays === 0 ? (
-              t('members.types.rule.same_day')
             ) : (
-              t('members.types.days', { count: rule.loanDays })
+              <span className="whitespace-nowrap">{rule.loanDays === 0 ? t('members.types.rule.same_day') : t('members.types.days', { count: rule.loanDays })}</span>
             )}
             {rule.others > 0 && <span className="text-xs text-muted-foreground">{t('members.types.rule.others', { count: rule.others })}</span>}
           </span>
