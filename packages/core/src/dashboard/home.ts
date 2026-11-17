@@ -1,6 +1,8 @@
 import { countDistinctGrouped, countGrouped, countRows, type DB } from '@altis/db';
-import { DDC_MAINS, addDays, localDate } from '@altis/shared';
+import { DDC_MAINS, addDays, isoWeekday, localDate } from '@altis/shared';
+import type { OpacHomeContent } from '@altis/shared/api/opac-home';
 import {
+  DASHBOARD_DUE_SOON_DAYS,
   DASHBOARD_EXPIRING_DAYS,
   DASHBOARD_LONG_OVERDUE_DAYS,
   DASHBOARD_TOP_TITLES,
@@ -17,6 +19,9 @@ import { circulationDaySummary } from '../circulation/day-summary.js';
 import { branchTimeZone } from '../circulation/dates.js';
 import { libraryTimeZone } from '../members/common.js';
 import { classIndexOf, dueBeforeSql } from '../reports/circulation/common.js';
+// ---- Komunitas (staff screens' data) ----
+import { closedBy, loadClosedDayRules } from '../circulation/calendars.js';
+import { readSettings } from '../settings/service.js';
 
 // The library figures of Beranda (the shapes and their routes: @altis/shared/api/dashboard-home). Counts only, a
 // handful of cheap reads each, by the rules the circulation summary and the reports use for the same figures: a voided
@@ -138,6 +143,37 @@ async function longOverdue(db: Db, now: number, tz: string): Promise<number> {
   return countRows(db.selectFrom('loans as l').where('l.open_item_id', 'is not', null).where(dueBeforeSql(todays, -(DASHBOARD_LONG_OVERDUE_DAYS + 1))));
 }
 
+// ---- Komunitas (staff screens' data) ----
+
+/** The open loans due from today to DASHBOARD_DUE_SOON_DAYS days ahead, each by its own branch's today. */
+async function dueSoon(db: Db, now: number, tz: string): Promise<number> {
+  const branches = await db.selectFrom('branches').select(['id', 'timezone']).execute();
+  if (branches.length === 0) return 0;
+  const todays = new Map(branches.map((b) => [b.id, localDate(b.timezone || tz, now)]));
+  return countRows(
+    db
+      .selectFrom('loans as l')
+      .where('l.open_item_id', 'is not', null)
+      .where(dueBeforeSql(todays, DASHBOARD_DUE_SOON_DAYS))
+      .where(dueBeforeSql(todays, -1, '>')),
+  );
+}
+
+/**
+ * Today's opening hours as the public home page computes them: the rows of the OPAC home hours whose weekdays hold
+ * today's, unless the library calendar closes today (library-wide rules). Null without such a row or with the home
+ * page's visit block off.
+ */
+export async function openingHoursToday(db: Db, today: string): Promise<LibraryDashboard['openToday']> {
+  const home = (await readSettings(db, ['opac.home'], []))['opac.home'] as OpacHomeContent | null;
+  if (home === null || home.blocks.visit === false) return null;
+  const weekday = isoWeekday(today);
+  const rows = home.hours.filter((h) => h.weekdays.includes(weekday));
+  if (rows.length === 0) return null;
+  if (closedBy(await loadClosedDayRules(db, null))(today)) return { times: [], closed: true };
+  return { times: rows.map((h) => h.time), closed: false };
+}
+
 /** The usage section of the library dashboard: the loans of the last DASHBOARD_USAGE_DAYS days by class and title. */
 async function usageSection(db: Db, today: string): Promise<Usage> {
   const from = addDays(today, -(DASHBOARD_USAGE_DAYS - 1));
@@ -190,10 +226,13 @@ function cachedUsageSection(db: Db, today: string, now: number): Promise<Usage> 
 export async function libraryDashboard(db: Db, grants: Grants, now: number): Promise<LibraryDashboard> {
   const tz = await libraryTimeZone(db);
   const today = localDate(tz, now);
-  const [members, overdue, usage] = await Promise.all([
+  const readsLoans = can(grants, 'circulation.records.read');
+  const [members, overdue, usage, soon, openToday] = await Promise.all([
     can(grants, 'members.records.read') ? membersSection(db, today) : null,
-    can(grants, 'circulation.records.read') ? longOverdue(db, now, tz) : null,
+    readsLoans ? longOverdue(db, now, tz) : null,
     can(grants, 'reports.statistics.read') ? cachedUsageSection(db, today, now) : null,
+    readsLoans ? dueSoon(db, now, tz) : null,
+    openingHoursToday(db, today),
   ]);
-  return { today, members, loans: overdue === null ? null : { longOverdue: overdue }, usage };
+  return { today, members, loans: overdue === null ? null : { longOverdue: overdue, dueSoon: soon ?? 0 }, usage, openToday };
 }

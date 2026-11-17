@@ -16,6 +16,9 @@ export const DASHBOARD_EXPIRING_DAYS = 14;
 /** "Long overdue": an open loan more than this many days past its due date (in its own branch's calendar). */
 export const DASHBOARD_LONG_OVERDUE_DAYS = 14;
 
+/** "Due soon" on Beranda: an open loan due from today to this many days ahead (in its own branch's calendar). */
+export const DASHBOARD_DUE_SOON_DAYS = 2;
+
 /** The loans by subject and the most borrowed titles cover the loans lent in this many days up to today. */
 export const DASHBOARD_USAGE_DAYS = 30;
 
@@ -84,6 +87,13 @@ export interface TopTitle {
 export interface LibraryDashboard {
   today: string;
   members: { active: number; joinedThisMonth: number; expiringSoon: number } | null;
-  loans: { longOverdue: number } | null;
+  /** `dueSoon`: the open loans due from today to {@link DASHBOARD_DUE_SOON_DAYS} days ahead, at every branch. */
+  loans: { longOverdue: number; dueSoon?: number } | null;
+  /**
+   * Today's opening hours as the public home page shows them (the rows of the OPAC home hours that mark today's
+   * weekday, the time as the library wrote it), for any caller; `closed` when the library calendar closes today.
+   * Null when no row marks today or the home page's visit block is off.
+   */
+  openToday?: { times: string[]; closed: boolean } | null;
   usage: { from: string; to: string; bySubject: SubjectLoans[]; topTitles: TopTitle[] } | null;
 }

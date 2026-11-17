@@ -8,6 +8,7 @@ import {
   type PolicyResolveQuery,
   type PolicyResolveResponse,
   type PolicyView,
+  type TypeLoanRule,
 } from '@altis/shared/api/circulation';
 import type { Selectable, Transaction, Updateable } from 'kysely';
 import { codeKey } from '../catalog/data/keys.js';
@@ -443,4 +444,41 @@ export async function archivePolicy(tx: TxCtx, id: string, version: number): Pro
   if (Number(updated.numUpdatedRows) !== 1) throw policyStale();
   await tx.audit({ action: 'circulation.policy.archive', entity: 'policies', entityId: id, meta: {} });
   return { id, version: version + 1 };
+}
+
+// ---- Komunitas (staff screens' data) ----
+
+/**
+ * The general loan terms of each member type of `typeIds` (absent from the map: none given): the rule that applies to
+ * the type's loans of any collection and material (resolution as above, with only the member type filled), and how many
+ * live rules naming a collection type, a material type or a branch may apply instead to some of its loans (those of the
+ * type and those of every type). Null when no rule covers the type. One read of the live rules.
+ */
+export async function typeLoanRules(db: Db, typeIds: readonly string[]): Promise<Map<string, TypeLoanRule | null>> {
+  const out = new Map<string, TypeLoanRule | null>();
+  if (typeIds.length === 0) return out;
+  const rules = await db
+    .selectFrom('policies')
+    .select(['id', 'code_display', 'member_type_id', 'collection_type_id', 'material_type_id', 'branch_id', 'loanable', 'loan_days', 'renew_limit'])
+    .where('archived_at', 'is', null)
+    .execute();
+  for (const typeId of typeIds) {
+    const rule = pickPolicy(rules, { memberTypeId: typeId, collectionTypeId: null, materialTypeId: null, branchId: null });
+    if (rule === null) {
+      out.set(typeId, null);
+      continue;
+    }
+    const others = rules.filter(
+      (r) => (r.member_type_id === null || r.member_type_id === typeId) && (r.collection_type_id !== null || r.material_type_id !== null || r.branch_id !== null),
+    ).length;
+    out.set(typeId, {
+      policyId: rule.id,
+      code: rule.code_display,
+      loanDays: Number(rule.loan_days),
+      renewLimit: Number(rule.renew_limit),
+      loanable: Number(rule.loanable) === 1,
+      others,
+    });
+  }
+  return out;
 }

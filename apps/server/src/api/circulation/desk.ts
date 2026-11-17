@@ -1,6 +1,7 @@
 import {
   can,
   changeLoanDue,
+  deskItemGlance,
   deskMemberLookup,
   deskMemberSearch,
   deskMemberView,
@@ -13,6 +14,7 @@ import {
   voidLoan,
 } from '@altis/core';
 import {
+  DeskItemGlanceBody,
   DeskMemberLookupBody,
   DeskMemberSearchBody,
   InLibraryUseBody,
@@ -20,6 +22,7 @@ import {
   LoanDueBody,
   LoanLostBody,
   ReturnBody,
+  type DeskItemGlance,
   type DeskMemberSearchResponse,
   type DeskMemberView,
   type InLibraryUseResponse,
@@ -269,6 +272,27 @@ const inLibraryUses = route({
   },
 });
 
+// ---- Komunitas (staff screens' data) ----
+// What the desk may say about a scanned item under a refusal (title, status, branch, due date, kept on the hold shelf),
+// never the member who holds it: a POST read, since a scanned code may be a member's card.
+const itemGlance = route({
+  id: 'circulation.desk.items.glance',
+  method: 'POST',
+  path: `${API}/items/glance`,
+  permission: 'circulation.desk.use',
+  branchParam: 'branchId',
+  mode: 'read',
+  idempotency: 'none',
+  audit: null,
+  tx: 'self',
+  params: BranchParams,
+  body: DeskItemGlanceBody,
+  handler: async (rc) => {
+    const body: DeskItemGlance = await deskItemGlance(rc.db.db, { barcode: rc.body.barcode });
+    return { body };
+  },
+});
+
 export const DESK_ROUTES: RouteDecl[] = [
   membersLookup,
   membersSearch,
@@ -282,4 +306,6 @@ export const DESK_ROUTES: RouteDecl[] = [
   loansLost,
   loansDue,
   inLibraryUses,
+  // ---- Komunitas (staff screens' data) ----
+  itemGlance,
 ];
