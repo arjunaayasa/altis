@@ -1,5 +1,5 @@
 import { COMMUNITY_LICENSE_SPDX, COMMUNITY_SOURCE_URL } from '@altis/shared';
-import { ExternalLinkIcon, LibraryIcon } from 'lucide-react';
+import { PageHead } from '@/components/layout';
 import { EDITION, editionName } from '@/edition';
 import { useT } from '@/i18n';
 import { useMe } from '@/lib/me';
@@ -17,40 +17,33 @@ export function AboutScreen() {
   const server = me?.build;
   const serverDiffers = server !== undefined && server !== __ALTIS_BUILD__;
   return (
-    <div className="flex max-w-2xl flex-col gap-6">
-      <header className="flex items-start gap-3">
-        <LibraryIcon className="mt-1 size-8 shrink-0 text-primary" aria-hidden="true" />
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold">{t('about.title')}</h1>
-          <p className="text-muted-foreground">{t('about.product')}</p>
-        </div>
-      </header>
-      <dl className="grid gap-x-6 gap-y-2 rounded-lg border bg-card p-5 text-sm sm:grid-cols-[max-content_1fr]">
+    <div className="grid max-w-3xl gap-6">
+      <PageHead title={t('about.title')} intro={t('about.product')} />
+      <dl className="grid gap-x-8 text-sm sm:grid-cols-[max-content_1fr] [&>dd]:border-t [&>dd]:py-2.5 [&>dt]:py-2.5 sm:[&>dt]:border-t">
         <dt className="text-muted-foreground">{t('about.version')}</dt>
-        <dd className="font-mono font-medium">{__ALTIS_BUILD__}</dd>
+        <dd className="font-mono font-semibold">{__ALTIS_BUILD__}</dd>
         {serverDiffers && (
           <>
             <dt className="text-muted-foreground">{t('about.server_version')}</dt>
             <dd>
-              <span className="font-mono font-medium">{server}</span>
+              <span className="font-mono font-semibold">{server}</span>
               <span className="block text-xs text-muted-foreground">{t('about.server_differs')}</span>
             </dd>
           </>
         )}
         <dt className="text-muted-foreground">{t('about.edition')}</dt>
-        <dd className="font-medium">{editionName(t, EDITION)}</dd>
+        <dd className="font-semibold">{editionName(t, EDITION)}</dd>
         <dt className="text-muted-foreground">{t('about.software_license')}</dt>
-        <dd className="font-mono font-medium">{COMMUNITY_LICENSE_SPDX}</dd>
+        <dd className="font-mono font-semibold">{COMMUNITY_LICENSE_SPDX}</dd>
         <dt className="text-muted-foreground">{t('about.source')}</dt>
         <dd className="break-words">
           <a
             href={COMMUNITY_SOURCE_URL}
             target="_blank"
             rel="noopener"
-            className="inline-flex items-center gap-1 font-medium text-primary underline-offset-4 hover:underline"
+            className="font-semibold text-accent-text underline-offset-4 hover:underline"
           >
             {COMMUNITY_SOURCE_URL.replace(/^https:\/\//, '')}
-            <ExternalLinkIcon className="size-3.5" aria-hidden="true" />
           </a>
         </dd>
         {me !== undefined && (
@@ -60,15 +53,9 @@ export function AboutScreen() {
           </>
         )}
       </dl>
-      <section className="flex flex-col gap-1 text-sm">
-        <a
-          href="/legal/third-party-notices.txt"
-          target="_blank"
-          rel="noopener"
-          className="inline-flex items-center gap-1 font-medium text-primary underline-offset-4 hover:underline"
-        >
+      <section className="grid gap-1 text-sm">
+        <a href="/legal/third-party-notices.txt" target="_blank" rel="noopener" className="w-fit font-semibold text-accent-text underline-offset-4 hover:underline">
           {t('about.notices')}
-          <ExternalLinkIcon className="size-3.5" aria-hidden="true" />
         </a>
         <p className="text-muted-foreground">{t('about.notices_hint')}</p>
       </section>

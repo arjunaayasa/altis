@@ -2,7 +2,6 @@ import { LoginBody, type LoginResponse } from '@altis/shared/api/auth';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { LibraryIcon } from 'lucide-react';
 import { useCallback, useId, useState, type ComponentProps, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { Field, NoticeAlert, ProblemAlert, RootError, describedBy } from '@/components/form-field';
@@ -45,15 +44,17 @@ export function useContinue(): (res: Pick<LoginResponse, 'stage' | 'mustChangePa
 export function SignInFrame({ title, description, wide = false, children }: { title: string; description?: string; wide?: boolean; children: ReactNode }) {
   const me = useMe();
   return (
-    <main className="flex min-h-dvh items-start justify-center bg-muted/40 px-4 py-10 sm:items-center">
+    <main className="flex min-h-dvh items-start justify-center bg-layer px-4 py-10 sm:items-center">
       <div className={cn('w-full', wide ? 'max-w-lg' : 'max-w-sm')}>
-        <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <LibraryIcon className="size-8 text-primary" aria-hidden="true" />
-          <p className="text-sm font-medium text-muted-foreground">{me?.library.name ?? 'ALTIS'}</p>
+        <div className="mb-5 grid justify-items-center gap-0.5 text-center">
+          <p className="text-base font-bold tracking-wide" translate="no">
+            ALTIS
+          </p>
+          {me !== undefined && <p className="text-meta text-muted-foreground">{me.library.name}</p>}
         </div>
-        <section className="flex flex-col gap-5 rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
-          <header className="flex flex-col gap-1">
-            <h1 className="text-xl font-semibold">{title}</h1>
+        <section className="grid gap-5 rounded-lg border bg-background p-6">
+          <header className="grid gap-1">
+            <h1 className="text-xl leading-tight font-bold">{title}</h1>
             {description !== undefined && <p className="text-sm text-muted-foreground">{description}</p>}
           </header>
           {children}
@@ -64,7 +65,7 @@ export function SignInFrame({ title, description, wide = false, children }: { ti
 }
 
 /** A link in the style of the sign-in pages. */
-export const signInLinkClass = 'text-sm text-primary underline-offset-4 hover:underline focus-visible:underline';
+export const signInLinkClass = 'text-sm font-semibold text-accent-text underline-offset-4 hover:underline focus-visible:underline';
 
 /** The remember-me checkbox with its warning (the password step and the 2FA step). */
 export function RememberField({ id, inputProps }: { id: string; inputProps: ComponentProps<'input'> }) {

@@ -31,6 +31,8 @@ export const SYSTEM_UI_ID = {
   'auditlog.actor.filter_short': 'Saring',
   'jobs.schedules.every_minutes_one': 'Setiap {minutes} menit',
   'backups.more_named': 'Tindakan untuk cadangan {time}',
+  'diagnostics.network.suggest_change_one': 'Uji peramban menyarankan {hops} hop. Ubah pengaturannya di Konfigurasi Sistem.',
+  'diagnostics.release.keyset_value_one': '{docs} dokumen, seq tertinggi {seq}',
 } as const;
 
 export const SYSTEM_UI_EN: Record<keyof typeof SYSTEM_UI_ID, string> = {
@@ -62,4 +64,6 @@ export const SYSTEM_UI_EN: Record<keyof typeof SYSTEM_UI_ID, string> = {
   'auditlog.actor.filter_short': 'Filter',
   'jobs.schedules.every_minutes_one': 'Every {minutes} minute',
   'backups.more_named': 'Actions for the backup of {time}',
+  'diagnostics.network.suggest_change_one': 'The browser test suggests {hops} hop. Change the setting in System configuration.',
+  'diagnostics.release.keyset_value_one': '{docs} document, highest seq {seq}',
 };

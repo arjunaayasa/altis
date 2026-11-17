@@ -8,6 +8,7 @@ import { useId, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Field, NoticeAlert, ProblemAlert, RootError, describedBy } from '@/components/form-field';
+import { PageHead } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type AdminKey } from '@/i18n';
@@ -36,18 +37,18 @@ export function ProfilePage({ children }: { children: ReactNode }) {
   const me = useMe();
   const mustChange = me?.authenticated === true && me.mustChangePassword;
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
-      <header className="flex flex-col gap-4">
-        <h1 className="text-2xl font-semibold">{t('profile.title')}</h1>
+    <div className="grid max-w-5xl gap-6">
+      <div className="grid gap-4">
+        <PageHead title={t('profile.title')} />
         {!mustChange && (
           <nav aria-label={t('profile.sections')}>
-            <ul className="flex flex-wrap gap-1 border-b">
+            <ul className="flex flex-wrap gap-x-1 border-b">
               {SECTIONS.map((section) => (
                 <li key={section.to}>
                   <Link
                     to={section.to}
                     activeOptions={{ exact: true }}
-                    className="-mb-px block border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:font-medium data-[status=active]:text-foreground"
+                    className="-mb-px block border-b-2 border-transparent px-2.5 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-foreground"
                   >
                     {t(section.labelKey)}
                   </Link>
@@ -56,8 +57,8 @@ export function ProfilePage({ children }: { children: ReactNode }) {
             </ul>
           </nav>
         )}
-      </header>
-      {children}
+      </div>
+      <div className="grid min-w-0 gap-6">{children}</div>
     </div>
   );
 }
@@ -66,14 +67,17 @@ export function ProfilePage({ children }: { children: ReactNode }) {
 export function ProfileSection({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-4 rounded-lg border bg-card p-5 text-card-foreground">
-      <header className="flex flex-col gap-1">
-        <h2 id={id} className="text-lg font-semibold">
+    <section
+      aria-labelledby={id}
+      className="grid min-w-0 gap-x-8 gap-y-4 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1fr)] [*+&]:border-t [*+&]:pt-6"
+    >
+      <header className="grid content-start gap-1">
+        <h2 id={id} className="text-base font-bold">
           {title}
         </h2>
         {description !== undefined && <p className="text-sm text-muted-foreground">{description}</p>}
       </header>
-      {children}
+      <div className="grid min-w-0 content-start gap-4">{children}</div>
     </section>
   );
 }

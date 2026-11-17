@@ -1,6 +1,5 @@
 import type { ProbeResultResponse } from '@altis/shared/api/diagnostics';
 import { useQueryClient } from '@tanstack/react-query';
-import { PlayIcon, SquareIcon } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Notice, NoticeAlert } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
@@ -92,19 +91,17 @@ export function BrowserTests({ onSaved }: { onSaved(): void }) {
   const method = (ok: boolean): string => t(ok ? 'diagnostics.http.allowed' : 'diagnostics.http.blocked');
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <h2 id={titleId} className="text-base font-semibold">
+    <section aria-labelledby={titleId} className="grid max-w-[75ch] gap-3 border-t pt-4">
+      <h2 id={titleId} className="text-base font-bold">
         {t('diagnostics.probe.title')}
       </h2>
       <p className="text-sm text-muted-foreground">{t('diagnostics.probe.description')}</p>
       <div className="flex flex-wrap gap-2">
-        <Button disabled={running} onClick={() => void start()}>
-          <PlayIcon aria-hidden="true" />
+        <Button variant="outline" disabled={running} onClick={() => void start()}>
           {t('diagnostics.probe.run')}
         </Button>
         {running && (
           <Button variant="outline" onClick={() => run.current?.abort()}>
-            <SquareIcon aria-hidden="true" />
             {t('diagnostics.probe.stop')}
           </Button>
         )}
@@ -114,7 +111,7 @@ export function BrowserTests({ onSaved }: { onSaved(): void }) {
         (outcome.kind === 'info' ? <NoticeAlert>{outcome.text}</NoticeAlert> : <Notice kind={outcome.kind}>{outcome.text}</Notice>)}
       {results !== null && (
         <div className="flex flex-col gap-2">
-          <h3 className="text-sm font-semibold">{t('diagnostics.probe.results')}</h3>
+          <h3 className="text-sm font-bold">{t('diagnostics.probe.results')}</h3>
           <dl className="flex flex-col gap-2">
             <Row label={t('diagnostics.probe.polling')}>{passed(results.probes.polling)}</Row>
             <Row label={t('diagnostics.probe.sse')}>{passed(results.probes.sse)}</Row>

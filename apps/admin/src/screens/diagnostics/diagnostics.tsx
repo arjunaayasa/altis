@@ -4,13 +4,12 @@ import type { DiagnosticsReport, DiagnosticsRunMode, DiagnosticsRuntime, Diagnos
 import { opCliLines, type OpView } from '@altis/shared/api/ops';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { CircleAlertIcon, PlayIcon, RefreshCwIcon, XIcon } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useDateTime } from '@/components/data-table';
-import { CheckField, Notice, ProblemAlert } from '@/components/form-field';
+import { CheckField, Notice } from '@/components/form-field';
 import { JobProgress, type JobOutcome } from '@/components/job-progress';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ErrorState, LoadingState, PageHead } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { editionName, editionStatus } from '@/edition';
 import { useT, type AdminKey, type TKey, type Translate } from '@/i18n';
@@ -135,8 +134,8 @@ function ReleaseBlock({ report }: BlockProps) {
             })}
       </Row>
       <Row label={t('diagnostics.release.keyset')}>
-        <span className={release.keyset.full ? 'text-destructive' : undefined}>
-          {t('diagnostics.release.keyset_value', { docs: release.keyset.docs, seq: release.keyset.maxSeq })}
+        <span className={release.keyset.full ? 'font-semibold text-bad' : undefined}>
+          {t(release.keyset.docs === 1 ? 'diagnostics.release.keyset_value_one' : 'diagnostics.release.keyset_value', { docs: release.keyset.docs, seq: release.keyset.maxSeq })}
           {release.keyset.full && ` ${t('diagnostics.release.keyset_full')}`}
         </span>
       </Row>
@@ -342,10 +341,10 @@ function NetworkBlock({ report }: BlockProps) {
         <Row label={t('diagnostics.network.suggested')}>{network.suggestedHops ?? t('diagnostics.http.untested')}</Row>
       </dl>
       {differs && (
-        <div className="flex flex-col gap-1 rounded-md border border-warning-foreground/30 bg-warning p-3 text-sm text-warning-foreground">
-          <p>{t('diagnostics.network.suggest_change', { hops: network.suggestedHops! })}</p>
+        <div className="grid gap-1 rounded-md border border-warn-line bg-warn-bg px-3.5 py-3 text-sm">
+          <p>{t(network.suggestedHops === 1 ? 'diagnostics.network.suggest_change_one' : 'diagnostics.network.suggest_change', { hops: network.suggestedHops! })}</p>
           {holds(me, 'system.config.manage') ? (
-            <Link to="/admin/system" className="self-start font-medium underline underline-offset-4">
+            <Link to="/admin/system" className="w-fit font-semibold text-accent-text underline underline-offset-4">
               {t('diagnostics.network.open_config')}
             </Link>
           ) : (
@@ -407,7 +406,7 @@ function AuditBlock({ report }: BlockProps) {
             {chain.ok ? (
               t('diagnostics.audit.ok')
             ) : (
-              <span className="text-destructive">{t('diagnostics.audit.broken', { seq: chain.brokenAt ?? '?' })}</span>
+              <span className="font-semibold text-bad">{t('diagnostics.audit.broken', { seq: chain.brokenAt ?? '?' })}</span>
             )}
           </Row>
           <Row label={t('diagnostics.audit.head')}>{chain.head}</Row>
@@ -446,7 +445,7 @@ function ClockBlock({ report }: BlockProps) {
         <p className="text-sm">{t('diagnostics.clock.ok')}</p>
       ) : (
         <div className="flex flex-col gap-2">
-          <p className="text-sm text-destructive">{t('diagnostics.clock.anomaly', { time: dateTime(anomaly.detectedAt) })}</p>
+          <p className="text-sm font-semibold text-bad">{t('diagnostics.clock.anomaly', { time: dateTime(anomaly.detectedAt) })}</p>
           <p className="text-sm text-muted-foreground">{t('diagnostics.clock.max_seen', { time: dateTime(anomaly.maxSeen) })}</p>
           {/* Komunitas K1: the scheduled steps that count days (the report housekeeping's) wait for the clock too. */}
           <p className="text-sm">{t('jobs.message.reports.housekeeping.date_jobs_postponed')}</p>
@@ -478,7 +477,7 @@ function ExposureBlock({ report }: BlockProps) {
   if (exposure === null) return <p className="text-sm text-muted-foreground">{t('diagnostics.exposure.none')}</p>;
   return (
     <>
-      <p className={cn('text-sm', !exposure.ok && 'text-destructive')}>{t(exposure.ok ? 'diagnostics.exposure.ok' : 'diagnostics.exposure.failed')}</p>
+      <p className={cn('text-sm', !exposure.ok && 'font-semibold text-bad')}>{t(exposure.ok ? 'diagnostics.exposure.ok' : 'diagnostics.exposure.failed')}</p>
       <dl className="flex flex-col gap-2">
         {!exposure.ok && exposure.url !== null && (
           <Row label={t('diagnostics.exposure.url')}>
@@ -500,7 +499,7 @@ function DiskBlock({ report }: BlockProps) {
   return lowAt === null ? (
     <p className="text-sm">{t('diagnostics.disk.ok')}</p>
   ) : (
-    <p className="text-sm text-destructive">{t('diagnostics.disk.low', { time: dateTime(lowAt) })}</p>
+    <p className="text-sm font-semibold text-bad">{t('diagnostics.disk.low', { time: dateTime(lowAt) })}</p>
   );
 }
 
@@ -527,7 +526,7 @@ function Unavailable() {
 
 /** A warning inside a block (the colours of the suggested-hops notice). */
 function BlockWarning({ children }: { children: ReactNode }) {
-  return <div className="flex flex-col gap-1 rounded-md border border-warning-foreground/30 bg-warning p-3 text-sm text-warning-foreground">{children}</div>;
+  return <div className="grid gap-1 rounded-md border border-warn-line bg-warn-bg px-3.5 py-3 text-sm">{children}</div>;
 }
 
 function SearchBlock({ report }: BlockProps) {
@@ -603,7 +602,6 @@ function SearchBlock({ report }: BlockProps) {
         canRebuild && (
           <div>
             <Button variant="outline" onClick={() => setConfirming(true)}>
-              <RefreshCwIcon aria-hidden="true" />
               {t('catalog.settings.search_health.rebuild')}
             </Button>
           </div>
@@ -737,8 +735,8 @@ function Block({ name, report }: { name: keyof DiagnosticsReport; report: Diagno
   const id = useId();
   const { title, Body } = BLOCKS[name];
   return (
-    <section data-diagnostics-block={name} aria-labelledby={id} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <h2 id={id} className="text-base font-semibold">
+    <section data-diagnostics-block={name} aria-labelledby={id} className="grid min-w-0 content-start gap-3 border-t pt-4">
+      <h2 id={id} className="text-base font-bold">
         {t(title)}
       </h2>
       <Body report={report} />
@@ -751,14 +749,13 @@ function ExposureBanner({ url }: { url: string | null }) {
   const t = useT();
   const id = useId();
   return (
-    <Alert variant="destructive" aria-labelledby={id}>
-      <CircleAlertIcon aria-hidden="true" />
-      <AlertTitle id={id}>{t('diagnostics.exposure.banner')}</AlertTitle>
-      <AlertDescription>
-        <p>{t('alert.exposure_failed')}</p>
-        {url !== null && <p className="font-mono text-xs break-all">{url}</p>}
-      </AlertDescription>
-    </Alert>
+    <div role="alert" aria-labelledby={id} className="grid gap-1 rounded-md border border-bad-line bg-bad-bg px-3.5 py-3 text-sm">
+      <p id={id} className="font-bold text-bad">
+        {t('diagnostics.exposure.banner')}
+      </p>
+      <p>{t('alert.exposure_failed')}</p>
+      {url !== null && <p className="font-mono text-xs break-all">{url}</p>}
+    </div>
   );
 }
 
@@ -816,8 +813,8 @@ function OpAttention() {
   const cancellable = op.needsAttention && !op.terminal && !op.pointOfNoReturn;
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4">
-      <h2 id={titleId} className="text-base font-semibold text-destructive">
+    <section aria-labelledby={titleId} className="grid gap-3 rounded-md border border-bad-line bg-bad-bg px-3.5 py-3">
+      <h2 id={titleId} className="text-base font-bold text-bad">
         {t('diagnostics.op.title')}
       </h2>
       <p className="text-sm">{t('diagnostics.op.body', { kind })}</p>
@@ -836,24 +833,22 @@ function OpAttention() {
       {op.needsAttention && (
         <div className="flex flex-wrap items-center gap-2">
           <Button disabled={busy} onClick={() => void resume()}>
-            <PlayIcon aria-hidden="true" />
             {t('ops.page.resume')}
           </Button>
           {cancellable && (
-            <Button variant="outline" disabled={busy} onClick={() => setCancelling(true)}>
-              <XIcon aria-hidden="true" />
+            <Button variant="outline" className="bg-background" disabled={busy} onClick={() => setCancelling(true)}>
               {t('ops.page.cancel')}
             </Button>
           )}
         </div>
       )}
-      <a href={OPS_PAGE_PATH} className="self-start text-sm text-primary underline-offset-4 hover:underline">
+      <a href={OPS_PAGE_PATH} className="w-fit text-sm font-semibold text-accent-text underline-offset-4 hover:underline">
         {t('diagnostics.op.open_page')}
       </a>
       {outcome !== null && <Notice kind={outcome.kind}>{outcome.text}</Notice>}
       <div className="flex flex-col gap-1 text-sm">
         <p>{t('ops.page.cli_steps')}</p>
-        <pre className="overflow-x-auto rounded bg-muted p-2 text-xs">
+        <pre className="overflow-x-auto rounded border bg-background p-2 text-xs">
           {/* Final review (OPS-ATTN-EXIT): ops:resume or ops:cancel, as on the operations page. */}
           <code>{opCliLines(op).join('\n')}</code>
         </pre>
@@ -884,37 +879,29 @@ export function DiagnosticsScreen() {
   const report = query.data;
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-2xl font-semibold">{t('nav.diagnostics')}</h1>
-          <p className="text-sm text-muted-foreground">{t('diagnostics.description')}</p>
-        </div>
-        <Button variant="outline" disabled={query.isFetching} onClick={() => void query.refetch()}>
-          <RefreshCwIcon aria-hidden="true" />
-          {t('diagnostics.refresh')}
-        </Button>
-      </header>
+    <div className="grid gap-6">
+      <PageHead
+        title={t('nav.diagnostics')}
+        intro={t('diagnostics.description')}
+        actions={
+          <Button variant="outline" disabled={query.isFetching} onClick={() => void query.refetch()}>
+            {t('diagnostics.refresh')}
+          </Button>
+        }
+      />
 
       {report?.exposure?.ok === false && <ExposureBanner url={report.exposure.url} />}
       <OpAttention />
 
       {report === undefined ? (
         query.isError ? (
-          <ProblemAlert error={query.error}>
-            <p>{t('diagnostics.load_failed')}</p>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => void query.refetch()}>
-              {t('table.retry')}
-            </Button>
-          </ProblemAlert>
+          <ErrorState title={t('diagnostics.load_failed')} error={query.error} onRetry={() => void query.refetch()} retrying={query.isFetching} />
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <LoadingState />
         )
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-x-8 gap-y-6 md:grid-cols-2 xl:grid-cols-3">
             {BLOCK_ORDER.map((name) => (
               <Block key={name} name={name} report={report} />
             ))}
