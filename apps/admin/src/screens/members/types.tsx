@@ -6,6 +6,7 @@ import { useId, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { CheckField, Field, Notice, ProblemAlert, RootError, SELECT_CLASS } from '@/components/form-field';
+import { Callout, DenseTable, InlinePanel, PageHead, SkeletonTable, StatusText, Tag, type DenseColumn } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
@@ -16,7 +17,6 @@ import { FORM_PARSE, problemText } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
 import { changedFields, countsIn, isFieldProblem, isStale, optionalText, putFieldErrors, serverIssues, zodIssues } from '@/screens/catalog/masters/master-table';
 import { useMemberTypes, useTypeName } from '@/screens/circulation/common';
-import { Callout, DenseTable, InlinePanel, PageHead, SkeletonTable, StatusText, Tag, type DenseColumn } from '@/screens/circulation/parts';
 
 /**
  * Tipe Anggota (`/admin/anggota/tipe`): the member types, each with its code, names, accreditation group, the most open

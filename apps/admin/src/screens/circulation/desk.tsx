@@ -19,6 +19,7 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { CircleAlertIcon, CircleCheckIcon, InfoIcon, TriangleAlertIcon } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Notice, SELECT_CLASS } from '@/components/form-field';
+import { Callout, FactList, Kbd, LAYER, MemberPhoto, StatusText, TABLE, TONE_SURFACE, TONE_TEXT, Tag, type StatusTone } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -46,7 +47,6 @@ import {
   useTypeName,
   writeStored,
 } from './common';
-import { Callout, FactList, Kbd, LAYER, MemberPhoto, StatusText, TABLE, TONE_SURFACE, TONE_TEXT, Tag, type StatusTone } from './parts';
 // ---- Komunitas (holds) ----
 import { MemberHoldsPanel, holdSlipHref } from './holds';
 // ---- Komunitas (charges and payments) ----

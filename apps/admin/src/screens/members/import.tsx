@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useId, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { Notice, ProblemAlert } from '@/components/form-field';
+import { Callout, DenseTable, StatStrip, StatusText, Steps, TABLE, Tag, type DenseColumn } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT, type TKey, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
@@ -12,7 +13,6 @@ import { useMe } from '@/lib/me';
 import { uploadFile } from '@/lib/upload';
 import { cn } from '@/lib/utils';
 import { newTransactionKey, useMemberTypes } from '@/screens/circulation/common';
-import { Callout, DenseTable, StatStrip, StatusText, Steps, TABLE, Tag, type DenseColumn } from '@/screens/circulation/parts';
 import { MEMBER_CSV_COLUMNS, checkMemberCsvHeader, readCsvHead, type CsvHead, type MemberCsvColumn } from './import-head';
 
 /**

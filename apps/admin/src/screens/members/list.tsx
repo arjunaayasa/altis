@@ -6,6 +6,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Field, Notice, SELECT_CLASS } from '@/components/form-field';
+import { Callout, DenseTable, FILTER_ROW, MoreMenu, MoreMenuItem, MoreMenuRule, PageHead, SkeletonTable, StatusText, type DenseColumn } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
@@ -14,7 +15,6 @@ import { ApiError, api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
 import { MemberStatusBadge, todayLocal, useCalendarDate, useMemberTypes, useTypeName } from '@/screens/circulation/common';
-import { Callout, DenseTable, FILTER_ROW, MoreMenu, MoreMenuItem, MoreMenuRule, PageHead, SkeletonTable, StatusText, type DenseColumn } from '@/screens/circulation/parts';
 // ---- Komunitas K2 (members extended) ----
 import { BulkBar } from './bulk';
 import { refreshMembers } from './common';

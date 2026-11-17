@@ -5,11 +5,11 @@ import type { ItemCirculation } from '@altis/shared/api/catalog/items';
 import type { MemberTypeListResponse, MemberTypeRef, MemberTypeView } from '@altis/shared/api/members';
 import { useCallback, useMemo, useState } from 'react';
 import { Badge } from '@/components/form-field';
+import { StatusText, Tag, type TagTone } from '@/components/layout';
 import { useLocale, useT, type Translate } from '@/i18n';
 import { holdsAt } from '@/lib/access';
 import { isWritableBranch } from '@/lib/branches';
 import { useApiQuery, useMe } from '@/lib/me';
-import { StatusText, Tag, type TagTone } from './parts';
 
 /**
  * What the circulation and member screens share: the desk branch (chosen once, kept per browser), calendar dates in the

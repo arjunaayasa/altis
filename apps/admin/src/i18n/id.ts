@@ -136,6 +136,10 @@ export const ADMIN_ID = {
   'table.prev': 'Sebelumnya',
   'table.next': 'Berikutnya',
   'table.retry': 'Coba lagi',
+  'table.selected': '{count} dipilih',
+  'table.clear_selection': 'Batal pilih',
+  'table.filter_apply': 'Terapkan saringan',
+  'table.load_failed': 'Data gagal dimuat',
 
   // ---- users: Pengguna staf (§13.3) ------------------------------------------------------------------------------
   'users.add': 'Tambah pengguna',

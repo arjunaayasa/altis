@@ -114,6 +114,10 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'table.prev': 'Previous',
   'table.next': 'Next',
   'table.retry': 'Try again',
+  'table.selected': '{count} selected',
+  'table.clear_selection': 'Clear selection',
+  'table.filter_apply': 'Apply filters',
+  'table.load_failed': 'The data could not be loaded',
 
   'users.add': 'Add user',
   'users.caption': 'Staff users',
