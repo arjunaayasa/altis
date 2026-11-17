@@ -122,7 +122,7 @@ export function LocationsScreen() {
             onMapDrafts={setMapDrafts}
             head={head}
             branchFilter={
-              <FilterField id={`${ids}-branch`} label={t('catalog.locations.branch')} className="max-w-md">
+              <FilterField wide id={`${ids}-branch`} label={t('catalog.locations.branch')} className="max-w-md">
                 <select
                   id={`${ids}-branch`}
                   className={SELECT_CLASS}
