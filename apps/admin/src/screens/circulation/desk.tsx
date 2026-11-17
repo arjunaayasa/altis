@@ -21,7 +21,7 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { CircleCheckIcon, CircleXIcon, InfoIcon, TriangleAlertIcon } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Notice, SELECT_CLASS } from '@/components/form-field';
-import { Callout, FactList, Kbd, LAYER, MemberPhoto, StatusText, TABLE, TONE_SURFACE, TONE_TEXT, Tag, type StatusTone } from '@/components/layout';
+import { Callout, FactList, Kbd, KeyText, LAYER, MemberPhoto, StatusText, TABLE, TONE_SURFACE, TONE_TEXT, Tag, type StatusTone } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -1699,8 +1699,12 @@ function MemberPanel({
         <h2 id={nameId} className="text-base font-bold">
           {t('circulation.member.none')}
         </h2>
-        <p className="text-sm text-muted-foreground">{t('circulation.member.none_scan')}</p>
-        <p className="text-sm text-muted-foreground">{t('circulation.member.none_return')}</p>
+        <p className="text-sm text-muted-foreground">
+          <KeyText text={t('circulation.member.none_scan')} />
+        </p>
+        <p className="text-sm text-muted-foreground">
+          <KeyText text={t('circulation.member.none_return')} />
+        </p>
       </aside>
     );
   }
@@ -1946,7 +1950,11 @@ function ReturnSide({ rows, back }: { rows: readonly ReturnRow[]; back: string |
           { key: 'other', label: t('circulation.returns.other_branch'), value: String(other), ...(other > 0 ? { tone: 'warn' as const } : {}) },
         ]}
       />
-      {back !== null && <p className="text-sm text-muted-foreground">{back === '' ? t('circulation.returns.back_loan') : t('circulation.returns.back_to', { name: back })}</p>}
+      {back !== null && (
+        <p className="text-sm text-muted-foreground">
+          <KeyText text={back === '' ? t('circulation.returns.back_loan') : t('circulation.returns.back_to', { name: back })} />
+        </p>
+      )}
     </aside>
   );
 }
@@ -2150,7 +2158,11 @@ function ReadSide({ rows, back }: { rows: readonly ReadRow[]; back: string | nul
           { key: 'flagged', label: t('circulation.read.flagged'), value: String(flagged), ...(flagged > 0 ? { tone: 'warn' as const } : {}) },
         ]}
       />
-      {back !== null && <p className="text-sm text-muted-foreground">{back === '' ? t('circulation.returns.back_loan') : t('circulation.returns.back_to', { name: back })}</p>}
+      {back !== null && (
+        <p className="text-sm text-muted-foreground">
+          <KeyText text={back === '' ? t('circulation.returns.back_loan') : t('circulation.returns.back_to', { name: back })} />
+        </p>
+      )}
     </aside>
   );
 }

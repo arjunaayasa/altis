@@ -187,7 +187,9 @@ describe('Meja Layanan: keys and scanner', () => {
     // The fact on the right says how late, as a number in words.
     expect(within(screen.getByTestId('desk-feedback')).getByText('19 hari')).toBeTruthy();
     const tally = screen.getByRole('complementary', { name: 'Ringkasan' });
-    expect(within(tally).getByText('Tekan F2 untuk kembali ke Budi Santoso.')).toBeTruthy();
+    // The key it names is drawn as a key cap inside the sentence.
+    const back = within(tally).getByText((_, el) => el?.tagName === 'P' && el.textContent === 'Tekan F2 untuk kembali ke Budi Santoso.');
+    expect(within(back).getByText('F2').tagName).toBe('KBD');
     const table = screen.getByRole('table', { name: 'Pengembalian kali ini' });
     expect(within(table).getByText('Terlambat 19 hari')).toBeTruthy();
 

@@ -14,3 +14,14 @@ export function Kbd({ children, className, hidden = false }: { children: ReactNo
     </kbd>
   );
 }
+
+/** A function key or Esc named in a sentence: F1 to F12, or Esc. */
+const KEY_IN_TEXT = /\b(F(?:1[0-2]|[1-9])|Esc)\b/;
+
+/**
+ * A translated sentence with the keys it names (`Tekan F6 untuk …`) drawn as {@link Kbd}; the words stay one text for
+ * the reader and for a screen reader.
+ */
+export function KeyText({ text }: { text: string }) {
+  return <>{text.split(KEY_IN_TEXT).map((part, i) => (i % 2 === 1 ? <Kbd key={i}>{part}</Kbd> : part))}</>;
+}

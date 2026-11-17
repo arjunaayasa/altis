@@ -4,7 +4,7 @@ export { FactList, StatStrip } from './figures';
 export { FILTER_ROW, FilterField, FilterRow } from './filter-row';
 export { FORM_FULL, FormBar, FormSection, SideSection } from './form-section';
 export { InlinePanel } from './inline-panel';
-export { Kbd } from './kbd';
+export { Kbd, KeyText } from './kbd';
 export { LinkTabs } from './link-tabs';
 export { MemberPhoto, initials } from './member-photo';
 export { MoreMenu, MoreMenuItem, MoreMenuRule } from './more-menu';

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useRef, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { EmptyState, ErrorState, FilterField, FilterRow, FormSection, InlinePanel, LoadingState, PageError, Section, SelectionBar } from '@/components/layout';
+import { EmptyState, ErrorState, FilterField, FilterRow, FormSection, InlinePanel, KeyText, LoadingState, PageError, Section, SelectionBar } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -309,5 +309,17 @@ describe('Section and FormSection', () => {
     const group = screen.getByRole('group', { name: 'Kontak' });
     expect((group as HTMLFieldSetElement).disabled).toBe(true);
     expect(screen.getByRole('region', { name: 'Kontak' })).toBeTruthy();
+  });
+});
+
+describe('KeyText', () => {
+  it('draws the function keys and Esc of a sentence as keys, and keeps the rest as text', () => {
+    const { container } = render(
+      <p>
+        <KeyText text="Tekan F6 untuk mencari per nama; F12 dan Esc juga. Fakta F2x bukan tombol." />
+      </p>,
+    );
+    expect([...container.querySelectorAll('kbd')].map((k) => k.textContent)).toEqual(['F6', 'F12', 'Esc']);
+    expect(container.textContent).toBe('Tekan F6 untuk mencari per nama; F12 dan Esc juga. Fakta F2x bukan tombol.');
   });
 });
