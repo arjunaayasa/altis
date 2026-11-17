@@ -1,6 +1,5 @@
 import { SruTestBody, type SruTestResponse } from '@altis/shared/api/catalog/copy';
 import { SRU_VERSIONS, SruServerList, type CatalogSettings } from '@altis/shared/api/settings';
-import { PlusIcon, Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
 import { useFieldArray, useWatch, type UseFormReturn } from 'react-hook-form';
 import { CheckField, Field, Notice, SELECT_CLASS } from '@/components/form-field';
@@ -153,7 +152,6 @@ function ServerFieldset({
               {t(testing ? 'catalog.settings.sru.testing' : 'catalog.settings.sru.test')}
             </Button>
             <Button type="button" variant="outline" size="sm" onClick={onRemove}>
-              <Trash2Icon aria-hidden="true" />
               {t('catalog.settings.sru.remove', { name })}
             </Button>
           </div>
@@ -197,7 +195,6 @@ export function SruServersEditor({ form, readOnly }: { form: UseFormReturn<Catal
       {!readOnly && (
         <div>
           <Button type="button" variant="outline" size="sm" onClick={add}>
-            <PlusIcon aria-hidden="true" />
             {t('catalog.settings.sru.add')}
           </Button>
         </div>

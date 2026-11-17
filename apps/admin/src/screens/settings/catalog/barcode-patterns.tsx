@@ -1,5 +1,4 @@
 import { BarcodePatternList, type CatalogSettings } from '@altis/shared/api/settings';
-import { PlusIcon, XIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useFieldArray, useWatch, type FieldError, type UseFormReturn } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
@@ -45,7 +44,7 @@ export function ListError({
   if (!limited && error === undefined) return null;
   const type = limited ? 'too_big' : String(error?.type);
   return (
-    <p role="alert" className="text-sm text-destructive">
+    <p role="alert" className="text-meta font-semibold text-bad">
       {type === 'too_big' ? t(tooMany, { max }) : type === 'too_small' && tooFew !== undefined ? t(tooFew) : errorText(t, error)}
     </p>
   );
@@ -84,7 +83,7 @@ export function BarcodePatternsEditor({ form, readOnly }: { form: UseFormReturn<
       <p id={`${baseId}-hint`} className="text-xs text-muted-foreground">
         {t('catalog.settings.patterns.hint')} {t('catalog.settings.code_locked')}
       </p>
-      <div aria-hidden="true" className="hidden grid-cols-[7rem_minmax(0,1fr)_5rem_4.5rem_5rem_8rem_2.25rem] gap-2 text-xs font-medium text-muted-foreground md:grid">
+      <div aria-hidden="true" className="hidden grid-cols-[7rem_minmax(0,1fr)_5rem_4.5rem_5rem_7rem_4.5rem] gap-2 text-xs font-medium text-muted-foreground md:grid">
         <span>{t('catalog.settings.patterns.col.id')}</span>
         <span>{t('catalog.settings.patterns.col.name')}</span>
         <span>{t('catalog.settings.patterns.col.prefix')}</span>
@@ -105,7 +104,7 @@ export function BarcodePatternsEditor({ form, readOnly }: { form: UseFormReturn<
           };
           return (
             <li key={field.id} className="grid gap-1">
-              <div className="grid grid-cols-2 gap-2 md:grid-cols-[7rem_minmax(0,1fr)_5rem_4.5rem_5rem_8rem_2.25rem] md:items-center">
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-[7rem_minmax(0,1fr)_5rem_4.5rem_5rem_7rem_4.5rem] md:items-center">
                 <Input
                   className="font-mono"
                   maxLength={32}
@@ -155,24 +154,24 @@ export function BarcodePatternsEditor({ form, readOnly }: { form: UseFormReturn<
                 {!readOnly && (
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="icon"
+                    variant="outline"
+                    size="sm"
                     aria-label={t('catalog.settings.patterns.remove', { n })}
                     disabled={array.fields.length <= 1}
                     onClick={() => remove(i)}
                   >
-                    <XIcon aria-hidden="true" />
+                    {t('system.remove')}
                   </Button>
                 )}
               </div>
               {fieldErrors.map(({ name, error }) =>
                 error === undefined ? null : (
-                  <p key={name} id={errorId(name)} className="text-sm text-destructive">
+                  <p key={name} id={errorId(name)} className="text-meta font-semibold text-bad">
                     {t(`catalog.settings.patterns.col.${name}`)}: {errorText(t, error)}
                   </p>
                 ),
               )}
-              {rowError !== undefined && <p className="text-sm text-destructive">{errorText(t, rowError)}</p>}
+              {rowError !== undefined && <p className="text-meta font-semibold text-bad">{errorText(t, rowError)}</p>}
             </li>
           );
         })}
@@ -180,7 +179,6 @@ export function BarcodePatternsEditor({ form, readOnly }: { form: UseFormReturn<
       {!readOnly && (
         <div>
           <Button type="button" variant="outline" size="sm" onClick={add}>
-            <PlusIcon aria-hidden="true" />
             {t('catalog.settings.patterns.add')}
           </Button>
         </div>
