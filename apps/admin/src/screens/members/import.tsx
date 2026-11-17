@@ -24,7 +24,8 @@ import { MEMBER_CSV_COLUMNS, checkMemberCsvHeader, readCsvHead, type CsvHead, ty
  * 2. **Pemetaan & pratinjau:** the browser reads the file's head (import-head.ts; nothing is sent yet): the separator,
  *    the encoding and the rows, each column of the file and the ALTIS field it fills (a required one missing, or a
  *    column the import does not know, stops here: the server would refuse the whole file), the first 5 rows with the
- *    cells that will not pass marked, and the mode: create new members only (a number that exists is skipped) or also
+ *    cells that will not pass marked in colour and in words (why, and a count of the ones that refuse their row and the
+ *    ones only warned of), and the mode: create new members only (a number that exists is skipped) or also
  *    update the ones that exist (an empty cell keeps the stored value).
  * 3. **Uji kering:** the file goes up (the staged context `members.import`) and a dry run reads and checks every row
  *    without writing: the counts (will create, will update, unchanged, refused per reason), the warnings and the first
@@ -286,6 +287,18 @@ export function MemberImportScreen() {
   const realDone = realRun.data !== undefined && TERMINAL.has(realRun.data.status);
   const check = head === null ? null : checkMemberCsvHeader(head.header);
   const typeCodes = new Set((types.data?.items ?? []).map((x) => x.code.toLowerCase()));
+  // The preview's rows, each cell with how it will fare (null: a column the preview does not show, or a fine value).
+  const previewFlags =
+    head === null || check === null
+      ? []
+      : head.rows.slice(0, 5).map((row) =>
+          head.header.map((_, i) => {
+            const c = check.columns[i];
+            return typeof c === 'string' && c !== 'unknown' && c !== 'duplicate' ? cellFlag(c, row[i] ?? '', typeCodes) : null;
+          }),
+        );
+  const flagged = previewFlags.flat().filter((f): f is CellFlag => f !== null);
+  const refusedCells = flagged.filter((f) => f.tone === 'bad').length;
 
   return (
     <div className="grid max-w-5xl gap-6">
@@ -439,10 +452,19 @@ export function MemberImportScreen() {
                       const c = check.columns[i];
                       if (typeof c !== 'string' || c === 'unknown' || c === 'duplicate') return null;
                       const v = row[i] ?? '';
-                      const flag = cellFlag(c, v, typeCodes);
+                      const flag = previewFlags[r]?.[i] ?? null;
                       return (
                         <td key={i} className={cn(TABLE.td, 'whitespace-nowrap')}>
-                          {v === '' ? <span className="text-muted-foreground">—</span> : flag === null ? v : <StatusText tone={flag}>{v}</StatusText>}
+                          {v === '' ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : flag === null ? (
+                            v
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5">
+                              <StatusText tone={flag.tone}>{v}</StatusText>
+                              <Tag tone={flag.tone}>{t(`members.import.cell.${flag.problem}`)}</Tag>
+                            </span>
+                          )}
                         </td>
                       );
                     })}
@@ -451,6 +473,7 @@ export function MemberImportScreen() {
               </tbody>
             </table>
           </div>
+          {flagged.length > 0 && <p className="text-sm text-muted-foreground">{t('members.import.flagged', { refused: refusedCells, warned: flagged.length - refusedCells })}</p>}
           {progress !== null && (
             <p role="status" className="text-sm text-muted-foreground">
               {t('members.import.uploading', { percent: progress })}
@@ -542,12 +565,20 @@ const FIELD_LABEL: Readonly<Record<MemberCsvColumn, TKey>> = {
   locale: 'members.field.locale',
 };
 
-/** How a preview cell will fare: red when the row will be refused for it, amber when it is only warned of. */
-function cellFlag(column: MemberCsvColumn, value: string, typeCodes: ReadonlySet<string>): 'bad' | 'warn' | null {
+/** How a preview cell will fare: `bad` when the row will be refused for it, `warn` when it is only warned of; and why. */
+interface CellFlag {
+  tone: 'bad' | 'warn';
+  problem: 'unknown_type' | 'unreadable_date' | 'gender_unknown';
+}
+
+/** See {@link CellFlag}; null for a value the import takes as it is. */
+function cellFlag(column: MemberCsvColumn, value: string, typeCodes: ReadonlySet<string>): CellFlag | null {
   const v = value.trim();
   if (v === '') return null;
-  if (column === 'member_type') return typeCodes.size > 0 && !typeCodes.has(v.toLowerCase()) ? 'bad' : null;
-  if (column === 'birth_date' || column === 'joined_on' || column === 'expires_on') return /^\d{4}-\d{2}-\d{2}$|^\d{1,2}[/.-]\d{1,2}[/.-]\d{4}$/.test(v) ? null : 'bad';
-  if (column === 'gender') return /^(l|p|m|f|male|female|laki-laki|perempuan)$/i.test(v) ? null : 'warn';
+  if (column === 'member_type') return typeCodes.size > 0 && !typeCodes.has(v.toLowerCase()) ? { tone: 'bad', problem: 'unknown_type' } : null;
+  if (column === 'birth_date' || column === 'joined_on' || column === 'expires_on') {
+    return /^\d{4}-\d{2}-\d{2}$|^\d{1,2}[/.-]\d{1,2}[/.-]\d{4}$/.test(v) ? null : { tone: 'bad', problem: 'unreadable_date' };
+  }
+  if (column === 'gender') return /^(l|p|m|f|male|female|laki-laki|perempuan)$/i.test(v) ? null : { tone: 'warn', problem: 'gender_unknown' };
   return null;
 }
