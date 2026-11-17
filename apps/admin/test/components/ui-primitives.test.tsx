@@ -2,6 +2,7 @@ import type { MeResponse } from '@altis/shared/api/auth';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import {
@@ -13,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -77,6 +79,49 @@ describe('Checkbox', () => {
     expect(box.getAttribute('aria-checked')).toBe('true');
     fireEvent.click(box);
     expect(box.getAttribute('aria-checked')).toBe('false');
+  });
+});
+
+describe('the focus of a form control stays visible', () => {
+  // Tailwind writes the `aria-invalid:` rules after the `focus-visible:` ones at the same specificity: a property both
+  // set is the invalid one's on a focused invalid field, unless an `aria-invalid:focus-visible:` rule sets it again.
+  // And `outline-none` sets the outline style to none for the outline width utilities too: a focus outline after it
+  // must set its style again.
+  const property = (utility: string): string => utility.split('-', 1)[0]!;
+  function focusShadowedWhenInvalid(className: string): string[] {
+    const classes = className.split(/\s+/);
+    const set = (prefix: string): Set<string> => new Set(classes.filter((c) => c.startsWith(prefix) && !c.slice(prefix.length).includes(':')).map((c) => property(c.slice(prefix.length))));
+    const onFocus = set('focus-visible:');
+    const restated = set('aria-invalid:focus-visible:');
+    return [...set('aria-invalid:')].filter((p) => onFocus.has(p) && !restated.has(p));
+  }
+
+  it('an invalid input, select, textarea or select trigger shows the focus look when it has the focus', () => {
+    render(
+      <>
+        <Input aria-label="Nama" aria-invalid />
+        <select aria-label="Tipe" aria-invalid className={SELECT_CLASS} />
+        <textarea aria-label="Catatan" aria-invalid className={TEXTAREA_CLASS} />
+        <Select>
+          <SelectTrigger aria-label="Cabang" aria-invalid>
+            <SelectValue />
+          </SelectTrigger>
+        </Select>
+      </>,
+    );
+    for (const name of ['Nama', 'Tipe', 'Catatan', 'Cabang']) {
+      const control = screen.getByLabelText(name);
+      expect(control.getAttribute('aria-invalid')).toBe('true');
+      expect(focusShadowedWhenInvalid(control.className), name).toEqual([]);
+      expect(control.className).toMatch(/(^|\s)focus-visible:border-ring(\s|$)/);
+    }
+  });
+
+  it('the checkbox draws its focus outline after outline-none', () => {
+    render(<Checkbox aria-label="Tampil di OPAC" />);
+    const classes = screen.getByRole('checkbox', { name: 'Tampil di OPAC' }).className.split(/\s+/);
+    expect(classes).toContain('outline-none');
+    expect(classes).toEqual(expect.arrayContaining(['focus-visible:outline-2', 'focus-visible:outline-solid']));
   });
 });
 
