@@ -468,6 +468,11 @@ describe('the shell theme (S16)', () => {
     expect(SHELL_CSS).toContain('@media (min-width:64rem){.menu{flex:1 1 0%;min-width:0;order:0}.menu ul{justify-content:flex-end}}');
   });
 
+  it('the footer: on a wide screen its grid has a column per block it shows', () => {
+    expect(SHELL_CSS).toContain('.foot-grid{grid-template-columns:1.2fr 1fr 1fr 1.3fr}.foot-grid-3{grid-template-columns:1fr 1fr 1.3fr}');
+    expect(SHELL_CSS).toContain('.foot-grid-2{grid-template-columns:1fr 1.3fr}');
+  });
+
   it('the footer: its links, then "Ditenagai ALTIS Community" with the source code link (AGPL-3.0 §13, rel="noopener") and the staff sign-in, in both languages', async () => {
     for (const locale of LOCALES) {
       const html = await (await page({}, `/x?lang=${locale}`, { ...CTX, locale })).text();

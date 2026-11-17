@@ -261,5 +261,6 @@ export const SHELL_CSS: string = [
   '.foot-contact{display:grid;margin:.5rem 0 0;line-height:1.75}',
   '.site-footer .foot-contact a{display:inline;min-height:0;text-decoration:underline;text-underline-offset:.2em;overflow-wrap:anywhere}',
   '@media (min-width:40rem){.foot-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}',
-  '@media (min-width:60rem){.foot-grid{grid-template-columns:1.2fr 1fr 1fr 1.3fr}}',
+  '@media (min-width:60rem){.foot-grid{grid-template-columns:1.2fr 1fr 1fr 1.3fr}.foot-grid-3{grid-template-columns:1fr 1fr 1.3fr}' +
+    '.foot-grid-2{grid-template-columns:1fr 1.3fr}}',
 ].join('\n');
