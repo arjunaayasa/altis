@@ -431,6 +431,8 @@ export { orphanBackups } from './backup/orphans.js';
 // 1c Task 26: the system dashboard (permission-scoped sections and alerts, decision C33).
 export { ALERT_PERMISSION, dashboardSummary } from './dashboard/summary.js';
 export type { DashboardOptions } from './dashboard/summary.js';
+// Beranda's library figures: today at a desk's branch, and the permission-scoped library sections.
+export { deskDashboard, libraryDashboard } from './dashboard/home.js';
 // 1c Task 21: the download preparation (`backup.prepare_download`, the preparer's own `.altisbak`), its prepared files
 // for the ranged download, and the archive upload (an `external` backup).
 export {
