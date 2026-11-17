@@ -2,6 +2,7 @@ import { jsonForHtmlScript, type SafeHtml } from '@altis/core';
 import type { DbHandle } from '@altis/db';
 import { DEFAULT_ACCENT, isAccent } from '@altis/opac-theme';
 import { LOCALES, isLocale, resolveLocale, type Locale } from '@altis/shared';
+import { OPAC_HOME_DEFAULT, opacHomeTextIn, type OpacHomeContent } from '@altis/shared/api/opac-home';
 import type { Context } from 'hono';
 import { raw } from 'hono/html';
 import type { JSX } from 'hono/jsx/jsx-runtime';
@@ -11,8 +12,9 @@ import type { Config } from '../../config.js';
 import { cspHeader, cspNonce } from '../../http/csp.js';
 import type { AppEnv } from '../../http/request-id.js';
 import type { AppServices } from '../../services.js';
-import { Layout, toDocument, type HeroBand, type PageFrame } from '../layout.js';
-import { navPages, type OpacNavLink } from './queries.js';
+import { Layout, toDocument, type FrameLink, type HeroBand, type PageFrame, type SiteFooter } from '../layout.js';
+import { opacText } from './messages.js';
+import { hasPublishedNews, navPages, type OpacNavLink } from './queries.js';
 import { absoluteUrl, isLocalPath, withLang } from './urls.js';
 
 // The page frame of the catalogue's OPAC pages (Phase 2 Tasks 3 and 21; spec §9.1, §9.2). Every catalogue page handler
@@ -44,6 +46,46 @@ export interface OpacContext {
   indexable: boolean;
   /** The menu pages (`show_in_nav`, published, ≤ 8, by `sort_order`); absent: no menu (the status pages). */
   nav?: readonly OpacNavLink[];
+  // ---- Komunitas (OPAC look) ----
+  /** What the site menu and the footer show of the library; absent: the status pages, which read nothing. */
+  site?: SiteInfo;
+}
+
+/** The library's site as the menu and the footer of every page show it (from the settings and the published news). */
+export interface SiteInfo {
+  /** `library.address` (line breaks kept), or null. */
+  address: string | null;
+  /** The opening hours of the home page's visit block (none while that block is switched off). */
+  hours: readonly { days: string; time: string }[];
+  /** The library's colour of the header bar (`#rrggbb`), or null: the accent's. */
+  brand: string | null;
+  /** The home page shows its "about" block (switched on, with content): the menu's "Profil". */
+  profile: boolean;
+  /** The home page shows its services block: the menu's "Layanan". */
+  services: boolean;
+  /** The home page shows its visit block (switched on, with an address or hours): the menu's "Kontak". */
+  contact: boolean;
+  /** A news post is published: the menu's "Berita". */
+  news: boolean;
+  /** The language of the library's own texts (the address, the hours) when it is not the page's. */
+  contentLang?: Locale | undefined;
+}
+
+/** The site of `home` with `address` and whether news is published (see SiteInfo). */
+export function siteInfo(home: OpacHomeContent, address: string | null, news: boolean): SiteInfo {
+  const b = home.blocks;
+  const about = home.about;
+  const hasAddress = address !== null && address.trim() !== '';
+  const aboutText = opacHomeTextIn(about.text, 'id') ?? opacHomeTextIn(about.text, 'en');
+  return {
+    address: hasAddress ? address : null,
+    hours: b.visit ? home.hours.map((h) => ({ days: h.days, time: h.time })) : [],
+    brand: home.brand ?? null,
+    profile: b.about && (aboutText !== null || about.photo !== null || about.founded !== null || about.librarians !== null),
+    services: b.services && (home.services.length > 0 || home.facilities.length > 0),
+    contact: b.visit && (hasAddress || home.hours.length > 0),
+    news,
+  };
 }
 
 /** One OPAC page. */
@@ -76,6 +118,8 @@ export interface OpacPageOptions {
   openGraph?: { type?: string; image?: string | null } | false;
   /** The search form in the header; default true (the home page shows its own). */
   headerSearch?: boolean;
+  /** The page's own search form in the header's search band, in place of the plain one (the results page's). */
+  searchBand?: () => JSX.Element;
   // ---- Komunitas (OPAC home page) ----
   /** The home page's hero band around the header (layout.tsx HeroBand). */
   hero?: HeroBand;
@@ -107,11 +151,15 @@ export function requestNow(c: Context<AppEnv>): number {
 export async function opacContext(rc: OpacContextSource): Promise<OpacContext> {
   const handle = rc.db.db;
   const settings = rc.services.settings;
-  const [libraryName, libraryLocale, accent, indexable] = await Promise.all([
+  const now = requestNow(rc.c);
+  const [libraryName, libraryLocale, accent, indexable, address, home, news] = await Promise.all([
     settings.get<string>(handle, 'library.name'),
     settings.get<string>(handle, 'library.locale'),
     settings.get<string>(handle, 'opac.accent'),
     settings.get<boolean>(handle, 'opac.indexable'),
+    settings.get<string | null>(handle, 'library.address'),
+    settings.get<OpacHomeContent>(handle, 'opac.home'),
+    hasPublishedNews(handle, now),
   ]);
   const locale = resolveLocale(rc.c.req.query('lang'), libraryLocale);
   return {
@@ -120,7 +168,8 @@ export async function opacContext(rc: OpacContextSource): Promise<OpacContext> {
     accent: isAccent(accent) ? accent : DEFAULT_ACCENT,
     baseUrl: rc.config.baseUrl,
     indexable: indexable !== false,
-    nav: await navPages(handle, requestNow(rc.c), locale),
+    nav: await navPages(handle, now, locale),
+    site: { ...siteInfo(home ?? OPAC_HOME_DEFAULT, address ?? null, news), contentLang: isLocale(libraryLocale) && libraryLocale !== locale ? libraryLocale : undefined },
   };
 }
 
@@ -220,22 +269,69 @@ function withoutLang(path: string): string {
   return `${rest.slice(0, queryAt)}${params.length === 0 ? '' : `?${params.join('&')}`}${hash}`;
 }
 
+/** The section of the site a path belongs to: what the menu marks as the current page. */
+function sectionOf(path: string): string {
+  if (path === '/') return '/';
+  if (path === '/cari' || path.startsWith('/cari/') || path.startsWith('/katalog/')) return '/cari';
+  if (path === '/berita' || path.startsWith('/berita/')) return '/berita';
+  return path;
+}
+
 /**
- * The header of a catalogue page (layout.tsx PageFrame): the language switch to this path and query in each language
- * from baseUrl (on this site, root-relative, while no baseUrl is known), the brand and the menu links in the page's
- * language when the request named it, and the search form when `o.search`.
+ * The site menu: Beranda and Katalog always, then Profil, Layanan, Berita and Kontak when their target has content
+ * (the home page's blocks, a published news post), then the menu pages; each in the page's language when the request
+ * named it, the one of the current path marked.
  */
-export function pageFrame(c: Context<AppEnv>, ctx: Pick<OpacContext, 'locale' | 'baseUrl' | 'nav'>, o: { search: boolean }): PageFrame {
+export function siteMenu(locale: Locale, site: SiteInfo | undefined, pages: readonly OpacNavLink[], lang: Locale | null, path: string): FrameLink[] {
+  const keep = (href: string): string => (lang === null ? href : withLang(href, lang));
+  const anchor = (id: string): string => `${keep('/')}#${id}`;
+  const current = sectionOf(path);
+  const entries: [href: string, key: Parameters<typeof opacText>[1], section: string | null][] = [
+    [keep('/'), 'shell.menu.home', '/'],
+    [keep('/cari'), 'shell.menu.catalog', '/cari'],
+  ];
+  if (site?.profile === true) entries.push([anchor('tentang'), 'shell.menu.profile', null]);
+  if (site?.services === true) entries.push([anchor('layanan'), 'shell.menu.services', null]);
+  if (site?.news === true) entries.push([keep('/berita'), 'shell.menu.news', '/berita']);
+  if (site?.contact === true) entries.push([anchor('kunjungi'), 'shell.menu.contact', null]);
+  return [
+    ...entries.map(([href, key, section]): FrameLink => ({ href, label: opacText(locale, key), current: section !== null && section === current })),
+    ...pages.map((link): FrameLink => ({ href: keep(link.href), label: link.label, lang: link.lang, current: link.href === path })),
+  ];
+}
+
+/** The footer of a page with `site`: the library's address and hours, its links, and the search field. */
+export function siteFooter(locale: Locale, site: SiteInfo | undefined, pages: readonly OpacNavLink[], lang: Locale | null): SiteFooter {
+  const keep = (href: string): string => (lang === null ? href : withLang(href, lang));
+  const links: FrameLink[] = [{ href: keep('/cari'), label: opacText(locale, 'shell.menu.catalog') }];
+  if (site?.profile === true) links.push({ href: `${keep('/')}#tentang`, label: opacText(locale, 'shell.footer.profile') });
+  if (site?.services === true) links.push({ href: `${keep('/')}#layanan`, label: opacText(locale, 'shell.menu.services') });
+  if (site?.news === true) links.push({ href: keep('/berita'), label: opacText(locale, 'shell.menu.news') });
+  if (site?.contact === true) links.push({ href: `${keep('/')}#kunjungi`, label: opacText(locale, 'shell.footer.visit') });
+  for (const page of pages) links.push({ href: keep(page.href), label: page.label, lang: page.lang });
+  return { address: site?.address ?? null, hours: site?.hours ?? [], contentLang: site?.contentLang, links, search: { lang } };
+}
+
+/**
+ * The header and footer of a catalogue page (layout.tsx PageFrame): the language switch to this path and query in each
+ * language from baseUrl (on this site, root-relative, while no baseUrl is known), the brand, the site menu and the
+ * footer's links in the page's language when the request named it, and the search form when `o.search`.
+ */
+export function pageFrame(c: Context<AppEnv>, ctx: Pick<OpacContext, 'locale' | 'baseUrl' | 'nav' | 'site'>, o: { search: boolean }): PageFrame {
   const url = c.req.url;
-  const here = `${origin(ctx.baseUrl)}${keptPath(url, ctx.baseUrl)}`;
+  const path = keptPath(url, ctx.baseUrl);
+  const here = `${origin(ctx.baseUrl)}${path}`;
   const query = keptQuery(url);
   const lang = requestLang(c);
   const langHrefs = Object.fromEntries(LOCALES.map((l) => [l, `${here}${queryWith(query, l)}`])) as Record<Locale, string>;
+  const pages = ctx.nav ?? [];
   return {
     homeHref: lang === null ? '/' : `/?lang=${lang}`,
     langHrefs,
-    nav: (ctx.nav ?? []).map((link) => ({ href: lang === null ? link.href : withLang(link.href, lang), label: link.label, lang: link.lang })),
+    nav: ctx.nav === undefined ? [] : siteMenu(ctx.locale, ctx.site, pages, lang, path),
     search: o.search ? { lang } : null,
+    footer: siteFooter(ctx.locale, ctx.site, pages, lang),
+    brand: ctx.site?.brand ?? null,
   };
 }
 
@@ -345,7 +441,7 @@ export function opacPage(rc: OpacResponder, ctx: OpacContext, o: OpacPageOptions
       description={description}
       robots={ctx.indexable ? ROBOTS[o.robots] : 'noindex'}
       head={head}
-      frame={pageFrame(rc.c, ctx, { search: o.headerSearch !== false })}
+      frame={{ ...pageFrame(rc.c, ctx, { search: o.headerSearch !== false }), searchBand: o.searchBand?.() }}
       hero={o.hero}
     >
       {o.body(nonce)}

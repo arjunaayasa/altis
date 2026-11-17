@@ -8,8 +8,16 @@ import { opacText } from './messages.js';
 import { opacContext, opacPage, requestLang, type OpacContextSource } from './page.js';
 import { xmlResponse } from './respond.js';
 import { cardTitle, resultCards, type ResultCardData } from './result-card.js';
-import { parseOpacSearchParams, searchLookups, searchMasters, searchPath, type ParsedOpacSearch } from './search-params.js';
-import { SearchView, searchTitle } from './search-view.js';
+import {
+  parseOpacSearchParams,
+  searchLookups,
+  searchMasters,
+  searchPath,
+  unscopedText,
+  type OpacSearchScope,
+  type ParsedOpacSearch,
+} from './search-params.js';
+import { SearchBox, SearchView, searchTitle } from './search-view.js';
 import { absoluteUrl, withLang } from './urls.js';
 
 // The OPAC routes of the search (Phase 2 Task 33; spec §4, §9.1, §9.6):
@@ -158,9 +166,16 @@ const search = route({
     const ctx = await opacContext(rc);
     const { db, masters, parsed, agents } = await requestSearch(rc);
     const pageSize = pageSizeOf(await rc.services.settings.get<number>(db, 'opac.resultsPerPage'));
-    const { text, page } = parsed.query;
+    const { page } = parsed.query;
     const { echo } = parsed;
-    const result = await runSearch(db, parsed, { page, pageSize, facets: true, now: rc.now });
+    const text = echo.q ?? '';
+    const searched = await runSearch(db, parsed, { page, pageSize, facets: true, now: rc.now });
+    // The search ran the text in its field (`ruas`); the spelling line shows it as the visitor typed it.
+    const scope: OpacSearchScope = (echo.ruas as OpacSearchScope | undefined) ?? 'semua';
+    const result: CatalogSearchResult =
+      searched.correction === null
+        ? searched
+        : { ...searched, correction: { ...searched.correction, from: unscopedText(searched.correction.from, scope), to: unscopedText(searched.correction.to, scope) } };
     const values = (facet: 'lc' | 'sb', selected: string | undefined): string[] => [
       ...(result.facets?.[facet] ?? []).map((v) => v.value),
       ...(selected === undefined ? [] : [selected]),
@@ -179,6 +194,7 @@ const search = route({
       canonicalPath: searchPath(echo, { hal: echo.hal ?? null }, null),
       robots: 'noindex-follow',
       headerSearch: false,
+      searchBand: () => <SearchBox locale={ctx.locale} lang={lang} echo={echo} text={text} />,
       head: () => <link rel="alternate" type="application/rss+xml" title={feedTitle} href={searchPath(echo, {}, lang, '/cari/rss')} />,
       body: () => (
         <SearchView
@@ -235,7 +251,7 @@ const searchRss = route({
     const result = await runSearch(db, parsed, { page: 1, pageSize: FEED_ITEMS, facets: false, now: rc.now });
     const cards = await resultCards(db, result.recordIds);
     const { echo } = parsed;
-    const text = parsed.query.text;
+    const text = echo.q ?? '';
     const xml = rssXml(
       {
         title:

@@ -150,6 +150,21 @@ describe('parseOpacSearchParams', () => {
     expect(parse('persis=1').echo).toEqual({});
   });
 
+  it('ruas=judul|pengarang|subjek with a text: the text searched in that field, echoed as typed; semua, others or no text: nothing', () => {
+    const titled = parse('q=rumah+%22ujung+sawah%22&ruas=judul');
+    expect(titled.query.text).toBe('judul:rumah judul:"ujung sawah"');
+    expect(titled.echo).toEqual({ q: 'rumah "ujung sawah"', ruas: 'judul' });
+    expect(parse('q=wibowo&ruas=pengarang').query.text).toBe('pengarang:wibowo');
+    expect(parse('q=novel&ruas=subjek').query.text).toBe('subjek:novel');
+    for (const query of ['q=rumah&ruas=semua', 'q=rumah&ruas=isbn', 'q=rumah&ruas=JUDUL', 'q=rumah&ruas=']) {
+      expect(parse(query).query.text, query).toBe('rumah');
+      expect(parse(query).echo, query).toEqual({ q: 'rumah' });
+    }
+    expect(parse('ruas=judul').echo).toEqual({});
+    // Every link of the page keeps it, right after the text.
+    expect(searchPath(parse('q=rumah&ruas=judul&jenis=buku').echo, {}, null)).toBe('/cari?q=rumah&ruas=judul&jenis=BUKU');
+  });
+
   it('a repeated parameter: the first value counts; unknown parameters and lang are not echoed', () => {
     expect(parse('jenis=EBOOK&jenis=BUKU&kelas=3&kelas=4').query.filters).toEqual({ materialTypeIds: [EBOOK], classDigit: 3 });
     expect(parse('q=x&lang=en&utm_source=a&foo=bar').echo).toEqual({ q: 'x' });

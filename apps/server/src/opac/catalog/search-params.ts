@@ -10,6 +10,8 @@ import { ATTACHMENT_MEDIA, isUlid, normalizeKey, type Locale } from '@altis/shar
 //
 //   q          the query text in the §4.4 syntax (control characters → spaces, ≤ 500 code points)
 //   persis     `1`: the query exactly as typed (the "Cari X saja?" link of an applied correction, §4.7)
+//   ruas       judul|pengarang|subjek: every word or phrase of `q` searched in that field (the syntax's `judul:`,
+//              `pengarang:`, `subjek:`), only with a text; `semua` (or nothing) searches every field
 //   jenis      a material type's code      bahasa   a language's code
 //   koleksi    a collection type's code    cabang   a branch's code
 //   lokasi     a room's id                 subjek   a subject's id        pengarang   an agent's id
@@ -24,6 +26,7 @@ import { ATTACHMENT_MEDIA, isUlid, normalizeKey, type Locale } from '@altis/shar
 export const OPAC_SEARCH_PARAMS = [
   'q',
   'persis',
+  'ruas',
   'jenis',
   'bahasa',
   'koleksi',
@@ -59,6 +62,43 @@ export const OPAC_SORTS = Object.freeze({
 } as const satisfies Record<string, NonNullable<CatalogSearchQuery['sort']>>);
 
 export type OpacSort = keyof typeof OPAC_SORTS;
+
+// ---- Komunitas (OPAC look): the field a search looks in ----
+/**
+ * The fields a search can be limited to (`ruas`), `semua` first (every field, the default): the fields of the query
+ * syntax that search one part of a record. ISBN is no field of its own: the search recognises an ISBN or ISSN in any
+ * text first.
+ */
+export const OPAC_SEARCH_SCOPES = Object.freeze(['semua', 'judul', 'pengarang', 'subjek'] as const);
+
+export type OpacSearchScope = (typeof OPAC_SEARCH_SCOPES)[number];
+
+/** A field of the query syntax already written before a word (`judul:`, `-author:`), any case. */
+const FIELDED = /^-?[A-Za-z]+:/;
+
+/**
+ * `text` with every word and quoted phrase searched in the field `scope` (`rumah "ujung sawah"` → `judul:rumah
+ * judul:"ujung sawah"`): a word or phrase that already names a field, the operators `ATAU`/`OR` and an unbalanced quote
+ * stay as typed, an excluding `-` stays in front. The text is returned as it is for `semua`.
+ */
+export function scopedText(text: string, scope: OpacSearchScope): string {
+  if (scope === 'semua') return text;
+  const out: string[] = [];
+  // A word, or a quoted phrase with the field that may stand before it; a lone quote (an unbalanced one) on its own.
+  const re = /(-?)((?:[A-Za-z]+:)?"[^"]*"|[^\s"]+)|"/gu;
+  for (const m of text.matchAll(re)) {
+    const [whole, minus = '', term = ''] = m;
+    if (whole === '"' || term === '' || FIELDED.test(whole) || (minus === '' && (term === 'ATAU' || term === 'OR'))) out.push(whole);
+    else out.push(`${minus}${scope}:${term}`);
+  }
+  return out.join(' ');
+}
+
+/** `text` without the field `scope` written before its words: what {@link scopedText} added, as the visitor typed it. */
+export function unscopedText(text: string, scope: OpacSearchScope): string {
+  if (scope === 'semua') return text;
+  return text.replace(new RegExp(`(^|\\s)(-?)${scope}:`, 'giu'), '$1$2');
+}
 
 /** The `code_key` → id of each master the search takes a code of. */
 export interface OpacSearchLookups {
@@ -127,9 +167,15 @@ export function parseOpacSearchParams(params: URLSearchParams, lookups: OpacSear
   const filters: ParsedOpacSearch['query']['filters'] = {};
 
   const text = cleanText(first(params, 'q'));
+  let scope: OpacSearchScope = 'semua';
   if (text !== '') {
     echo.q = text;
     if (first(params, 'persis') === '1') echo.persis = '1';
+    const ruas = first(params, 'ruas');
+    if (ruas !== undefined && ruas !== 'semua' && (OPAC_SEARCH_SCOPES as readonly string[]).includes(ruas)) {
+      scope = ruas as OpacSearchScope;
+      echo.ruas = scope;
+    }
   }
 
   const codes: [OpacSearchParam, ReadonlyMap<string, string>, 'materialTypeIds' | 'languageIds' | 'collectionTypeIds' | 'branchIds'][] = [
@@ -193,7 +239,8 @@ export function parseOpacSearchParams(params: URLSearchParams, lookups: OpacSear
   const page = hal !== undefined && PAGE.test(hal) ? Number(hal) : 1;
   if (page > 1) echo.hal = String(page);
 
-  return { query: { text, scope: 'opac', filters, sort, page }, echo };
+  // The search runs the text in its field; the page shows it as typed (echo.q).
+  return { query: { text: scopedText(text, scope), scope: 'opac', filters, sort, page }, echo };
 }
 
 /**
