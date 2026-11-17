@@ -163,6 +163,35 @@ describe('the member page form', () => {
     return { app, patches, change: (next: Partial<MemberView>) => (current = { ...current, ...next, version: current.version + 1 }) };
   }
 
+  it("shows the member's type and home branch in their lists also when the lists come after the member", async () => {
+    // The lists answer only once the form is on the page: their options arrive after the form set the values.
+    let answer: () => void = () => undefined;
+    const later = new Promise<void>((resolve) => (answer = resolve));
+    startApp({
+      me: adminMe(),
+      path: PATH,
+      routes: {
+        'GET members/types': async () => {
+          await later;
+          return { items: [SISWA] };
+        },
+        'GET branches': async () => {
+          await later;
+          return { items: [BRANCH] };
+        },
+        'GET members/:id': () => ({ ...CREATED, homeBranchId: BRANCH.id }),
+        'GET members/:id/events': () => ({ items: [], nextCursor: null }),
+      },
+    });
+    await screen.findByLabelText('Tipe anggota');
+    answer();
+    await waitFor(() => expect(screen.getByLabelText<HTMLSelectElement>('Tipe anggota').options.length).toBe(2));
+    await waitFor(() => expect(screen.getByLabelText<HTMLSelectElement>('Tipe anggota').value).toBe(TYPE_ID));
+    expect(screen.getByLabelText<HTMLSelectElement>('Cabang asal').value).toBe(BRANCH.id);
+    // Putting the values back changed nothing the user typed.
+    expect(screen.queryByText('Ada perubahan yang belum disimpan.')).toBeNull();
+  });
+
   it('puts the head, then the summary strip, then the tabs across the page; a wrapped tab row grows instead of covering the panel', async () => {
     memberPage();
     const heading = await screen.findByRole('heading', { level: 1, name: 'Siti Aminah' });
