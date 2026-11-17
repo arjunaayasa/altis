@@ -301,7 +301,7 @@ export function MemberImportScreen() {
   const refusedCells = flagged.filter((f) => f.tone === 'bad').length;
 
   return (
-    <div className="grid max-w-5xl gap-6">
+    <div className="grid gap-6">
       <div className="grid max-w-[75ch] gap-1">
         <h1 className="text-xl leading-tight font-bold">{t('nav.members.import')}</h1>
         <p className="text-sm text-muted-foreground">{t('members.import.page_intro')}</p>

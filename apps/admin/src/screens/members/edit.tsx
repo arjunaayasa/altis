@@ -303,8 +303,8 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
         </Field>
       </FormSection>
       <FormSection title={t('members.form.personal')} intro={t('members.form.personal_intro')} disabled={!canManage}>
-        {text('name', 'members.field.name', { max: 191, className: 'sm:col-span-2' })}
-        <fieldset className="grid content-start gap-2 sm:col-span-2">
+        {text('name', 'members.field.name', { max: 191, className: 'sm:col-span-2 xl:col-span-3' })}
+        <fieldset className="grid content-start gap-2 sm:col-span-2 xl:col-span-3">
           <legend className="mb-1 text-sm font-medium">{t('members.field.gender')}</legend>
           <div className="flex flex-wrap gap-5">
             {GENDER_CHOICES.map((g) => (
@@ -323,16 +323,16 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
       <FormSection title={t('members.form.contact')} intro={t('members.form.contact_intro')} disabled={!canManage}>
         {text('email', 'members.field.email', { max: 191, type: 'email' })}
         {text('phone', 'members.field.phone', { max: 64, type: 'tel' })}
-        <Field label={t('members.field.address')} error={errors.address} className="sm:col-span-2">
+        <Field label={t('members.field.address')} error={errors.address} className="sm:col-span-2 xl:col-span-3">
           {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={1000} {...form.register('address')} />}
         </Field>
         {text('postalCode', 'members.field.postal_code', { max: 16 })}
-        <Field label={t('members.field.mailing_address')} error={errors.mailingAddress} className="sm:col-span-2">
+        <Field label={t('members.field.mailing_address')} error={errors.mailingAddress} className="sm:col-span-2 xl:col-span-3">
           {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={1000} {...form.register('mailingAddress')} />}
         </Field>
       </FormSection>
       <FormSection title={t('members.form.notes')} intro={t('members.field.notes_hint')} disabled={!canManage}>
-        <Field label={t('members.field.notes')} error={errors.notes} className="sm:col-span-2">
+        <Field label={t('members.field.notes')} error={errors.notes} className="sm:col-span-2 xl:col-span-3">
           {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={5000} {...form.register('notes')} />}
         </Field>
       </FormSection>
@@ -354,7 +354,7 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
 
 /**
  * One part of the member form: its title and a sentence on the left (above on a narrow screen), its fields on the
- * right, a thin rule above every part but the first.
+ * right in two columns (three on a wide screen), a thin rule above every part but the first.
  */
 function FormSection({ title, intro, disabled, children }: { title: string; intro: string; disabled: boolean; children: ReactNode }) {
   const id = useId();
@@ -366,7 +366,7 @@ function FormSection({ title, intro, disabled, children }: { title: string; intr
         </h2>
         <p className="text-sm text-muted-foreground">{intro}</p>
       </div>
-      <fieldset disabled={disabled} className="grid min-w-0 content-start gap-x-5 gap-y-4 sm:grid-cols-2">
+      <fieldset disabled={disabled} className="grid min-w-0 content-start gap-x-5 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
         <legend className="sr-only">{title}</legend>
         {children}
       </fieldset>
