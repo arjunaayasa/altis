@@ -35,7 +35,7 @@ const checkbox = (name: string): HTMLInputElement => screen.getByRole('checkbox'
 
 /** A read-only permission's status words, which screen readers read after its label. */
 const grantedText = (label: string): string | undefined =>
-  screen.getByText(label).closest('li')?.querySelector('.sr-only')?.textContent?.trim();
+  screen.getByText(label).closest('li')?.querySelector('[data-grant]')?.textContent?.trim();
 
 /** The texts an element's aria-describedby points at. */
 const describedBy = (el: HTMLElement): string[] =>
