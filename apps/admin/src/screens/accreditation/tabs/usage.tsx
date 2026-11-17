@@ -1,5 +1,4 @@
 import type { UsageGridView } from '@altis/shared/api/accreditation';
-import { UploadIcon } from 'lucide-react';
 import { useId, useState, type JSX } from 'react';
 import { GroupMap } from '@/components/accreditation/usage/group-map';
 import { UsageGrid } from '@/components/accreditation/usage/grid';
@@ -8,6 +7,7 @@ import { UnsavedChangesDialog, hasUnsavedChanges } from '@/components/accreditat
 import { accredKeys, accredPaths, useInstruments, usePeriod } from '@/components/accreditation/usage/queries';
 import { useDateTime } from '@/components/data-table';
 import { Notice, NoticeAlert, RefetchProblem } from '@/components/form-field';
+import { LoadingState } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
@@ -47,9 +47,7 @@ export function UsageTab({ periodId }: { periodId: string }): JSX.Element {
       period.isError || grid.isError ? (
         <Notice kind="error">{problemText(t, error)}</Notice>
       ) : (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
+        <LoadingState />
       );
   } else if (importing) {
     const lastImport = grid.data.lastImport ?? period.data.lastUsageImport;
@@ -65,7 +63,7 @@ export function UsageTab({ periodId }: { periodId: string }): JSX.Element {
     const frozen = period.data.status === 'frozen';
     const lastImport = grid.data.lastImport ?? period.data.lastUsageImport;
     body = (
-      <div className="flex flex-col gap-6">
+      <div className="grid min-w-0 gap-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="grid gap-0.5 text-sm">
             {lastImport === null ? (
@@ -83,7 +81,6 @@ export function UsageTab({ periodId }: { periodId: string }): JSX.Element {
           </div>
           {canManage && configKnown && (
             <Button type="button" variant="outline" onClick={openImport}>
-              <UploadIcon aria-hidden="true" />
               {t('accreditation.usage.import_open')}
             </Button>
           )}
@@ -98,9 +95,9 @@ export function UsageTab({ periodId }: { periodId: string }): JSX.Element {
   }
 
   return (
-    <section aria-labelledby={titleId} data-period-id={periodId} className="flex flex-col gap-4">
-      <div className="grid gap-1">
-        <h2 id={titleId} className="text-lg font-semibold">
+    <section aria-labelledby={titleId} data-period-id={periodId} className="grid min-w-0 gap-4">
+      <div className="grid max-w-[75ch] gap-1">
+        <h2 id={titleId} className="text-base font-bold">
           {t('accreditation.usage.title')}
         </h2>
         <p className="text-sm text-muted-foreground">{t('accreditation.usage.intro')}</p>

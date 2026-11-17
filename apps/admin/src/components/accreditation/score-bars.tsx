@@ -12,8 +12,8 @@ export function ScoreBars({ score }: { score: ScoreView }): JSX.Element {
   const f = useFormats();
   const titleId = useId();
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3">
-      <h3 id={titleId} className="font-semibold">
+    <section aria-labelledby={titleId} className="grid gap-3">
+      <h3 id={titleId} className="text-base font-bold">
         {t('accreditation.workspace.bars.title')}
       </h3>
       <ul className="grid gap-3">
@@ -34,9 +34,9 @@ export function ScoreBars({ score }: { score: ScoreView }): JSX.Element {
                 aria-valuemin={0}
                 aria-valuemax={c.max}
                 aria-valuenow={c.sum}
-                className="h-2 w-full overflow-hidden rounded-full bg-muted"
+                className="h-2 w-full overflow-hidden rounded-full bg-layer-2"
               >
-                <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                <div className="h-full rounded-full bg-series-1" style={{ width: `${pct}%` }} />
               </div>
             </li>
           );

@@ -1,5 +1,4 @@
 import { SlimsDbConfigBody, type SlimsUsageTestResponse } from '@altis/shared/api/accreditation';
-import { PlugIcon } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 import { CheckField, Field, Notice } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
@@ -109,15 +108,15 @@ function TestAnswer({ answer }: { answer: SlimsUsageTestResponse }) {
       {answer.tables.length > 0 && (
         <div className="overflow-x-auto rounded-md border">
           <table aria-labelledby={tablesId} className="w-full text-sm">
-            <caption id={tablesId} className="px-3 py-2 text-left font-medium">
+            <caption id={tablesId} className="px-3 py-2 text-left font-semibold">
               {t('accreditation.usage.test.tables')}
             </caption>
-            <thead className="bg-muted/50 text-left">
+            <thead className="bg-layer text-left">
               <tr>
-                <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+                <th scope="col" className="px-3 py-2 font-semibold text-muted-foreground">
                   {t('catalog.migration.db.col_table')}
                 </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium text-muted-foreground">
+                <th scope="col" className="px-3 py-2 text-right font-semibold text-muted-foreground">
                   {t('catalog.migration.db.col_rows')}
                 </th>
               </tr>
@@ -217,7 +216,6 @@ function DbFields({
       <CheckField label={t('catalog.migration.db.tls')} checked={db.tls} onChange={(e) => set({ tls: e.target.checked })} />
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" disabled={test.kind === 'testing'} onClick={() => void runTest()}>
-          <PlugIcon aria-hidden="true" />
           {t('catalog.migration.db.test')}
         </Button>
         {test.kind === 'testing' && (
@@ -278,11 +276,11 @@ export function SourceForm({
   return (
     <div className="flex flex-col gap-4">
       <fieldset className="grid gap-3">
-        <legend className="mb-1 text-sm font-medium">{t('accreditation.usage.source.kind')}</legend>
+        <legend className="mb-1 text-meta font-semibold">{t('accreditation.usage.source.kind')}</legend>
         {choice('db', 'accreditation.usage.source.kind_db', 'accreditation.usage.source.kind_db_hint')}
         {choice('dump', 'accreditation.usage.source.kind_dump', 'accreditation.usage.source.kind_dump_hint')}
         {errors.kind !== undefined && (
-          <p id={kindError} className="text-sm text-destructive">
+          <p id={kindError} className="text-meta font-semibold text-bad">
             {t(errors.kind)}
           </p>
         )}
@@ -290,7 +288,7 @@ export function SourceForm({
       {value.kind === 'db' && (
         <>
           <DbFields db={value.db} errors={errors.db ?? {}} test={test} onChange={(db) => onChange({ ...value, db })} onTest={onTest} />
-          {errors.test !== undefined && <p className="text-sm text-destructive">{t(errors.test)}</p>}
+          {errors.test !== undefined && <p className="text-meta font-semibold text-bad">{t(errors.test)}</p>}
         </>
       )}
       {value.kind === 'dump' && (

@@ -1,9 +1,8 @@
 import type { ReportCatalogEntry } from '@altis/shared/api/reports';
 import { Link, useParams, useSearch } from '@tanstack/react-router';
-import { ArrowLeftIcon } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Badge, NoticeAlert, ProblemAlert } from '@/components/form-field';
-import { Button } from '@/components/ui/button';
+import { NoticeAlert } from '@/components/form-field';
+import { BackLink, EmptyState, ErrorState, LoadingState, PageHead, Tag } from '@/components/layout';
 import { useT } from '@/i18n';
 import { ReportBadges, reportTitle, useReportCatalog } from './catalog';
 import { ExportPanel } from './export-panel';
@@ -42,31 +41,25 @@ export function ReportDetailScreen() {
   const catalog = useReportCatalog();
   const entry = catalog.data?.reports.find((r) => r.id === reportId);
 
-  if (catalog.isError) {
+  if (catalog.isError && catalog.data === undefined) {
     return (
       <Frame>
-        <ProblemAlert error={catalog.error}>
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => void catalog.refetch()}>
-            {t('table.retry')}
-          </Button>
-        </ProblemAlert>
+        <ErrorState error={catalog.error} onRetry={() => void catalog.refetch()} retrying={catalog.isFetching} />
       </Frame>
     );
   }
   if (catalog.data === undefined) {
     return (
       <Frame>
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
+        <LoadingState />
       </Frame>
     );
   }
   if (entry === undefined) {
     return (
       <Frame>
-        <h1 className="text-2xl font-semibold">{t('reports.catalog.title')}</h1>
-        <p className="text-sm text-muted-foreground">{t('reports.detail.not_found')}</p>
+        <PageHead title={t('reports.catalog.title')} />
+        <EmptyState title={t('reports.detail.not_found')} />
       </Frame>
     );
   }
@@ -77,11 +70,8 @@ export function ReportDetailScreen() {
 function Frame({ children }: { children: ReactNode }) {
   const t = useT();
   return (
-    <div className="flex flex-col gap-6">
-      <Link to="/admin/reports" className="inline-flex items-center gap-1 self-start text-sm text-primary underline-offset-4 hover:underline">
-        <ArrowLeftIcon className="size-4" aria-hidden="true" />
-        {t('reports.detail.back')}
-      </Link>
+    <div className="grid gap-6">
+      <BackLink to="/admin/reports">{t('reports.detail.back')}</BackLink>
       {children}
     </div>
   );
@@ -136,13 +126,15 @@ function ReportPage({ entry, search }: { entry: ReportCatalogEntry; search: Read
 
   return (
     <Frame>
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">{title}</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge>{t(`reports.module.${entry.module}`)}</Badge>
-          <ReportBadges entry={entry} />
-        </div>
-      </header>
+      <PageHead
+        title={title}
+        intro={
+          <span className="flex flex-wrap items-center gap-2">
+            <Tag>{t(`reports.module.${entry.module}`)}</Tag>
+            <ReportBadges entry={entry} />
+          </span>
+        }
+      />
       {table ? (
         <>
           <ParamForm entry={entry} values={values} errors={errors} options={options} onChange={change} onApply={apply} onReset={reset} />
@@ -162,7 +154,7 @@ function ReportPage({ entry, search }: { entry: ReportCatalogEntry; search: Read
       ) : (
         <NoticeAlert>
           <span>{t('reports.detail.document')}</span>{' '}
-          <Link to="/admin/accreditation" className="text-primary underline-offset-4 hover:underline">
+          <Link to="/admin/accreditation" className="font-semibold text-accent-text underline-offset-4 hover:underline">
             {t('reports.detail.document_link')}
           </Link>
         </NoticeAlert>
