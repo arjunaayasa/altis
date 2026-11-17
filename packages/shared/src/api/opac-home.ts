@@ -13,6 +13,10 @@
  * text is the Indonesian one, which the English page then shows as before. The services, captions and hours are the
  * library's own text in the library's language.
  *
+ * The library's logo (shown with its name in the site's header and footer) is an upload of the same context, fitted in
+ * the browser onto a white tile, with its alternative text. The public contact (a telephone number and an e-mail
+ * address the library publishes) is part of the content too; the address may not be any user's or member's own.
+ *
  * No Node built-ins here: the browser bundles this module. Import it as `@altis/shared/api/opac-home`.
  */
 import { z } from 'zod';
@@ -169,6 +173,44 @@ export function opacHomeTextIn(value: OpacHomeText, lang: OpacHomeLang): { text:
   return null;
 }
 
+// ---- Komunitas (OPAC look): the logo and the public contact ----
+/**
+ * The logo is fitted in the browser into a white tile this high, its width following the logo's proportions between a
+ * square and four times the height (a taller logo is centred on a square tile).
+ */
+export const OPAC_HOME_LOGO_SIZE = Object.freeze({ height: 240, minWidth: 240, maxWidth: 960 });
+
+/** The library's logo: an `opac.home_photo` upload and its alternative text (required). */
+export const OpacHomeLogo = z.strictObject({
+  fileId: ulidField,
+  alt: required(OPAC_HOME_LIMITS.alt),
+});
+
+export type OpacHomeLogo = z.infer<typeof OpacHomeLogo>;
+
+/** The longest telephone number and e-mail address the page publishes. */
+export const OPAC_HOME_CONTACT_LIMITS = Object.freeze({ phone: 30, email: 191 });
+
+/**
+ * A telephone number as the library writes it: 6 to 15 digits with spaces, brackets, points or hyphens between them, and
+ * a leading `+` for an international number (`(021) 555-0101`, `+62 21 5550101`).
+ */
+export const OPAC_HOME_PHONE_PATTERN = /^\+?(?:[ ().-]*[0-9]){6,15}[ ().-]*$/;
+
+/** The `tel:` link of a telephone number: its digits, with the leading `+` it was written with. */
+export function phoneHref(phone: string): string {
+  const v = phone.trim();
+  return `tel:${v.startsWith('+') ? '+' : ''}${v.replace(/[^0-9]/g, '')}`;
+}
+
+/** The public contact: each null when the library publishes none. */
+export const OpacHomeContact = z.strictObject({
+  phone: z.string().trim().max(OPAC_HOME_CONTACT_LIMITS.phone).regex(OPAC_HOME_PHONE_PATTERN).nullable(),
+  email: z.string().trim().max(OPAC_HOME_CONTACT_LIMITS.email).pipe(z.email()).nullable(),
+});
+
+export type OpacHomeContact = z.infer<typeof OpacHomeContact>;
+
 /** The hero photo: as a photo, without a caption, with its vertical position and the darkness of its overlay. */
 export const OpacHomeHero = z.strictObject({
   fileId: ulidField,
@@ -220,9 +262,10 @@ export const OpacHomeBlocks = z.strictObject(
 export type OpacHomeBlocks = z.infer<typeof OpacHomeBlocks>;
 
 /** The file ids a content names: the hero, the "about" photo and the facility photos. */
-export function opacHomeFileIds(home: Pick<OpacHomeContent, 'hero' | 'about' | 'facilities'>): string[] {
+export function opacHomeFileIds(home: Pick<OpacHomeContent, 'hero' | 'logo' | 'about' | 'facilities'>): string[] {
   const ids: string[] = [];
   if (home.hero !== null) ids.push(home.hero.fileId);
+  if (home.logo !== null) ids.push(home.logo.fileId);
   if (home.about.photo !== null) ids.push(home.about.photo.fileId);
   for (const f of home.facilities) ids.push(f.fileId);
   return ids;
@@ -246,11 +289,17 @@ export const OpacHomeContent = z
     facilities: z.array(OpacHomePhoto).max(OPAC_HOME_LIMITS.facilities),
     hours: z.array(OpacHomeHours).max(OPAC_HOME_LIMITS.hours),
     blocks: OpacHomeBlocks,
+    // ---- Komunitas (OPAC look) ----
+    /** The library's logo beside its name in the header and the footer; null: the name alone. */
+    logo: OpacHomeLogo.nullable().default(null),
+    /** The telephone number and e-mail address the site publishes. */
+    contact: OpacHomeContact.default({ phone: null, email: null }),
   })
   .superRefine((home, ctx) => {
     const seen = new Set<string>();
     const paths: [string, (string | number)[]][] = [];
     if (home.hero !== null) paths.push([home.hero.fileId, ['hero', 'fileId']]);
+    if (home.logo !== null) paths.push([home.logo.fileId, ['logo', 'fileId']]);
     if (home.about.photo !== null) paths.push([home.about.photo.fileId, ['about', 'photo', 'fileId']]);
     home.facilities.forEach((f, i) => paths.push([f.fileId, ['facilities', i, 'fileId']]));
     for (const [id, path] of paths) {
@@ -271,6 +320,8 @@ export const OPAC_HOME_DEFAULT: OpacHomeContent = Object.freeze({
   facilities: Object.freeze([]) as unknown as OpacHomePhoto[],
   hours: Object.freeze([]) as unknown as OpacHomeHours[],
   blocks: Object.freeze({ ...OPAC_HOME_BLOCK_DEFAULTS }),
+  logo: null,
+  contact: Object.freeze({ phone: null, email: null }),
 }) as OpacHomeContent;
 
 /** A welcome text (the hero's lead sentence) of one language; null or blank: none. */

@@ -75,6 +75,33 @@ export const SEARCH_CSS: string = [
   '.filters-active a{display:flex;align-items:center;min-height:2.25rem;font-size:.9375rem}',
   '.filters-clear{margin:.25rem 0 0;font-size:.9375rem}',
 
+  // ---- Komunitas (OPAC look) ----
+  // The link to the advanced search beside the search box, and "Hapus filter" beside the count.
+  '.advanced-link{display:inline-flex;align-items:center;min-height:2.75rem;font-weight:600;font-size:.9375rem}',
+  '.filters-remove{display:inline-flex;align-items:center;min-height:2.75rem;font-weight:600;font-size:.9375rem;margin-right:auto}',
+  '.search-summary .search-count{margin-right:.5rem}',
+  // The advanced search: two groups of labelled fields, one column on a phone, two or three on a wide screen.
+  '.advanced-page{max-width:56rem}',
+  '.advanced-page h1{margin:0 0 .5rem}',
+  '.advanced-intro{color:var(--muted);max-width:var(--measure)}',
+  '.advanced-form{display:grid;gap:1.5rem}',
+  '.adv-group{display:grid;gap:1rem 1.25rem;margin:0;padding:1.25rem 0 0;border:0;border-top:1px solid var(--border);min-width:0}',
+  '.adv-group legend{float:left;grid-column:1/-1;width:100%;margin:0 0 .25rem;padding:0;font-size:1rem;font-weight:700}',
+  '.adv-field{display:grid;gap:.375rem;align-content:start;min-width:0}',
+  '.adv-field label{font-size:.875rem;font-weight:700}',
+  '.adv-field input[type=text],.adv-field select{width:100%;min-height:2.75rem;padding:0 .75rem;border:1px solid var(--border-strong);' +
+    'border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font:inherit}',
+  '.adv-hint{color:var(--muted);font-size:.8125rem}',
+  '.adv-check{display:flex;align-items:center;gap:.5rem;min-height:2.75rem;align-self:end}',
+  '.adv-check input{width:1.125rem;height:1.125rem;margin:0;accent-color:var(--accent)}',
+  '.adv-check label{font-weight:600}',
+  '.adv-actions{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1.25rem}',
+  '.adv-actions button{min-height:2.875rem;padding:0 1.625rem;border:0;border-radius:var(--radius-sm);background:var(--accent);' +
+    'color:var(--accent-ink);font:inherit;font-weight:700;cursor:pointer}',
+  '.adv-actions a{display:inline-flex;align-items:center;min-height:2.75rem;font-weight:600}',
+  '@media (min-width:40rem){.adv-group{grid-template-columns:repeat(2,minmax(0,1fr))}.adv-wide{grid-column:1/-1}}',
+  '@media (min-width:60rem){.adv-group{grid-template-columns:repeat(3,minmax(0,1fr))}}',
+
   // Wide screens: the facets on the left, the jump link no longer needed.
   '@media (min-width:60rem){.search-layout{grid-template-columns:13.75rem minmax(0,1fr);gap:2.5rem;align-items:start}' +
     '.facets{grid-column:1;grid-row:1}.search-results{grid-column:2}.filter-jump{display:none}}',

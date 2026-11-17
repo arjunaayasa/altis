@@ -16,12 +16,14 @@ import { CitationsSection } from './citations-view.js';
 import { BookCover } from './cover.js';
 import { opacText } from './messages.js';
 import type { OpacContext, OpacPageOptions } from './page.js';
+import { ShelfStatusLine, yearOf } from './shelf-status.js';
 import { absoluteUrl, withLang } from './urls.js';
 
 // The OPAC record detail (Phase 2 Task 34; spec §9.3, §9.4), the page of `/katalog/:id/:slug`:
 //
 //   header         the cover (or the substitute cover: cover.tsx), the title and subtitle, the material type, the
-//                  statement of responsibility, the agents linking to `/cari?pengarang=<id>`
+//                  statement of responsibility, the agents linking to `/cari?pengarang=<id>`, and what the copies
+//                  allow now in the words of the title's card (shelf-status.tsx)
 //   sections       summary, notes, availability (availability.tsx, with the shelf maps), the full description,
 //                  subjects linking to `/cari?subjek=<id>`, relations both ways, the public custom fields ("Informasi
 //                  lain"), at most 20 public attachments (each to its viewer), the citations (citations-view.tsx)
@@ -53,6 +55,9 @@ export interface DetailExtras {
    * the member area). The page itself never reads a member session: these are plain links to `/akun`.
    */
   member?: { hold: boolean; bookmark: boolean; attachments: readonly { id: string; title: string; kind: string; mime: string | null }[] };
+  // ---- Komunitas (OPAC look) ----
+  /** The current year (a due date of this year is written without it); absent: the clock's. */
+  year?: number;
 }
 
 /** The title with its subtitle (`Title: subtitle`), its trailing ISBD punctuation dropped. */
@@ -402,6 +407,11 @@ function RecordView(props: { d: RecordData; extras: DetailExtras; locale: Locale
           <p class="record-type">{typeName(d, locale)}</p>
           {d.responsibility === undefined || d.responsibility.trim() === '' ? null : <p class="record-responsibility">{d.responsibility}</p>}
           <Agents d={d} locale={locale} keep={keep} />
+          {extras.availability.status === null ? null : (
+            <p class="record-shelf">
+              <ShelfStatusLine status={extras.availability.status} locale={locale} year={extras.year ?? yearOf(Date.now())} />
+            </p>
+          )}
           <MemberActions id={d.id} member={extras.member} locale={locale} keep={keep} />
         </div>
       </header>

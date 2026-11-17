@@ -12,3 +12,6 @@ export {
 } from './popular.js';
 export { CLASS_ACTIVITY_KEEP, CLASS_MIN_BORROWERS, classActivityStep, refreshClassActivity, topClasses } from './class-activity.js';
 export type { ClassActivity } from './class-activity.js';
+// ---- Komunitas (OPAC look): what a card says of a title's copies ----
+export { addShelfCopy, copyShelfState, emptyShelfCounts, shelfCounts, shelfStatusOf, shelfStatuses } from './shelf-status.js';
+export type { CopyShelfState, ShelfCounts, ShelfStatus } from './shelf-status.js';

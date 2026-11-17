@@ -177,7 +177,7 @@ async function recordPage(rc: Rc, slug: string | null): Promise<Response> {
     d.customPublic.length === 0 ? Promise.resolve([]) : loadCustomDefs(handle, 'records'),
     memberLinks(rc, d), // Komunitas (member area)
   ]);
-  return opacPage(rc, ctx, recordPageOptions(ctx, d, { coverFileId, availability, customDefs, member }, requestLang(rc.c)));
+  return opacPage(rc, ctx, recordPageOptions(ctx, d, { coverFileId, availability, customDefs, member, ...(ctx.year === undefined ? {} : { year: ctx.year }) }, requestLang(rc.c)));
 }
 
 const record = route<unknown, unknown, Record<string, string>>({

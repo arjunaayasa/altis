@@ -156,13 +156,52 @@ describe('parseOpacSearchParams', () => {
     expect(titled.echo).toEqual({ q: 'rumah "ujung sawah"', ruas: 'judul' });
     expect(parse('q=wibowo&ruas=pengarang').query.text).toBe('pengarang:wibowo');
     expect(parse('q=novel&ruas=subjek').query.text).toBe('subjek:novel');
-    for (const query of ['q=rumah&ruas=semua', 'q=rumah&ruas=isbn', 'q=rumah&ruas=JUDUL', 'q=rumah&ruas=']) {
+    for (const query of ['q=rumah&ruas=semua', 'q=rumah&ruas=JUDUL', 'q=rumah&ruas=']) {
       expect(parse(query).query.text, query).toBe('rumah');
       expect(parse(query).echo, query).toEqual({ q: 'rumah' });
     }
     expect(parse('ruas=judul').echo).toEqual({});
     // Every link of the page keeps it, right after the text.
     expect(searchPath(parse('q=rumah&ruas=judul&jenis=buku').echo, {}, null)).toBe('/cari?q=rumah&ruas=judul&jenis=BUKU');
+  });
+
+  it('ruas=isbn: the text is no query text but the exact ISBN/ISSN filter; echoed as typed with its scope, never ranked', () => {
+    const isbn = parse('q=978-602-03-1234-5&ruas=isbn');
+    expect(isbn.query.text).toBe('');
+    expect(isbn.query.filters).toEqual({ identifier: '978-602-03-1234-5' });
+    expect(isbn.query.sort).toBe('newest');
+    expect(isbn.echo).toEqual({ q: '978-602-03-1234-5', ruas: 'isbn' });
+    expect(searchPath(isbn.echo, {}, null)).toBe('/cari?q=978-602-03-1234-5&ruas=isbn');
+    // Without a text there is nothing to match: no filter at all.
+    expect(parse('ruas=isbn').query.filters).toEqual({});
+  });
+
+  it('isbn=: the advanced form\'s ISBN field, a filter of its own beside the text; trimmed and cut to 40 characters', () => {
+    const both = parse('q=laskar&isbn=%20979-3062-79-7%20');
+    expect(both.query).toMatchObject({ text: 'laskar', filters: { identifier: '979-3062-79-7' } });
+    expect(both.echo).toEqual({ q: 'laskar', isbn: '979-3062-79-7' });
+    expect(searchPath(both.echo, { isbn: null }, null)).toBe('/cari?q=laskar');
+    expect(parse(`isbn=${'9'.repeat(60)}`).echo.isbn).toHaveLength(40);
+    expect(parse('isbn=').echo).toEqual({});
+    // The ISBN scope's text wins over the field: one identifier per search.
+    expect(parse('q=9786020324781&ruas=isbn&isbn=9793062797').query.filters).toEqual({ identifier: '9786020324781' });
+  });
+
+  it('the advanced form\'s judul, penulis, topik and penerbit: folded into q with their fields, never echoed themselves', () => {
+    const adv = parse('q=pelangi&judul=laskar&penulis=andrea+hirata&topik=novel&penerbit=bentang&jenis=BUKU');
+    expect(adv.query.text).toBe('pelangi judul:laskar pengarang:andrea pengarang:hirata subjek:novel penerbit:bentang');
+    expect(adv.echo).toEqual({ q: 'pelangi judul:laskar pengarang:andrea pengarang:hirata subjek:novel penerbit:bentang', jenis: 'BUKU' });
+    // A scope of the typed text is written out before the fields join it; a phrase stays one.
+    const scoped = parse('q=rumah&ruas=judul&penulis=%22ahmad+tohari%22');
+    expect(scoped.echo).toEqual({ q: 'judul:rumah pengarang:"ahmad tohari"' });
+    expect(scoped.query.text).toBe('judul:rumah pengarang:"ahmad tohari"');
+    // Blank fields are nothing; a field alone is the whole text.
+    expect(parse('judul=&penulis=%20%20').echo).toEqual({});
+    expect(parse('topik=sejarah').echo).toEqual({ q: 'subjek:sejarah' });
+    // The ISBN scope's text becomes the ISBN field; the text fields are then the query text beside it.
+    const withIsbn = parse('q=9786020324781&ruas=isbn&judul=laskar');
+    expect(withIsbn.query).toMatchObject({ text: 'judul:laskar', filters: { identifier: '9786020324781' } });
+    expect(withIsbn.echo).toEqual({ q: 'judul:laskar', isbn: '9786020324781' });
   });
 
   it('a repeated parameter: the first value counts; unknown parameters and lang are not echoed', () => {

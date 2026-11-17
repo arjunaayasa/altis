@@ -1,4 +1,4 @@
-import { legacyTarget, pickPolicy, popularRecordIds, recordUrlPath } from '@altis/core';
+import { legacyTarget, pickPolicy, popularRecordIds, recordUrlPath, shelfStatuses, type ShelfStatus } from '@altis/core';
 import { countGrouped, type DbHandle } from '@altis/db';
 import type { Locale } from '@altis/shared';
 import { sourceNameField } from '@altis/shared/api/catalog/migration';
@@ -39,12 +39,9 @@ export interface TitleCard {
   /** The record's call number and classification: the substitute cover's spine label and cloth colour. */
   callNumber: string | null;
   classification: string | null;
-  // ---- Komunitas (OPAC home page) ----
-  /**
-   * From the search index's facets: `available` when a copy is on an open shelf now (`av`), `unavailable` when the
-   * title has copies but none is (`br` without `av`), null when it has no copy at all.
-   */
-  availability: 'available' | 'unavailable' | null;
+  // ---- Komunitas (OPAC look) ----
+  /** What the card says of the title's copies (core shelfStatuses); null when it has none. */
+  shelf: ShelfStatus | null;
 }
 
 /** One news post as the home page lists it. */
@@ -171,24 +168,9 @@ type CardRow = {
   classification: string | null;
 };
 
-/**
- * The availability of each of `ids` the search index knows (see TitleCard): one read of the facets `av` and `br` for
- * all of them.
- */
-async function availabilities(db: Db, ids: readonly string[]): Promise<Map<string, 'available' | 'unavailable'>> {
-  const out = new Map<string, 'available' | 'unavailable'>();
-  if (ids.length === 0) return out;
-  const rows = await db.selectFrom('search_facet').select(['record_id', 'facet']).where('facet', 'in', ['av', 'br']).where('record_id', 'in', [...ids]).execute();
-  for (const r of rows) {
-    if (r.facet === 'av') out.set(r.record_id, 'available');
-    else if (!out.has(r.record_id)) out.set(r.record_id, 'unavailable');
-  }
-  return out;
-}
-
 async function cards(db: Db, rows: readonly CardRow[]): Promise<TitleCard[]> {
   const ids = rows.map((r) => r.id);
-  const [agents, available] = await Promise.all([mainAgents(db, ids), availabilities(db, ids)]);
+  const [agents, shelf] = await Promise.all([mainAgents(db, ids), ids.length === 0 ? new Map<string, ShelfStatus>() : shelfStatuses(db, ids)]);
   return rows.map((r) => ({
     id: r.id,
     title: r.title,
@@ -198,7 +180,7 @@ async function cards(db: Db, rows: readonly CardRow[]): Promise<TitleCard[]> {
     mainAgent: agents.get(r.id) ?? null,
     callNumber: r.call_number,
     classification: r.classification,
-    availability: available.get(r.id) ?? null,
+    shelf: shelf.get(r.id) ?? null,
   }));
 }
 

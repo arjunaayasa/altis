@@ -234,6 +234,9 @@ const SAMPLE: Record<SettingKey, unknown> = {
     facilities: [],
     hours: [{ days: 'Senin–Jumat', time: '07.00–15.00', weekdays: [1, 2, 3, 4, 5] }],
     blocks: { classes: true, popular: true, newTitles: true, promoted: false, about: true, services: true, readingClasses: true, news: true, visit: true },
+    // ---- Komunitas (OPAC look) ----
+    logo: { fileId: '01J0000000000000000000000E', alt: 'Logo perpustakaan' },
+    contact: { phone: '(021) 555-0101', email: 'perpustakaan@contoh.example' },
   },
 };
 

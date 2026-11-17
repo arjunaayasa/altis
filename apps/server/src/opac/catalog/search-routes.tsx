@@ -8,6 +8,7 @@ import { opacText } from './messages.js';
 import { opacContext, opacPage, requestLang, type OpacContextSource } from './page.js';
 import { xmlResponse } from './respond.js';
 import { cardTitle, resultCards, type ResultCardData } from './result-card.js';
+import { yearOf } from './shelf-status.js';
 import {
   parseOpacSearchParams,
   searchLookups,
@@ -181,7 +182,7 @@ const search = route({
       ...(selected === undefined ? [] : [selected]),
     ];
     const [cards, names] = await Promise.all([
-      resultCards(db, result.recordIds),
+      resultCards(db, result.recordIds, { shelf: true }),
       loadFacetNames(db, { rooms: values('lc', echo.lokasi), subjects: values('sb', echo.subjek) }, masters, agents),
     ]);
     const lang = requestLang(rc.c);
@@ -208,6 +209,7 @@ const search = route({
           cards={cards}
           masters={masters}
           names={names}
+          year={yearOf(rc.now)}
         />
       ),
     });

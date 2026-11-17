@@ -9,15 +9,21 @@ import { ATTACHMENT_MEDIA, isUlid, normalizeKey, type Locale } from '@altis/shar
 // the raw request.
 //
 //   q          the query text in the §4.4 syntax (control characters → spaces, ≤ 500 code points)
+//   isbn       an ISBN or ISSN matched exactly against the stored identifiers (the advanced search's field)
 //   persis     `1`: the query exactly as typed (the "Cari X saja?" link of an applied correction, §4.7)
 //   ruas       judul|pengarang|subjek: every word or phrase of `q` searched in that field (the syntax's `judul:`,
-//              `pengarang:`, `subjek:`), only with a text; `semua` (or nothing) searches every field
+//              `pengarang:`, `subjek:`), only with a text; `semua` (or nothing) searches every field; `isbn`: `q` is
+//              an ISBN or ISSN matched exactly, as `isbn` is
 //   jenis      a material type's code      bahasa   a language's code
 //   koleksi    a collection type's code    cabang   a branch's code
 //   lokasi     a room's id                 subjek   a subject's id        pengarang   an agent's id
 //   tahun      `1990-2000` or one year     tersedia `1`                   lampiran    one of ATTACHMENT_MEDIA
 //   kelas      0-9 (the `cl` facet, M4)    urut     relevansi|terbaru|judul|tahun_baru|tahun_lama|populer
 //   hal        the page, from 1 (past 50 the search reports the page cap, §4.5)
+//
+// The advanced search form (advanced-view.tsx) also sends `judul`, `penulis`, `topik` and `penerbit`: each a text
+// searched in its field, folded into `q` (with `q`'s own field written out), so that they are never echoed: every link
+// of the results page carries the one query text.
 //
 // A parameter given twice counts once (its first value). A code is matched as its `code_key` (normalizeKey: NFKC, upper
 // case) and echoed so; an id must be a ULID, and the route then checks that it names something the OPAC shows.
@@ -34,6 +40,8 @@ export const OPAC_SEARCH_PARAMS = [
   'lokasi',
   'subjek',
   'pengarang',
+  // ---- Komunitas (OPAC look) ----
+  'isbn',
   'tahun',
   'tersedia',
   'lampiran',
@@ -47,8 +55,13 @@ export type OpacSearchParam = (typeof OPAC_SEARCH_PARAMS)[number];
 /** The accepted parameters, canonical (see the top of this file). */
 export type OpacSearchEcho = Partial<Record<OpacSearchParam, string>>;
 
+/** The advanced search page (advanced-routes.tsx): a GET form to /cari over these parameters. */
+export const OPAC_ADVANCED_PATH = '/cari/lanjutan';
+
 /** The query text is cut to this many code points (the search box's `maxlength`). */
 export const OPAC_SEARCH_TEXT_MAX = 500;
+/** The `isbn` field is cut to this many characters (an ISBN with its hyphens and a label is far shorter). */
+export const OPAC_ISBN_TEXT_MAX = 40;
 
 /** `urut` → the search's order (§4.5). */
 export const OPAC_SORTS = Object.freeze({
@@ -66,10 +79,23 @@ export type OpacSort = keyof typeof OPAC_SORTS;
 // ---- Komunitas (OPAC look): the field a search looks in ----
 /**
  * The fields a search can be limited to (`ruas`), `semua` first (every field, the default): the fields of the query
- * syntax that search one part of a record. ISBN is no field of its own: the search recognises an ISBN or ISSN in any
- * text first.
+ * syntax that search one part of a record, then `isbn`, the exact match of an ISBN or ISSN on the stored identifiers
+ * (the search also recognises one in any text first, but goes on to the words when it finds no such record).
  */
-export const OPAC_SEARCH_SCOPES = Object.freeze(['semua', 'judul', 'pengarang', 'subjek'] as const);
+export const OPAC_SEARCH_SCOPES = Object.freeze(['semua', 'judul', 'pengarang', 'subjek', 'isbn'] as const);
+
+/**
+ * The text fields of the advanced search form, each folded into `q` as the field of the query syntax it searches
+ * (see the top of this file).
+ */
+export const OPAC_ADVANCED_TEXT_FIELDS = Object.freeze({
+  judul: 'judul',
+  penulis: 'pengarang',
+  topik: 'subjek',
+  penerbit: 'penerbit',
+} as const);
+
+export type OpacAdvancedTextField = keyof typeof OPAC_ADVANCED_TEXT_FIELDS;
 
 export type OpacSearchScope = (typeof OPAC_SEARCH_SCOPES)[number];
 
@@ -81,8 +107,8 @@ const FIELDED = /^-?[A-Za-z]+:/;
  * judul:"ujung sawah"`): a word or phrase that already names a field, the operators `ATAU`/`OR` and an unbalanced quote
  * stay as typed, an excluding `-` stays in front. The text is returned as it is for `semua`.
  */
-export function scopedText(text: string, scope: OpacSearchScope): string {
-  if (scope === 'semua') return text;
+export function scopedText(text: string, scope: OpacSearchScope | (typeof OPAC_ADVANCED_TEXT_FIELDS)[OpacAdvancedTextField]): string {
+  if (scope === 'semua' || scope === 'isbn') return text;
   const out: string[] = [];
   // A word, or a quoted phrase with the field that may stand before it; a lone quote (an unbalanced one) on its own.
   const re = /(-?)((?:[A-Za-z]+:)?"[^"]*"|[^\s"]+)|"/gu;
@@ -96,7 +122,7 @@ export function scopedText(text: string, scope: OpacSearchScope): string {
 
 /** `text` without the field `scope` written before its words: what {@link scopedText} added, as the visitor typed it. */
 export function unscopedText(text: string, scope: OpacSearchScope): string {
-  if (scope === 'semua') return text;
+  if (scope === 'semua' || scope === 'isbn') return text;
   return text.replace(new RegExp(`(^|\\s)(-?)${scope}:`, 'giu'), '$1$2');
 }
 
@@ -166,17 +192,37 @@ export function parseOpacSearchParams(params: URLSearchParams, lookups: OpacSear
   const echo: OpacSearchEcho = {};
   const filters: ParsedOpacSearch['query']['filters'] = {};
 
-  const text = cleanText(first(params, 'q'));
-  let scope: OpacSearchScope = 'semua';
+  const typed = cleanText(first(params, 'q'));
+  const ruas = first(params, 'ruas');
+  const typedScope: OpacSearchScope =
+    typed !== '' && ruas !== undefined && (OPAC_SEARCH_SCOPES as readonly string[]).includes(ruas) ? (ruas as OpacSearchScope) : 'semua';
+  // ---- Komunitas (OPAC look): the advanced form's text fields, folded into the query text ----
+  const advanced = (Object.keys(OPAC_ADVANCED_TEXT_FIELDS) as OpacAdvancedTextField[]).flatMap((name) => {
+    const value = cleanText(first(params, name));
+    return value === '' ? [] : [scopedText(value, OPAC_ADVANCED_TEXT_FIELDS[name])];
+  });
+  let text = typed;
+  let scope = typedScope;
+  // The ISBN or ISSN to match exactly: the `isbn` field, or the text of the `isbn` scope (which wins).
+  let isbn = Array.from(cleanText(first(params, 'isbn'))).slice(0, OPAC_ISBN_TEXT_MAX).join('').trim();
+  if (advanced.length > 0) {
+    // With text fields beside it, the `isbn` scope's text becomes the ISBN field and the fields are the query text.
+    if (scope === 'isbn') {
+      isbn = Array.from(typed).slice(0, OPAC_ISBN_TEXT_MAX).join('').trim();
+      text = '';
+      scope = 'semua';
+    }
+    text = cleanText([scopedText(text, scope), ...advanced].filter((x) => x !== '').join(' '));
+    scope = 'semua';
+  }
   if (text !== '') {
     echo.q = text;
     if (first(params, 'persis') === '1') echo.persis = '1';
-    const ruas = first(params, 'ruas');
-    if (ruas !== undefined && ruas !== 'semua' && (OPAC_SEARCH_SCOPES as readonly string[]).includes(ruas)) {
-      scope = ruas as OpacSearchScope;
-      echo.ruas = scope;
-    }
+    if (scope !== 'semua') echo.ruas = scope;
   }
+  if (scope === 'isbn') isbn = text;
+  else if (isbn !== '') echo.isbn = isbn;
+  if (isbn !== '') filters.identifier = isbn;
 
   const codes: [OpacSearchParam, ReadonlyMap<string, string>, 'materialTypeIds' | 'languageIds' | 'collectionTypeIds' | 'branchIds'][] = [
     ['jenis', lookups.materialTypeByCode, 'materialTypeIds'],
@@ -227,10 +273,12 @@ export function parseOpacSearchParams(params: URLSearchParams, lookups: OpacSear
     filters.classDigit = Number(digit);
   }
 
-  // §4.5: relevance with a query text, newest without; `relevansi` without a text has nothing to rank.
+  // Relevance with a query text, newest without; `relevansi` without a text has nothing to rank (an ISBN matched
+  // exactly has none either).
+  const ranked = text !== '' && scope !== 'isbn';
   const urut = first(params, 'urut');
-  let sort: NonNullable<CatalogSearchQuery['sort']> = text === '' ? 'newest' : 'relevance';
-  if (urut !== undefined && Object.hasOwn(OPAC_SORTS, urut) && !(urut === 'relevansi' && text === '')) {
+  let sort: NonNullable<CatalogSearchQuery['sort']> = ranked ? 'relevance' : 'newest';
+  if (urut !== undefined && Object.hasOwn(OPAC_SORTS, urut) && !(urut === 'relevansi' && !ranked)) {
     echo.urut = urut;
     sort = OPAC_SORTS[urut as OpacSort];
   }
@@ -239,8 +287,8 @@ export function parseOpacSearchParams(params: URLSearchParams, lookups: OpacSear
   const page = hal !== undefined && PAGE.test(hal) ? Number(hal) : 1;
   if (page > 1) echo.hal = String(page);
 
-  // The search runs the text in its field; the page shows it as typed (echo.q).
-  return { query: { text: scopedText(text, scope), scope: 'opac', filters, sort, page }, echo };
+  // The search runs the text in its field; the page shows it as typed (echo.q). The `isbn` scope's text is the filter.
+  return { query: { text: scope === 'isbn' ? '' : scopedText(text, scope), scope: 'opac', filters, sort, page }, echo };
 }
 
 /**
