@@ -1,7 +1,7 @@
 import { EllipsisIcon } from 'lucide-react';
-import { useEffect, useId, useRef, useState, type ComponentProps, type CSSProperties, type FormEvent, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, type ComponentProps, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 
 /**
@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
  *   in words too: a colour never stands alone.
  * - **Inline panels** ({@link InlinePanel}) take the place of a dialog for anything that does not destroy data
  *   (extend a membership, suspend, a member type's form, a bulk action): they open in the page, on the neutral layer,
- *   and move the focus to their first field.
+ *   move the focus to their first field, and give it back to what opened them when they close with the focus inside.
  * - **Dense tables** ({@link DenseTable}, or the {@link TABLE} classes for a table drawn by hand): a header on the
  *   neutral layer, thin row lines, tabular digits, optional group head rows.
  * - {@link StatStrip} (counts side by side with thin dividers), {@link FactList} (label left, value right),
@@ -86,7 +86,9 @@ export function Callout({
 /**
  * A panel opened in the page instead of a dialog: a heading, its fields and its buttons, on the neutral layer. As a
  * form (`onSubmit`) it is labelled by its heading. On opening, the focus moves to the first field (or the element marked
- * `data-autofocus`); Esc inside it calls `onCancel`.
+ * `data-autofocus`); Esc inside it calls `onCancel`. When it closes (cancelled, Esc, saved) with the focus inside, the
+ * focus goes back to the element that had it when the panel opened, as a dialog gives it back to its trigger; to the
+ * page's main region (`#main` of the shell) when that element is gone meanwhile.
  */
 export function InlinePanel({
   title,
@@ -105,6 +107,19 @@ export function InlinePanel({
 }) {
   const headingId = useId();
   const box = useRef<HTMLElement | null>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  // Before the first field takes the focus: who had it. Its cleanup runs while the panel is still in the page.
+  useLayoutEffect(() => {
+    const root = box.current;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body && root?.contains(active) !== true) opener.current = active;
+    return () => {
+      if (root === null || !root.contains(document.activeElement)) return;
+      const target = opener.current;
+      if (target !== null && target.isConnected && !root.contains(target)) target.focus();
+      else document.getElementById('main')?.focus();
+    };
+  }, []);
   useEffect(() => {
     if (!focusOnOpen) return;
     const root = box.current;
@@ -370,100 +385,63 @@ export function PageHead({ title, intro, actions, titleId }: { title: ReactNode;
   );
 }
 
+/** The action chosen in an open {@link MoreMenu}, run once the menu has closed and given the focus back. */
+const MoreMenuChoice = createContext<{ current: (() => void) | null }>({ current: null });
+
 /**
- * The ⋯ button of a row or a page head: a disclosure that shows a short list of actions under it (or above it, near the
- * bottom of the window). The list is drawn over the page, so a table's scroll box never clips it; it takes the focus
- * when it opens. A click outside, Esc, scrolling or leaving it with Tab closes it (Esc gives the focus back to the
- * button); choosing an action closes it too.
+ * The ⋯ button of a row or a page head: the shared dropdown menu (arrow keys, Home/End, Esc, type-ahead; the focus
+ * returns to the button when it closes), its list drawn over the page so a table's scroll box never clips it. The
+ * chosen action runs once the focus is back on the button, so an inline panel or a dialog it opens gives the focus
+ * back there when it closes.
  */
-export function MoreMenu({ label, small = false, children }: { label: string; small?: boolean; children(close: () => void): ReactNode }) {
-  const [place, setPlace] = useState<CSSProperties | null>(null);
-  const listId = useId();
-  const list = useRef<HTMLDivElement>(null);
+export function MoreMenu({ label, small = false, children }: { label: string; small?: boolean; children: ReactNode }) {
+  const choice = useRef<(() => void) | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const open = place !== null;
-  const close = (refocus = false): void => {
-    setPlace(null);
-    if (refocus) trigger.current?.focus();
-  };
-  const show = (): void => {
-    const r = trigger.current?.getBoundingClientRect();
-    if (r === undefined) return;
-    const below = window.innerHeight - r.bottom;
-    setPlace(below < 220 && r.top > below ? { position: 'fixed', bottom: window.innerHeight - r.top + 4, right: window.innerWidth - r.right } : { position: 'fixed', top: r.bottom + 4, right: window.innerWidth - r.right });
-  };
-  useEffect(() => {
-    if (!open) return;
-    list.current?.querySelector<HTMLElement>('button,a')?.focus();
-    const onDown = (e: PointerEvent): void => {
-      const target = e.target as Node;
-      if (list.current?.contains(target) !== true && trigger.current?.contains(target) !== true) setPlace(null);
-    };
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape') return;
-      e.preventDefault();
-      setPlace(null);
-      trigger.current?.focus();
-    };
-    const onMove = (): void => setPlace(null);
-    document.addEventListener('pointerdown', onDown);
-    document.addEventListener('keydown', onKey);
-    window.addEventListener('resize', onMove);
-    window.addEventListener('scroll', onMove, true);
-    return () => {
-      document.removeEventListener('pointerdown', onDown);
-      document.removeEventListener('keydown', onKey);
-      window.removeEventListener('resize', onMove);
-      window.removeEventListener('scroll', onMove, true);
-    };
-  }, [open]);
   return (
-    <>
-      <Button
-        ref={trigger}
-        type="button"
-        variant={small ? 'ghost' : 'outline'}
-        size="icon"
-        className={small ? 'size-8' : undefined}
-        aria-label={label}
-        aria-expanded={open}
-        aria-controls={open ? listId : undefined}
-        onClick={() => (open ? close() : show())}>
-        <EllipsisIcon aria-hidden="true" />
-      </Button>
-      {open &&
-        createPortal(
-          <div
-            ref={list}
-            id={listId}
-            style={place}
-            onBlur={(e) => {
-              const next = e.relatedTarget as Node | null;
-              if (next !== null && list.current?.contains(next) !== true && trigger.current?.contains(next) !== true) setPlace(null);
-            }}
-            className="z-50 grid min-w-52 rounded-lg border bg-popover p-1 text-left text-popover-foreground shadow-pop">
-            {children(() => close(true))}
-          </div>,
-          document.body,
-        )}
-    </>
+    <MoreMenuChoice.Provider value={choice}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button ref={trigger} type="button" variant={small ? 'ghost' : 'outline'} size="icon" className={small ? 'size-8' : undefined} aria-label={label}>
+            <EllipsisIcon aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          className="min-w-52"
+          onCloseAutoFocus={(event) => {
+            const run = choice.current;
+            choice.current = null;
+            if (run === null) return;
+            event.preventDefault();
+            trigger.current?.focus();
+            run();
+          }}>
+          {children}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </MoreMenuChoice.Provider>
   );
 }
 
-/** One action of a {@link MoreMenu}: a plain button (an `href` makes it a link elsewhere), red when it destroys data. */
-export function MoreMenuItem({ danger = false, className, ...props }: ComponentProps<'button'> & { danger?: boolean }) {
+/** One action of a {@link MoreMenu} (Enter, Space or a click chooses it), red when it destroys data. */
+export function MoreMenuItem({ danger = false, onSelect, children, ...props }: { danger?: boolean; onSelect(): void; children: ReactNode; 'aria-label'?: string }) {
+  const choice = useContext(MoreMenuChoice);
   return (
-    <button
-      type="button"
-      className={cn('flex h-8 items-center rounded-md px-2.5 text-left text-sm whitespace-nowrap outline-none hover:bg-layer-2 focus-visible:bg-layer-2', danger && 'text-bad', className)}
-      {...props}
-    />
+    <DropdownMenuItem
+      variant={danger ? 'destructive' : 'default'}
+      className="h-8 px-2.5 whitespace-nowrap"
+      onSelect={() => {
+        choice.current = onSelect;
+      }}
+      {...props}>
+      {children}
+    </DropdownMenuItem>
   );
 }
 
 /** A thin rule between groups of a {@link MoreMenu}. */
 export function MoreMenuRule() {
-  return <hr className="my-1 border-border" />;
+  return <DropdownMenuSeparator />;
 }
 
 /** The table's shape while the first page loads (said once to screen readers). */

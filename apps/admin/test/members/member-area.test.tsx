@@ -110,8 +110,8 @@ describe("the member's OPAC password", () => {
         },
       },
     });
-    fireEvent.click(await screen.findByRole('button', { name: 'Tindakan lain' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Atur kata sandi OPAC…' }));
+    fireEvent.keyDown(await screen.findByRole('button', { name: 'Tindakan lain' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Atur kata sandi OPAC…' }));
     let dialog = await screen.findByRole('dialog');
     fireEvent.change(within(dialog).getByLabelText('Kata sandi baru'), { target: { value: 'password123' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan kata sandi' }));
@@ -120,8 +120,8 @@ describe("the member's OPAC password", () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan kata sandi' }));
     expect(await screen.findByText('Kata sandi OPAC anggota disimpan.')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Tindakan lain' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Atur kata sandi OPAC…' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Tindakan lain' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Atur kata sandi OPAC…' }));
     dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Hapus kata sandi' }));
     expect(await screen.findByText(/Kata sandi OPAC anggota dihapus/)).toBeTruthy();

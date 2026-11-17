@@ -532,44 +532,17 @@ export function MemberDetailScreen() {
           )}
           {canManage && live && (
             <MoreMenu label={t('members.action.more')}>
-              {(close) => (
-                <>
-                  {m.storedStatus === 'suspended' ? (
-                    <MoreMenuItem
-                      onClick={() => {
-                        close();
-                        setPanel('reactivate');
-                      }}>
-                      {t('members.action.reactivate_ellipsis')}
-                    </MoreMenuItem>
-                  ) : (
-                    <MoreMenuItem
-                      onClick={() => {
-                        close();
-                        setPanel('suspend');
-                      }}>
-                      {t('members.action.suspend_ellipsis')}
-                    </MoreMenuItem>
-                  )}
-                  {/* Komunitas (member area) */}
-                  <MoreMenuItem
-                    onClick={() => {
-                      close();
-                      setDialog('password');
-                    }}>
-                    {t('members.password.open')}
-                  </MoreMenuItem>
-                  <MoreMenuRule />
-                  <MoreMenuItem
-                    danger
-                    onClick={() => {
-                      close();
-                      setDialog('archive');
-                    }}>
-                    {t('members.action.archive')}
-                  </MoreMenuItem>
-                </>
+              {m.storedStatus === 'suspended' ? (
+                <MoreMenuItem onSelect={() => setPanel('reactivate')}>{t('members.action.reactivate_ellipsis')}</MoreMenuItem>
+              ) : (
+                <MoreMenuItem onSelect={() => setPanel('suspend')}>{t('members.action.suspend_ellipsis')}</MoreMenuItem>
               )}
+              {/* Komunitas (member area) */}
+              <MoreMenuItem onSelect={() => setDialog('password')}>{t('members.password.open')}</MoreMenuItem>
+              <MoreMenuRule />
+              <MoreMenuItem danger onSelect={() => setDialog('archive')}>
+                {t('members.action.archive')}
+              </MoreMenuItem>
             </MoreMenu>
           )}
           {/* ---- Komunitas K2 (members extended) ---- */}
