@@ -98,6 +98,15 @@ const bodiesOf = (app: ReturnType<typeof startApp>, method: string, path: string
   app.requests.filter((r) => r.method === method && r.path === path).map((r) => r.body);
 
 /** The row of the list that holds `text`. */
+/** Opens the ⋯ menu of `row` and chooses the action whose name matches `name`. */
+async function chooseInRow(row: HTMLElement, name: RegExp): Promise<void> {
+  const trigger = within(row).getByRole('button', { name: /^Tindakan untuk cadangan / });
+  trigger.focus();
+  fireEvent.keyDown(trigger, { key: 'Enter' });
+  await screen.findByRole('menu');
+  fireEvent.click(screen.getByRole('menuitem', { name }));
+}
+
 async function rowWith(text: string): Promise<HTMLElement> {
   const table = await screen.findByRole('table');
   const cell = await within(table).findByText(text);
@@ -123,8 +132,8 @@ describe('the backups list', () => {
     startApp({ me: signedIn({ permissions: ['system.backup.read'] }), path: '/admin/backups', routes: routes(() => [backup(), EXTERNAL]) });
     await rowWith('Manual');
     expect(screen.queryByRole('button', { name: 'Buat sekarang' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Siapkan unduhan/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Pulihkan/ })).toBeNull();
+    // No row action is offered, so no row has a ⋯ menu.
+    expect(screen.queryByRole('button', { name: /^Tindakan untuk cadangan / })).toBeNull();
     expect(screen.queryByLabelText('Berkas arsip (.altisbak)')).toBeNull();
   });
 });
@@ -189,7 +198,7 @@ describe('Buat sekarang', () => {
 describe('Siapkan unduhan', () => {
   async function openPrepare(): Promise<HTMLElement> {
     const own = await rowWith('Manual');
-    fireEvent.click(within(own).getByRole('button', { name: /Siapkan unduhan/ }));
+    await chooseInRow(own, /Siapkan unduhan/);
     return screen.findByRole('dialog', { name: 'Siapkan unduhan cadangan' });
   }
 
@@ -492,7 +501,7 @@ describe('Pulihkan', () => {
       routes: routes(() => [backup(), EXTERNAL], { 'POST backups/:id/restore': () => ({ opId: '01JZ000000000000000000OP02' }) }),
     });
     const ext = await rowWith('Arsip unggahan');
-    fireEvent.click(within(ext).getByRole('button', { name: /Pulihkan/ }));
+    await chooseInRow(ext, /Pulihkan/);
     const dialog = await screen.findByRole('dialog', { name: 'Pulihkan data dari cadangan' });
     const submit = within(dialog).getByRole('button', { name: 'Pulihkan' }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
@@ -520,7 +529,7 @@ describe('Pulihkan', () => {
       routes: routes(() => [backup()], { 'POST backups/:id/restore': () => ({ opId: '01JZ000000000000000000OP03' }) }),
     });
     const own = await rowWith('Manual');
-    fireEvent.click(within(own).getByRole('button', { name: /Pulihkan/ }));
+    await chooseInRow(own, /Pulihkan/);
     const dialog = await screen.findByRole('dialog', { name: 'Pulihkan data dari cadangan' });
     expect(within(dialog).queryByLabelText(/Ketik nama perpustakaan ini/)).toBeNull();
     expect(within(dialog).queryByLabelText('Frasa sandi arsip')).toBeNull();
@@ -536,7 +545,7 @@ describe('Pulihkan', () => {
       routes: routes(() => [EXTERNAL], { 'POST backups/:id/restore': () => problem(422, 'BACKUP_PASSPHRASE_REQUIRED') }),
     });
     const ext = await rowWith('Arsip unggahan');
-    fireEvent.click(within(ext).getByRole('button', { name: /Pulihkan/ }));
+    await chooseInRow(ext, /Pulihkan/);
     const dialog = await screen.findByRole('dialog', { name: 'Pulihkan data dari cadangan' });
     fireEvent.change(within(dialog).getByLabelText(/Ketik nama perpustakaan ini/), { target: { value: 'Perpustakaan Arsya' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Pulihkan' }));

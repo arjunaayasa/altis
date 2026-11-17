@@ -3,7 +3,7 @@ import { useId, useState, type FormEvent } from 'react';
 import { useDateTime } from '@/components/data-table';
 import { CheckField, Field } from '@/components/form-field';
 import { useReturnFocus } from '@/components/return-focus';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Callout } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -155,9 +155,7 @@ function RestoreForm({ backup }: { backup: BackupItem }) {
       />
       {askName && (
         <>
-          <Alert variant="destructive">
-            <AlertDescription>{t('backups.restore.external')}</AlertDescription>
-          </Alert>
+          <Callout tone="bad" title={t('backups.restore.external')} />
           <Field id={ids.name} label={t('backups.restore.confirm_name', { name: libraryName })} hint={t('backups.restore.confirm_name_hint')}>
             {(c) => (
               <Input {...c} autoComplete="off" spellCheck={false} maxLength={191} value={typedName} onChange={(e) => setTypedName(e.target.value)} />
@@ -166,7 +164,7 @@ function RestoreForm({ backup }: { backup: BackupItem }) {
         </>
       )}
       {error !== null && (
-        <p id={ids.error} role="alert" className="text-sm text-destructive">
+        <p id={ids.error} role="alert" className="text-meta font-semibold text-bad">
           {error}
         </p>
       )}
