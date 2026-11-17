@@ -10,16 +10,14 @@ import {
 import type { MemberListItem, MemberSearchResponse } from '@altis/shared/api/members';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useId, useState, type FormEvent } from 'react';
-import { Badge, Field, Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { Field, Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { DenseTable, ErrorState, FilterField, FilterRow, InlinePanel, PageHead, Section, SkeletonTable, StatusText, Tag, type DenseColumn } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api, csrfToken, setCsrfToken } from '@/lib/api';
 import { buildSync } from '@/lib/build-sync';
-import { problemText } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
 import { todayLocal, useCalendarDate } from '@/screens/circulation/common';
 
@@ -28,7 +26,8 @@ import { todayLocal, useCalendarDate } from '@/screens/circulation/common';
  * a move). Members are picked one by one (number or name) or a whole class at once (at most 200); "Periksa" shows who
  * may get a letter now (no open loan, no unpaid balance, no hold waiting on the hold shelf) and why the others may not;
  * "Cetak surat" issues the next numbers of the year to those who pass and opens the PDF (the refused ones are listed on
- * its last page). Below, the letters issued: print one again (same number) or void it (its number is never reused).
+ * its last page). Below, the letters issued: print one again (same number) or void it (its number is never reused; the
+ * reason is asked in a panel above the list).
  *
  * Everything needs `members.records.manage`. The letter's paper and signature come from Pengaturan › Anggota.
  */
@@ -172,71 +171,160 @@ export function ClearancesScreen() {
 
   if (!canManage) return <Notice kind="error">{t('members.clearance.no_permission')}</Notice>;
 
+  const closeVoid = (): void => {
+    setVoiding(null);
+    setReason('');
+    setVoidProblem(null);
+  };
+
+  const pickedColumns: DenseColumn<MemberListItem>[] = [
+    {
+      id: 'member',
+      header: t('members.clearance.col.member'),
+      cell: (m) => (
+        <>
+          <span className="font-semibold tracking-wide">{m.memberNo}</span> · {m.name}
+        </>
+      ),
+    },
+    { id: 'class', header: t('members.clearance.col.class'), cell: (m) => m.className ?? '—' },
+    {
+      id: 'check',
+      header: t('members.clearance.col.check'),
+      cell: (m) => {
+        const why = refusalsOf(m.id);
+        return why === null ? <span className="text-muted-foreground">—</span> : why === '' ? <Tag tone="ok">{t('members.clearance.passes')}</Tag> : <StatusText tone="bad">{why}</StatusText>;
+      },
+    },
+    {
+      id: 'actions',
+      header: <span className="sr-only">{t('table.actions')}</span>,
+      className: 'w-px py-1.5 text-right whitespace-nowrap',
+      cell: (m) => (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          aria-label={t('members.clearance.remove_named', { name: m.name })}
+          onClick={() => {
+            setPicked((list) => list.filter((x) => x.id !== m.id));
+            setCheck(null);
+          }}>
+          {t('members.clearance.remove')}
+        </Button>
+      ),
+    },
+  ];
+
+  const letterColumns: DenseColumn<ClearanceView>[] = [
+    {
+      id: 'number',
+      header: t('members.clearance.col.number'),
+      cell: (l) => (
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="tracking-wide whitespace-nowrap">{l.number}</span>
+          {l.voided && <Tag tone="warn">{t('members.clearance.void_badge')}</Tag>}
+        </span>
+      ),
+    },
+    { id: 'member', header: t('members.clearance.col.member'), cell: (l) => (l.name === null ? t('members.clearance.anonymous') : `${l.memberNo ?? ''} · ${l.name}`) },
+    { id: 'issued', header: t('members.clearance.col.issued'), className: 'whitespace-nowrap', cell: (l) => day(l.issuedOn) },
+    { id: 'purpose', header: t('members.clearance.col.purpose'), cell: (l) => t(`vocab.clearance_purpose.${l.purpose}`) },
+    {
+      id: 'actions',
+      header: <span className="sr-only">{t('table.actions')}</span>,
+      className: 'w-px py-1.5 text-right whitespace-nowrap',
+      cell: (l) => (
+        <>
+          <Button asChild size="sm" variant="ghost">
+            <a href={`/api/v1/members/${encodeURIComponent(l.memberId)}/clearances/${encodeURIComponent(l.id)}/pdf`} target="_blank" rel="noopener" aria-label={t('members.clearance.reprint_named', { number: l.number })}>
+              {t('members.clearance.reprint')}
+            </a>
+          </Button>
+          {!l.voided && (
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={t('members.clearance.void_named', { number: l.number })}
+              aria-expanded={voiding?.id === l.id}
+              onClick={() => {
+                setReason('');
+                setVoidProblem(null);
+                setVoiding(l);
+              }}>
+              {t('members.clearance.void')}
+            </Button>
+          )}
+        </>
+      ),
+    },
+  ];
+
   return (
-    <div className="flex max-w-5xl flex-col gap-4">
-      <div className="grid gap-1">
-        <h1 className="text-2xl font-semibold">{t('nav.members.clearances')}</h1>
-        <p className="text-sm text-muted-foreground">{t('members.clearance.intro')}</p>
-      </div>
+    <div className="grid max-w-5xl gap-6">
+      <PageHead title={t('nav.members.clearances')} intro={t('members.clearance.intro')} />
       {notice !== null && <Notice kind="success">{notice}</Notice>}
       {pdfUrl !== null && (
         <p className="text-sm">
-          <a href={pdfUrl} target="_blank" rel="noopener" className="font-medium text-primary underline-offset-4 hover:underline">
+          <a href={pdfUrl} target="_blank" rel="noopener" className="font-semibold text-accent-text underline-offset-4 hover:underline">
             {t('members.clearance.open_pdf')}
           </a>
         </p>
       )}
       <ProblemAlert error={problem} />
 
-      <form noValidate onSubmit={(e) => void search(e)} className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-4">
-        <div className="grid min-w-56 flex-1 gap-1">
-          <Label htmlFor={`${ids}-q`}>{t('members.clearance.search')}</Label>
+      <FilterRow
+        label={t('members.clearance.search')}
+        onSubmit={(e) => void search(e)}
+        actions={
+          <Button type="submit" variant="outline">
+            {t('members.clearance.find')}
+          </Button>
+        }>
+        <FilterField id={`${ids}-q`} wide label={t('members.clearance.search')}>
           <Input id={`${ids}-q`} value={q} maxLength={191} autoComplete="off" onChange={(e) => setQ(e.target.value)} />
-        </div>
-        <div className="grid w-40 gap-1">
-          <Label htmlFor={`${ids}-class`}>{t('members.clearance.class')}</Label>
+        </FilterField>
+        <FilterField id={`${ids}-class`} label={t('members.clearance.class')}>
           <Input id={`${ids}-class`} value={className} maxLength={64} autoComplete="off" onChange={(e) => setClassName(e.target.value)} />
-        </div>
-        <Button type="submit" variant="outline">
-          {t('members.clearance.find')}
-        </Button>
-      </form>
+        </FilterField>
+      </FilterRow>
 
       {found !== null && (
-        <section aria-label={t('members.clearance.found')} className="flex flex-col gap-2 rounded-lg border p-3">
+        <section aria-label={t('members.clearance.found')} className="grid gap-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-muted-foreground">{t('members.clearance.found_count', { count: found.length })}</p>
-            <Button type="button" size="sm" disabled={found.length === 0} onClick={() => add(found)}>
+            <p className="text-meta text-muted-foreground">{t('members.clearance.found_count', { count: found.length })}</p>
+            <Button type="button" size="sm" variant="outline" disabled={found.length === 0} onClick={() => add(found)}>
               {t('members.clearance.add_all')}
             </Button>
           </div>
-          <ul className="flex max-h-64 flex-col divide-y overflow-y-auto">
-            {found.map((m) => (
-              <li key={m.id} className="flex items-center justify-between gap-2 py-1.5 text-sm">
-                <span>
-                  <span className="font-mono">{m.memberNo}</span> · {m.name}
-                  {m.className !== null && <span className="text-muted-foreground"> · {m.className}</span>}
-                </span>
-                <Button type="button" size="sm" variant="outline" aria-label={t('members.clearance.add_named', { name: m.name })} onClick={() => add([m])}>
-                  {t('members.clearance.add')}
-                </Button>
-              </li>
-            ))}
-          </ul>
+          {found.length > 0 && (
+            <ul className="grid max-h-64 overflow-y-auto rounded-lg border">
+              {found.map((m) => (
+                <li key={m.id} className="flex items-center justify-between gap-2 border-b px-3 py-1.5 text-sm last:border-b-0">
+                  <span className="min-w-0">
+                    <span className="font-semibold tracking-wide">{m.memberNo}</span> · {m.name}
+                    {m.className !== null && <span className="text-muted-foreground"> · {m.className}</span>}
+                  </span>
+                  <Button type="button" size="sm" variant="ghost" aria-label={t('members.clearance.add_named', { name: m.name })} onClick={() => add([m])}>
+                    {t('members.clearance.add')}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 
-      <section aria-labelledby={`${ids}-picked`} className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id={`${ids}-picked`} className="text-lg font-semibold">
-            {t('members.clearance.picked', { count: picked.length, max: MAX })}
-          </h2>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" disabled={picked.length === 0} onClick={() => void runCheck()}>
+      <Section
+        title={t('members.clearance.picked', { count: picked.length, max: MAX })}
+        aside={
+          <>
+            <Button type="button" size="sm" variant="outline" disabled={picked.length === 0} onClick={() => void runCheck()}>
               {t('members.clearance.check')}
             </Button>
             <Button
               type="button"
+              size="sm"
               variant="ghost"
               disabled={picked.length === 0}
               onClick={() => {
@@ -245,66 +333,11 @@ export function ClearancesScreen() {
               }}>
               {t('members.clearance.clear')}
             </Button>
-          </div>
-        </div>
-        {picked.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t('members.clearance.none_picked')}</p>
-        ) : (
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
-              <caption className="sr-only">{t('members.clearance.picked_caption')}</caption>
-              <thead className="bg-muted/50 text-left">
-                <tr>
-                  {(['members.clearance.col.member', 'members.clearance.col.class', 'members.clearance.col.check'] as const).map((key) => (
-                    <th key={key} scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                      {t(key)}
-                    </th>
-                  ))}
-                  <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                    {t('table.actions')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {picked.map((m) => {
-                  const why = refusalsOf(m.id);
-                  return (
-                    <tr key={m.id} className="border-t">
-                      <td className="px-3 py-2">
-                        <span className="font-mono">{m.memberNo}</span> · {m.name}
-                      </td>
-                      <td className="px-3 py-2">{m.className ?? '—'}</td>
-                      <td className="px-3 py-2">
-                        {why === null ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : why === '' ? (
-                          <Badge tone="info">{t('members.clearance.passes')}</Badge>
-                        ) : (
-                          <Badge tone="danger">{why}</Badge>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          aria-label={t('members.clearance.remove_named', { name: m.name })}
-                          onClick={() => {
-                            setPicked((list) => list.filter((x) => x.id !== m.id));
-                            setCheck(null);
-                          }}>
-                          {t('members.clearance.remove')}
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {check !== null && <p className="text-sm">{t('members.clearance.check_summary', { pass: passing, refused: check.items.length - passing })}</p>}
-        <div className="grid gap-3 sm:grid-cols-3">
+          </>
+        }>
+        <DenseTable caption={t('members.clearance.picked_caption')} columns={pickedColumns} rows={picked} rowKey={(m) => m.id} empty={t('members.clearance.none_picked')} />
+        {check !== null && <p className="text-sm font-semibold">{t('members.clearance.check_summary', { pass: passing, refused: check.items.length - passing })}</p>}
+        <div className="grid gap-x-5 gap-y-4 sm:grid-cols-3">
           <Field id={`${ids}-purpose`} label={t('members.clearance.purpose')}>
             <select id={`${ids}-purpose`} className={SELECT_CLASS} value={purpose} onChange={(e) => setPurpose(e.target.value as ClearancePurpose)}>
               {CLEARANCE_PURPOSES.map((p) => (
@@ -328,120 +361,63 @@ export function ClearancesScreen() {
             </select>
           </Field>
         </div>
-        <div>
+        <div className="flex flex-wrap gap-2">
           <Button type="button" disabled={busy || picked.length === 0} onClick={() => void issue()}>
             {t('members.clearance.issue')}
           </Button>
         </div>
-      </section>
+      </Section>
 
-      <section aria-labelledby={`${ids}-letters`} className="flex flex-col gap-2">
-        <h2 id={`${ids}-letters`} className="text-lg font-semibold">
-          {t('members.clearance.letters')}
-        </h2>
-        {letters.isError && <Notice kind="error">{problemText(t, letters.error)}</Notice>}
-        <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-sm">
-            <caption className="sr-only">{t('members.clearance.letters')}</caption>
-            <thead className="bg-muted/50 text-left">
-              <tr>
-                {(['members.clearance.col.number', 'members.clearance.col.member', 'members.clearance.col.issued', 'members.clearance.col.purpose'] as const).map((key) => (
-                  <th key={key} scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                    {t(key)}
-                  </th>
-                ))}
-                <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                  {t('table.actions')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
-                    {letters.data === undefined ? t('shell.loading') : t('members.clearance.no_letters')}
-                  </td>
-                </tr>
-              ) : (
-                rows.map((l) => (
-                  <tr key={l.id} className="border-t">
-                    <td className="px-3 py-2 font-mono">
-                      {l.number} {l.voided && <Badge tone="warning">{t('members.clearance.void_badge')}</Badge>}
-                    </td>
-                    <td className="px-3 py-2">{l.name === null ? t('members.clearance.anonymous') : `${l.memberNo ?? ''} · ${l.name}`}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{day(l.issuedOn)}</td>
-                    <td className="px-3 py-2">{t(`vocab.clearance_purpose.${l.purpose}`)}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-wrap gap-1">
-                        <Button asChild size="sm" variant="outline">
-                          <a href={`/api/v1/members/${encodeURIComponent(l.memberId)}/clearances/${encodeURIComponent(l.id)}/pdf`} target="_blank" rel="noopener" aria-label={t('members.clearance.reprint_named', { number: l.number })}>
-                            {t('members.clearance.reprint')}
-                          </a>
-                        </Button>
-                        {!l.voided && (
-                          <Button size="sm" variant="outline" aria-label={t('members.clearance.void_named', { number: l.number })} onClick={() => setVoiding(l)}>
-                            {t('members.clearance.void')}
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+      <Section title={t('members.clearance.letters')}>
+        {voiding !== null && (
+          <InlinePanel
+            key={voiding.id}
+            title={t('members.clearance.confirm_void', { number: voiding.number })}
+            onCancel={closeVoid}
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (reason.trim() === '') return;
+              setVoidProblem(null);
+              voidLetter(voiding).then(
+                () => setVoiding(null),
+                (error: unknown) => setVoidProblem(error),
+              );
+            }}>
+            <p className="-mt-1.5 max-w-[75ch] text-sm text-muted-foreground">{t('members.clearance.confirm_void_body')}</p>
+            <Field id={`${ids}-reason`} label={t('members.clearance.void_reason')} className="max-w-md">
+              <Input id={`${ids}-reason`} value={reason} maxLength={191} autoComplete="off" onChange={(e) => setReason(e.target.value)} />
+            </Field>
+            <ProblemAlert error={voidProblem} />
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" size="sm" variant="destructive" disabled={reason.trim() === ''}>
+                {t('members.clearance.void')}
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={closeVoid}>
+                {t('form.cancel')}
+              </Button>
+            </div>
+          </InlinePanel>
+        )}
+        {letters.isError && letters.data === undefined ? (
+          <ErrorState error={letters.error} onRetry={() => void letters.refetch()} retrying={letters.isFetching} />
+        ) : letters.data === undefined ? (
+          <SkeletonTable label={t('shell.loading')} columns={5} rows={3} />
+        ) : (
+          <DenseTable
+            caption={t('members.clearance.letters')}
+            columns={letterColumns}
+            rows={rows}
+            rowKey={(l) => l.id}
+            rowClassName={(l) => (voiding?.id === l.id ? 'bg-accent-soft' : undefined)}
+            empty={t('members.clearance.no_letters')}
+          />
+        )}
         {letters.hasNextPage && (
           <Button type="button" variant="outline" size="sm" className="w-fit" disabled={letters.isFetchingNextPage} onClick={() => void letters.fetchNextPage()}>
             {t('circulation.load_more')}
           </Button>
         )}
-      </section>
-
-      <Dialog
-        open={voiding !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setVoiding(null);
-            setReason('');
-            setVoidProblem(null);
-          }
-        }}>
-        {voiding !== null && (
-          <DialogContent closeLabel={t('form.cancel')}>
-            <DialogHeader>
-              <DialogTitle>{t('members.clearance.confirm_void', { number: voiding.number })}</DialogTitle>
-              <DialogDescription>{t('members.clearance.confirm_void_body')}</DialogDescription>
-            </DialogHeader>
-            <form
-              noValidate
-              className="flex flex-col gap-3"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (reason.trim() === '') return;
-                setVoidProblem(null);
-                voidLetter(voiding).then(
-                  () => setVoiding(null),
-                  (error: unknown) => setVoidProblem(error),
-                );
-              }}>
-              <div className="grid gap-1">
-                <Label htmlFor={`${ids}-reason`}>{t('members.clearance.void_reason')}</Label>
-                <Input id={`${ids}-reason`} value={reason} maxLength={191} autoComplete="off" onChange={(e) => setReason(e.target.value)} />
-              </div>
-              <ProblemAlert error={voidProblem} />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setVoiding(null)}>
-                  {t('form.cancel')}
-                </Button>
-                <Button type="submit" variant="destructive" disabled={reason.trim() === ''}>
-                  {t('members.clearance.void')}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        )}
-      </Dialog>
+      </Section>
     </div>
   );
 }
