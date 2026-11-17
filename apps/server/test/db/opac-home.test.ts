@@ -435,7 +435,7 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     expect(fresh).toContain(`<ul class="subject-pills" aria-label="${esc(opacText('id', 'home.pills.label'))}">`);
     expect(fresh).toContain(`<a href="/cari?subjek=${subjectId}">Novel &lt;Indonesia&gt;<span class="pill-count" aria-hidden="true">2</span>`);
     expect(fresh.split(opacText('id', 'home.card.available')).length - 1).toBe(2);
-    // The popular list carries the same pills and words.
+    // The popular titles carry the same pills and words.
     const popular = section(html, 'judul-populer')!;
     expect(popular).toContain('class="subject-pills"');
     expect(popular).toContain(`<span class="status status-ok card-status">${esc(opacText('id', 'home.card.available'))}</span>`);
@@ -462,10 +462,13 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     await setHome(home);
   });
 
-  it('the popular titles: a numbered list linking the most borrowed search; no borrower and no count on the page or in that search', async () => {
+  it('the popular titles: cards with covers like the new titles, linking the most borrowed search; no borrower and no count on the page or in that search', async () => {
     const html = (await get('/')).text;
     const popular = section(html, 'judul-populer')!;
-    expect(popular).toContain('<ol class="popular-list" role="list">');
+    expect(popular).toContain('<ul class="card-grid">');
+    expect(popular).toContain('class="book-cover cover-');
+    expect(popular).toContain(`<p class="section-sub">${esc(opacText('id', 'home.popular.note'))}</p>`);
+    expect(popular).not.toContain('popular-list');
     expect(popular).toContain('Bumi Manusia');
     expect(popular).toMatch(/href="\/katalog\/[0-9A-Z]{26}\/bumi-manusia"/);
     expect(popular).not.toContain('Laskar Pelangi');

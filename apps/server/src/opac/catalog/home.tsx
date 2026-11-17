@@ -48,8 +48,8 @@ export const PROMOTED_MAX = 12;
 /** The latest news posts shown. */
 export const HOME_NEWS = 3;
 // ---- Komunitas (OPAC home page) ----
-/** The popular titles shown. */
-export const HOME_POPULAR = 10;
+/** The popular titles shown, as cards like the new titles. */
+export const HOME_POPULAR = 6;
 /** At most this many subject pills above a list of titles. */
 export const HOME_PILLS = 6;
 /** The classes shown in the loans per class. */
@@ -161,6 +161,7 @@ function SectionHead(props: { id: string; heading: string; sub?: string | undefi
 function Titles(props: {
   id: string;
   heading: string;
+  sub?: string;
   cards: readonly TitleCard[];
   pills?: readonly SubjectPill[];
   more?: { href: string; label: string };
@@ -170,7 +171,7 @@ function Titles(props: {
   if (props.cards.length === 0) return null;
   return (
     <section class="home-section" aria-labelledby={props.id}>
-      <SectionHead id={props.id} heading={props.heading} more={props.more} />
+      <SectionHead id={props.id} heading={props.heading} sub={props.sub} more={props.more} />
       {props.pills === undefined ? null : <SubjectPills pills={props.pills} locale={props.locale} lang={props.lang} />}
       <ul class="card-grid">
         {props.cards.map((card) => (
@@ -286,36 +287,6 @@ function SearchCard(props: { locale: Locale; lang: Locale | null; titles: number
         <a href={keep('/cari', lang)}>{opacText(locale, 'home.search.browse')}</a>
       </p>
     </div>
-  );
-}
-
-/** The popular titles: a numbered list, the most lent first, with their availability; no count and no borrower. */
-function Popular(props: { cards: readonly TitleCard[]; pills: readonly SubjectPill[]; locale: Locale; lang: Locale | null }) {
-  const { cards, locale, lang } = props;
-  if (cards.length === 0) return null;
-  return (
-    <section class="home-section" aria-labelledby="judul-populer">
-      <SectionHead
-        id="judul-populer"
-        heading={opacText(locale, 'home.popular.title')}
-        sub={opacText(locale, 'home.popular.note')}
-        more={{ href: keep('/cari?urut=populer', lang), label: opacText(locale, 'home.popular.all') }}
-      />
-      <SubjectPills pills={props.pills} locale={locale} lang={lang} />
-      {/* The rank is drawn by the theme (list-style none); role=list keeps the list a list for every screen reader. */}
-      <ol class="popular-list" role="list">
-        {cards.map((card) => (
-          <li>
-            <a href={keep(recordUrlPath(card.id, card.title), lang)}>
-              {card.title}
-              {card.subtitle === null || card.subtitle.trim() === '' ? null : <span class="card-subtitle">: {card.subtitle}</span>}
-            </a>
-            {card.mainAgent === null ? null : <span class="card-meta">{card.mainAgent}</span>}
-            <Availability card={card} locale={locale} />
-          </li>
-        ))}
-      </ol>
-    </section>
   );
 }
 
@@ -630,7 +601,19 @@ export async function homeResponse(rc: HomeSource): Promise<Response> {
           closed={blocks.visit && closedToday}
         />
         {blocks.classes ? <Classes locale={locale} lang={lang} counts={facts.classes} /> : null}
-        {blocks.popular ? <Popular cards={popular} pills={popularPills ?? []} locale={locale} lang={lang} /> : null}
+        {/* The popular titles: the most lent first, as cards like the new titles; no count and no borrower. */}
+        {blocks.popular ? (
+          <Titles
+            id="judul-populer"
+            heading={opacText(locale, 'home.popular.title')}
+            sub={opacText(locale, 'home.popular.note')}
+            cards={popular}
+            pills={popularPills ?? []}
+            more={{ href: keep('/cari?urut=populer', lang), label: opacText(locale, 'home.popular.all') }}
+            locale={locale}
+            lang={lang}
+          />
+        ) : null}
         <Titles
           id="judul-baru"
           heading={opacText(locale, 'shell.home.new_titles')}
