@@ -19,7 +19,8 @@ import { useCount, useDeskToday, useLibraryToday } from '@/screens/dashboard-tod
  * - loans more than 14 days overdue at any branch (`circulation.records.read`) → the overdue list;
  * - at the desk's branch (`circulation.desk.use` there): copies on the hold shelf to clear (past their pickup date,
  *   expired or cancelled), and holds ready for pickup → the hold shelf;
- * - memberships ending within 14 days (`members.records.read`) → the expiring members report, set to 14 days;
+ * - active memberships ending within 14 days (`members.records.read`) → the expiring members report, set to 14 days
+ *   and to the active members not yet ended, so that it lists the members the line counts;
  * - an update ready to install (`system.update.read`) → Pembaruan;
  * - then the system's warnings and notes.
  *
@@ -34,7 +35,7 @@ interface Item {
   value: string;
   tone: 'bad' | 'warn' | 'plain';
   to: string | null;
-  search?: Record<string, string | number>;
+  search?: Record<string, string | number | boolean>;
 }
 
 const SEVERITY_TONE: Readonly<Record<AlertSeverity, Item['tone']>> = { error: 'bad', warning: 'warn', info: 'plain' };
@@ -82,7 +83,7 @@ export function useAttentionItems(): Item[] {
       t('dashboard.home.attention.expiring', { days: DASHBOARD_EXPIRING_DAYS }),
       library.data?.members?.expiringSoon,
       `/admin/reports/${encodeURIComponent('members.expiring')}`,
-    ).map((item) => ({ ...item, search: { days: DASHBOARD_EXPIRING_DAYS } })),
+    ).map((item) => ({ ...item, search: { days: DASHBOARD_EXPIRING_DAYS, activeOnly: true } })),
     ...(update === null ? [] : [{ key: 'update', label: t('dashboard.home.attention.update', { version: update.version }), value: '', tone: 'plain' as const, to: '/admin/updates' }]),
     ...alerts.filter((a) => a.severity !== 'error').map(alertItem),
   ];

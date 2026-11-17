@@ -188,7 +188,8 @@ describe('Perlu perhatian', () => {
       ['long_overdue', '/admin/layanan/terlambat'],
       ['holds_to_clear', '/admin/layanan/rak-tunggu'],
       ['holds_ready', '/admin/layanan/rak-tunggu'],
-      ['expiring', '/admin/reports/members.expiring?days=14'],
+      // The report set to the members the line counts: active, not yet ended, ending within 14 days.
+      ['expiring', '/admin/reports/members.expiring?days=14&activeOnly=true'],
       ['alert.jobs_dead', '/admin/jobs'],
     ]);
     expect(within(region).getByRole('link', { name: 'Terlambat lebih dari 14 hari 4' })).toBeTruthy();
