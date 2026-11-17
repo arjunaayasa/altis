@@ -1,5 +1,6 @@
 import { CATALOG_EN } from './catalog';
 import { KOMUNITAS_EN } from './komunitas';
+import { SHELL_EN } from './shell';
 import type { AdminKey } from './id';
 
 /** The admin SPA's own strings in English, complete: typed against the Indonesian keys (`id.ts`). */
@@ -1180,4 +1181,6 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'nav.circulation.stations': 'Guestbook Stations',
   'nav.members.cards': 'Print Cards',
   ...KOMUNITAS_EN,
+  // ---- The shell: module bar, sidebar, user menu and theme (i18n/shell.ts) ----
+  ...SHELL_EN,
 };
