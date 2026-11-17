@@ -3,9 +3,10 @@ import type { Page } from '@playwright/test';
 import { LOCALES, type Locale } from '@altis/shared';
 import type { BranchItem } from '@altis/shared/api/branches';
 import type { RoleItem } from '@altis/shared/api/roles';
-import { NAV as ADMIN_NAV } from '../../../apps/admin/src/lib/nav.js';
+import { NAV as ADMIN_NAV, NAV_MODULES } from '../../../apps/admin/src/lib/nav.js';
 import { assignRole, createStaff, enableTwoFactor } from '../lib/api.js';
 import { CspRecorder, guardContext, pageViolations } from '../lib/csp.js';
+import { moduleBar, openNavPage } from '../lib/nav.js';
 import { tr, type TextKey } from '../lib/text.js';
 import { T, expect, expectHome, passReauth, signIn, test } from '../fixtures.js';
 
@@ -17,9 +18,11 @@ import { T, expect, expectHome, passReauth, signIn, test } from '../fixtures.js'
 
 /**
  * Every entry of the admin navigation, from the table the SPA's shell renders (apps/admin/src/lib/nav.ts): an entry
- * added there is visited here without anyone editing this spec. A super admin sees every one (the test checks it).
+ * added there is visited here without anyone editing this spec. A super admin sees every one (the test opens each
+ * through its module and the sidebar, as a user does).
  */
-const NAV: readonly { key: TextKey; path: RegExp }[] = ADMIN_NAV.map((item) => ({
+const NAV: readonly { to: string; key: TextKey; path: RegExp }[] = ADMIN_NAV.map((item) => ({
+  to: item.to,
   key: item.labelKey,
   path: new RegExp(`${item.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?$`),
 }));
@@ -151,19 +154,18 @@ for (const locale of LOCALES) {
       });
     }
 
-    const mainNav = page.getByRole('navigation', { name: t('shell.nav_label') });
-    await clean(csp, 'nav: the shell shows every entry of the navigation table', async () => {
-      await expect(mainNav.getByRole('link')).toHaveCount(NAV.length);
+    await clean(csp, 'nav: the module bar shows every module', async () => {
+      await expect(moduleBar(page, t).getByRole('link')).toHaveCount(NAV_MODULES.length);
     });
     for (const item of NAV) {
       await clean(csp, `nav: ${t(item.key)}`, async () => {
-        await mainNav.getByRole('link', { name: t(item.key), exact: true }).click();
+        await openNavPage(page, item.to, t);
         await expectScreen(page, item.path);
       });
     }
 
     await clean(csp, 'settings: every group', async () => {
-      await mainNav.getByRole('link', { name: t('nav.settings'), exact: true }).click();
+      await openNavPage(page, '/admin/settings', t);
       const tabs = page.getByRole('navigation', { name: t('settings.sections') });
       for (const tab of SETTINGS_TABS) {
         await tabs.getByRole('link', { name: t(tab.key), exact: true }).click();
@@ -201,7 +203,7 @@ for (const locale of LOCALES) {
     });
 
     await clean(csp, 'users: the confirmations, the reauth dialog and the temporary password', async () => {
-      await mainNav.getByRole('link', { name: t('nav.users'), exact: true }).click();
+      await openNavPage(page, '/admin/users', t);
       await page.getByLabel(t('users.search'), { exact: true }).fill(target.username);
       await page.getByRole('button', { name: t('users.search_submit'), exact: true }).click();
       const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: target.username, exact: true }) });
@@ -236,7 +238,7 @@ for (const locale of LOCALES) {
     });
 
     await clean(csp, 'branches: the archive confirmation', async () => {
-      await mainNav.getByRole('link', { name: t('nav.branches'), exact: true }).click();
+      await openNavPage(page, '/admin/branches', t);
       const row = page.getByRole('row').filter({ hasText: branch.name });
       await row.getByRole('button', { name: t('branches.action.archive'), exact: true }).click();
       const confirm = page.getByRole('alertdialog', { name: t('branches.confirm.archive.title', { name: branch.name }) });
@@ -246,7 +248,7 @@ for (const locale of LOCALES) {
     });
 
     await clean(csp, 'system configuration: the cron token confirmation and the one-time token', async () => {
-      await mainNav.getByRole('link', { name: t('nav.system'), exact: true }).click();
+      await openNavPage(page, '/admin/system', t);
       await page.getByRole('button', { name: t('system.cron.rotate'), exact: true }).click();
       const confirm = page.getByRole('alertdialog', { name: t('system.cron.confirm_title') });
       await confirm.getByRole('button', { name: t('system.cron.rotate'), exact: true }).click();

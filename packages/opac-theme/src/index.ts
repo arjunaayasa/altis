@@ -8,7 +8,7 @@
 // tasks that style the OPAC never edit the same file:
 //
 //   base.ts    the 1b tokens, accents and page frame (Task 21 may edit the shared tokens)
-//   shell.ts   Task 21: header, navigation, search box, skip link, home page
+//   shell.ts   Task 21: header, navigation, search box, skip link, footer, substitute covers, shared components
 //   pages.ts   Task 20: Halaman & Berita
 //   search.ts  Task 33: results, facets, paging
 //   detail.ts  Task 34: record detail, availability table, shelf map, citations
@@ -29,8 +29,12 @@ import { AKUN_CSS } from './akun.js';
 // ---- Komunitas (OPAC home page) ----
 import { HOME_CSS } from './home.js';
 
-export { ACCENTS, DEFAULT_ACCENT, isAccent } from './base.js';
+export { ACCENTS, ACCENT_COLORS, BAR_COLORS, DEFAULT_ACCENT, SCHEME_COLORS, isAccent } from './base.js';
 export type { AccentName } from './base.js';
+export { contrastRatio, hexRgb, oklchHex, oklchToRgb, rgbHex } from './color.js';
+export type { Rgb } from './color.js';
+export { COVER_CLASSES, COVER_COLORS, SPINE_LABEL_COLORS } from './shell.js';
+export type { CoverClass } from './shell.js';
 export { AKUN_CSS, BASE_CSS, DETAIL_CSS, HOME_CSS, PAGES_CSS, SEARCH_CSS, SHELL_CSS, VISITS_CSS };
 
 /** The modules of the stylesheet, in the order they are joined (S16). */

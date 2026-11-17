@@ -127,24 +127,24 @@ export function CheckField({
 
 /** The look of `ui/input`, for a native `<select>`. */
 export const SELECT_CLASS =
-  'flex h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 py-1 text-base shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive md:text-sm';
+  'flex h-8.5 w-full min-w-0 rounded-md border border-input bg-background px-2.5 py-1 text-base transition-[border-color,box-shadow] duration-150 ease-out outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-accent-soft disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-bad-bg aria-invalid:focus-visible:border-ring aria-invalid:focus-visible:ring-accent-soft md:text-sm';
 
 /** The look of `ui/input`, for a `<textarea>`. */
 export const TEXTAREA_CLASS =
-  'flex min-h-20 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive md:text-sm';
+  'flex min-h-18 w-full min-w-0 rounded-md border border-input bg-background px-2.5 py-2 text-base leading-snug transition-[border-color,box-shadow] duration-150 ease-out outline-none placeholder:text-faint focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-accent-soft disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-bad-bg aria-invalid:focus-visible:border-ring aria-invalid:focus-visible:ring-accent-soft md:text-sm';
 
 const BADGE_TONES = {
-  neutral: 'border-border bg-muted text-muted-foreground',
-  info: 'border-primary/30 bg-primary/10 text-primary',
-  warning: 'border-warning-foreground/30 bg-warning text-warning-foreground',
-  danger: 'border-destructive/30 bg-destructive/10 text-destructive',
+  neutral: 'bg-layer-2 text-muted-foreground',
+  info: 'bg-accent-soft text-accent-text',
+  warning: 'bg-warn-bg text-warn',
+  danger: 'bg-bad-bg text-bad',
 } as const;
 
 /** A short status word next to a value (`sistem`, `Default`, `Nonaktif`, ...). */
 export function Badge({ tone = 'neutral', className, ...props }: ComponentProps<'span'> & { tone?: keyof typeof BADGE_TONES }) {
   return (
     <span
-      className={cn('inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs font-medium whitespace-nowrap', BADGE_TONES[tone], className)}
+      className={cn('inline-flex h-5.5 items-center rounded-sm px-1.5 text-xs font-semibold whitespace-nowrap', BADGE_TONES[tone], className)}
       {...props}
     />
   );
@@ -154,8 +154,8 @@ export function Badge({ tone = 'neutral', className, ...props }: ComponentProps<
 export function Notice({ kind, children, action }: { kind: 'success' | 'error'; children: ReactNode; action?: ReactNode }) {
   if (kind === 'success') {
     return (
-      <p role="status" className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-        <CircleCheckIcon className="size-4 shrink-0 text-primary" aria-hidden="true" />
+      <p role="status" className="flex items-center gap-2 rounded-md border border-ok-line bg-ok-bg px-3.5 py-2.5 text-sm font-semibold text-ok">
+        <CircleCheckIcon className="size-4 shrink-0" aria-hidden="true" />
         {children}
       </p>
     );

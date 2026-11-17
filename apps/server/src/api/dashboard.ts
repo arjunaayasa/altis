@@ -1,6 +1,9 @@
-import { dashboardCheckDue, dashboardSummary, enqueueDashboardCheck } from '@altis/core';
+import { dashboardCheckDue, dashboardSummary, deskDashboard, enqueueDashboardCheck, libraryDashboard } from '@altis/core';
 import { DomainError } from '@altis/shared';
+import { ulidField } from '@altis/shared/api/common';
 import type { DashboardResponse } from '@altis/shared/api/dashboard';
+import type { DeskDashboard, LibraryDashboard } from '@altis/shared/api/dashboard-home';
+import { z } from 'zod';
 import { csrfKey } from '../http/csrf.js';
 import { route, type RouteContext, type RouteDecl } from '../http/route.js';
 import { loggableError } from '../safe-error.js';
@@ -74,5 +77,52 @@ const dashboardGet = route({
   },
 });
 
-/** The dashboard route (route catalog `dashboard.get`). */
-export const DASHBOARD_ROUTES: RouteDecl[] = [dashboardGet];
+// Beranda's library figures (the shapes: @altis/shared/api/dashboard-home; the counts: core dashboard/home.ts), beside
+// the system dashboard:
+//
+//   GET branches/:branchId/dashboard   circulation.desk.use at the branch: today at the desk's branch, its loans and
+//                                      returns per local hour
+//   GET dashboard/library              any signed-in staff user: each section only for a holder of its data's read
+//                                      permission (members, circulation records, the statistics reports)
+//
+// Counts only; read again by an open Beranda every minute, so both answer `Cache-Control: no-store` like the system
+// dashboard.
+
+/** GET branches/:branchId/dashboard. */
+const deskGet = route({
+  id: 'dashboard.desk',
+  method: 'GET',
+  path: '/api/v1/branches/:branchId/dashboard',
+  permission: 'circulation.desk.use',
+  branchParam: 'branchId',
+  idempotency: 'none',
+  audit: null,
+  params: z.strictObject({ branchId: ulidField }),
+  handler: async (rc) => {
+    const body: DeskDashboard = await deskDashboard(rc.db.db, rc.params.branchId, rc.now);
+    return { body, headers: NO_STORE };
+  },
+});
+
+/** GET dashboard/library. */
+const libraryGet = route({
+  id: 'dashboard.library',
+  method: 'GET',
+  path: '/api/v1/dashboard/library',
+  public: true,
+  session: 'required',
+  idempotency: 'none',
+  audit: null,
+  handler: async (rc) => {
+    // Unreachable: step 9 refuses a `session: 'required'` route without one.
+    if (rc.auth === null) throw new DomainError('AUTH_REQUIRED');
+    const body: LibraryDashboard = await libraryDashboard(rc.db.db, rc.auth.grants, rc.now);
+    return { body, headers: NO_STORE };
+  },
+});
+
+/** Beranda's library figures (community routes served beside the system dashboard). */
+export const DASHBOARD_HOME_ROUTES: RouteDecl[] = [deskGet, libraryGet];
+
+/** The dashboard routes (route catalog `dashboard.get`), then Beranda's library figures. */
+export const DASHBOARD_ROUTES: RouteDecl[] = [dashboardGet, ...DASHBOARD_HOME_ROUTES];

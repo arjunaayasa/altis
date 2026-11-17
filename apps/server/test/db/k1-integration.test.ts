@@ -35,6 +35,7 @@ import { checkPdf } from '../../../../packages/core/test/support/pdf-check.js';
 import { SLIMS_FIXTURE_SEED, slimsFixtureBytes } from '../../../../packages/core/test/support/slims-fixture/index.js';
 import type { UsageExpectation } from '../../../../packages/core/test/support/slims-fixture/generate-usage.js';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
+import { DASHBOARD_HOME_ROUTES } from '../../src/api/dashboard.js';
 import { AKUN_ROUTES } from '../../src/opac/akun/routes.js';
 import { VISIT_STATION_ROUTES } from '../../src/opac/visits/routes.js';
 import { ALL_ROUTES, KOMUNITAS_ROUTES } from '../../src/routes.js';
@@ -96,8 +97,9 @@ describe('the community routes are covered: matrix rows, personas, audit scripts
   it('every community route, the records bulk edit included, has its matrix row and a matrix fixture', () => {
     const rows = Object.keys(KOMUNITAS_MATRIX.rows);
     // The community routes served outside KOMUNITAS_ROUTES: the guestbook station's pages and the OPAC member area
-    // (after the OPAC's catalogue routes), and the settings groups of members, visits and privacy (SETTINGS_ROUTES).
-    const outside = [...VISIT_STATION_ROUTES, ...AKUN_ROUTES].map((d) => d.id);
+    // (after the OPAC's catalogue routes), Beranda's library figures (beside the system dashboard), and the settings
+    // groups of members, visits and privacy (SETTINGS_ROUTES).
+    const outside = [...VISIT_STATION_ROUTES, ...AKUN_ROUTES, ...DASHBOARD_HOME_ROUTES].map((d) => d.id);
     const ids = [...KOMUNITAS_ROUTES.map((d) => d.id), ...outside, 'settings.members.put', 'settings.visits.put', 'settings.privacy.put', 'catalog.records.bulk'];
     expect(ids.length).toBeGreaterThan(40);
     expect(ids.filter((id) => !rows.includes(id))).toEqual([]);

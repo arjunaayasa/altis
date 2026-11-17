@@ -1,8 +1,7 @@
 import type { BackupItem } from '@altis/shared/api/backups';
 import type { EditionView } from '@altis/shared';
-import type { Alert as DashboardAlert, AlertSeverity, DashboardResponse, DashboardRunMode } from '@altis/shared/api/dashboard';
+import type { DashboardResponse, DashboardRunMode } from '@altis/shared/api/dashboard';
 import { Link } from '@tanstack/react-router';
-import { CircleAlertIcon, InfoIcon, TriangleAlertIcon } from 'lucide-react';
 import { useCallback, useId, type ReactNode } from 'react';
 import { useDateTime } from '@/components/data-table';
 import { ProblemAlert } from '@/components/form-field';
@@ -10,18 +9,18 @@ import { Button } from '@/components/ui/button';
 import { editionName } from '@/edition';
 import { useLocale, useT, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
-import { isServerPage, safeNext } from '@/lib/api';
+import { isServerPage } from '@/lib/api';
 import { useApiQuery, useMe } from '@/lib/me';
 import { cn } from '@/lib/utils';
 
 /**
  * Dasbor sistem (spec §13.3 "Versi/update, backup terakhir, antrean, penjadwal, peringatan"; route
- * `dashboard.get`; decision C33), shown on Beranda (screens/home.tsx) to every staff member. `GET dashboard` leaves
- * out what the caller may not see, so the screen shows one card per section the answer carries:
+ * `dashboard.get`), shown on Beranda (screens/home.tsx) to every staff member, as its last section, "Sistem". `GET dashboard` leaves out what the caller may not see, so the section shows one card per section the
+ * answer carries:
  *
- * - the alerts first (errors, then warnings, as the server orders them), each with its message (`alert.<kind>`) and
- *   the page that explains or fixes it (`runner_stale` → Diagnostik; `ops_attention` → the operations page, a server
- *   page that is loaded, never routed);
+ * - the alerts are lines of Beranda's "Perlu perhatian" (screens/dashboard-attention.tsx), each with its message
+ *   (`alert.<kind>`) and the page that explains or fixes it (`runner_stale` → Diagnostik; `ops_attention` → the
+ *   operations page, a server page that is loaded, never routed);
  * - Versi (everyone's: the versions and the edition, "Edisi Komunitas"), Pembaruan (`version.update`, 1d Task 29: the
  *   last update check, linking to `/admin/updates`), Cadangan terakhir (with `system.backup.read`: the answer's
  *   `lastBackup` is null both without the permission and without a backup, so the permission decides the card),
@@ -86,7 +85,7 @@ function duration(t: Translate, ms: number): string {
 }
 
 /** A link to an admin page: the operations page is loaded (a server page), any other one routed. */
-function PageLink({ to, children, className }: { to: string; children: ReactNode; className?: string }) {
+export function PageLink({ to, search, children, className }: { to: string; search?: Record<string, string | number | boolean>; children: ReactNode; className?: string }) {
   if (isServerPage(to)) {
     return (
       <a href={to} className={className}>
@@ -95,10 +94,20 @@ function PageLink({ to, children, className }: { to: string; children: ReactNode
     );
   }
   return (
-    <Link to={to} className={className}>
+    <Link to={to} search={search} className={className}>
       {children}
     </Link>
   );
+}
+
+/** The system dashboard, read as Beranda reads it (shared by its sections: the same query). */
+export function useSystemDashboard() {
+  return useApiQuery<DashboardResponse>({
+    queryKey: DASHBOARD_KEY,
+    path: 'dashboard',
+    request: { background: true },
+    refetchInterval: REFRESH_MS,
+  });
 }
 
 /** A dashboard card: a titled region. */
@@ -106,9 +115,9 @@ function Card({ title, children, className }: { title: string; children: ReactNo
   const id = useId();
   return (
     <section aria-labelledby={id} className={cn('flex flex-col gap-3 rounded-lg border bg-card p-4', className)}>
-      <h2 id={id} className="text-base font-semibold">
+      <h3 id={id} className="text-sm font-bold">
         {title}
-      </h2>
+      </h3>
       {children}
     </section>
   );
@@ -127,55 +136,9 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 /** The link at the bottom of a card. */
 function CardLink({ to, children }: { to: string; children: ReactNode }) {
   return (
-    <PageLink to={to} className="mt-auto self-start text-sm text-primary underline-offset-4 hover:underline">
+    <PageLink to={to} className="mt-auto self-start text-sm font-semibold text-accent-text underline-offset-4 hover:underline">
       {children}
     </PageLink>
-  );
-}
-
-const SEVERITY_ICON: Readonly<Record<AlertSeverity, typeof InfoIcon>> = {
-  error: CircleAlertIcon,
-  warning: TriangleAlertIcon,
-  info: InfoIcon,
-};
-
-const SEVERITY_CLASS: Readonly<Record<AlertSeverity, string>> = {
-  error: 'border-destructive/40 bg-destructive/5 text-destructive',
-  warning: 'border-warning-foreground/30 bg-warning text-warning-foreground',
-  info: 'border-primary/30 bg-primary/5 text-foreground',
-};
-
-function Alerts({ alerts }: { alerts: readonly DashboardAlert[] }) {
-  const t = useT();
-  return (
-    <Card title={t('dashboard.alerts.title')} className="lg:col-span-2">
-      <ul className="flex flex-col gap-2">
-        {alerts.map((alert) => {
-          const Icon = SEVERITY_ICON[alert.severity];
-          const link = alert.link !== undefined && safeNext(alert.link) === alert.link ? alert.link : null;
-          return (
-            <li
-              key={alert.kind}
-              data-alert={alert.kind}
-              className={cn('flex flex-wrap items-start justify-between gap-2 rounded-md border px-3 py-2 text-sm', SEVERITY_CLASS[alert.severity])}
-            >
-              <span className="flex items-start gap-2">
-                <Icon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                <span>
-                  <span className="sr-only">{t(`dashboard.severity.${alert.severity}`)}: </span>
-                  {t(alert.messageKey, alert.params)}
-                </span>
-              </span>
-              {link !== null && (
-                <Button asChild size="sm" variant="outline" className="text-foreground">
-                  <PageLink to={link}>{t('dashboard.alerts.open')}</PageLink>
-                </Button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </Card>
   );
 }
 
@@ -219,7 +182,7 @@ function UpdateCard({ update }: { update: NonNullable<DashboardResponse['version
       </dl>
       {available?.steppingStone === true && <p className="text-sm text-muted-foreground">{t('update.precheck.stepping_stone')}</p>}
       {!update.entitled && (
-        <p className="text-sm text-destructive">{t(available === null ? 'dashboard.update.ended' : 'dashboard.update.not_entitled')}</p>
+        <p className="text-sm text-bad">{t(available === null ? 'dashboard.update.ended' : 'dashboard.update.not_entitled')}</p>
       )}
       {!update.oneClick && <p className="text-sm text-muted-foreground">{t('dashboard.update.image')}</p>}
       <CardLink to="/admin/updates">{t('dashboard.update.open')}</CardLink>
@@ -238,7 +201,7 @@ function BackupCard({ backup, nextAt }: { backup: BackupItem | null; nextAt: num
       ) : (
         <dl className="flex flex-col gap-2">
           <Row label={t('dashboard.backup.status')}>
-            <span className={backup.status === 'failed' ? 'text-destructive' : undefined}>{t(`dashboard.backup.status.${backup.status}`)}</span>
+            <span className={backup.status === 'failed' ? 'text-bad' : undefined}>{t(`dashboard.backup.status.${backup.status}`)}</span>
           </Row>
           <Row label={t('dashboard.backup.kind')}>{t(`dashboard.backup.kind.${backup.kind}`)}</Row>
           <Row label={t('dashboard.backup.created')}>{dateTime(backup.createdAt)}</Row>
@@ -266,7 +229,7 @@ function QueueCard({ queue }: { queue: NonNullable<DashboardResponse['queue']> }
       <dl className="grid grid-cols-3 gap-2">
         {stat(t('dashboard.queue.queued'), queue.queued)}
         {stat(t('dashboard.queue.running'), queue.running)}
-        {stat(t('dashboard.queue.dead'), queue.dead, queue.dead > 0 ? 'text-destructive' : undefined)}
+        {stat(t('dashboard.queue.dead'), queue.dead, queue.dead > 0 ? 'text-bad' : undefined)}
       </dl>
       {queue.oldestQueuedMs !== null && (
         <p className="text-sm text-muted-foreground">{t('dashboard.queue.oldest', { duration: duration(t, queue.oldestQueuedMs) })}</p>
@@ -310,21 +273,18 @@ function SchedulerCard({ scheduler }: { scheduler: NonNullable<DashboardResponse
   );
 }
 
-/** The system dashboard (Beranda's). */
+/** The system dashboard (Beranda's last section, "Sistem"). */
 export function Dashboard() {
   const t = useT();
   const me = useMe();
-  const query = useApiQuery<DashboardResponse>({
-    queryKey: DASHBOARD_KEY,
-    path: 'dashboard',
-    request: { background: true },
-    refetchInterval: REFRESH_MS,
-  });
+  const headingId = useId();
+  const query = useSystemDashboard();
   const readsBackups = holds(me, 'system.backup.read');
 
   const data = query.data;
+  let body: ReactNode;
   if (data === undefined) {
-    return query.isError ? (
+    body = query.isError ? (
       <ProblemAlert error={query.error}>
         <p>{t('dashboard.load_failed')}</p>
         <Button variant="outline" size="sm" className="mt-2" onClick={() => void query.refetch()}>
@@ -336,15 +296,23 @@ export function Dashboard() {
         {t('shell.loading')}
       </p>
     );
+  } else {
+    body = (
+      <div aria-label={t('dashboard.label')} role="group" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <VersionCard version={data.version} edition={data.edition} />
+        {data.version.update !== null && <UpdateCard update={data.version.update} />}
+        {readsBackups && <BackupCard backup={data.lastBackup} nextAt={data.nextBackupAt} />}
+        {data.queue !== null && <QueueCard queue={data.queue} />}
+        {data.scheduler !== null && <SchedulerCard scheduler={data.scheduler} />}
+      </div>
+    );
   }
   return (
-    <div aria-label={t('dashboard.label')} role="group" className="grid gap-4 lg:grid-cols-2">
-      {data.alerts.length > 0 && <Alerts alerts={data.alerts} />}
-      <VersionCard version={data.version} edition={data.edition} />
-      {data.version.update !== null && <UpdateCard update={data.version.update} />}
-      {readsBackups && <BackupCard backup={data.lastBackup} nextAt={data.nextBackupAt} />}
-      {data.queue !== null && <QueueCard queue={data.queue} />}
-      {data.scheduler !== null && <SchedulerCard scheduler={data.scheduler} />}
-    </div>
+    <section aria-labelledby={headingId} className="flex flex-col gap-3" data-system-dashboard="">
+      <h2 id={headingId} className="text-base font-bold">
+        {t('dashboard.home.system.title')}
+      </h2>
+      {body}
+    </section>
   );
 }

@@ -5,12 +5,12 @@ import { cn } from '@/lib/utils';
 // Adapted from shadcn/ui (new-york-v4, MIT: LICENSE-shadcn-ui.txt; see README.md in this folder).
 
 const alertVariants = cva(
-  'relative grid w-full grid-cols-[0_1fr] items-start gap-y-0.5 rounded-lg border px-4 py-3 text-sm has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&>svg]:size-4 [&>svg]:translate-y-0.5 [&>svg]:text-current',
+  'relative grid w-full grid-cols-[0_1fr] items-start gap-y-1 rounded-lg border px-3.5 py-3 text-sm has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&>svg]:size-4 [&>svg]:translate-y-0.5 [&>svg]:text-current',
   {
     variants: {
       variant: {
-        default: 'bg-card text-card-foreground',
-        destructive: 'bg-card text-destructive [&>svg]:text-current *:data-[slot=alert-description]:text-destructive/90',
+        default: 'bg-layer text-card-foreground',
+        destructive: 'border-bad-line bg-bad-bg text-bad [&>svg]:text-current *:data-[slot=alert-description]:text-foreground',
       },
     },
     defaultVariants: { variant: 'default' },
@@ -22,7 +22,7 @@ function Alert({ className, variant, ...props }: ComponentProps<'div'> & Variant
 }
 
 function AlertTitle({ className, ...props }: ComponentProps<'div'>) {
-  return <div data-slot="alert-title" className={cn('col-start-2 line-clamp-1 min-h-4 font-medium tracking-tight', className)} {...props} />;
+  return <div data-slot="alert-title" className={cn('col-start-2 line-clamp-1 min-h-4 font-bold', className)} {...props} />;
 }
 
 function AlertDescription({ className, ...props }: ComponentProps<'div'>) {

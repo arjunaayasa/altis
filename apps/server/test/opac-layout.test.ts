@@ -94,18 +94,26 @@ describe('opacPage: the frame (§9.2)', () => {
     expect(html).toContain('<a class="brand" href="/">Perpustakaan SMA &lt;1&gt;</a>');
     expect(html).toContain(`<nav class="menu" aria-label="${esc(opacText('id', 'shell.nav.label'))}">`);
     const menu = /<nav class="menu"[^>]*>([\s\S]*?)<\/nav>/.exec(html)![1]!;
+    // The site's own entries first (Beranda and Katalog always; the others only with a site that has them), then the
+    // menu pages.
     expect([...menu.matchAll(/<a href="([^"]*)"[^>]*>([^<]*)<\/a>/g)].map((m) => [m[1], m[2]])).toEqual([
+      ['/', opacText('id', 'shell.menu.home')],
+      ['/cari', opacText('id', 'shell.menu.catalog')],
       ['/halaman/tentang-kami', 'Tentang kami'],
       ['/halaman/jam-buka', 'Jam buka'],
     ]);
     expect(menu).toContain('<a href="/halaman/jam-buka" lang="id">');
+    // On a narrow screen the menu gives way to one link to the catalogue.
+    expect(html).toContain(`<a class="nav-catalog" href="/cari">${esc(opacText('id', 'shell.menu.catalog'))}</a>`);
   });
 
-  it('no menu without pages', async () => {
+  it('without pages the menu has the site\'s own entries; a context without a menu (the status pages) has none', async () => {
     const html = await (await page({}, '/x', { ...CTX, nav: [] })).text();
-    expect(html).not.toContain('class="menu"');
+    const menu = /<nav class="menu"[^>]*>([\s\S]*?)<\/nav>/.exec(html)![1]!;
+    expect([...menu.matchAll(/href="([^"]*)"/g)].map((m) => m[1])).toEqual(['/', '/cari']);
     const bare = await (await page({}, '/x', { locale: 'id', libraryName: 'P', accent: 'teal', baseUrl: BASE, indexable: true })).text();
     expect(bare).not.toContain('class="menu"');
+    expect(bare).not.toContain('class="nav-catalog"');
   });
 
   it('a GET search form to /cari whose input has a label; headerSearch: false leaves it out', async () => {
@@ -119,7 +127,10 @@ describe('opacPage: the frame (§9.2)', () => {
     expect(form).toContain(esc(opacText('id', 'shell.search.label')));
     expect(form).toContain(`<button type="submit">${esc(opacText('id', 'shell.search.submit'))}</button>`);
     expect(form).not.toContain('name="lang"');
-    expect(await (await page({ headerSearch: false })).text()).not.toContain('class="search-box"');
+    // The header's form is in the search band; the footer has a search field of its own.
+    const without = await (await page({ headerSearch: false })).text();
+    expect(without).not.toContain('class="search-band"');
+    expect(without.slice(0, without.indexOf('<footer'))).not.toContain('class="search-box"');
   });
 
   it('?lang=en: the frame in English, and the menu, the brand and the search keep the language', async () => {
@@ -448,19 +459,23 @@ describe('the shell theme (S16)', () => {
     ]) {
       expect(SHELL_CSS, cls).toContain(`${cls}`);
     }
-    expect(SHELL_CSS).toMatch(/:focus-visible\{outline:3px solid var\(--focus\)/);
+    expect(SHELL_CSS).toMatch(/:focus-visible\{outline:2px solid var\(--focus\);outline-offset:2px\}/);
     expect(OPAC_CSS).not.toMatch(/@import|url\(/);
   });
 
-  it('the footer: the staff sign-in, then the source code link (AGPL-3.0 §13) with rel="noopener", in both languages', async () => {
+  it('the footer: its links, then "Ditenagai ALTIS Community" with the source code link (AGPL-3.0 §13, rel="noopener") and the staff sign-in, in both languages', async () => {
     for (const locale of LOCALES) {
       const html = await (await page({}, `/x?lang=${locale}`, { ...CTX, locale })).text();
       const footer = /<footer class="site-footer">([\s\S]*?)<\/footer>/.exec(html)?.[1];
       expect(footer).toBeDefined();
       expect([...footer!.matchAll(/<a ([^>]*)>([^<]*)<\/a>/g)].map((m) => [m[1], m[2]])).toEqual([
-        ['href="/admin/login"', esc(t(locale, 'opac.home.staff_login'))],
+        [`href="/cari?lang=${locale}"`, esc(opacText(locale, 'shell.menu.catalog'))],
+        [`href="/halaman/tentang-kami?lang=${locale}"`, 'Tentang kami'],
+        [`href="/halaman/jam-buka?lang=${locale}" lang="id"`, 'Jam buka'],
         [`href="${COMMUNITY_SOURCE_URL}" rel="noopener"`, esc(opacText(locale, 'shell.footer.source'))],
+        ['href="/admin/login"', esc(t(locale, 'opac.home.staff_login'))],
       ]);
+      expect(footer).toContain(`<span>${esc(opacText(locale, 'shell.footer.powered'))}</span>`);
     }
     expect(opacText('id', 'shell.footer.source')).toBe('Kode sumber (AGPL-3.0)');
     expect(opacText('en', 'shell.footer.source')).toBe('Source code (AGPL-3.0)');

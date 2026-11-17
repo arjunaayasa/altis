@@ -124,6 +124,28 @@ describe('Meja Layanan', () => {
     expect(await screen.findByRole('tab', { name: 'Dipinjam (1)' })).toBeTruthy();
   });
 
+  it('a member with overdue loans loads as a warning that names them; one without loads as a success', async () => {
+    let member = deskMember({ counts: { openLoans: 2, overdue: 1, holdsReady: 0 } });
+    start({
+      'POST branches/:branchId/circulation/members/lookup': () => member,
+      'GET branches/:branchId/circulation/members/:memberId': () => member,
+    });
+    await scan('A001');
+    expect(await screen.findByText('Anggota dimuat: Budi Santoso')).toBeTruthy();
+    const card = screen.getByTestId('desk-feedback');
+    expect(card.getAttribute('data-tone')).toBe('warning');
+    expect(within(card).getByText('Pindai eksemplar untuk dipinjam. 1 pinjaman terlambat. Peminjaman tetap bisa. Lihat tab Dipinjam (F7).')).toBeTruthy();
+    await waitFor(() => expect(within(screen.getAllByRole('status')[0]!).queryByText(/1 pinjaman terlambat\./)).toBeTruthy());
+
+    member = deskMember({ id: '01JZ0000000000000000000A02', memberNo: 'A002', name: 'Siti Aminah' });
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await screen.findByText('Belum ada anggota');
+    await scan('A002');
+    expect(await screen.findByText('Anggota dimuat: Siti Aminah')).toBeTruthy();
+    expect(screen.getByTestId('desk-feedback').getAttribute('data-tone')).toBe('success');
+    expect(within(screen.getByTestId('desk-feedback')).getByText('Pindai eksemplar untuk dipinjam.')).toBeTruthy();
+  });
+
   it('Ctrl+Z voids the last loan, and the slip (F9) then leaves that loan out', async () => {
     let member = deskMember();
     const app = start({
@@ -221,11 +243,13 @@ describe('Meja Layanan', () => {
     const loaded = new Promise<void>((resolve) => {
       release = resolve;
     });
+    // The member already holds another item, so a loan row offers "Hilang", whose dialog is a real dialog.
+    const held = { id: '01JZ0000000000000000000L09', version: 1, branchId: BRANCH, item: { ...LOAN.item, id: '01JZ0000000000000000000I09', barcode: 'B0009' }, record: LOAN.record, loanedOn: '2026-11-10', dueOn: '2026-11-17', daysLate: 0, renewals: 0, renewLimit: 1, finePreview: null };
     const app = start(
       {
         'GET branches/:branchId/circulation/members/:memberId': async () => {
           await loaded;
-          return deskMember();
+          return deskMember({ counts: { openLoans: 1, overdue: 0, holdsReady: 0 }, loans: [held] });
         },
         'POST branches/:branchId/circulation/loans': () => LOAN,
       },
@@ -238,7 +262,8 @@ describe('Meja Layanan', () => {
     expect(await screen.findByText(/^Dipinjam: Laskar Pelangi — jatuh tempo/, { selector: 'p.text-xl' })).toBeTruthy();
     expect(app.writes()).toEqual([`POST branches/${BRANCH}/circulation/loans`]);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Pintasan (?)' }));
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Dipinjam (1)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Hilang' }));
     await screen.findByRole('dialog');
     const target = document.activeElement ?? document.body;
     for (const key of ['B', '0', '0', '0', '2', 'Enter']) fireEvent.keyDown(target, { key });

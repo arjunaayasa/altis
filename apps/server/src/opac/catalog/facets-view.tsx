@@ -59,7 +59,7 @@ export async function loadFacetNames(
 }
 
 /** The facets in the order the page shows them. */
-const FACET_ORDER: readonly FacetName[] = ['av', 'mt', 'at', 'cl', 'sb', 'lg', 'ct', 'br', 'lc'];
+const FACET_ORDER: readonly FacetName[] = ['av', 'cl', 'sb', 'mt', 'at', 'lg', 'ct', 'br', 'lc'];
 
 /** The parameter each facet's values go in. */
 const FACET_PARAM: Readonly<Record<FacetName, OpacSearchParam>> = {
@@ -75,7 +75,7 @@ const FACET_PARAM: Readonly<Record<FacetName, OpacSearchParam>> = {
 };
 
 /** The parameters that filter (the active filters), in the order of the page's links. */
-const FILTER_PARAMS: readonly OpacSearchParam[] = ['jenis', 'bahasa', 'koleksi', 'cabang', 'lokasi', 'subjek', 'pengarang', 'tahun', 'tersedia', 'lampiran', 'kelas'];
+export const FILTER_PARAMS: readonly OpacSearchParam[] = ['jenis', 'bahasa', 'koleksi', 'cabang', 'lokasi', 'subjek', 'pengarang', 'tahun', 'tersedia', 'lampiran', 'kelas'];
 
 /** What the facets and the active filters are drawn from. */
 export interface FacetsInput {

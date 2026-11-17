@@ -140,7 +140,10 @@ describe('charges at the desk', () => {
       `/admin/layanan?member=${MEMBER_ID}`,
     );
 
-    expect(await screen.findByText('Tanggungan Rp 1.500')).toBeTruthy();
+    // The balance is one of the member panel's facts: its label, the amount beside it.
+    const panel = await screen.findByRole('complementary', { name: 'Budi Santoso' });
+    expect(within(panel).getByText('Tanggungan')).toBeTruthy();
+    expect(within(panel).getByText('Rp 1.500')).toBeTruthy();
     fireEvent.mouseDown(await screen.findByRole('tab', { name: /^Dipinjam/ }));
     expect(await screen.findByText('Denda berjalan Rp 2.500 (5 hari dikenai denda)')).toBeTruthy();
 
@@ -156,7 +159,7 @@ describe('charges at the desk', () => {
     expect(new Headers(call?.[1]?.headers).get('Idempotency-Key')).toMatch(/^desk-pay:[0-9a-f]{32}$/);
     const link = screen.getByRole('link', { name: 'Cetak kuitansi PUSAT/2026/000001' });
     expect(link.getAttribute('href')).toBe(`/api/v1/branches/${BRANCH}/circulation/payments/${PAYMENT.id}/receipt`);
-    await waitFor(() => expect(screen.queryByText('Tanggungan Rp 1.500')).toBeNull());
+    await waitFor(() => expect(within(screen.getByRole('complementary', { name: 'Budi Santoso' })).queryByText('Tanggungan')).toBeNull());
 
     // F9: the slip of this visit holds the payment; the tab opened at once shows the PDF.
     const tab = { location: { href: '' }, close: vi.fn() };

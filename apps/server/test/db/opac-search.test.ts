@@ -451,6 +451,20 @@ describe.skipIf(!ctx.available)(`OPAC search, facets and feeds [${engineLabel()}
       expect(res.text).toContain('&quot;&gt;&lt;script&gt;');
     });
 
+    it('ruas limits the search to a field; the page shows the text as typed, the field chosen in the band', async () => {
+      expect(resultIds((await get('/cari?q=hirata&ruas=judul')).text)).toEqual([]);
+      const byAuthor = await get('/cari?q=hirata&ruas=pengarang');
+      expect(resultIds(byAuthor.text)).toContain(id('laskar'));
+      expect(byAuthor.text).not.toContain('pengarang:hirata');
+      expect(byAuthor.text).toContain('<input id="cari-q" type="search" name="q" value="hirata"');
+      expect(byAuthor.text).toContain(`<option value="pengarang" selected="">${opacText('id', 'search.scope.pengarang')}</option>`);
+      expect(resultIds((await get('/cari?q=pelangi&ruas=judul')).text)).toEqual([id('laskar')]);
+      // A result row: the call number's line with the class, and the cloth strip of a title without a cover.
+      const card = cardOf((await get('/cari?q=pelangi')).text, id('laskar'));
+      expect(card).toContain('<span class="book-cover cover-8 book-cover-sm" aria-hidden="true"></span>');
+      expect(card).toContain(`800 ${opacText('id', 'shell.home.class.8')}`);
+    });
+
     it('every class the search page writes is styled', async () => {
       const pages = await Promise.all(['/cari', '/cari?q=pendidkan', '/cari?q=pendidkan&persis=1', '/cari?jenis=BUKU&q=novel', '/cari?q=zzzzqqqq'].map((p) => get(p)));
       const classes = new Set(pages.flatMap((p) => [...p.text.matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1]!.split(/\s+/))));
