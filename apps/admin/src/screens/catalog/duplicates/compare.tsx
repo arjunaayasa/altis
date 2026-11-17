@@ -2,11 +2,11 @@ import { vocabKey } from '@altis/shared';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import type { RecordDetail } from '@altis/shared/api/catalog/records';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRightIcon, ExternalLinkIcon, MergeIcon, XIcon } from 'lucide-react';
-import { useId, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useDateTime } from '@/components/data-table';
 import { Field, Notice, SELECT_CLASS } from '@/components/form-field';
+import { InlinePanel, LoadingState, TABLE, Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useLocale, useT, type Translate } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
@@ -24,6 +24,8 @@ import { useMe } from '@/lib/me';
  *   a merge made on this page, {@link CompareProps.merged}), is named with the reason and never sent.
  * - `version` is the kept record's, as last read; a 409 `CONFLICT_STALE` (someone changed it) stays in the dialog, and
  *   the records are read again after every merge.
+ * - It opens as an inline panel under the group list (Esc or "Tutup perbandingan" closes it); a row that differs says
+ *   so in words ("Berbeda") as well as by its tint.
  */
 
 /** The editor's query key of a record (records/edit.tsx), so both screens share what they read. */
@@ -111,7 +113,6 @@ export function Compare({ n, recordIds, merged, onMerged, onClose }: CompareProp
   const t = useT();
   const me = useMe();
   const queryClient = useQueryClient();
-  const headingId = useId();
   const rows = useRows();
   const reads = useQueries({
     queries: recordIds.map((id) => ({
@@ -149,131 +150,127 @@ export function Compare({ n, recordIds, merged, onMerged, onClose }: CompareProp
   };
 
   return (
-    <section aria-labelledby={headingId} className="grid gap-4 rounded-lg border bg-card p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id={headingId} className="text-lg font-semibold">
-          {t('catalog.duplicates.compare.title', { n: String(n) })}
-        </h2>
-        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-          <XIcon aria-hidden="true" />
-          {t('catalog.duplicates.compare.close')}
-        </Button>
-      </div>
-      {done !== null && <Notice kind="success">{t('catalog.duplicates.merge.done', done)}</Notice>}
-      {!settled ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
-      ) : (
-        <>
-          {reads.map((q, i) =>
-            q.isError ? (
-              <Notice key={recordIds[i]} kind="error">
-                {t('catalog.duplicates.compare.unreadable', { id: recordIds[i]! })}
-                {q.error instanceof ApiError && q.error.code !== 'NOT_FOUND' ? ` ${problemText(t, q.error)}` : ''}
-              </Notice>
-            ) : null,
-          )}
-          {loaded
-            .filter((r) => r.archived || isMerged(r))
-            .map((r) => (
-              <p key={r.id} className="text-sm text-muted-foreground">
-                {isMerged(r) ? t('catalog.duplicates.compare.merged', { title: r.title }) : t('catalog.duplicates.compare.archived', { title: r.title })}
-              </p>
-            ))}
-          {live.length < 2 && (
-            <p className="text-sm font-medium">{t(live.length === 1 ? 'catalog.duplicates.compare.one_left' : 'catalog.duplicates.compare.none_left')}</p>
-          )}
-          {live.length >= 2 && target === source && <p className="text-sm text-muted-foreground">{t('catalog.duplicates.compare.same')}</p>}
-          {live.length >= 2 && (
-            <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
-              <Field label={t('catalog.duplicates.compare.target')}>
-                {(c) => (
-                  <select {...c} className={SELECT_CLASS} value={target} onChange={(e) => setChosen({ target: e.target.value, source })}>
-                    {live.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {option(r)}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </Field>
-              <Button type="button" variant="outline" onClick={() => setChosen({ target: source, source: target })}>
-                <ArrowLeftRightIcon aria-hidden="true" />
-                {t('catalog.duplicates.compare.swap')}
-              </Button>
-              <Field label={t('catalog.duplicates.compare.source')}>
-                {(c) => (
-                  <select {...c} className={SELECT_CLASS} value={source} onChange={(e) => setChosen({ target, source: e.target.value })}>
-                    {live.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {option(r)}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </Field>
-            </div>
-          )}
-          {left !== undefined && right !== undefined && left.id !== right.id && (
-            <>
-              <div className="overflow-x-auto rounded-md border">
-                <table className="w-full text-sm">
-                  <caption className="sr-only">{t('catalog.duplicates.compare.caption')}</caption>
-                  <thead className="bg-muted/50 text-left">
-                    <tr>
-                      <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                        {t('catalog.duplicates.compare.field')}
-                      </th>
-                      {[left, right].map((r, i) => (
-                        <th key={r.id} scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                          <span className="flex flex-wrap items-center gap-2">
-                            {t(i === 0 ? 'catalog.duplicates.compare.kept' : 'catalog.duplicates.compare.merged_in')}
-                            <a
-                              href={`/admin/catalog/records/${encodeURIComponent(r.id)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              aria-label={t('catalog.duplicates.compare.open', { title: r.title })}
-                              className="inline-flex text-primary"
-                            >
-                              <ExternalLinkIcon className="size-4" aria-hidden="true" />
-                            </a>
-                          </span>
-                        </th>
+    <>
+      <InlinePanel title={t('catalog.duplicates.compare.title', { n: String(n) })} onCancel={onClose} className="gap-4">
+        {done !== null && <Notice kind="success">{t('catalog.duplicates.merge.done', done)}</Notice>}
+        {!settled ? (
+          <LoadingState lines={3} />
+        ) : (
+          <>
+            {reads.map((q, i) =>
+              q.isError ? (
+                <Notice key={recordIds[i]} kind="error">
+                  {t('catalog.duplicates.compare.unreadable', { id: recordIds[i]! })}
+                  {q.error instanceof ApiError && q.error.code !== 'NOT_FOUND' ? ` ${problemText(t, q.error)}` : ''}
+                </Notice>
+              ) : null,
+            )}
+            {loaded
+              .filter((r) => r.archived || isMerged(r))
+              .map((r) => (
+                <p key={r.id} className="text-sm text-muted-foreground">
+                  {isMerged(r) ? t('catalog.duplicates.compare.merged', { title: r.title }) : t('catalog.duplicates.compare.archived', { title: r.title })}
+                </p>
+              ))}
+            {live.length < 2 && (
+              <p className="text-sm font-semibold">{t(live.length === 1 ? 'catalog.duplicates.compare.one_left' : 'catalog.duplicates.compare.none_left')}</p>
+            )}
+            {live.length >= 2 && target === source && <p className="text-sm text-muted-foreground">{t('catalog.duplicates.compare.same')}</p>}
+            {live.length >= 2 && (
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+                <Field label={t('catalog.duplicates.compare.target')}>
+                  {(c) => (
+                    <select {...c} className={SELECT_CLASS} value={target} onChange={(e) => setChosen({ target: e.target.value, source })}>
+                      {live.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {option(r)}
+                        </option>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row) => {
-                      const a = row.text(left);
-                      const b = row.text(right);
-                      if (a === '' && b === '') return null;
-                      const differs = a !== b;
-                      return (
-                        <tr key={row.key} data-differs={differs ? 'true' : 'false'} className={differs ? 'border-t bg-warning/40 align-top' : 'border-t align-top'}>
-                          <th scope="row" className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
-                            {row.label}
-                            {differs && <span className="sr-only"> ({t('catalog.duplicates.compare.differs')})</span>}
-                          </th>
-                          <td className="px-3 py-2">{row.show(left)}</td>
-                          <td className="px-3 py-2">{row.show(right)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                    </select>
+                  )}
+                </Field>
+                <Button type="button" variant="outline" className="bg-background" onClick={() => setChosen({ target: source, source: target })}>
+                  {t('catalog.duplicates.compare.swap')}
+                </Button>
+                <Field label={t('catalog.duplicates.compare.source')}>
+                  {(c) => (
+                    <select {...c} className={SELECT_CLASS} value={source} onChange={(e) => setChosen({ target, source: e.target.value })}>
+                      {live.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {option(r)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
               </div>
-              <p className="text-sm text-muted-foreground">{t('catalog.duplicates.merge_hint')}</p>
-              <div>
-                <Button type="button" variant="destructive" onClick={() => setPending({ target: left, source: right })}>
-                  <MergeIcon aria-hidden="true" />
+            )}
+            {left !== undefined && right !== undefined && left.id !== right.id && (
+              <>
+                <div className={`${TABLE.wrap} bg-background`}>
+                  <table className={TABLE.table}>
+                    <caption className="sr-only">{t('catalog.duplicates.compare.caption')}</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col" className={TABLE.th}>
+                          {t('catalog.duplicates.compare.field')}
+                        </th>
+                        {[left, right].map((r, i) => (
+                          <th key={r.id} scope="col" className={TABLE.th}>
+                            <span className="flex flex-wrap items-center gap-2">
+                              {t(i === 0 ? 'catalog.duplicates.compare.kept' : 'catalog.duplicates.compare.merged_in')}
+                              <a
+                                href={`/admin/catalog/records/${encodeURIComponent(r.id)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label={t('catalog.duplicates.compare.open', { title: r.title })}
+                                className="font-semibold text-accent-text underline-offset-4 hover:underline">
+                                {t('catalog.duplicates.compare.open_short')}
+                              </a>
+                            </span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row) => {
+                        const a = row.text(left);
+                        const b = row.text(right);
+                        if (a === '' && b === '') return null;
+                        const differs = a !== b;
+                        return (
+                          <tr key={row.key} data-differs={differs ? 'true' : 'false'} className={differs ? 'bg-warn-bg' : undefined}>
+                            <th scope="row" className={`${TABLE.td} text-left font-semibold text-muted-foreground`}>
+                              <span className="flex flex-wrap items-center gap-1.5">
+                                <span className="whitespace-nowrap">{row.label}</span>
+                                {differs && <Tag tone="warn">{t('catalog.duplicates.compare.differs_tag')}</Tag>}
+                              </span>
+                            </th>
+                            <td className={TABLE.td}>{row.show(left)}</td>
+                            <td className={TABLE.td}>{row.show(right)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="max-w-[75ch] text-sm text-muted-foreground">{t('catalog.duplicates.merge_hint')}</p>
+              </>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {left !== undefined && right !== undefined && left.id !== right.id && (
+                <Button type="button" size="sm" variant="destructive" onClick={() => setPending({ target: left, source: right })}>
                   {t('catalog.duplicates.merge')}
                 </Button>
-              </div>
-            </>
-          )}
-        </>
-      )}
+              )}
+              <Button type="button" size="sm" variant="outline" className="bg-background" onClick={onClose}>
+                {t('catalog.duplicates.compare.close')}
+              </Button>
+            </div>
+          </>
+        )}
+      </InlinePanel>
+      {/* Beside the panel, not in it: the dialog's Esc must not reach the panel's own Esc. */}
       <ConfirmDialog
         open={pending !== null}
         title={t('catalog.duplicates.merge.title')}
@@ -283,6 +280,6 @@ export function Compare({ n, recordIds, merged, onMerged, onClose }: CompareProp
         onConfirm={() => (pending === null ? Promise.resolve() : merge(pending))}
         onClose={() => setPending(null)}
       />
-    </section>
+    </>
   );
 }
