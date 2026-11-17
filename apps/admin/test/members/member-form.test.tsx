@@ -163,18 +163,20 @@ describe('the member page form', () => {
     return { app, patches, change: (next: Partial<MemberView>) => (current = { ...current, ...next, version: current.version + 1 }) };
   }
 
-  it('lays the tabs in the wide column and the summary beside them; a wrapped tab row grows instead of covering the panel', async () => {
+  it('puts the head, then the summary strip, then the tabs across the page; a wrapped tab row grows instead of covering the panel', async () => {
     memberPage();
-    expect(await screen.findByRole('heading', { name: 'Siti Aminah' })).toBeTruthy();
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Siti Aminah' });
     const list = screen.getByRole('tablist');
     const tabs = list.closest('[data-slot="tabs"]')!;
-    const summary = screen.getByRole('complementary', { name: 'Ringkasan anggota' });
-    expect(tabs.parentElement).toBe(summary.parentElement);
-    expect(tabs.parentElement!.className).toContain('lg:grid-cols-[minmax(0,1fr)_260px]');
-    // The tabs come first in the wide layout (the wide column): nothing moves them after the summary there.
-    expect(tabs.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(tabs.className.split(/\s+/)).toContain('lg:order-none');
-    expect(summary.className).not.toMatch(/(^|\s)lg:order-/);
+    // The figures are one strip under the head, before the tabs (no side column).
+    const summary = document.querySelector<HTMLElement>('dl[aria-label="Ringkasan anggota"]')!;
+    expect(summary).toBeTruthy();
+    expect(within(summary).getByText('Sedang dipinjam')).toBeTruthy();
+    expect(heading.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(summary.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('complementary', { name: 'Ringkasan anggota' })).toBeNull();
+    // "Layani di Meja Layanan" is the head's main action.
+    expect(screen.getByRole('link', { name: 'Layani di Meja Layanan' }).getAttribute('href')).toContain('/admin/layanan?member=');
     expect(list.className.split(/\s+/)).toEqual(expect.arrayContaining(['h-auto', 'flex-wrap']));
     expect(list.className.split(/\s+/)).not.toContain('h-9');
     // Each tab keeps one row's height: a share of the list's height would overflow it once the tabs wrap.
@@ -191,7 +193,9 @@ describe('the member page form', () => {
     fireEvent.change(screen.getByLabelText('Telepon'), { target: { value: '0812' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'Perpanjang masa…' }));
-    const dialog = await screen.findByRole('dialog');
+    // The extension opens in the page, under the head (no dialog).
+    const dialog = await screen.findByRole('form', { name: 'Perpanjang masa keanggotaan' });
+    expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Perpanjang' }));
     // The member read again: the untouched end date follows it, the typed phone stays.
     await waitFor(() => expect((screen.getByLabelText('Berlaku sampai') as HTMLInputElement).value).toBe('2027-11-30'));

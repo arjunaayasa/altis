@@ -2,8 +2,8 @@ import type { BranchListResponse } from '@altis/shared/api/branches';
 import type { LoanListItem, LoanListResponse } from '@altis/shared/api/circulation';
 import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { useId, useState, type FormEvent } from 'react';
-import { Badge, Field, Notice, SELECT_CLASS } from '@/components/form-field';
+import { useEffect, useId, useState, type FormEvent } from 'react';
+import { Field, SELECT_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
@@ -11,8 +11,8 @@ import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
-import { MasterTable, type MasterColumn } from '@/screens/catalog/masters/master-table';
 import { useCalendarDate, useMemberTypes, useTypeName } from './common';
+import { Callout, DenseTable, FILTER_ROW, PageHead, SkeletonTable, StatusText, type DenseColumn } from './parts';
 // ---- Komunitas (charges and payments) ----
 import { useMoney } from './charges';
 // ---- Komunitas (member, visit and circulation reports) ----
@@ -21,11 +21,13 @@ import { ReportLinks } from '@/screens/reports/report-links';
 import { SendRemindersButton } from './notices';
 
 /**
- * Terlambat & Jatuh Tempo (`/admin/layanan/terlambat`): the open loans past their due date, the longest-overdue first
- * (by due date), with the member, the item, the due date and the days late (amber up to two weeks, red beyond). Filters:
- * member type, branch and the fewest days late; they go in the request's query string, which never carries a personal
- * value (a member is named by id). "Layani" opens the member at the desk. The list comes a page at a time and the API
- * gives no total, so while more pages remain the summary says it counts the loans loaded so far.
+ * Terlambat & Jatuh Tempo (`/admin/layanan/terlambat`): the open loans past their due date, grouped by member (a head
+ * row with the name, number, type and class, and "Layani", which opens the member at the desk), the member with the
+ * longest-overdue loan first, then one row per item: barcode, title, loaned and due dates and the days late as a number
+ * in words, amber up to two weeks and red beyond. The labelled filters (member type, branch, the fewest days late) sit
+ * in one row and apply as they change; they go in the request's query string, which never carries a personal value. The
+ * list comes a page at a time and the API gives no total, so while more pages remain the summary says it counts the
+ * loans loaded so far.
  */
 
 const LATE_RED_AFTER_DAYS = 14;
@@ -61,6 +63,13 @@ export function OverdueScreen() {
   const canServe = holds(me, 'circulation.desk.use') || Object.values(me?.authenticated === true ? me.branchPermissions : {}).some((p) => p.includes('circulation.desk.use'));
   const canOpenMember = holds(me, 'members.records.read');
 
+  // The typed number applies a moment after the last key; the lists at once.
+  useEffect(() => {
+    if (draft.minDaysLate === filters.minDaysLate) return;
+    const id = setTimeout(() => setFilters((f) => ({ ...f, minDaysLate: draft.minDaysLate })), 400);
+    return () => clearTimeout(id);
+  }, [draft.minDaysLate, filters.minDaysLate]);
+
   const list = useInfiniteQuery({
     queryKey: ['circulation', 'loans', 'overdue', filters],
     queryFn: ({ pageParam }) => api<LoanListResponse>('GET', listPath(filters, pageParam)),
@@ -69,14 +78,19 @@ export function OverdueScreen() {
     placeholderData: keepPreviousData,
     enabled: me !== undefined,
   });
-  const rows = list.data?.pages.flatMap((p) => p.items) ?? [];
-  const members = new Set(rows.map((r) => r.member?.id ?? r.id)).size;
-  const longest = rows.reduce((max, r) => Math.max(max, r.daysLate), 0);
+  const loaded = list.data?.pages.flatMap((p) => p.items) ?? [];
+  const rows = groupByMember(loaded);
+  const members = new Set(loaded.map((r) => r.member?.id ?? r.id)).size;
+  const longest = loaded.reduce((max, r) => Math.max(max, r.daysLate), 0);
   const filtered = filters.memberTypeId !== '' || filters.branchId !== '' || filters.minDaysLate !== '';
 
   const apply = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     setFilters(draft);
+  };
+  const pick = (next: Filters): void => {
+    setDraft(next);
+    setFilters(next);
   };
 
   const typeOf = (id: string): string => {
@@ -85,83 +99,86 @@ export function OverdueScreen() {
   };
   const branchCode = (id: string): string => branches.data?.items.find((b) => b.id === id)?.code ?? '';
 
-  const columns: MasterColumn<LoanListItem>[] = [
-    {
-      id: 'member',
-      header: t('circulation.col.borrower'),
-      cell: (row) =>
-        row.member === null ? (
-          <span className="text-muted-foreground">{t('circulation.overdue.anonymous')}</span>
-        ) : (
-          <div>
-            {canOpenMember ? (
-              <Link to={`/admin/anggota/${encodeURIComponent(row.member.id)}`} className="font-medium text-primary underline-offset-4 hover:underline">
-                {row.member.name}
+  const groupHead = (row: LoanListItem) => {
+    const m = row.member;
+    if (m === null) return <span className="text-muted-foreground">{t('circulation.overdue.anonymous')}</span>;
+    const memberLoans = loaded.filter((r) => r.member?.id === m.id);
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <span className="min-w-0">
+          {canOpenMember ? (
+            <Link to={`/admin/anggota/${encodeURIComponent(m.id)}`} className="font-semibold text-primary underline-offset-4 hover:underline">
+              {m.name}
+            </Link>
+          ) : (
+            <span className="font-semibold">{m.name}</span>
+          )}{' '}
+          <span className="text-sm text-muted-foreground">
+            <span className="font-semibold tracking-wide tabular-nums">{m.memberNo}</span>
+            {typeOf(m.typeId) !== '' && ` · ${typeOf(m.typeId)}`}
+            {m.className !== null && `, ${m.className}`}
+          </span>
+        </span>
+        <span className="flex flex-wrap items-center gap-2">
+          {/* ---- Komunitas (notices) ---- */}
+          <SendRemindersButton loans={memberLoans.map((r) => ({ branchId: r.branchId, memberId: m.id }))} label="notices.send.overdue" />
+          {canServe && (
+            <Button asChild size="sm" variant="outline" className="bg-background">
+              <Link to={`/admin/layanan?member=${encodeURIComponent(m.id)}`} aria-label={t('members.action.serve_named', { name: m.name })}>
+                {t('circulation.overdue.serve')}
               </Link>
-            ) : (
-              <span className="font-medium">{row.member.name}</span>
-            )}
-            <p className="text-xs text-muted-foreground">
-              <span className="font-mono">{row.member.memberNo}</span>
-              {row.member.className !== null && ` · ${row.member.className}`}
-              {typeOf(row.member.typeId) !== '' && ` · ${typeOf(row.member.typeId)}`}
-            </p>
-          </div>
-        ),
-    },
+            </Button>
+          )}
+        </span>
+      </div>
+    );
+  };
+
+  const columns: DenseColumn<LoanListItem>[] = [
     {
-      id: 'item',
-      header: t('circulation.col.item'),
+      id: 'barcode',
+      header: t('circulation.col.barcode'),
+      className: 'whitespace-nowrap',
       cell: (row) => (
-        <div>
-          <p className="font-medium">{row.record?.title ?? '—'}</p>
-          <p className="font-mono text-xs text-muted-foreground">
-            {row.item?.barcode ?? '—'}
-            {branchCode(row.branchId) !== '' && ` · ${branchCode(row.branchId)}`}
-          </p>
-        </div>
+        <span className="grid">
+          <span className="font-semibold tracking-wide">{row.item?.barcode ?? '—'}</span>
+          {branchCode(row.branchId) !== '' && <span className="text-xs text-muted-foreground">{branchCode(row.branchId)}</span>}
+        </span>
       ),
     },
+    { id: 'title', header: t('circulation.col.title'), cell: (row) => row.record?.title ?? '—' },
+    { id: 'loaned', header: t('circulation.col.loaned'), className: 'whitespace-nowrap', cell: (row) => day(row.loanedOn) },
     { id: 'due', header: t('circulation.col.due'), className: 'whitespace-nowrap', cell: (row) => day(row.dueOn) },
     {
       id: 'late',
-      header: t('circulation.col.late'),
+      header: t('circulation.member.overdue'),
+      headClassName: 'text-right',
+      className: 'text-right whitespace-nowrap',
       cell: (row) => (
-        <div className="grid gap-1">
-          <Badge tone={row.daysLate > LATE_RED_AFTER_DAYS ? 'danger' : 'warning'}>{t('circulation.due.late', { count: row.daysLate })}</Badge>
+        <span className="grid justify-items-end">
+          <StatusText tone={row.daysLate > LATE_RED_AFTER_DAYS ? 'bad' : 'warn'}>{t('circulation.fact.days', { count: row.daysLate })}</StatusText>
           {row.finePreview !== null && (
             <span className="text-xs text-destructive">{t('charges.fine_preview', { amount: money(row.finePreview.amount, row.finePreview.currency), days: row.finePreview.days })}</span>
           )}
-        </div>
+        </span>
       ),
     },
-    ...(canServe
-      ? [
-          {
-            id: 'actions',
-            header: t('table.actions'),
-            cell: (row: LoanListItem) =>
-              row.member === null ? null : (
-                <div className="flex flex-wrap items-start gap-2">
-                  <Button asChild size="sm" variant="outline">
-                    <Link to={`/admin/layanan?member=${encodeURIComponent(row.member.id)}`}>{t('circulation.overdue.serve')}</Link>
-                  </Button>
-                  {/* ---- Komunitas (notices) ---- */}
-                  <SendRemindersButton loans={[{ branchId: row.branchId, memberId: row.member.id }]} label="notices.send.overdue" />
-                </div>
-              ),
-          },
-        ]
-      : []),
   ];
 
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">{t('nav.circulation.overdue')}</h1>
+    <div className="grid gap-6">
+      <PageHead
+        title={t('nav.circulation.overdue')}
+        intro={t('circulation.overdue.intro')}
+        actions={
+          /* ---- Komunitas (notices): an overdue reminder for every member shown ---- */
+          loaded.length > 0 ? <SendRemindersButton loans={loaded.map((r) => ({ branchId: r.branchId, memberId: r.member?.id ?? null }))} label="notices.send.overdue_all" /> : undefined
+        }
+      />
       <ReportLinks reports={[{ id: 'circulation.overdue', permission: 'circulation.records.read' }, { id: 'circulation.due_soon', permission: 'circulation.records.read' }]} />
-      <form noValidate onSubmit={apply} className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-4" aria-label={t('circulation.overdue.filters')}>
+      <form noValidate onSubmit={apply} className={FILTER_ROW} aria-label={t('circulation.overdue.filters')}>
         <Field id={`${ids}-type`} label={t('circulation.overdue.type')}>
-          <select id={`${ids}-type`} className={SELECT_CLASS} value={draft.memberTypeId} onChange={(e) => setDraft({ ...draft, memberTypeId: e.target.value })}>
+          <select id={`${ids}-type`} className={SELECT_CLASS} value={draft.memberTypeId} onChange={(e) => pick({ ...draft, memberTypeId: e.target.value })}>
             <option value="">{t('circulation.overdue.all_types')}</option>
             {(types.data?.items ?? []).map((type) => (
               <option key={type.id} value={type.id}>
@@ -171,7 +188,7 @@ export function OverdueScreen() {
           </select>
         </Field>
         <Field id={`${ids}-branch`} label={t('circulation.overdue.branch')}>
-          <select id={`${ids}-branch`} className={SELECT_CLASS} value={draft.branchId} onChange={(e) => setDraft({ ...draft, branchId: e.target.value })}>
+          <select id={`${ids}-branch`} className={SELECT_CLASS} value={draft.branchId} onChange={(e) => pick({ ...draft, branchId: e.target.value })}>
             <option value="">{t('circulation.overdue.all_branches')}</option>
             {(branches.data?.items ?? []).map((b) => (
               <option key={b.id} value={b.id}>
@@ -181,59 +198,75 @@ export function OverdueScreen() {
           </select>
         </Field>
         <Field label={t('circulation.overdue.min_days')}>
-          {(c) => <Input {...c} inputMode="numeric" autoComplete="off" value={draft.minDaysLate} onChange={(e) => setDraft({ ...draft, minDaysLate: e.target.value })} />}
+          {(c) => <Input {...c} inputMode="numeric" autoComplete="off" placeholder="0" value={draft.minDaysLate} onChange={(e) => setDraft({ ...draft, minDaysLate: e.target.value })} />}
         </Field>
-        <div className="flex items-end gap-2">
-          <Button type="submit">{t('circulation.overdue.apply')}</Button>
+        <div className="flex items-end gap-2 pb-1.5">
+          {/* Enter in the number applies it at once. */}
+          <button type="submit" className="sr-only" tabIndex={-1}>
+            {t('circulation.overdue.apply')}
+          </button>
           {filtered && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setDraft(NO_FILTERS);
-                setFilters(NO_FILTERS);
-              }}>
+            <Button type="button" variant="link" className="h-auto p-0" onClick={() => pick(NO_FILTERS)}>
               {t('circulation.overdue.clear')}
             </Button>
           )}
         </div>
       </form>
       {list.isError && list.data === undefined ? (
-        <Notice
-          kind="error"
+        <Callout
+          tone="bad"
+          role="alert"
+          title={t('circulation.overdue.failed')}
           action={
-            <Button variant="outline" size="sm" onClick={() => void list.refetch()}>
+            <Button variant="outline" size="sm" className="bg-background" onClick={() => void list.refetch()}>
               {t('table.retry')}
             </Button>
           }>
-          {problemText(t, list.error)}
-        </Notice>
+          <p>{problemText(t, list.error)}</p>
+        </Callout>
       ) : list.data === undefined ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t('shell.loading')}
-        </p>
+        <SkeletonTable label={t('shell.loading')} columns={5} rows={5} />
+      ) : rows.length === 0 ? (
+        <div className="grid gap-1 py-4">
+          <p className="font-bold">{t(filtered ? 'circulation.overdue.empty_filtered' : 'circulation.overdue.empty')}</p>
+          <p className="text-sm text-muted-foreground">{t(filtered ? 'circulation.overdue.empty_filtered_hint' : 'circulation.overdue.empty_hint')}</p>
+        </div>
       ) : (
-        <>
-          {rows.length > 0 && (
-            <p className="text-sm text-muted-foreground">
-              {t(list.hasNextPage ? 'circulation.overdue.summary_loaded' : 'circulation.overdue.summary', { loans: rows.length, members, days: longest })}
-            </p>
-          )}
-          {/* ---- Komunitas (notices): an overdue reminder for every member shown ---- */}
-          {rows.length > 0 && <SendRemindersButton loans={rows.map((r) => ({ branchId: r.branchId, memberId: r.member?.id ?? null }))} label="notices.send.overdue_all" />}
-          <MasterTable
+        <div className="grid gap-3">
+          <p className="text-sm text-muted-foreground">
+            {t(list.hasNextPage ? 'circulation.overdue.summary_loaded' : 'circulation.overdue.summary', { loans: loaded.length, members, days: longest })}
+          </p>
+          <DenseTable
             caption={t('circulation.overdue.caption')}
             columns={columns}
             rows={rows}
-            empty={t(filtered ? 'circulation.overdue.empty_filtered' : 'circulation.overdue.empty')}
+            rowKey={(r) => r.id}
+            empty={t('circulation.overdue.empty')}
+            groupOf={(r) => r.member?.id ?? 'anonymous'}
+            groupHead={groupHead}
           />
           {list.hasNextPage && (
-            <Button variant="outline" className="w-fit" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
+            <Button variant="outline" size="sm" className="w-fit" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
               {t('circulation.load_more')}
             </Button>
           )}
-        </>
+        </div>
       )}
     </div>
   );
+}
+
+/**
+ * The loans grouped by member, in the order each member first appears (the list comes oldest due date first, so the
+ * member with the longest-overdue loan leads); within a member, the order of the list. Anonymised loans form one group.
+ */
+export function groupByMember(rows: readonly LoanListItem[]): LoanListItem[] {
+  const groups = new Map<string, LoanListItem[]>();
+  for (const r of rows) {
+    const key = r.member?.id ?? 'anonymous';
+    const list = groups.get(key);
+    if (list === undefined) groups.set(key, [r]);
+    else list.push(r);
+  }
+  return [...groups.values()].flat();
 }
