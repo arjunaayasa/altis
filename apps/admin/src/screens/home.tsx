@@ -7,7 +7,7 @@ import { holds } from '@/lib/access';
 import { useMe } from '@/lib/me';
 import { cn } from '@/lib/utils';
 import { Dashboard } from '@/screens/dashboard';
-import { Attention, useAttentionItems } from '@/screens/dashboard-attention';
+import { Attention, useAttentionItems, useAttentionSources } from '@/screens/dashboard-attention';
 import { DeskActivity } from '@/screens/dashboard-activity';
 // ---- Komunitas K5 (reports) ----
 import { LibraryStatistics } from '@/screens/dashboard-library';
@@ -56,12 +56,13 @@ export function HomeScreen() {
   const { desk, query: deskQuery } = useDeskToday();
   const library = useLibraryToday();
   const attention = useAttentionItems();
+  const attentionSources = useAttentionSources();
 
   const deskBranch = desk.branches?.find((b) => b.id === desk.branchId);
   const today = library.data?.today ?? deskQuery.data?.on ?? browserToday();
   const lead = [longDate(today), ...(deskBranch !== undefined && (desk.branches?.length ?? 0) > 1 ? [t('dashboard.today.branch', { name: deskBranch.name })] : [])];
   const hasActivity = desk.branchId !== null;
-  const hasAttention = attention.length > 0;
+  const hasAttention = attention.length > 0 || attentionSources.reads;
   const seesLibrary =
     desk.branchId !== null || holds(me, 'members.records.read') || holds(me, 'circulation.records.read') || holds(me, 'reports.statistics.read') || hasAttention;
 
@@ -85,7 +86,7 @@ export function HomeScreen() {
       {(hasActivity || hasAttention) && (
         <div className={cn('grid gap-8', hasActivity && hasAttention && 'min-[1060px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]')}>
           <DeskActivity />
-          <Attention items={attention} />
+          <Attention items={attention} sources={attentionSources} />
         </div>
       )}
       <UsageBlocks />

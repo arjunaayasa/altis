@@ -1,6 +1,7 @@
 import { DASHBOARD_USAGE_DAYS, type SubjectLoans, type TopTitle } from '@altis/shared/api/dashboard-home';
 import { Link } from '@tanstack/react-router';
 import { useId, type ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
 import { useT, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
 import { useMe } from '@/lib/me';
@@ -16,6 +17,7 @@ import { useCount, useLibraryToday } from '@/screens/dashboard-today';
  *   title links to its record for a catalogue reader.
  *
  * Each block links to its full report (the loans by class, the most borrowed titles), which the same permission opens.
+ * While the first read is under way both blocks show their shape; when it fails, both say so and offer "Coba lagi".
  */
 
 /** The name of a DDC main class with its number (`800 Kesusastraan`), `NON` by its name only. */
@@ -49,7 +51,21 @@ function ReportLink({ id }: { id: string }) {
   );
 }
 
-function Subjects({ subjects }: { subjects: readonly SubjectLoans[] }) {
+/** In place of a block's figures: its shape while they load, or that they could not be read with "Coba lagi". */
+function Placeholder({ retry, announce }: { retry: (() => void) | null; announce: boolean }) {
+  const t = useT();
+  if (retry === null) return <div className="h-[180px] animate-pulse rounded-lg bg-layer-2 motion-reduce:animate-none" aria-hidden="true" />;
+  return (
+    <div role={announce ? 'alert' : undefined} className="flex flex-col items-start gap-2 rounded-md border border-bad-line bg-bad-bg px-3.5 py-3 text-sm">
+      <span className="font-bold text-bad">{t('dashboard.home.load_failed')}</span>
+      <Button variant="outline" size="sm" onClick={retry}>
+        {t('table.retry')}
+      </Button>
+    </div>
+  );
+}
+
+function Subjects({ subjects, placeholder }: { subjects: readonly SubjectLoans[]; placeholder?: ReactNode }) {
   const t = useT();
   const count = useCount();
   const range = t('dashboard.home.subjects.range', { days: DASHBOARD_USAGE_DAYS });
@@ -64,7 +80,9 @@ function Subjects({ subjects }: { subjects: readonly SubjectLoans[] }) {
           <ReportLink id="circulation.loans_by_class" />
         </>
       }>
-      {subjects.length === 0 ? (
+      {placeholder !== undefined ? (
+        placeholder
+      ) : subjects.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('dashboard.home.subjects.empty', { days: DASHBOARD_USAGE_DAYS })}</p>
       ) : (
         <>
@@ -115,7 +133,7 @@ function Subjects({ subjects }: { subjects: readonly SubjectLoans[] }) {
   );
 }
 
-function TopTitles({ titles }: { titles: readonly TopTitle[] }) {
+function TopTitles({ titles, placeholder }: { titles: readonly TopTitle[]; placeholder?: ReactNode }) {
   const t = useT();
   const me = useMe();
   const count = useCount();
@@ -130,7 +148,9 @@ function TopTitles({ titles }: { titles: readonly TopTitle[] }) {
           <ReportLink id="circulation.top_titles" />
         </>
       }>
-      {titles.length === 0 ? (
+      {placeholder !== undefined ? (
+        placeholder
+      ) : titles.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('dashboard.home.top.empty', { days: DASHBOARD_USAGE_DAYS })}</p>
       ) : (
         <ol className="border-t">
@@ -158,13 +178,26 @@ function TopTitles({ titles }: { titles: readonly TopTitle[] }) {
   );
 }
 
+const ROW = 'grid gap-8 min-[1060px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]';
+
 /** The loans by subject and the most borrowed titles, side by side (see the top of this file); nothing without them. */
 export function UsageBlocks() {
+  const me = useMe();
   const library = useLibraryToday();
-  const usage = library.data?.usage;
-  if (usage === undefined || usage === null) return null;
+  if (library.data === undefined) {
+    if (!holds(me, 'reports.statistics.read')) return null;
+    const retry = library.isError ? () => void library.refetch() : null;
+    return (
+      <div className={ROW}>
+        <Subjects subjects={[]} placeholder={<Placeholder retry={retry} announce />} />
+        <TopTitles titles={[]} placeholder={<Placeholder retry={retry} announce={false} />} />
+      </div>
+    );
+  }
+  const usage = library.data.usage;
+  if (usage === null) return null;
   return (
-    <div className="grid gap-8 min-[1060px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+    <div className={ROW}>
       <Subjects subjects={usage.bySubject} />
       <TopTitles titles={usage.topTitles} />
     </div>

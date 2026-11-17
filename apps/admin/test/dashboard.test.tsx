@@ -82,7 +82,7 @@ describe('system dashboard', () => {
   it('a runner_stale alert shows its message with a link to /admin/diagnostics, as a line of "Perlu perhatian"', async () => {
     startApp({ me: superMe(), path: '/admin', routes: { 'GET dashboard': () => full() } });
     const alerts = await screen.findByRole('region', { name: 'Perlu perhatian' });
-    const item = within(alerts).getByText(MESSAGES.id['alert.runner_stale']).closest('li');
+    const item = (await within(alerts).findByText(MESSAGES.id['alert.runner_stale'])).closest('li');
     expect(item).not.toBeNull();
     const link = within(item as HTMLElement).getByRole('link');
     expect(link.getAttribute('href')).toBe('/admin/diagnostics');
@@ -239,7 +239,8 @@ describe('system dashboard: updates (1d Task 29)', () => {
     const card = await screen.findByRole('region', { name: 'Pembaruan' });
     expect(within(card).getByText('Tidak ada pembaruan')).toBeTruthy();
     expect(within(card).getByText('Belum pernah')).toBeTruthy();
-    expect(screen.queryByRole('region', { name: 'Perlu perhatian' })).toBeNull();
+    // No line of an update in "Perlu perhatian".
+    expect(document.querySelector('[data-attention-item="update"]')).toBeNull();
   });
 
   it('no update card without the update section (a staff member without system.update.read)', async () => {
@@ -260,6 +261,7 @@ describe('system dashboard: updates (1d Task 29)', () => {
     ];
     startApp({ me: superMe(), path: '/admin', routes: { 'GET dashboard': () => full({ alerts }) } });
     const region = await screen.findByRole('region', { name: 'Perlu perhatian' });
+    await waitFor(() => expect(region.querySelectorAll('[data-attention-item]').length).toBeGreaterThan(0));
     for (const alert of alerts) {
       const item = within(region).getByText(MESSAGES.id[alert.messageKey as keyof typeof MESSAGES.id]).closest('li') as HTMLElement;
       expect(within(item).getByRole('link').getAttribute('href'), alert.kind).toBe(alert.link);
