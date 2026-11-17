@@ -126,7 +126,7 @@ describe('Profil', () => {
     const photos = screen.getByRole('region', { name: 'Foto profil' });
     const front = within(photos).getByText('Tampak depan perpustakaan').closest('li') as HTMLElement;
     fireEvent.click(within(front).getByRole('button', { name: 'Unggah foto' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Unggah foto' });
+    const dialog = await screen.findByRole('form', { name: 'Unggah foto' });
     await within(dialog).findByText(/paling besar \d+ MB/);
     fireEvent.change(within(dialog).getByLabelText('Berkas'), { target: { files: [new File([new Uint8Array(4096)], 'depan.png', { type: 'image/png' })] } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Unggah' }));
@@ -273,7 +273,7 @@ describe('Profil', () => {
     const photos = await screen.findByRole('region', { name: 'Foto profil' }, FIRST);
     const front = within(photos).getByText('Tampak depan perpustakaan').closest('li') as HTMLElement;
     fireEvent.click(within(front).getByRole('button', { name: 'Unggah foto' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Unggah foto' });
+    const dialog = await screen.findByRole('form', { name: 'Unggah foto' });
     await within(dialog).findByText(/paling besar \d+ MB/);
     const input = within(dialog).getByLabelText('Berkas');
     expect(input.getAttribute('accept')).toBe('image/jpeg,image/png,image/webp');

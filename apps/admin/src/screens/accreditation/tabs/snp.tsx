@@ -3,11 +3,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useId, useMemo, type JSX } from 'react';
 import { accredKeys, accredPaths } from '@/components/accreditation/usage/queries';
 import { useDateTime } from '@/components/data-table';
-import { Badge, Notice, NoticeAlert, RefetchProblem } from '@/components/form-field';
+import { Notice, NoticeAlert, RefetchProblem } from '@/components/form-field';
+import { ErrorState, SkeletonTable, TABLE, Tag, type TagTone } from '@/components/layout';
 import { useLocale, useT, type Translate } from '@/i18n';
-import { isMessageKey, problemText } from '@/lib/form-errors';
+import { isMessageKey } from '@/lib/form-errors';
 import { useApiQuery } from '@/lib/me';
 import { useRealtime } from '@/lib/realtime';
+import { cn } from '@/lib/utils';
 
 /**
  * The workspace tab Kepatuhan SNP (spec §6, §10.9 item 8): the standards of the school library standard that ALTIS
@@ -16,11 +18,11 @@ import { useRealtime } from '@/lib/realtime';
  * period's results (`GET accreditation/periods/:id/results`), read again when the evaluation says they changed.
  */
 
-const OUTCOME_TONE: Readonly<Record<SnpOutcome, 'neutral' | 'info' | 'warning' | 'danger'>> = {
-  pass: 'info',
-  fail: 'danger',
+const OUTCOME_TONE: Readonly<Record<SnpOutcome, TagTone>> = {
+  pass: 'ok',
+  fail: 'bad',
   reported: 'neutral',
-  not_evaluated: 'warning',
+  not_evaluated: 'warn',
   not_available: 'neutral',
 };
 
@@ -48,17 +50,11 @@ export function SnpTab({ periodId }: { periodId: string }): JSX.Element {
   const results = query.data;
   let body: JSX.Element;
   if (results === undefined) {
-    body = query.isError ? (
-      <Notice kind="error">{problemText(t, query.error)}</Notice>
-    ) : (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('shell.loading')}
-      </p>
-    );
+    body = query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} retrying={query.isFetching} /> : <SkeletonTable label={t('shell.loading')} rows={4} />;
   } else {
     const working = results.status === 'queued' || results.status === 'running';
     body = (
-      <div className="flex flex-col gap-3">
+      <div className="grid gap-3">
         <RefetchProblem query={query} />
         {results.status === 'missing' && <p className="text-sm text-muted-foreground">{t('accreditation.snp.missing')}</p>}
         {working && (
@@ -74,12 +70,13 @@ export function SnpTab({ periodId }: { periodId: string }): JSX.Element {
         {results.snp.length === 0
           ? results.status === 'ready' && <p className="text-sm text-muted-foreground">{t('accreditation.snp.none')}</p>
           : (
-              <div className="overflow-x-auto rounded-md border">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 text-left">
+              <div className={TABLE.wrap}>
+                <table className={TABLE.table}>
+                  <caption className="sr-only">{t('accreditation.snp.title')}</caption>
+                  <thead>
                     <tr>
                       {(['col_code', 'col_standard', 'col_outcome', 'col_value', 'col_rule', 'col_notes'] as const).map((col) => (
-                        <th key={col} scope="col" className="px-3 py-2 align-bottom font-medium text-muted-foreground">
+                        <th key={col} scope="col" className={cn(TABLE.th, 'align-bottom', col === 'col_value' && 'text-right')}>
                           {t(`accreditation.snp.${col}`)}
                         </th>
                       ))}
@@ -87,17 +84,17 @@ export function SnpTab({ periodId }: { periodId: string }): JSX.Element {
                   </thead>
                   <tbody>
                     {results.snp.map((row) => (
-                      <tr key={row.code} data-snp={row.code} className="border-t align-top">
-                        <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{row.code.replace(/^SNP-/, '')}</td>
-                        <th scope="row" className="px-3 py-2 text-left font-medium">
+                      <tr key={row.code} data-snp={row.code}>
+                        <td className={cn(TABLE.td, 'whitespace-nowrap text-muted-foreground')}>{row.code.replace(/^SNP-/, '')}</td>
+                        <th scope="row" className={cn(TABLE.td, 'min-w-48 text-left font-semibold')}>
                           {keyText(t, row.labelKey)}
                         </th>
-                        <td className="px-3 py-2">
-                          <Badge tone={OUTCOME_TONE[row.outcome]}>{t(`accreditation.snp.outcome.${row.outcome}`)}</Badge>
+                        <td className={TABLE.td}>
+                          <Tag tone={OUTCOME_TONE[row.outcome]}>{t(`accreditation.snp.outcome.${row.outcome}`)}</Tag>
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">{row.value === null ? '—' : number.format(row.value)}</td>
-                        <td className="px-3 py-2">{keyText(t, row.rule)}</td>
-                        <td className="px-3 py-2">
+                        <td className={cn(TABLE.td, 'text-right')}>{row.value === null ? '—' : number.format(row.value)}</td>
+                        <td className={cn(TABLE.td, 'min-w-48')}>{keyText(t, row.rule)}</td>
+                        <td className={cn(TABLE.td, 'min-w-48')}>
                           <div className="grid gap-1">
                             {row.notes.map((note, i) => (
                               <p key={`${note.key}-${i}`} className="text-xs text-muted-foreground">
@@ -117,9 +114,9 @@ export function SnpTab({ periodId }: { periodId: string }): JSX.Element {
   }
 
   return (
-    <section aria-labelledby={titleId} data-period-id={periodId} className="flex flex-col gap-4">
-      <div className="grid gap-1">
-        <h2 id={titleId} className="text-lg font-semibold">
+    <section aria-labelledby={titleId} data-period-id={periodId} className="grid min-w-0 gap-4">
+      <div className="grid max-w-[75ch] gap-1">
+        <h2 id={titleId} className="text-base font-bold">
           {t('accreditation.snp.title')}
         </h2>
         <p className="text-sm text-muted-foreground">{t('accred.note.snp_selected')}</p>

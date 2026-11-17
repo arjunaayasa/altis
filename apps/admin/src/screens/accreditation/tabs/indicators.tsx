@@ -5,9 +5,11 @@ import { useId, type JSX } from 'react';
 import { AnswerPicker } from '@/components/accreditation/answer-picker';
 import { EvidenceChecklist } from '@/components/accreditation/evidence-checklist';
 import { ProblemAlert } from '@/components/form-field';
+import { LoadingState, TABLE } from '@/components/layout';
 import { useT, type TKey, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
 import { useMe } from '@/lib/me';
+import { cn } from '@/lib/utils';
 import { accreditationKeys, keyText, noteParams, officialLabel, useFormats, useResults, type Formats } from '../data';
 import { ReadOnlyNote, TabState, type TabContext } from '../tab-state';
 
@@ -37,17 +39,11 @@ function Indicators({ ctx }: { ctx: TabContext }) {
   const instrument = ctx.instrument;
   if (instrument === undefined) return <p className="text-sm">{t('accreditation.instrument.unknown', { id: ctx.period.instrumentId })}</p>;
   if (instrument.components.length === 0) return <p className="text-sm">{t('accreditation.workspace.indicators.unscored')}</p>;
-  if (results.data === undefined && !results.isError) {
-    return (
-      <p role="status" className="text-sm text-muted-foreground">
-        {t('shell.loading')}
-      </p>
-    );
-  }
+  if (results.data === undefined && !results.isError) return <LoadingState />;
   const byCode = new Map((results.data?.indicators ?? []).map((r) => [r.code, r]));
   const onUploaded = (): void => void queryClient.invalidateQueries({ queryKey: accreditationKeys.results(periodId) });
   return (
-    <div className="flex flex-col gap-6">
+    <div className="grid max-w-5xl gap-8">
       <ReadOnlyNote ctx={ctx} />
       {results.isError && <ProblemAlert error={results.error} />}
       {results.data !== undefined && results.data.computedAt === null && <p className="text-sm">{t('accreditation.workspace.indicators.not_computed')}</p>}
@@ -74,11 +70,11 @@ function Component({ component, children }: { component: InstrumentView['compone
   const t = useT();
   const titleId = useId();
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3">
-      <h3 id={titleId} className="text-lg font-semibold">
+    <section aria-labelledby={titleId} className="grid gap-3">
+      <h3 id={titleId} className="text-base font-bold">
         {keyText(t, component.labelKey)}
       </h3>
-      {children}
+      <div className="grid border-b">{children}</div>
     </section>
   );
 }
@@ -163,13 +159,13 @@ function IndicatorCard({
   const canOpen = useCanOpen(result?.detail?.reportId ?? '');
   const computed = !indicator.manual;
   return (
-    <section aria-labelledby={titleId} data-indicator={indicator.code} className="flex flex-col gap-4 rounded-lg border bg-card p-4 text-card-foreground">
-      <header className="flex flex-col gap-1">
+    <section aria-labelledby={titleId} data-indicator={indicator.code} className="grid gap-4 border-t py-5">
+      <header className="grid gap-1">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h4 id={titleId} className="font-semibold">
+          <h4 id={titleId} className="text-sm font-bold">
             {officialLabel(t, indicator.officialNo, component)}
           </h4>
-          <span className="font-mono text-xs text-muted-foreground">{indicator.code}</span>
+          <span className="text-xs text-faint">{indicator.code}</span>
         </div>
         <p className="text-sm">{keyText(t, indicator.labelKey)}</p>
         <p className="text-xs text-muted-foreground">{t('accreditation.workspace.window', { window: label(t, WINDOWS, indicator.window) })}</p>
@@ -193,20 +189,22 @@ function IndicatorCard({
       )}
       {result?.table != null && result.table.length > 0 && (
         <details className="text-sm">
-          <summary className="cursor-pointer">{t('accreditation.workspace.table')}</summary>
-          <table className="mt-2 text-sm">
-            <tbody>
-              {result.table.map((row, i) => (
-                <tr key={i}>
-                  {row.map((cell, j) => (
-                    <td key={j} className="border-b px-2 py-1 tabular-nums">
-                      {typeof cell === 'number' ? f.number(cell) : cell}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <summary className="w-fit cursor-pointer text-muted-foreground hover:text-foreground">{t('accreditation.workspace.table')}</summary>
+          <div className={cn(TABLE.wrap, 'mt-2 w-fit max-w-full')}>
+            <table className={TABLE.table}>
+              <tbody>
+                {result.table.map((row, i) => (
+                  <tr key={i}>
+                    {row.map((cell, j) => (
+                      <td key={j} className={cn(TABLE.td, 'py-1.5', typeof cell === 'number' && 'text-right')}>
+                        {typeof cell === 'number' ? f.number(cell) : cell}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </details>
       )}
       {result?.detail != null && canOpen && (
@@ -214,8 +212,7 @@ function IndicatorCard({
           <Link
             to={`/admin/reports/${encodeURIComponent(result.detail.reportId)}`}
             search={result.detail.params}
-            className="text-primary underline-offset-4 hover:underline"
-          >
+            className="font-semibold text-accent-text underline-offset-4 hover:underline">
             {t('accreditation.workspace.detail')}
           </Link>
         </p>

@@ -29,7 +29,7 @@ export function ComponentSizes({ bytes, limitMb }: { bytes: EvidenceListResponse
     <div className="grid gap-2">
       <div className="overflow-x-auto rounded-md border">
         <table aria-labelledby={captionId} className="w-full text-sm">
-          <caption id={captionId} className="px-3 pt-2 text-left font-medium">
+          <caption id={captionId} className="px-3 pt-2 text-left font-semibold">
             {t('accreditation.print.sizes.title')}
           </caption>
           <thead className="text-left">
@@ -38,14 +38,14 @@ export function ComponentSizes({ bytes, limitMb }: { bytes: EvidenceListResponse
                 {t('accreditation.print.sizes.intro', { limit })}
               </td>
             </tr>
-            <tr className="bg-muted/50">
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+            <tr className="bg-layer">
+              <th scope="col" className="px-3 py-2 font-semibold text-muted-foreground">
                 {t('accreditation.print.sizes.col_component')}
               </th>
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+              <th scope="col" className="px-3 py-2 font-semibold text-muted-foreground">
                 {t('accreditation.print.sizes.col_size')}
               </th>
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+              <th scope="col" className="px-3 py-2 font-semibold text-muted-foreground">
                 {t('accreditation.print.sizes.col_state')}
               </th>
             </tr>
@@ -63,14 +63,14 @@ export function ComponentSizes({ bytes, limitMb }: { bytes: EvidenceListResponse
                   <td className="px-3 py-2">
                     <div className="grid min-w-40 gap-1">
                       <span className="tabular-nums">{t('accreditation.print.sizes.size_of', { size: size(n), limit })}</span>
-                      <div aria-hidden="true" className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                        <div className={cn('h-full rounded-full', over ? 'bg-destructive' : 'bg-primary')} style={{ width: `${pct}%` }} />
+                      <div aria-hidden="true" className="h-1.5 w-full overflow-hidden rounded-full bg-layer-2">
+                        <div className={cn('h-full rounded-full', over ? 'bg-bad' : 'bg-series-1')} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   </td>
                   <td className="px-3 py-2">
                     {over ? (
-                      <span data-over-limit className="text-destructive">
+                      <span data-over-limit className="font-semibold text-bad">
                         {t('accreditation.print.sizes.over', { limit })}
                       </span>
                     ) : (

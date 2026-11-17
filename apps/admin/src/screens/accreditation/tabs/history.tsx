@@ -2,6 +2,7 @@ import type { FreezeBody, SnapshotListResponse } from '@altis/shared/api/accredi
 import { useState, type JSX } from 'react';
 import { Disclaimer } from '@/components/accreditation/disclaimer';
 import { Field, NoticeAlert, ProblemAlert } from '@/components/form-field';
+import { ErrorState, SkeletonTable, TABLE, Tag } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
@@ -29,7 +30,7 @@ export function HistoryTab(props: { periodId: string }): JSX.Element {
 
 function History({ ctx }: { ctx: TabContext }) {
   return (
-    <div className="flex max-w-4xl flex-col gap-6">
+    <div className="grid max-w-4xl gap-8">
       {ctx.period.status === 'open' ? <FreezePanel ctx={ctx} /> : <UnfreezePanel ctx={ctx} />}
       <Snapshots periodId={ctx.period.id} />
     </div>
@@ -63,12 +64,12 @@ function FreezePanel({ ctx }: { ctx: TabContext }) {
   };
 
   return (
-    <section aria-label={t('accreditation.workspace.history.freeze.title')} className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground">
-      <h3 className="text-base font-semibold">{t('accreditation.workspace.history.freeze.title')}</h3>
+    <section aria-label={t('accreditation.workspace.history.freeze.title')} className="grid gap-3">
+      <h3 className="text-base font-bold">{t('accreditation.workspace.history.freeze.title')}</h3>
       <p className="text-sm text-muted-foreground">{t('accreditation.workspace.history.freeze.text')}</p>
       {ctx.canManage ? (
         <>
-          <Field label={t('accreditation.workspace.history.freeze.note')}>
+          <Field label={t('accreditation.workspace.history.freeze.note')} className="max-w-md">
             {(control) => <Input {...control} value={note} maxLength={191} disabled={busy} onChange={(e) => setNote(e.target.value)} />}
           </Field>
           <div>
@@ -107,8 +108,8 @@ function UnfreezePanel({ ctx }: { ctx: TabContext }) {
   };
 
   return (
-    <section aria-label={t('accreditation.workspace.history.unfreeze.title')} className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground">
-      <h3 className="text-base font-semibold">{t('accreditation.workspace.history.unfreeze.title')}</h3>
+    <section aria-label={t('accreditation.workspace.history.unfreeze.title')} className="grid gap-3">
+      <h3 className="text-base font-bold">{t('accreditation.workspace.history.unfreeze.title')}</h3>
       {ctx.period.frozenAt !== null && <p className="text-sm">{t('accreditation.workspace.history.frozen', { time: f.dateTime(ctx.period.frozenAt) })}</p>}
       <p className="text-sm text-muted-foreground">{t('accreditation.workspace.history.unfreeze.text')}</p>
       {ctx.canManage ? (
@@ -156,39 +157,40 @@ function Snapshots({ periodId }: { periodId: string }) {
   };
 
   return (
-    <section aria-label={t('accreditation.workspace.history.snapshots.title')} className="flex flex-col gap-3">
-      <h3 className="text-base font-semibold">{t('accreditation.workspace.history.snapshots.title')}</h3>
+    <section aria-label={t('accreditation.workspace.history.snapshots.title')} className="grid min-w-0 gap-3">
+      <h3 className="text-base font-bold">{t('accreditation.workspace.history.snapshots.title')}</h3>
       {list === undefined ? (
         snapshots.isError ? (
-          <ProblemAlert error={snapshots.error} />
+          <ErrorState error={snapshots.error} onRetry={() => void snapshots.refetch()} retrying={snapshots.isFetching} />
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <SkeletonTable label={t('shell.loading')} columns={5} rows={3} />
         )
       ) : list.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('accreditation.workspace.history.snapshots.empty')}</p>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-left">
+          <div className={TABLE.wrap}>
+            <table className={TABLE.table}>
+              <caption className="sr-only">{t('accreditation.workspace.history.snapshots.title')}</caption>
+              <thead>
                 <tr>
-                  <th className="px-3 py-2 font-medium">{t('accreditation.workspace.history.column.created')}</th>
-                  <th className="px-3 py-2 font-medium">{t('accreditation.workspace.history.column.score')}</th>
-                  <th className="px-3 py-2 font-medium">{t('accreditation.workspace.history.column.prerequisites')}</th>
-                  <th className="px-3 py-2 font-medium">{t('accreditation.workspace.history.column.note')}</th>
-                  <th className="px-3 py-2 font-medium">{t('accreditation.workspace.history.column.dossier')}</th>
+                  <th scope="col" className={TABLE.th}>{t('accreditation.workspace.history.column.created')}</th>
+                  <th scope="col" className={TABLE.th}>{t('accreditation.workspace.history.column.score')}</th>
+                  <th scope="col" className={TABLE.th}>{t('accreditation.workspace.history.column.prerequisites')}</th>
+                  <th scope="col" className={TABLE.th}>{t('accreditation.workspace.history.column.note')}</th>
+                  <th scope="col" className={TABLE.th}>{t('accreditation.workspace.history.column.dossier')}</th>
                 </tr>
               </thead>
               <tbody>
                 {list.map((s) => (
-                  <tr key={s.id} className="border-t align-top">
-                    <td className="px-3 py-2 whitespace-nowrap">{f.dateTime(s.createdAt)}</td>
-                    <td className="px-3 py-2 tabular-nums">{estimate(s)}</td>
-                    <td className="px-3 py-2">{t(s.prerequisitesMet ? 'accreditation.workspace.prereq.pass' : 'accreditation.workspace.prereq.fail')}</td>
-                    <td className="px-3 py-2">{s.note ?? ''}</td>
-                    <td className="px-3 py-2">
+                  <tr key={s.id}>
+                    <td className={`${TABLE.td} whitespace-nowrap`}>{f.dateTime(s.createdAt)}</td>
+                    <td className={TABLE.td}>{estimate(s)}</td>
+                    <td className={TABLE.td}>
+                      <Tag tone={s.prerequisitesMet ? 'ok' : 'bad'}>{t(s.prerequisitesMet ? 'accreditation.workspace.prereq.pass' : 'accreditation.workspace.prereq.fail')}</Tag>
+                    </td>
+                    <td className={TABLE.td}>{s.note ?? ''}</td>
+                    <td className={TABLE.td}>
                       {s.dossierFileId === null ? (
                         <span className="text-muted-foreground">{t('accreditation.workspace.history.dossier.none')}</span>
                       ) : (
