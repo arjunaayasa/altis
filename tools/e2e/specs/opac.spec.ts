@@ -467,7 +467,8 @@ test('results: the home search finds the record; its card, the facets, a facet t
     const form = page.locator('main').getByRole('search');
     await form.getByLabel(O('id', 'shell.search.label'), { exact: true }).fill(d.word);
     await form.getByLabel(O('id', 'shell.search.label'), { exact: true }).press('Enter');
-    await expect(page).toHaveURL(new RegExp(`/cari\\?q=${d.word}$`));
+    // The home search card sends the field it searches in (every field by default), then the text.
+    await expect(page).toHaveURL(new RegExp(`/cari\\?ruas=semua&q=${d.word}$`));
     await expect(page.locator('html')).toHaveAttribute('lang', 'id');
     await expect(page.locator('p.search-count')).toContainText(O('id', 'search.count_one'));
   });
