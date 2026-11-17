@@ -7,10 +7,14 @@ export const SERVICES_UI_ID = {
   'circulation.calendar.closed_short': 'Tutup',
   'circulation.policies.col.rule': 'Aturan',
   'circulation.policies.more_named': 'Tindakan untuk aturan {code}',
+  'stocktake.ui.back_list': 'Semua sesi',
+  'stocktake.ui.more': 'Tindakan lain untuk sesi ini',
 } as const;
 
 export const SERVICES_UI_EN: Record<keyof typeof SERVICES_UI_ID, string> = {
   'circulation.calendar.closed_short': 'Closed',
   'circulation.policies.col.rule': 'Rule',
   'circulation.policies.more_named': 'Actions for rule {code}',
+  'stocktake.ui.back_list': 'All sessions',
+  'stocktake.ui.more': 'More actions for this session',
 };

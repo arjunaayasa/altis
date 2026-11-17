@@ -14,16 +14,15 @@ import type {
 import { keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useId, useMemo, useState, type FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { Badge, Field, Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { Field, Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
+import { Callout, DenseTable, ErrorState, FilterField, FilterRow, PageHead, Section, SectionHead, SkeletonTable, StatStrip, Tag, type DenseColumn, type TagTone } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT } from '@/i18n';
 import { holds, holdsAt } from '@/lib/access';
 import { api } from '@/lib/api';
 import { isWritableBranch } from '@/lib/branches';
-import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
-import { MasterTable, type MasterColumn } from '@/screens/catalog/masters/master-table';
 import { readStored, todayLocal, writeStored } from '@/screens/circulation/common';
 // ---- Komunitas (member, visit and circulation reports) ----
 import { ReportLinks } from '@/screens/reports/report-links';
@@ -65,15 +64,17 @@ function BranchPicker({ branches, branchId, choose }: { branches: BranchView[]; 
   const id = useId();
   if (branches.length < 2) return null;
   return (
-    <Field id={id} label={t('visits.branch')} className="max-w-xs">
-      <select id={id} className={SELECT_CLASS} value={branchId} onChange={(e) => choose(e.target.value)}>
-        {branches.map((b) => (
-          <option key={b.id} value={b.id}>
-            {b.name}
-          </option>
-        ))}
-      </select>
-    </Field>
+    <FilterRow label={t('visits.branch')}>
+      <FilterField id={id} label={t('visits.branch')} className="max-w-xs">
+        <select id={id} className={SELECT_CLASS} value={branchId} onChange={(e) => choose(e.target.value)}>
+          {branches.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+      </FilterField>
+    </FilterRow>
   );
 }
 
@@ -90,20 +91,16 @@ function Summary({ branchId }: { branchId: string }) {
   const summary = useApiQuery<VisitSummary>({ queryKey: ['visits', 'summary', branchId], path: `visits/summary?branchId=${encodeURIComponent(branchId)}` });
   const s = summary.data;
   return (
-    <dl className="grid grid-cols-3 gap-3" aria-label={t('visits.today')}>
-      {(
-        [
-          ['visits.total', s?.total],
-          ['visits.members', s?.members],
-          ['visits.guests', s?.guests],
-        ] as const
-      ).map(([key, value]) => (
-        <div key={key} className="rounded-lg border bg-card p-3">
-          <dt className="text-xs text-muted-foreground">{t(key)}</dt>
-          <dd className="text-2xl font-semibold">{value ?? '—'}</dd>
-        </div>
-      ))}
-    </dl>
+    <Section title={t('visits.today')}>
+      <StatStrip
+        label={t('visits.today')}
+        items={[
+          { key: 'total', label: t('visits.total'), value: s?.total ?? '—' },
+          { key: 'members', label: t('visits.members'), value: s?.members ?? '—' },
+          { key: 'guests', label: t('visits.guests'), value: s?.guests ?? '—' },
+        ]}
+      />
+    </Section>
   );
 }
 
@@ -145,8 +142,8 @@ function CheckinForm({ branchId }: { branchId: string }) {
   };
 
   return (
-    <form noValidate onSubmit={(e) => void submit(e)} className="grid gap-3 rounded-lg border bg-card p-4">
-      <h2 className="text-lg font-semibold">{t('visits.checkin.title')}</h2>
+    <form noValidate onSubmit={(e) => void submit(e)} aria-labelledby={`${ids}-title`} className="grid content-start gap-4">
+      <SectionHead id={`${ids}-title`} title={t('visits.checkin.title')} />
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" className="size-4 accent-primary" checked={guest} onChange={(e) => setGuest(e.target.checked)} />
         {t('visits.checkin.as_guest')}
@@ -160,7 +157,7 @@ function CheckinForm({ branchId }: { branchId: string }) {
         </>
       ) : (
         <Field label={t('visits.checkin.member_no')}>
-          {(c) => <Input {...c} autoComplete="off" className="font-mono" maxLength={200} value={memberNo} onChange={(e) => setMemberNo(e.target.value)} />}
+          {(c) => <Input {...c} autoComplete="off" className="tracking-wide" maxLength={200} value={memberNo} onChange={(e) => setMemberNo(e.target.value)} />}
         </Field>
       )}
       <Field id={`${ids}-purpose`} label={t('visits.checkin.purpose')}>
@@ -175,15 +172,16 @@ function CheckinForm({ branchId }: { branchId: string }) {
       </Field>
       {answer !== null && <Notice kind={answer.kind}>{answer.text}</Notice>}
       <ProblemAlert error={problem} />
-      <Button type="submit" className="w-fit">
-        {t('visits.checkin.submit')}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit">{t('visits.checkin.submit')}</Button>
+      </div>
     </form>
   );
 }
 
 function ClassVisitForm({ branchId }: { branchId: string }) {
   const t = useT();
+  const ids = useId();
   const queryClient = useQueryClient();
   const [className, setClassName] = useState('');
   const [headcount, setHeadcount] = useState('');
@@ -213,16 +211,18 @@ function ClassVisitForm({ branchId }: { branchId: string }) {
   };
 
   return (
-    <form noValidate onSubmit={(e) => void submit(e)} className="grid gap-3 rounded-lg border bg-card p-4">
-      <h2 className="text-lg font-semibold">{t('visits.class.title')}</h2>
+    <form noValidate onSubmit={(e) => void submit(e)} aria-labelledby={`${ids}-title`} className="grid content-start gap-4">
+      <SectionHead id={`${ids}-title`} title={t('visits.class.title')} />
       <Field label={t('visits.class.name')}>{(c) => <Input {...c} maxLength={64} value={className} onChange={(e) => setClassName(e.target.value)} />}</Field>
       <Field label={t('visits.class.headcount')}>{(c) => <Input {...c} inputMode="numeric" value={headcount} onChange={(e) => setHeadcount(e.target.value)} />}</Field>
       <Field label={t('visits.class.note')}>{(c) => <Input {...c} maxLength={191} value={note} onChange={(e) => setNote(e.target.value)} />}</Field>
       {done !== null && <Notice kind="success">{done}</Notice>}
       <ProblemAlert error={problem} />
-      <Button type="submit" className="w-fit">
-        {t('visits.class.submit')}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" variant="outline">
+          {t('visits.class.submit')}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -256,20 +256,21 @@ function VisitList({ branchId, canManage }: { branchId: string; canManage: boole
     return t('visits.anonymous');
   };
 
-  const columns: MasterColumn<VisitView>[] = [
+  const columns: DenseColumn<VisitView>[] = [
     { id: 'time', header: t('visits.col.time'), className: 'whitespace-nowrap', cell: (v) => time(v.visitedAt) },
     { id: 'who', header: t('visits.col.who'), cell: who },
     { id: 'class', header: t('visits.col.class'), cell: (v) => v.className ?? '—' },
-    { id: 'source', header: t('visits.col.source'), cell: (v) => <Badge>{t(`vocab.visit_source.${v.source}`)}</Badge> },
+    { id: 'source', header: t('visits.col.source'), cell: (v) => <Tag>{t(`vocab.visit_source.${v.source}`)}</Tag> },
     { id: 'purpose', header: t('visits.col.purpose'), cell: (v) => (v.purpose === null ? '—' : t(`vocab.visit_purpose.${v.purpose}`)) },
-    { id: 'count', header: t('visits.col.count'), cell: (v) => v.headcount },
+    { id: 'count', header: t('visits.col.count'), headClassName: 'text-right', className: 'text-right', cell: (v) => v.headcount },
     ...(canManage
       ? [
           {
             id: 'actions',
-            header: t('table.actions'),
+            header: <span className="sr-only">{t('table.actions')}</span>,
+            className: 'w-px py-1.5 text-right whitespace-nowrap',
             cell: (v: VisitView) => (
-              <Button size="sm" variant="outline" aria-label={t('visits.void_named', { time: time(v.visitedAt) })} onClick={() => setVoiding(v)}>
+              <Button size="sm" variant="ghost" aria-label={t('visits.void_named', { time: time(v.visitedAt) })} onClick={() => setVoiding(v)}>
                 {t('visits.void')}
               </Button>
             ),
@@ -279,19 +280,21 @@ function VisitList({ branchId, canManage }: { branchId: string; canManage: boole
   ];
 
   return (
-    <section className="grid gap-3">
-      <h2 className="text-lg font-semibold">{t('visits.list.title')}</h2>
-      <form
-        noValidate
-        className="flex flex-wrap items-end gap-3"
+    <Section title={t('visits.list.title')}>
+      <FilterRow
+        label={t('visits.list.title')}
         onSubmit={(e) => {
           e.preventDefault();
           setFilters(draft);
         }}
-      >
-        <Field label={t('visits.list.from')}>{(c) => <Input {...c} type="date" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />}</Field>
-        <Field label={t('visits.list.to')}>{(c) => <Input {...c} type="date" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />}</Field>
-        <Field id={`${ids}-source`} label={t('visits.list.source')}>
+        actions={
+          <Button type="submit" variant="outline">
+            {t('visits.list.apply')}
+          </Button>
+        }>
+        <FilterField label={t('visits.list.from')}>{(c) => <Input {...c} type="date" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />}</FilterField>
+        <FilterField label={t('visits.list.to')}>{(c) => <Input {...c} type="date" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />}</FilterField>
+        <FilterField id={`${ids}-source`} label={t('visits.list.source')}>
           <select id={`${ids}-source`} className={SELECT_CLASS} value={draft.source} onChange={(e) => setDraft({ ...draft, source: e.target.value as VisitSource | '' })}>
             <option value="">{t('visits.list.all_sources')}</option>
             {VISIT_SOURCES.map((s) => (
@@ -300,11 +303,15 @@ function VisitList({ branchId, canManage }: { branchId: string; canManage: boole
               </option>
             ))}
           </select>
-        </Field>
-        <Button type="submit">{t('visits.list.apply')}</Button>
-      </form>
-      {list.isError && <Notice kind="error">{problemText(t, list.error)}</Notice>}
-      <MasterTable caption={t('visits.list.title')} columns={columns} rows={rows} empty={t('visits.list.empty')} />
+        </FilterField>
+      </FilterRow>
+      {list.isError && list.data === undefined ? (
+        <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
+      ) : list.data === undefined ? (
+        <SkeletonTable label={t('shell.loading')} columns={canManage ? 7 : 6} rows={4} />
+      ) : (
+        <DenseTable caption={t('visits.list.title')} columns={columns} rows={rows} rowKey={(v) => v.id} empty={t('visits.list.empty')} />
+      )}
       {list.hasNextPage && (
         <Button variant="outline" className="w-fit" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
           {t('visits.load_more')}
@@ -324,7 +331,7 @@ function VisitList({ branchId, canManage }: { branchId: string; canManage: boole
           onClose={() => setVoiding(null)}
         />
       )}
-    </section>
+    </Section>
   );
 }
 
@@ -337,13 +344,13 @@ export function VisitsScreen() {
   // A reader without a branch of their own still reads the default branch's list.
   const readBranch = branchId ?? allBranches.data?.items.find((b) => b.isDefault)?.id ?? allBranches.data?.items[0]?.id ?? null;
   return (
-    <div className="flex max-w-6xl flex-col gap-4">
-      <h1 className="text-2xl font-semibold">{t('visits.title')}</h1>
+    <div className="grid max-w-6xl gap-6">
+      <PageHead title={t('visits.title')} />
       <ReportLinks reports={[{ id: 'visits.monthly', permission: 'reports.statistics.read' }, { id: 'visits.daily', permission: 'reports.statistics.read' }, { id: 'visits.list', permission: 'visits.records.read' }]} />
       {branches !== undefined && branchId !== null && <BranchPicker branches={branches} branchId={branchId} choose={choose} />}
       {readBranch !== null && readable && <Summary branchId={readBranch} />}
       {branchId !== null ? (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-x-8 gap-y-6 lg:grid-cols-2">
           <CheckinForm branchId={branchId} />
           <ClassVisitForm branchId={branchId} />
         </div>
@@ -356,6 +363,8 @@ export function VisitsScreen() {
 }
 
 // ---- stations ------------------------------------------------------------------------------------------------------
+
+const STATION_TONE: Readonly<Record<'paired' | 'code' | 'unpaired' | 'revoked', TagTone>> = { paired: 'ok', code: 'warn', unpaired: 'warn', revoked: 'neutral' };
 
 function stationState(s: StationView): 'paired' | 'code' | 'unpaired' | 'revoked' {
   if (s.revokedAt !== null) return 'revoked';
@@ -396,8 +405,8 @@ export function StationsScreen() {
 
   if (branches !== undefined && branchId === null) {
     return (
-      <div className="flex max-w-4xl flex-col gap-4">
-        <h1 className="text-2xl font-semibold">{t('visits.stations.title')}</h1>
+      <div className="grid max-w-5xl gap-6">
+        <PageHead title={t('visits.stations.title')} intro={t('visits.stations.intro')} />
         <Notice kind="error">{t('visits.no_branch')}</Notice>
       </div>
     );
@@ -434,47 +443,57 @@ export function StationsScreen() {
     }
   };
 
-  const columns: MasterColumn<StationView>[] = [
-    { id: 'name', header: t('visits.stations.col.name'), cell: (s) => s.name },
+  const columns: DenseColumn<StationView>[] = [
+    { id: 'name', header: t('visits.stations.col.name'), cell: (s) => <span className="font-semibold">{s.name}</span> },
     { id: 'room', header: t('visits.stations.col.room'), cell: (s) => roomName(s.locationId) },
     {
       id: 'state',
       header: t('visits.stations.col.state'),
       cell: (s) => {
         const state = stationState(s);
-        return <Badge tone={state === 'paired' ? 'info' : state === 'revoked' ? 'neutral' : 'warning'}>{t(`visits.stations.state.${state}`)}</Badge>;
+        return <Tag tone={STATION_TONE[state]}>{t(`visits.stations.state.${state}`)}</Tag>;
       },
     },
     { id: 'seen', header: t('visits.stations.col.last_seen'), cell: (s) => (s.lastSeenAt === null ? t('visits.stations.never') : time(s.lastSeenAt)) },
     {
       id: 'actions',
-      header: t('table.actions'),
+      header: <span className="sr-only">{t('table.actions')}</span>,
+      className: 'w-px py-1.5 text-right whitespace-nowrap',
       cell: (s) => (
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={() => void newCode(s)}>
+        <>
+          <Button size="sm" variant="ghost" onClick={() => void newCode(s)}>
             {t('visits.stations.new_code')}
           </Button>
           {s.revokedAt === null && (
-            <Button size="sm" variant="outline" onClick={() => setRevoking(s)}>
+            <Button size="sm" variant="ghost" onClick={() => setRevoking(s)}>
               {t('visits.stations.revoke')}
             </Button>
           )}
-        </div>
+        </>
       ),
     },
   ];
 
   return (
-    <div className="flex max-w-5xl flex-col gap-4">
-      <h1 className="text-2xl font-semibold">{t('visits.stations.title')}</h1>
-      <p className="text-sm text-muted-foreground">{t('visits.stations.intro')}</p>
+    <div className="grid max-w-5xl gap-6">
+      <PageHead title={t('visits.stations.title')} intro={t('visits.stations.intro')} />
       {branches !== undefined && branchId !== null && <BranchPicker branches={branches} branchId={branchId} choose={choose} />}
-      <form noValidate onSubmit={(e) => void create(e)} className="flex flex-wrap items-end gap-2">
-        <Field label={t('visits.stations.name')} className="min-w-64 flex-1">
+      <ProblemAlert error={problem} />
+      {notice !== null && <Notice kind="success">{notice}</Notice>}
+      {code !== null && (
+        <Callout role="status" title={t('visits.stations.code_title', { name: code.name })}>
+          <p translate="no" className="text-2xl font-bold tracking-[0.3em] tabular-nums">
+            {code.code.slice(0, 4)}-{code.code.slice(4)}
+          </p>
+          <p className="text-muted-foreground">{t('visits.stations.code_hint', { time: time(code.expiresAt) })}</p>
+        </Callout>
+      )}
+      <form noValidate aria-label={t('visits.stations.create')} onSubmit={(e) => void create(e)} className="flex flex-wrap items-end gap-3">
+        <Field label={t('visits.stations.name')} className="min-w-0 flex-[2_1_220px]">
           {(c) => <Input {...c} maxLength={191} value={name} onChange={(e) => setName(e.target.value)} />}
         </Field>
         {rooms.length > 0 && (
-          <Field label={t('visits.stations.room')} className="min-w-48">
+          <Field label={t('visits.stations.room')} className="min-w-0 flex-[1_1_160px]">
             {(c) => (
               <select {...c} className={SELECT_CLASS} value={roomId} onChange={(e) => setRoomId(e.target.value)}>
                 <option value="">{t('visits.stations.room_none')}</option>
@@ -489,18 +508,13 @@ export function StationsScreen() {
         )}
         <Button type="submit">{t('visits.stations.create')}</Button>
       </form>
-      <ProblemAlert error={problem} />
-      {notice !== null && <Notice kind="success">{notice}</Notice>}
-      {code !== null && (
-        <section role="status" className="grid gap-2 rounded-lg border-2 border-primary bg-card p-4">
-          <h2 className="text-base font-semibold">{t('visits.stations.code_title', { name: code.name })}</h2>
-          <p className="font-mono text-4xl tracking-[0.3em]">
-            {code.code.slice(0, 4)}-{code.code.slice(4)}
-          </p>
-          <p className="text-sm text-muted-foreground">{t('visits.stations.code_hint', { time: time(code.expiresAt) })}</p>
-        </section>
+      {stations.isError && stations.data === undefined ? (
+        <ErrorState error={stations.error} onRetry={() => void stations.refetch()} retrying={stations.isFetching} />
+      ) : stations.data === undefined ? (
+        <SkeletonTable label={t('shell.loading')} columns={5} rows={2} />
+      ) : (
+        <DenseTable caption={t('visits.stations.title')} columns={columns} rows={stations.data.items} rowKey={(s) => s.id} empty={t('visits.stations.empty')} />
       )}
-      <MasterTable caption={t('visits.stations.title')} columns={columns} rows={stations.data?.items ?? []} empty={t('visits.stations.empty')} />
       {revoking !== null && (
         <ConfirmDialog
           open
