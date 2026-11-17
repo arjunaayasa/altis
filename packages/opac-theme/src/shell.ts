@@ -102,6 +102,10 @@ export const SHELL_CSS: string = [
   // The field choice takes a row of its own on a phone, so that the text and its button share the next one.
   '.search-box select{flex:1 1 100%;max-width:100%}',
   '@media (min-width:30rem){.search-box select{flex:0 1 auto}.search-box input[type=search]{flex-basis:12rem}}',
+  // ---- Komunitas (OPAC look) ----
+  // In the search band on a phone the text has a row of its own, so that its example is read whole; the button below.
+  '.search-band .search-row input[type=search]{flex-basis:100%}',
+  '@media (min-width:30rem){.search-band .search-row input[type=search]{flex-basis:12rem}}',
   '.search-box input::placeholder{color:var(--faint);opacity:1}',
   '.search-box button{min-height:2.875rem;padding:0 1.375rem;border:0;border-radius:var(--radius-sm);background:var(--accent);' +
     'color:var(--accent-ink);font:inherit;font-weight:700;cursor:pointer}',
@@ -233,7 +237,8 @@ export const SHELL_CSS: string = [
   '.foot-bottom p{display:flex;flex-wrap:wrap;align-items:center;gap:0 1rem;margin:0}',
   // ---- Komunitas (OPAC look): the library's logo beside its name, the published contact as links ----
   // The logo is a JPEG on a white tile (the setting's), 40 px high; its width follows it, up to four times its height.
-  '.brand-with-logo{gap:.75rem}',
+  // With a logo the name wraps rather than push the menu and the language switch onto a line of their own.
+  '.brand-with-logo{gap:.75rem;max-width:22rem}',
   '.brand-logo{display:block;flex:none;height:2.5rem;width:auto;max-width:10rem;border-radius:var(--radius-sm);background:#fff}',
   '.brand-name{min-width:0}',
   '.foot-logo{display:block;height:2.5rem;width:auto;max-width:10rem;margin:0 0 .75rem;border-radius:var(--radius-sm);background:#fff}',

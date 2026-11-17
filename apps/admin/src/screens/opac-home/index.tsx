@@ -522,12 +522,12 @@ function HomeEditor({
   return (
     <>
       {outcome !== null && (
-        <div ref={outcomeBox} className="scroll-mt-4">
+        <div ref={outcomeBox} className="scroll-mt-28">
           {outcome}
         </div>
       )}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
-        <aside aria-label={t('opacHome.preview.title')} className="grid content-start gap-3 xl:sticky xl:top-4 xl:order-2">
+        <aside aria-label={t('opacHome.preview.title')} className="grid content-start gap-3 xl:sticky xl:top-[107px] xl:order-2">
           <SectionHead title={t('opacHome.preview.title')} />
           <HeroPreview draft={draft} view={view} />
         </aside>
@@ -690,16 +690,18 @@ function HomeEditor({
                 )}
               </Field>
             )}
-            <Field label={t('opacHome.contact.phone')} hint={t('opacHome.contact.phone_hint')} error={errorAt('home.contact.phone')}>
-              {(c) => (
-                <Input {...c} type="tel" autoComplete="off" value={draft.phone} maxLength={OPAC_HOME_CONTACT_LIMITS.phone} onChange={(e) => edit((d) => ({ ...d, phone: e.target.value }))} />
-              )}
-            </Field>
-            <Field label={t('opacHome.contact.email')} hint={t('opacHome.contact.email_hint')} error={errorAt('home.contact.email')}>
-              {(c) => (
-                <Input {...c} type="email" autoComplete="off" value={draft.email} maxLength={OPAC_HOME_CONTACT_LIMITS.email} onChange={(e) => edit((d) => ({ ...d, email: e.target.value }))} />
-              )}
-            </Field>
+            <div className={cn('grid gap-x-5 gap-y-4 sm:grid-cols-2', FORM_FULL)}>
+              <Field label={t('opacHome.contact.phone')} hint={t('opacHome.contact.phone_hint')} error={errorAt('home.contact.phone')}>
+                {(c) => (
+                  <Input {...c} type="tel" autoComplete="off" value={draft.phone} maxLength={OPAC_HOME_CONTACT_LIMITS.phone} onChange={(e) => edit((d) => ({ ...d, phone: e.target.value }))} />
+                )}
+              </Field>
+              <Field label={t('opacHome.contact.email')} hint={t('opacHome.contact.email_hint')} error={errorAt('home.contact.email')}>
+                {(c) => (
+                  <Input {...c} type="email" autoComplete="off" value={draft.email} maxLength={OPAC_HOME_CONTACT_LIMITS.email} onChange={(e) => edit((d) => ({ ...d, email: e.target.value }))} />
+                )}
+              </Field>
+            </div>
           </FormSection>
 
           <FormSection title={t('opacHome.about.title')} intro={t('opacHome.about.description')}>
