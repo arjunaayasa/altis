@@ -222,17 +222,17 @@ function Follow({ jobId, onDone }: JobProgressProps) {
   const progress = job.status === 'succeeded' ? 100 : job.progress;
   const message = jobMessageText(t, job);
   return (
-    <div data-slot="job-progress" className="grid gap-2">
-      <div className="flex items-center justify-between gap-2 text-sm">
+    <div data-slot="job-progress" className="grid gap-1.5">
+      <div className="flex items-center justify-between gap-2 text-meta">
         <span role="status">
           <JobStatusBadge status={job.status} />
         </span>
-        <span className="tabular-nums">{Math.round(progress)} %</span>
+        <span className="font-semibold tabular-nums">{Math.round(progress)} %</span>
       </div>
-      <ProgressBar value={progress} label={t('jobs.detail.progress')} />
-      {message !== null && <p className="text-sm text-muted-foreground">{message}</p>}
+      <ProgressBar value={progress} label={t('jobs.detail.progress')} className="h-1.5 rounded-sm bg-layer-2" />
+      {message !== null && <p className="text-meta text-muted-foreground">{message}</p>}
       {job.status === 'dead' && job.lastError !== null && <p className="font-mono text-xs break-all text-muted-foreground">{job.lastError}</p>}
-      {driving && isActive(job) && <p className="text-sm text-muted-foreground">{t('jobs.drive.running')}</p>}
+      {driving && isActive(job) && <p className="text-xs text-muted-foreground">{t('jobs.drive.running')}</p>}
       {idle && isActive(job) && (
         <NoticeAlert>
           <span>{t('jobs.drive.idle')}</span>{' '}

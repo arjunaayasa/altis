@@ -11,7 +11,8 @@ import { useReturnFocus } from './return-focus';
  * close the focus goes back where it was (or to the main region when the action removed that element). While
  * `onConfirm` runs, the buttons wait; a failure stays in the dialog with its localized message, a success closes it.
  * When the server asks for the password first (AUTH_REAUTH_REQUIRED), the reauth dialog opens on top and the action
- * goes on afterwards (lib/api.ts).
+ * goes on afterwards (lib/api.ts). It is the one dialog a destructive action may ask in (the layout README): the title
+ * names the action and its object, the description its consequence, the confirm button repeats the verb.
  */
 export function ConfirmDialog({
   open,
@@ -61,21 +62,21 @@ export function ConfirmDialog({
   return (
     <AlertDialog.Root open={open} onOpenChange={(next) => (next ? undefined : close())}>
       <AlertDialog.Portal>
-        <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=open]:fade-in-0" />
+        <AlertDialog.Overlay className="fixed inset-0 z-50 bg-(--scrim) data-[state=open]:animate-in data-[state=open]:fade-in-0" />
         <AlertDialog.Content
           onOpenAutoFocus={focus.onOpenAutoFocus}
           onCloseAutoFocus={focus.onCloseAutoFocus}
-          className="fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border bg-background p-6 shadow-lg data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg">
-          <div className="flex flex-col gap-2 text-center sm:text-left">
-            <AlertDialog.Title className="text-lg leading-none font-semibold">{title}</AlertDialog.Title>
+          className="fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-3.5 rounded-lg border bg-background p-5 text-foreground shadow-pop duration-200 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-120">
+          <div className="grid gap-1.5">
+            <AlertDialog.Title className="text-base leading-snug font-bold">{title}</AlertDialog.Title>
             <AlertDialog.Description className="text-sm text-muted-foreground">{description}</AlertDialog.Description>
           </div>
           {error !== null && (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="rounded-md border border-bad-line bg-bad-bg px-3.5 py-2.5 text-sm font-semibold text-bad">
               {error}
             </p>
           )}
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <div className="flex flex-wrap justify-end gap-2">
             <AlertDialog.Cancel asChild>
               <Button variant="outline" disabled={busy}>
                 {t('form.cancel')}

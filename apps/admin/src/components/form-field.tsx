@@ -1,10 +1,10 @@
-import { CircleAlertIcon, CircleCheckIcon, InfoIcon, TriangleAlertIcon } from 'lucide-react';
 import { useId, type ComponentProps, type ReactNode } from 'react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { PageError } from '@/components/layout/callout';
+import { TAG_SHAPE, TAG_TONE, TONE_SURFACE, TONE_TEXT } from '@/components/layout/status';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useT, type TKey } from '@/i18n';
-import { fieldErrorText, problemText } from '@/lib/form-errors';
+import { fieldErrorText } from '@/lib/form-errors';
 import { cn } from '@/lib/utils';
 
 /**
@@ -12,6 +12,10 @@ import { cn } from '@/lib/utils';
  * (linked to the control through `aria-describedby`, the error also through `aria-invalid`), a checkbox or switch with
  * its label, the native `<select>`/`<textarea>` styles matching `ui/input`, a small badge, and the alerts and notices
  * above or below a form. A field error is an i18n key (lib/form-errors.ts), translated here.
+ *
+ * They share the look of the layout pieces (components/layout): a field's label in 13 px semibold above its control
+ * (34 px high), the error in red words under it, then the hint; a badge looks like a `Tag`; the notices and alerts are
+ * callouts, a status always said in words.
  */
 
 /** The props a field hands its control. */
@@ -64,8 +68,10 @@ export function Field({
   const errorId = `${id}-error`;
   const message = fieldErrorText(t, typeof error === 'string' ? { message: error } : error);
   return (
-    <div className={cn('grid content-start gap-2', className)}>
-      <Label htmlFor={id}>{label}</Label>
+    <div className={cn('grid content-start gap-1.5', className)}>
+      <Label htmlFor={id} className="text-meta leading-snug">
+        {label}
+      </Label>
       {typeof children === 'function'
         ? children({
             id,
@@ -74,7 +80,7 @@ export function Field({
           })
         : children}
       {message !== undefined && (
-        <p id={errorId} className="text-sm text-destructive">
+        <p id={errorId} className="text-meta font-semibold text-bad">
           {message}
         </p>
       )}
@@ -134,56 +140,46 @@ export const TEXTAREA_CLASS =
   'flex min-h-18 w-full min-w-0 rounded-md border border-input bg-background px-2.5 py-2 text-base leading-snug transition-[border-color,box-shadow] duration-150 ease-out outline-none placeholder:text-faint focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-accent-soft disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-bad-bg aria-invalid:focus-visible:border-ring aria-invalid:focus-visible:ring-accent-soft md:text-sm';
 
 const BADGE_TONES = {
-  neutral: 'bg-layer-2 text-muted-foreground',
-  info: 'bg-accent-soft text-accent-text',
-  warning: 'bg-warn-bg text-warn',
-  danger: 'bg-bad-bg text-bad',
+  neutral: TAG_TONE.neutral,
+  info: TAG_TONE.accent,
+  warning: TAG_TONE.warn,
+  danger: TAG_TONE.bad,
 } as const;
 
-/** A short status word next to a value (`sistem`, `Default`, `Nonaktif`, ...). */
+/** A short status word next to a value (`sistem`, `Default`, `Nonaktif`, ...): the look of a `Tag`. */
 export function Badge({ tone = 'neutral', className, ...props }: ComponentProps<'span'> & { tone?: keyof typeof BADGE_TONES }) {
-  return (
-    <span
-      className={cn('inline-flex h-5.5 items-center rounded-sm px-1.5 text-xs font-semibold whitespace-nowrap', BADGE_TONES[tone], className)}
-      {...props}
-    />
-  );
+  return <span className={cn(TAG_SHAPE, BADGE_TONES[tone], className)} {...props} />;
 }
 
-/** The outcome of the last action of a screen: a success (`role="status"`) or a failure (`role="alert"`). */
+/** The box of a callout (the look of the layout's `Callout`). */
+const CALLOUT_BOX = 'grid gap-1 rounded-md border px-3.5 py-3 text-sm';
+
+/**
+ * The outcome of the last action of a screen: a success (`role="status"`, green words) or a failure (`role="alert"`, a
+ * red callout whose title is the message, the action under it).
+ */
 export function Notice({ kind, children, action }: { kind: 'success' | 'error'; children: ReactNode; action?: ReactNode }) {
   if (kind === 'success') {
     return (
-      <p role="status" className="flex items-center gap-2 rounded-md border border-ok-line bg-ok-bg px-3.5 py-2.5 text-sm font-semibold text-ok">
-        <CircleCheckIcon className="size-4 shrink-0" aria-hidden="true" />
+      <p role="status" className={cn('rounded-md border px-3.5 py-2.5 text-sm font-semibold', TONE_SURFACE.ok, TONE_TEXT.ok)}>
         {children}
       </p>
     );
   }
   return (
-    <Alert variant="destructive">
-      <CircleAlertIcon aria-hidden="true" />
-      <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
-        <span>{children}</span>
-        {action}
-      </AlertDescription>
-    </Alert>
+    <div role="alert" className={cn(CALLOUT_BOX, TONE_SURFACE.bad)}>
+      <div className={cn('font-bold', TONE_TEXT.bad)}>{children}</div>
+      {action !== undefined && <div className="mt-1.5 flex flex-wrap items-center gap-2">{action}</div>}
+    </div>
   );
 }
 
-/** A problem of the form as a whole (lib/form-errors.ts `problemText`: with the wait of a 429); nothing for null. */
+/**
+ * A problem of the form as a whole (lib/form-errors.ts `problemText`: with the wait of a 429), as the layout's
+ * `PageError`: the problem is the title, `children` follow it; nothing for null.
+ */
 export function ProblemAlert({ error, children }: { error: unknown; children?: ReactNode }) {
-  const t = useT();
-  if (error === null || error === undefined) return null;
-  return (
-    <Alert variant="destructive">
-      <TriangleAlertIcon aria-hidden="true" />
-      <AlertDescription>
-        <p>{problemText(t, error)}</p>
-        {children}
-      </AlertDescription>
-    </Alert>
-  );
+  return <PageError error={error}>{children}</PageError>;
 }
 
 /** What {@link RefetchProblem} reads of a query (`useQuery`'s result). */
@@ -204,16 +200,16 @@ export function RefetchProblem({ query }: { query: Refetchable }) {
   const t = useT();
   if (!query.isRefetchError) return null;
   return (
-    <Alert className="border-warning-foreground/30 bg-warning text-warning-foreground">
-      <TriangleAlertIcon aria-hidden="true" />
-      <AlertDescription className="text-current">
-        <p>{t('form.refetch_failed')}</p>
-        <p>{problemText(t, query.error)}</p>
-        <Button type="button" variant="outline" size="sm" className="mt-1" disabled={query.isFetching} onClick={() => void query.refetch()}>
+    <PageError
+      tone="warn"
+      title={t('form.refetch_failed')}
+      error={query.error}
+      action={
+        <Button type="button" variant="outline" size="sm" className="bg-background" disabled={query.isFetching} onClick={() => void query.refetch()}>
           {t('table.retry')}
         </Button>
-      </AlertDescription>
-    </Alert>
+      }
+    />
   );
 }
 
@@ -222,18 +218,17 @@ export function RootError({ message }: { message: string | undefined }) {
   const t = useT();
   if (message === undefined) return null;
   return (
-    <p role="alert" className="text-sm text-destructive">
+    <p role="alert" className="text-meta font-semibold text-bad">
       {t(message as TKey)}
     </p>
   );
 }
 
-/** A message: `success` after a save, `info` for a notice. */
+/** A message: `success` after a save (green words), `info` for a notice (on the neutral layer). */
 export function NoticeAlert({ tone = 'info', children }: { tone?: 'info' | 'success'; children: ReactNode }) {
   return (
-    <Alert role="status" className={tone === 'success' ? 'border-primary/30' : undefined}>
-      {tone === 'success' ? <CircleCheckIcon aria-hidden="true" className="text-primary" /> : <InfoIcon aria-hidden="true" />}
-      <AlertDescription className="text-foreground">{children}</AlertDescription>
-    </Alert>
+    <div role="status" className={cn(CALLOUT_BOX, 'justify-items-start', tone === 'success' ? cn(TONE_SURFACE.ok, TONE_TEXT.ok, 'font-semibold') : 'border-border bg-layer text-foreground')}>
+      {children}
+    </div>
   );
 }

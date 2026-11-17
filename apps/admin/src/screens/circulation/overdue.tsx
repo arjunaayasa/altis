@@ -4,6 +4,7 @@ import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { Field, SELECT_CLASS } from '@/components/form-field';
+import { Callout, DenseTable, FILTER_ROW, PageHead, SkeletonTable, StatusText, type DenseColumn } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
@@ -12,7 +13,6 @@ import { api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { useCalendarDate, useMemberTypes, useTypeName } from './common';
-import { Callout, DenseTable, FILTER_ROW, PageHead, SkeletonTable, StatusText, type DenseColumn } from './parts';
 // ---- Komunitas (charges and payments) ----
 import { useMoney } from './charges';
 // ---- Komunitas (member, visit and circulation reports) ----

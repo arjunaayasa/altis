@@ -5,12 +5,12 @@ import type { LoanListResponse } from '@altis/shared/api/circulation';
 import { MemberBody, MemberPatchBody, type MemberEventsResponse, type MemberView } from '@altis/shared/api/members';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-router';
-import { ArrowLeftIcon } from 'lucide-react';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useDateTime } from '@/components/data-table';
 import { Field, Notice, ProblemAlert, RefetchProblem, RootError, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
+import { BackLink, Callout, FormBar, FormSection, InlinePanel, MemberPhoto, MoreMenu, MoreMenuItem, MoreMenuRule, StatStrip, StatusText, TABLE } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
@@ -22,7 +22,6 @@ import { FORM_PARSE, problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { changedFields, isFieldProblem, isStale, optionalText, putFieldErrors, serverIssues, zodIssues } from '@/screens/catalog/masters/master-table';
 import { DueBadge, MemberStatusBadge, limitText, todayLocal, useCalendarDate, useMemberTypes, useTypeName } from '@/screens/circulation/common';
-import { Callout, InlinePanel, MemberPhoto, MoreMenu, MoreMenuItem, MoreMenuRule, StatStrip, StatusText, TABLE } from '@/screens/circulation/parts';
 import { ExtendPanel, ReactivatePanel, SuspendPanel, refreshMembers, useMember } from './common';
 import { MemberCustomPanel, MemberPhotoPanel, MemberPrivacyPanel, RestoreButton } from './member-extras';
 // ---- Komunitas (member area) ----
@@ -338,7 +337,7 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
       </FormSection>
       <RootError message={errors.root?.server?.message} />
       {canManage && (
-        <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+        <FormBar>
           <Button type="submit" disabled={isSubmitting}>
             {t(isSubmitting ? 'form.saving' : 'form.save')}
           </Button>
@@ -346,41 +345,9 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
             <Link to="/admin/anggota">{t('form.cancel')}</Link>
           </Button>
           {isDirty && <StatusText tone="warn" className="text-sm">{t('members.form.unsaved')}</StatusText>}
-        </div>
+        </FormBar>
       )}
     </form>
-  );
-}
-
-/**
- * One part of the member form: its title and a sentence on the left (above on a narrow screen), its fields on the
- * right in two columns (three on a wide screen), a thin rule above every part but the first.
- */
-function FormSection({ title, intro, disabled, children }: { title: string; intro: string; disabled: boolean; children: ReactNode }) {
-  const id = useId();
-  return (
-    <section aria-labelledby={id} className="grid gap-x-8 gap-y-4 border-t py-5 first:border-t-0 first:pt-1 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1fr)]">
-      <div className="grid content-start gap-1">
-        <h2 id={id} className="text-base font-bold">
-          {title}
-        </h2>
-        <p className="text-sm text-muted-foreground">{intro}</p>
-      </div>
-      <fieldset disabled={disabled} className="grid min-w-0 content-start gap-x-5 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
-        <legend className="sr-only">{title}</legend>
-        {children}
-      </fieldset>
-    </section>
-  );
-}
-
-function BackLink() {
-  const t = useT();
-  return (
-    <Link to="/admin/anggota" className="inline-flex w-fit items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground">
-      <ArrowLeftIcon className="size-4" aria-hidden="true" />
-      {t('members.back')}
-    </Link>
   );
 }
 
@@ -391,7 +358,7 @@ export function MemberCreateScreen() {
   const canManage = holds(me, 'members.records.manage');
   return (
     <div className="grid max-w-5xl gap-6">
-      <BackLink />
+      <BackLink to="/admin/anggota">{t('members.back')}</BackLink>
       <div className="grid gap-1">
         <h1 className="text-xl leading-tight font-bold">{t('members.new.title')}</h1>
         <p className="text-sm text-muted-foreground">{t('members.new.intro')}</p>
@@ -431,7 +398,7 @@ export function MemberDetailScreen() {
   if (member.data === undefined) {
     return (
       <div className="grid max-w-6xl gap-6">
-        <BackLink />
+        <BackLink to="/admin/anggota">{t('members.back')}</BackLink>
         {member.isError ? (
           member.error instanceof ApiError && member.error.status === 404 ? (
             <Callout tone="bad" role="alert" title={t('members.not_found')}>
@@ -483,7 +450,7 @@ export function MemberDetailScreen() {
 
   return (
     <div className="grid max-w-6xl gap-6">
-      <BackLink />
+      <BackLink to="/admin/anggota">{t('members.back')}</BackLink>
       <RefetchProblem query={member} />
       {notice !== null && <Notice kind="success">{notice}</Notice>}
       {archiveRefused && (
