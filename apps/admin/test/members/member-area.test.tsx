@@ -80,12 +80,14 @@ describe('Tipe Anggota: the OPAC options', () => {
       },
     });
     fireEvent.click(await screen.findByRole('button', { name: /Ubah/ }));
-    const dialog = await screen.findByRole('dialog');
+    // The form opens in the page, above the table (no dialog).
+    expect(screen.queryByRole('dialog')).toBeNull();
+    const dialog = await screen.findByRole('form', { name: /^Ubah tipe anggota/ });
     const renew = within(dialog).getByLabelText('Boleh memperpanjang pinjaman sendiri lewat OPAC') as HTMLInputElement;
     expect(renew.checked).toBe(true);
     fireEvent.click(renew);
     fireEvent.change(within(dialog).getByLabelText('Batas reservasi aktif'), { target: { value: '5' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan tipe' }));
     await waitFor(() => expect(app.requests.some((r) => r.method === 'PATCH')).toBe(true));
     expect(app.requests.find((r) => r.method === 'PATCH')?.body).toEqual({ version: 1, holdsLimit: 5, onlineRenewal: false });
   });
@@ -108,6 +110,7 @@ describe("the member's OPAC password", () => {
         },
       },
     });
+    fireEvent.click(await screen.findByRole('button', { name: 'Tindakan lain' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Atur kata sandi OPAC…' }));
     let dialog = await screen.findByRole('dialog');
     fireEvent.change(within(dialog).getByLabelText('Kata sandi baru'), { target: { value: 'password123' } });
@@ -117,7 +120,8 @@ describe("the member's OPAC password", () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Simpan kata sandi' }));
     expect(await screen.findByText('Kata sandi OPAC anggota disimpan.')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Atur kata sandi OPAC…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tindakan lain' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Atur kata sandi OPAC…' }));
     dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Hapus kata sandi' }));
     expect(await screen.findByText(/Kata sandi OPAC anggota dihapus/)).toBeTruthy();

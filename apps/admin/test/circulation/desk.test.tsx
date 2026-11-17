@@ -221,11 +221,13 @@ describe('Meja Layanan', () => {
     const loaded = new Promise<void>((resolve) => {
       release = resolve;
     });
+    // The member already holds another item, so a loan row offers "Hilang", whose dialog is a real dialog.
+    const held = { id: '01JZ0000000000000000000L09', version: 1, branchId: BRANCH, item: { ...LOAN.item, id: '01JZ0000000000000000000I09', barcode: 'B0009' }, record: LOAN.record, loanedOn: '2026-11-10', dueOn: '2026-11-17', daysLate: 0, renewals: 0, renewLimit: 1, finePreview: null };
     const app = start(
       {
         'GET branches/:branchId/circulation/members/:memberId': async () => {
           await loaded;
-          return deskMember();
+          return deskMember({ counts: { openLoans: 1, overdue: 0, holdsReady: 0 }, loans: [held] });
         },
         'POST branches/:branchId/circulation/loans': () => LOAN,
       },
@@ -238,7 +240,8 @@ describe('Meja Layanan', () => {
     expect(await screen.findByText(/^Dipinjam: Laskar Pelangi — jatuh tempo/, { selector: 'p.text-xl' })).toBeTruthy();
     expect(app.writes()).toEqual([`POST branches/${BRANCH}/circulation/loans`]);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Pintasan (?)' }));
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Dipinjam (1)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Hilang' }));
     await screen.findByRole('dialog');
     const target = document.activeElement ?? document.body;
     for (const key of ['B', '0', '0', '0', '2', 'Enter']) fireEvent.keyDown(target, { key });

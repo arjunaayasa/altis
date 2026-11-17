@@ -6,11 +6,11 @@ import { MemberBody, MemberPatchBody, type MemberEventsResponse, type MemberView
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-router';
 import { ArrowLeftIcon } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useDateTime } from '@/components/data-table';
-import { Badge, Field, Notice, NoticeAlert, ProblemAlert, RefetchProblem, RootError, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
+import { Field, Notice, ProblemAlert, RefetchProblem, RootError, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
@@ -21,8 +21,9 @@ import { useDirtyGuard } from '@/lib/dirty-forms';
 import { FORM_PARSE, problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { changedFields, isFieldProblem, isStale, optionalText, putFieldErrors, serverIssues, zodIssues } from '@/screens/catalog/masters/master-table';
-import { DueBadge, MemberStatusBadge, limitText, useCalendarDate, useMemberTypes, useTypeName } from '@/screens/circulation/common';
-import { ExtendDialog, SuspendDialog, refreshMembers, useMember } from './common';
+import { DueBadge, MemberStatusBadge, limitText, todayLocal, useCalendarDate, useMemberTypes, useTypeName } from '@/screens/circulation/common';
+import { Callout, InlinePanel, MemberPhoto, MoreMenu, MoreMenuItem, MoreMenuRule, StatStrip, StatusText, TABLE } from '@/screens/circulation/parts';
+import { ExtendPanel, ReactivatePanel, SuspendPanel, refreshMembers, useMember } from './common';
 import { MemberCustomPanel, MemberPhotoPanel, MemberPrivacyPanel, RestoreButton } from './member-extras';
 // ---- Komunitas (member area) ----
 import { MemberPasswordDialog } from './password';
@@ -38,10 +39,14 @@ import { MemberChargesTab } from '@/screens/circulation/charges';
  *   above the form, which keeps what was typed ("Muat ulang data" reads the member again). Whenever the member is read
  *   at a new version (after Perpanjang, Tangguhkan, Aktifkan or "Muat ulang data"), the fields the user has not touched
  *   take the new values, so a later save never sends an old value back. Gender has no default.
- * - **The page** shows the status, the validity and the counts beside tabs: Data anggota (the form), Pinjaman aktif,
- *   Riwayat pinjaman (both need `circulation.records.read`) and Riwayat keanggotaan (the member's events).
- * - **Actions** for `members.records.manage`: extend the membership, suspend (a note is required) or reactivate, and
- *   archive (refused while loans are open: MEMBER_IN_USE). "Layani di Meja Layanan" opens the member at the desk.
+ * - **The page** opens with the member's head (the photo at 3:4 or the initials, the name, number, type and class, the
+ *   status) and its actions, then a strip of figures (on loan, valid until, joined, valid from, source), then the tabs:
+ *   Data anggota (the form, one section per part), Pinjaman aktif, Riwayat pinjaman (both need
+ *   `circulation.records.read`), Denda and Riwayat keanggotaan (the member's events).
+ * - **Actions** for `members.records.manage`: extend the membership, suspend (a note is required) or reactivate, each
+ *   opened in place under the head; archive asks first (a dialog: it removes the member from the lists) and a refusal
+ *   while loans are open (MEMBER_IN_USE) is said on the page, with the way to the desk. "Layani di Meja Layanan" opens
+ *   the member at the desk.
  */
 
 interface MemberForm {
@@ -226,29 +231,30 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
 
   const text = (name: keyof MemberForm, label: TKey, o: { max: number; hint?: string; type?: string; className?: string; mono?: boolean } = { max: 191 }) => (
     <Field label={t(label)} error={errors[name]} {...(o.hint === undefined ? {} : { hint: o.hint })} {...(o.className === undefined ? {} : { className: o.className })}>
-      {(c) => <Input {...c} type={o.type ?? 'text'} autoComplete="off" maxLength={o.max} className={o.mono === true ? 'font-mono' : undefined} {...form.register(name)} />}
+      {(c) => <Input {...c} type={o.type ?? 'text'} autoComplete="off" maxLength={o.max} className={o.mono === true ? 'font-semibold tracking-wide tabular-nums' : undefined} {...form.register(name)} />}
     </Field>
   );
 
   return (
     <form
       noValidate
-      className="flex flex-col gap-4"
+      className="flex flex-col"
       onSubmit={(e) => {
         form.clearErrors();
         void submit(e);
       }}>
       {problem !== null && (
-        <ProblemAlert error={problem}>
-          {isStale(problem) && (
-            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void reload()}>
-              {t('members.form.reload')}
-            </Button>
-          )}
-        </ProblemAlert>
+        <div className="mb-4">
+          <ProblemAlert error={problem}>
+            {isStale(problem) && (
+              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void reload()}>
+                {t('members.form.reload')}
+              </Button>
+            )}
+          </ProblemAlert>
+        </div>
       )}
-      <fieldset disabled={!canManage} className="grid min-w-0 gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2">
-        <legend className="px-1 text-sm font-semibold">{t('members.form.membership')}</legend>
+      <FormSection title={t('members.form.membership')} intro={t('members.form.membership_intro')} disabled={!canManage}>
         {text('memberNo', 'members.field.member_no', { max: 200, hint: t('members.field.member_no_hint'), mono: true })}
         <Field
           id={`${ids}-type`}
@@ -295,13 +301,12 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
             <option value="en">{t('members.field.locale_en')}</option>
           </select>
         </Field>
-      </fieldset>
-      <fieldset disabled={!canManage} className="grid min-w-0 gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2">
-        <legend className="px-1 text-sm font-semibold">{t('members.form.personal')}</legend>
+      </FormSection>
+      <FormSection title={t('members.form.personal')} intro={t('members.form.personal_intro')} disabled={!canManage}>
         {text('name', 'members.field.name', { max: 191, className: 'sm:col-span-2' })}
-        <fieldset className="grid content-start gap-2">
+        <fieldset className="grid content-start gap-2 sm:col-span-2">
           <legend className="mb-1 text-sm font-medium">{t('members.field.gender')}</legend>
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-5">
             {GENDER_CHOICES.map((g) => (
               <label key={g} className="flex items-center gap-2 text-sm">
                 <input type="radio" value={g} className="size-4 accent-primary" {...form.register('gender')} />
@@ -314,9 +319,8 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
         {text('identityNo', 'members.field.identity_no', { max: 64, hint: t('members.field.identity_no_hint') })}
         {text('className', 'members.field.class', { max: 64, hint: t('members.field.class_hint') })}
         {text('institution', 'members.field.institution', { max: 191, className: 'sm:col-span-2' })}
-      </fieldset>
-      <fieldset disabled={!canManage} className="grid min-w-0 gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2">
-        <legend className="px-1 text-sm font-semibold">{t('members.form.contact')}</legend>
+      </FormSection>
+      <FormSection title={t('members.form.contact')} intro={t('members.form.contact_intro')} disabled={!canManage}>
         {text('email', 'members.field.email', { max: 191, type: 'email' })}
         {text('phone', 'members.field.phone', { max: 64, type: 'tel' })}
         <Field label={t('members.field.address')} error={errors.address} className="sm:col-span-2">
@@ -326,33 +330,54 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
         <Field label={t('members.field.mailing_address')} error={errors.mailingAddress} className="sm:col-span-2">
           {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={1000} {...form.register('mailingAddress')} />}
         </Field>
-      </fieldset>
-      <fieldset disabled={!canManage} className="grid min-w-0 gap-4 rounded-lg border bg-card p-4">
-        <legend className="px-1 text-sm font-semibold">{t('members.form.notes')}</legend>
-        <Field label={t('members.field.notes')} hint={t('members.field.notes_hint')} error={errors.notes}>
+      </FormSection>
+      <FormSection title={t('members.form.notes')} intro={t('members.field.notes_hint')} disabled={!canManage}>
+        <Field label={t('members.field.notes')} error={errors.notes} className="sm:col-span-2">
           {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={5000} {...form.register('notes')} />}
         </Field>
-      </fieldset>
+      </FormSection>
       <RootError message={errors.root?.server?.message} />
       {canManage && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 border-t pt-4">
           <Button type="submit" disabled={isSubmitting}>
             {t(isSubmitting ? 'form.saving' : 'form.save')}
           </Button>
           <Button asChild variant="outline">
             <Link to="/admin/anggota">{t('form.cancel')}</Link>
           </Button>
-          {isDirty && <p className="text-sm text-muted-foreground">{t('members.form.unsaved')}</p>}
+          {isDirty && <StatusText tone="warn" className="text-sm">{t('members.form.unsaved')}</StatusText>}
         </div>
       )}
     </form>
   );
 }
 
+/**
+ * One part of the member form: its title and a sentence on the left (above on a narrow screen), its fields on the
+ * right, a thin rule above every part but the first.
+ */
+function FormSection({ title, intro, disabled, children }: { title: string; intro: string; disabled: boolean; children: ReactNode }) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} className="grid gap-x-8 gap-y-4 border-t py-5 first:border-t-0 first:pt-1 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid content-start gap-1">
+        <h2 id={id} className="text-base font-bold">
+          {title}
+        </h2>
+        <p className="text-sm text-muted-foreground">{intro}</p>
+      </div>
+      <fieldset disabled={disabled} className="grid min-w-0 content-start gap-x-5 gap-y-4 sm:grid-cols-2">
+        <legend className="sr-only">{title}</legend>
+        {children}
+      </fieldset>
+    </section>
+  );
+}
+
 function BackLink() {
   const t = useT();
   return (
-    <Link to="/admin/anggota" className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+    <Link to="/admin/anggota" className="inline-flex w-fit items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground">
       <ArrowLeftIcon className="size-4" aria-hidden="true" />
       {t('members.back')}
     </Link>
@@ -365,9 +390,12 @@ export function MemberCreateScreen() {
   const navigate = useNavigate();
   const canManage = holds(me, 'members.records.manage');
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
+    <div className="grid max-w-5xl gap-6">
       <BackLink />
-      <h1 className="text-2xl font-semibold">{t('members.new.title')}</h1>
+      <div className="grid gap-1">
+        <h1 className="text-xl leading-tight font-bold">{t('members.new.title')}</h1>
+        <p className="text-sm text-muted-foreground">{t('members.new.intro')}</p>
+      </div>
       {!canManage && <ProblemAlert error={new ApiError(403, 'AUTHZ_DENIED')} />}
       <MemberFormView member={null} canManage={canManage} onSaved={(id) => navigate({ href: `/admin/anggota/${encodeURIComponent(id)}`, state: { created: true } })} />
     </div>
@@ -375,6 +403,9 @@ export function MemberCreateScreen() {
 }
 
 type DetailTab = 'data' | 'loans' | 'history' | 'charges' | 'events';
+
+/** The panel open under the member's head (one at a time). */
+type HeadPanel = 'extend' | 'suspend' | 'reactivate' | 'photo';
 
 export function MemberDetailScreen() {
   const t = useT();
@@ -387,8 +418,10 @@ export function MemberDetailScreen() {
   const { memberId = '' } = useParams({ strict: false }) as { memberId?: string };
   const member = useMember(memberId);
   const [tab, setTab] = useState<DetailTab>('data');
-  const [dialog, setDialog] = useState<'extend' | 'suspend' | 'reactivate' | 'archive' | 'password' | null>(null);
+  const [panel, setPanel] = useState<HeadPanel | null>(null);
+  const [dialog, setDialog] = useState<'archive' | 'password' | null>(null);
   const [notice, setNotice] = useState<string | null>(location.state.created === true ? t('members.created') : null);
+  const [archiveRefused, setArchiveRefused] = useState(false);
   const canManage = holds(me, 'members.records.manage');
   const canLoans = holds(me, 'circulation.records.read');
   const canServe =
@@ -396,14 +429,27 @@ export function MemberDetailScreen() {
 
   if (member.data === undefined) {
     return (
-      <div className="flex max-w-4xl flex-col gap-4">
+      <div className="grid max-w-6xl gap-6">
         <BackLink />
         {member.isError ? (
-          <Notice kind="error">{member.error instanceof ApiError && member.error.status === 404 ? t('members.not_found') : problemText(t, member.error)}</Notice>
+          member.error instanceof ApiError && member.error.status === 404 ? (
+            <Callout tone="bad" role="alert" title={t('members.not_found')}>
+              <p>{t('members.not_found_hint')}</p>
+            </Callout>
+          ) : (
+            <Notice kind="error">{problemText(t, member.error)}</Notice>
+          )
         ) : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('shell.loading')}
-          </p>
+          <div aria-busy="true" className="flex flex-wrap items-start gap-5">
+            <p role="status" className="sr-only">
+              {t('shell.loading')}
+            </p>
+            <span className="h-32 w-24 shrink-0 rounded border bg-muted" />
+            <div className="grid flex-1 gap-2 pt-1">
+              <span className="h-5 w-60 max-w-full animate-pulse rounded bg-muted motion-reduce:animate-none" />
+              <span className="h-3 w-36 animate-pulse rounded bg-muted motion-reduce:animate-none" />
+            </div>
+          </div>
         )}
       </div>
     );
@@ -411,18 +457,20 @@ export function MemberDetailScreen() {
 
   const m = member.data;
   const live = !m.archived && m.status !== 'anonymized';
-
-  const reactivate = async (): Promise<void> => {
-    await api<StoreResponse>('PATCH', `members/${encodeURIComponent(m.id)}`, { version: m.version, status: 'active' });
-    await refreshMembers(queryClient);
-    setNotice(t('members.reactivated'));
-  };
+  const toggle = (p: HeadPanel): void => setPanel((open) => (open === p ? null : p));
+  const daysLeft = m.expiresOn === null ? null : daysUntil(todayLocal(), m.expiresOn);
 
   const archive = async (): Promise<void> => {
+    setArchiveRefused(false);
     try {
       await api<StoreResponse>('DELETE', `members/${encodeURIComponent(m.id)}`, { version: m.version });
     } catch (e) {
-      // MEMBER_IN_USE (open loans) stays in the dialog with its own sentence; a stale version reads the member again.
+      // Open loans (MEMBER_IN_USE): said on the page, with the way to the desk where they are returned.
+      if (e instanceof ApiError && e.code === 'MEMBER_IN_USE') {
+        setArchiveRefused(true);
+        return;
+      }
+      // A stale version reads the member again; the dialog says it.
       if (isStale(e)) await member.refetch();
       throw e;
     }
@@ -431,167 +479,217 @@ export function MemberDetailScreen() {
   };
 
   return (
-    <div className="flex max-w-6xl flex-col gap-4">
+    <div className="grid max-w-6xl gap-6">
       <BackLink />
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="grid gap-1">
-          <h1 className="text-2xl font-semibold">{m.name}</h1>
-          <p className="text-sm text-muted-foreground">
-            <span className="font-mono">{m.memberNo}</span> · {typeName(m.type)}
-            {m.className !== null && ` · ${m.className}`}
+      <RefetchProblem query={member} />
+      {notice !== null && <Notice kind="success">{notice}</Notice>}
+      {archiveRefused && (
+        <Callout
+          tone="bad"
+          role="alert"
+          title={m.openLoans > 0 ? t('members.archive.refused_title', { name: m.name, count: m.openLoans }) : t('error.MEMBER_IN_USE')}
+          action={
+            canServe ? (
+              <Button asChild size="sm" variant="outline" className="bg-background">
+                <Link to={`/admin/layanan?member=${encodeURIComponent(m.id)}`}>{t('members.action.serve_desk')}</Link>
+              </Button>
+            ) : undefined
+          }>
+          <p>{t('members.archive.refused_body')}</p>
+        </Callout>
+      )}
+      <div className="flex flex-wrap items-start gap-5">
+        <MemberPhoto name={m.name} fileId={m.photoFileId} size="lg" alt={m.photoFileId === null ? undefined : t('members.tools.photo.alt', { name: m.name })} />
+        <div className="grid min-w-60 flex-1 gap-1">
+          <h1 className="text-2xl leading-tight font-bold break-words">{m.name}</h1>
+          <p className="text-muted-foreground">
+            <span className="font-semibold tracking-wide text-foreground tabular-nums">{m.memberNo}</span> · {typeName(m.type)}
+            {m.className !== null && `, ${m.className}`}
+            {m.institution !== null && `, ${m.institution}`}
           </p>
+          <p className="flex flex-wrap items-center gap-1.5">
+            <MemberStatusBadge status={m.status} />
+            {m.storedStatus === 'suspended' && m.statusNote !== null && <span className="text-sm text-muted-foreground">{m.statusNote}</span>}
+          </p>
+          {canManage && live && (
+            <p>
+              <Button type="button" variant="link" className="h-auto p-0 text-sm font-semibold" aria-expanded={panel === 'photo'} onClick={() => toggle('photo')}>
+                {t('members.photo.change')}
+              </Button>
+            </p>
+          )}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {canServe && live && (
             <Button asChild>
               <Link to={`/admin/layanan?member=${encodeURIComponent(m.id)}`}>{t('members.action.serve_desk')}</Link>
             </Button>
           )}
           {canManage && live && (
-            <>
-              <Button variant="outline" onClick={() => setDialog('extend')}>
-                {t('members.action.extend')}
-              </Button>
-              {m.storedStatus === 'suspended' ? (
-                <Button variant="outline" onClick={() => setDialog('reactivate')}>
-                  {t('members.action.reactivate')}
-                </Button>
-              ) : (
-                <Button variant="outline" onClick={() => setDialog('suspend')}>
-                  {t('members.action.suspend_ellipsis')}
-                </Button>
+            <Button variant="outline" aria-expanded={panel === 'extend'} onClick={() => toggle('extend')}>
+              {t('members.action.extend')}
+            </Button>
+          )}
+          {canManage && live && (
+            <MoreMenu label={t('members.action.more')}>
+              {(close) => (
+                <>
+                  {m.storedStatus === 'suspended' ? (
+                    <MoreMenuItem
+                      onClick={() => {
+                        close();
+                        setPanel('reactivate');
+                      }}>
+                      {t('members.action.reactivate_ellipsis')}
+                    </MoreMenuItem>
+                  ) : (
+                    <MoreMenuItem
+                      onClick={() => {
+                        close();
+                        setPanel('suspend');
+                      }}>
+                      {t('members.action.suspend_ellipsis')}
+                    </MoreMenuItem>
+                  )}
+                  {/* Komunitas (member area) */}
+                  <MoreMenuItem
+                    onClick={() => {
+                      close();
+                      setDialog('password');
+                    }}>
+                    {t('members.password.open')}
+                  </MoreMenuItem>
+                  <MoreMenuRule />
+                  <MoreMenuItem
+                    danger
+                    onClick={() => {
+                      close();
+                      setDialog('archive');
+                    }}>
+                    {t('members.action.archive')}
+                  </MoreMenuItem>
+                </>
               )}
-              <Button variant="outline" onClick={() => setDialog('archive')}>
-                {t('members.action.archive')}
-              </Button>
-              {/* Komunitas (member area) */}
-              <Button variant="outline" onClick={() => setDialog('password')}>
-                {t('members.password.open')}
-              </Button>
-            </>
+            </MoreMenu>
           )}
           {/* ---- Komunitas K2 (members extended) ---- */}
           {canManage && m.archived && m.status !== 'anonymized' && <RestoreButton member={m} onDone={setNotice} />}
         </div>
       </div>
-      <RefetchProblem query={member} />
-      {notice !== null && <Notice kind="success">{notice}</Notice>}
-      {m.storedStatus === 'suspended' && m.statusNote !== null && <NoticeAlert>{t('members.suspended_note', { note: m.statusNote })}</NoticeAlert>}
-      {/* Wide screens: the tabs in the wide column, the summary beside them. Narrow screens: the summary first, above
-          the long form; the tabs wrap onto a second row there (WRAPPING_TABS). */}
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
-        <Tabs value={tab} onValueChange={(v) => setTab(v as DetailTab)} className="order-1 min-w-0 lg:order-none">
-          <TabsList className={WRAPPING_TABS.list}>
-            <TabsTrigger value="data" className={WRAPPING_TABS.trigger}>
-              {t('members.tab.data')}
-            </TabsTrigger>
-            {canLoans && (
-              <TabsTrigger value="loans" className={WRAPPING_TABS.trigger}>
-                {t('members.tab.loans', { count: m.openLoans })}
-              </TabsTrigger>
-            )}
-            {canLoans && (
-              <TabsTrigger value="history" className={WRAPPING_TABS.trigger}>
-                {t('members.tab.history')}
-              </TabsTrigger>
-            )}
-            {canLoans && (
-              <TabsTrigger value="charges" className={WRAPPING_TABS.trigger}>
-                {t('charges.member_page.tab')}
-              </TabsTrigger>
-            )}
-            <TabsTrigger value="events" className={WRAPPING_TABS.trigger}>
-              {t('members.tab.events')}
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="data">
-            <MemberFormView key={m.id} member={m} canManage={canManage && live} onSaved={async () => setNotice(t('members.saved'))} />
-            {/* ---- Komunitas K2 (members extended): custom fields ---- */}
-            <MemberCustomPanel key={`custom-${m.id}-${m.version}`} member={m} canManage={canManage && live} onDone={setNotice} />
-          </TabsContent>
-          {canLoans && (
-            <TabsContent value="loans">
-              <MemberLoans memberId={m.id} state="open" />
-            </TabsContent>
-          )}
-          {canLoans && (
-            <TabsContent value="history">
-              <MemberLoans memberId={m.id} state="closed" />
-            </TabsContent>
-          )}
-          {canLoans && (
-            <TabsContent value="charges">
-              <MemberChargesTab memberId={m.id} />
-            </TabsContent>
-          )}
-          <TabsContent value="events">
-            <MemberEvents memberId={m.id} />
-          </TabsContent>
-        </Tabs>
-        <aside aria-label={t('members.summary')} className="flex h-fit flex-col gap-3 rounded-lg border bg-card p-4 text-sm">
-          {/* ---- Komunitas K2 (members extended): the photo ---- */}
-          {m.status !== 'anonymized' && <MemberPhotoPanel member={m} canManage={canManage && live} onDone={setNotice} />}
-          <dl className="grid gap-2">
-            <div>
-              <dt className="text-muted-foreground">{t('members.col.status')}</dt>
-              <dd>
-                <MemberStatusBadge status={m.status} />
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">{t('members.col.valid_until')}</dt>
-              <dd className="font-medium">{m.expiresOn === null ? t('members.never_expires') : day(m.expiresOn)}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">{t('members.summary.on_loan')}</dt>
-              <dd className="font-medium">
-                {m.openLoans}
-                {m.type.loanLimit !== null && ` / ${m.type.loanLimit}`}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">{t('members.summary.joined')}</dt>
-              <dd>{day(m.joinedOn)}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">{t('members.summary.valid_from')}</dt>
-              <dd>{day(m.validFrom)}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">{t('members.summary.source')}</dt>
-              <dd>{sourceText(t, m.source)}</dd>
-            </div>
-          </dl>
-          {/* ---- Komunitas K2 (members extended): the member's own data and anonymisation ---- */}
-          <MemberPrivacyPanel member={m} onDone={setNotice} />
-        </aside>
-      </div>
-      <ExtendDialog memberId={m.id} open={dialog === 'extend'} onClose={() => setDialog(null)} onDone={() => setNotice(t('members.extended'))} />
-      <SuspendDialog member={m} open={dialog === 'suspend'} onClose={() => setDialog(null)} onDone={() => setNotice(t('members.suspended'))} />
-      <MemberPasswordDialog member={m} open={dialog === 'password'} onClose={() => setDialog(null)} onDone={setNotice} />
-      {dialog === 'reactivate' && (
-        <ConfirmDialog
-          open
-          title={t('members.reactivate.title', { name: m.name })}
-          description={t('members.reactivate.body')}
-          confirmLabel={t('members.action.reactivate')}
-          onConfirm={reactivate}
-          onClose={() => setDialog(null)}
+      {panel === 'extend' && canManage && live && (
+        <ExtendPanel
+          memberId={m.id}
+          onClose={() => setPanel(null)}
+          onDone={() => {
+            setNotice(t('members.extended'));
+            setArchiveRefused(false);
+          }}
         />
       )}
+      {panel === 'suspend' && canManage && live && <SuspendPanel member={m} onClose={() => setPanel(null)} onDone={() => setNotice(t('members.suspended'))} />}
+      {panel === 'reactivate' && canManage && live && <ReactivatePanel member={m} onClose={() => setPanel(null)} onDone={() => setNotice(t('members.reactivated'))} />}
+      {panel === 'photo' && canManage && live && (
+        <InlinePanel title={t('members.tools.photo.title')} onCancel={() => setPanel(null)} focusOnOpen>
+          {/* ---- Komunitas K2 (members extended): the photo ---- */}
+          <MemberPhotoPanel member={m} canManage onDone={setNotice} />
+          <div>
+            <Button type="button" size="sm" variant="outline" onClick={() => setPanel(null)}>
+              {t('members.close')}
+            </Button>
+          </div>
+        </InlinePanel>
+      )}
+      <StatStrip
+        label={t('members.summary')}
+        items={[
+          {
+            key: 'loans',
+            label: t('members.summary.on_loan'),
+            value: m.type.loanLimit === null ? String(m.openLoans) : t('circulation.member.loans_of', { count: m.openLoans, limit: m.type.loanLimit }),
+          },
+          {
+            key: 'until',
+            label: t('members.col.valid_until'),
+            value: m.expiresOn === null ? t('members.never_expires') : day(m.expiresOn),
+            ...(daysLeft !== null && daysLeft >= 0 && daysLeft <= 30 ? { note: <StatusText tone="warn">{t('circulation.due.left', { count: daysLeft })}</StatusText> } : {}),
+            ...(m.status === 'expired' ? { tone: 'bad' as const } : {}),
+          },
+          { key: 'joined', label: t('members.summary.joined'), value: day(m.joinedOn) },
+          { key: 'from', label: t('members.summary.valid_from'), value: day(m.validFrom) },
+          { key: 'source', label: t('members.summary.source'), value: <span className="text-sm font-normal">{sourceText(t, m.source)}</span> },
+        ]}
+      />
+      <Tabs value={tab} onValueChange={(v) => setTab(v as DetailTab)} className="min-w-0">
+        <TabsList className={WRAPPING_TABS.list} aria-label={t('members.tabs.label')}>
+          <TabsTrigger value="data" className={WRAPPING_TABS.trigger}>
+            {t('members.tab.data')}
+          </TabsTrigger>
+          {canLoans && (
+            <TabsTrigger value="loans" className={WRAPPING_TABS.trigger}>
+              {t('members.tab.loans', { count: m.openLoans })}
+            </TabsTrigger>
+          )}
+          {canLoans && (
+            <TabsTrigger value="history" className={WRAPPING_TABS.trigger}>
+              {t('members.tab.history')}
+            </TabsTrigger>
+          )}
+          {canLoans && (
+            <TabsTrigger value="charges" className={WRAPPING_TABS.trigger}>
+              {t('charges.member_page.tab')}
+            </TabsTrigger>
+          )}
+          <TabsTrigger value="events" className={WRAPPING_TABS.trigger}>
+            {t('members.tab.events')}
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="data" className="grid gap-6 pt-2">
+          <MemberFormView key={m.id} member={m} canManage={canManage && live} onSaved={async () => setNotice(t('members.saved'))} />
+          {/* ---- Komunitas K2 (members extended): custom fields ---- */}
+          <MemberCustomPanel key={`custom-${m.id}-${m.version}`} member={m} canManage={canManage && live} onDone={setNotice} />
+          {/* ---- Komunitas K2 (members extended): the member's own data and anonymisation ---- */}
+          <MemberPrivacyPanel member={m} onDone={setNotice} />
+        </TabsContent>
+        {canLoans && (
+          <TabsContent value="loans" className="pt-2">
+            <MemberLoans memberId={m.id} state="open" />
+          </TabsContent>
+        )}
+        {canLoans && (
+          <TabsContent value="history" className="pt-2">
+            <MemberLoans memberId={m.id} state="closed" />
+          </TabsContent>
+        )}
+        {canLoans && (
+          <TabsContent value="charges" className="pt-2">
+            <MemberChargesTab memberId={m.id} />
+          </TabsContent>
+        )}
+        <TabsContent value="events" className="pt-2">
+          <MemberEvents memberId={m.id} />
+        </TabsContent>
+      </Tabs>
+      <MemberPasswordDialog member={m} open={dialog === 'password'} onClose={() => setDialog(null)} onDone={setNotice} />
       {dialog === 'archive' && (
         <ConfirmDialog
           open
           destructive
           title={t('members.archive.title', { name: m.name })}
           description={t('members.archive.body')}
-          confirmLabel={t('members.action.archive')}
+          confirmLabel={t('members.action.archive_confirm')}
           onConfirm={archive}
           onClose={() => setDialog(null)}
         />
       )}
     </div>
   );
+}
+
+/** The days from `from` to `to` (calendar dates), or null when either is not one. */
+function daysUntil(from: string, to: string): number | null {
+  const a = Date.parse(`${from}T00:00:00Z`);
+  const b = Date.parse(`${to}T00:00:00Z`);
+  return Number.isNaN(a) || Number.isNaN(b) ? null : Math.round((b - a) / 86_400_000);
 }
 
 function sourceText(t: (key: TKey) => string, source: string | null): string {
@@ -622,54 +720,55 @@ function MemberLoans({ memberId, state }: { memberId: string; state: 'open' | 'c
   const rows = list.data.pages.flatMap((p) => p.items);
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
+      <div className={TABLE.wrap}>
+        <table className={TABLE.table}>
           <caption className="sr-only">{t(state === 'open' ? 'members.tab.loans_caption' : 'members.tab.history')}</caption>
-          <thead className="bg-muted/50 text-left">
+          <thead>
             <tr>
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                {t('circulation.col.item')}
+              <th scope="col" className={TABLE.th}>
+                {t('circulation.col.barcode')}
               </th>
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
+              <th scope="col" className={TABLE.th}>
+                {t('circulation.col.title')}
+              </th>
+              <th scope="col" className={TABLE.th}>
                 {t('circulation.col.loaned')}
               </th>
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                {t('circulation.col.due')}
+              <th scope="col" className={TABLE.th}>
+                {t(state === 'open' ? 'circulation.col.due' : 'circulation.col.returned')}
               </th>
-              {state === 'closed' && (
-                <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                  {t('circulation.col.returned')}
+              {state === 'open' && (
+                <th scope="col" className={TABLE.th}>
+                  {t('circulation.col.renewals')}
                 </th>
               )}
-              <th scope="col" className="px-3 py-2 font-medium text-muted-foreground">
-                {t('circulation.col.state')}
+              <th scope="col" className={TABLE.th}>
+                {t(state === 'open' ? 'circulation.col.state' : 'circulation.col.remark')}
               </th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={state === 'closed' ? 5 : 4} className="px-3 py-6 text-center text-muted-foreground">
-                  {t(state === 'open' ? 'circulation.loans.empty' : 'circulation.history.empty')}
+                <td colSpan={state === 'open' ? 6 : 5} className={TABLE.empty}>
+                  {t(state === 'open' ? 'members.loans.empty' : 'members.history.empty')}
                 </td>
               </tr>
             ) : (
               rows.map((loan) => (
-                <tr key={loan.id} className={loan.overdue ? 'border-t border-l-4 border-l-destructive align-top' : 'border-t align-top'}>
-                  <td className="px-3 py-2">
-                    <p className="font-medium">{loan.record?.title ?? '—'}</p>
-                    <p className="font-mono text-xs text-muted-foreground">{loan.item?.barcode ?? '—'}</p>
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">{day(loan.loanedOn)}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{day(loan.dueOn)}</td>
-                  {state === 'closed' && <td className="px-3 py-2 whitespace-nowrap">{day(loan.returnedOn)}</td>}
-                  <td className="px-3 py-2">
+                <tr key={loan.id}>
+                  <td className={`${TABLE.td} font-semibold tracking-wide whitespace-nowrap`}>{loan.item?.barcode ?? '—'}</td>
+                  <td className={TABLE.td}>{loan.record?.title ?? '—'}</td>
+                  <td className={`${TABLE.td} whitespace-nowrap`}>{day(loan.loanedOn)}</td>
+                  <td className={`${TABLE.td} whitespace-nowrap`}>{day(state === 'open' ? loan.dueOn : loan.returnedOn)}</td>
+                  {state === 'open' && <td className={`${TABLE.td} whitespace-nowrap`}>{t('circulation.loans.renewals', { count: loan.renewals, limit: loan.renewLimit })}</td>}
+                  <td className={TABLE.td}>
                     {state === 'open' ? (
                       <DueBadge dueOn={loan.dueOn} daysLate={loan.daysLate} />
                     ) : loan.daysLate > 0 ? (
-                      <Badge tone="danger">{t('circulation.due.late', { count: loan.daysLate })}</Badge>
+                      <StatusText tone="bad">{t('circulation.due.late', { count: loan.daysLate })}</StatusText>
                     ) : (
-                      <Badge tone="neutral">{loan.outcome === null ? t('circulation.due.on_time') : t(`vocab.loan_outcome.${loan.outcome}`)}</Badge>
+                      <span className="text-muted-foreground">{loan.outcome === null ? t('circulation.due.on_time') : t(`vocab.loan_outcome.${loan.outcome}`)}</span>
                     )}
                   </td>
                 </tr>
@@ -678,6 +777,7 @@ function MemberLoans({ memberId, state }: { memberId: string; state: 'open' | 'c
           </tbody>
         </table>
       </div>
+      {state === 'open' && rows.length > 0 && <p className="text-sm text-muted-foreground">{t('members.loans.at_desk')}</p>}
       {list.hasNextPage && (
         <Button type="button" variant="outline" size="sm" className="w-fit" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
           {t('circulation.load_more')}
@@ -707,10 +807,10 @@ function MemberEvents({ memberId }: { memberId: string }) {
   if (list.isError) return <Notice kind="error">{problemText(t, list.error)}</Notice>;
   if (list.data === undefined) return <p role="status" className="text-sm text-muted-foreground">{t('shell.loading')}</p>;
   const rows = list.data.pages.flatMap((p) => p.items);
-  if (rows.length === 0) return <p className="rounded-md border px-3 py-6 text-center text-sm text-muted-foreground">{t('members.events.empty')}</p>;
+  if (rows.length === 0) return <p className="rounded-lg border px-3 py-7 text-sm text-muted-foreground">{t('members.events.empty')}</p>;
   return (
     <div className="flex flex-col gap-2">
-      <ol aria-label={t('members.tab.events')} className="flex flex-col divide-y rounded-md border">
+      <ol aria-label={t('members.tab.events')} className="flex flex-col divide-y rounded-lg border">
         {rows.map((ev) => {
           const from = typeof ev.meta['from'] === 'string' ? ev.meta['from'] : null;
           const to = typeof ev.meta['to'] === 'string' ? ev.meta['to'] : null;
