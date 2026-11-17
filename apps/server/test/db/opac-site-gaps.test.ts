@@ -217,7 +217,8 @@ describe.skipIf(!ctx.available)(`the public site's gaps [${engineLabel()}]`, () 
       expect(laskar).toContain(esc(opacText('id', 'detail.on_loan', { date: '29 November 2026' })));
       const kamus = (await get(recordUrlPath(ids['Kamus Besar']!, 'Kamus Besar'))).text;
       expect(kamus).toContain(`<p class="record-shelf"><span class="status status-muted">${esc(WORDS['Kamus Besar']![1])}</span></p>`);
-      expect(kamus).toContain(`<td><span class="status status-muted">${esc(opacText('id', 'search.card.library_use'))}</span></td>`);
+      // The status cell is marked so that a phone shows it first when a copy reads as a card.
+      expect(kamus).toContain(`<td class="availability-status"><span class="status status-muted">${esc(opacText('id', 'search.card.library_use'))}</span></td>`);
       expect(kamus).toContain(esc(opacText('id', 'detail.availability_summary', { count: 1, available: 0 })));
       const pemimpi = (await get(recordUrlPath(ids['Sang Pemimpi']!, 'Sang Pemimpi'))).text;
       expect(pemimpi).toContain(esc(WORDS['Sang Pemimpi']![1]));
