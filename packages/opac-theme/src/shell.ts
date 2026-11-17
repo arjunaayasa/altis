@@ -201,6 +201,19 @@ export const SHELL_CSS: string = [
     'font-size:.75rem;font-weight:600;text-align:left;white-space:nowrap}',
   '.availability td{padding:.625rem .75rem;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}',
   '.availability tbody tr:last-child td{border-bottom:0}',
+  // On a phone each copy is a card: its status first, then each other cell under its column's name (`data-label`), so
+  // the status never hides past the right edge; the header row stays for screen readers only.
+  '@media (max-width:39.99rem){' +
+    '.availability thead{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);' +
+    'white-space:nowrap;border:0}' +
+    '.availability,.availability tbody,.availability td{display:block;width:100%}' +
+    '.availability tr{display:flex;flex-direction:column;padding:.625rem .75rem;border-bottom:1px solid var(--border)}' +
+    '.availability tbody tr:last-child{border-bottom:0}' +
+    '.availability td,.availability tbody tr:last-child td{padding:.125rem 0;border:0;overflow-wrap:anywhere}' +
+    '.availability .availability-status{order:-1;padding-bottom:.375rem}' +
+    '.availability td[data-label]::before{content:attr(data-label);display:inline-block;min-width:7.5rem;margin:0 .5rem 0 0;' +
+    'color:var(--muted);font-size:.875rem;font-weight:600}' +
+    '}',
   '.status{display:inline;font-weight:600}',
   '.status-ok{color:var(--ok)}',
   '.status-warn{color:var(--warn)}',
