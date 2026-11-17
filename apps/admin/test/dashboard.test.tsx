@@ -8,9 +8,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { signedIn, startApp, superMe } from './fake-api';
 
 // Dasbor sistem (spec §13.3 "Versi/update, backup terakhir, antrean, penjadwal, peringatan"; Task 31): Beranda shows
-// `GET dashboard`, one card per section the answer carries (C33: the server leaves out what the caller may not see),
-// the alerts with their links, and reads it again when an event arrives on `system.status` or `system.backup`. The
-// community edition has no licence card: the Versi card names the edition.
+// `GET dashboard` in its section "Sistem", one card per section the answer carries (the server leaves out what the
+// caller may not see), the alerts with their links as lines of "Perlu perhatian", and reads it again when an event
+// arrives on `system.status` or `system.backup`. The community edition has no licence card: the Versi card names the
+// edition.
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -74,32 +75,34 @@ function full(o: Partial<DashboardResponse> = {}): DashboardResponse {
   });
 }
 
-/** The card headings shown, in order. */
-const cards = (): string[] => screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent ?? '');
+/** The card headings of the system section, in order. */
+const cards = (): string[] => within(screen.getByRole('region', { name: 'Sistem' })).getAllByRole('heading', { level: 3 }).map((h) => h.textContent ?? '');
 
 describe('system dashboard', () => {
-  it('a runner_stale alert shows its message with a link to /admin/diagnostics', async () => {
+  it('a runner_stale alert shows its message with a link to /admin/diagnostics, as a line of "Perlu perhatian"', async () => {
     startApp({ me: superMe(), path: '/admin', routes: { 'GET dashboard': () => full() } });
-    const alerts = await screen.findByRole('region', { name: 'Peringatan' });
+    const alerts = await screen.findByRole('region', { name: 'Perlu perhatian' });
     const item = within(alerts).getByText(MESSAGES.id['alert.runner_stale']).closest('li');
     expect(item).not.toBeNull();
     const link = within(item as HTMLElement).getByRole('link');
     expect(link.getAttribute('href')).toBe('/admin/diagnostics');
+    expect(within(item as HTMLElement).getByText('Masalah')).toBeTruthy();
   });
 
   it('a staff user without permissions sees the version card only', async () => {
     startApp({ me: signedIn({ permissions: [] }), path: '/admin', routes: { 'GET dashboard': () => dashboard() } });
-    expect(await screen.findByRole('heading', { level: 2, name: 'Versi' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 3, name: 'Versi' })).toBeTruthy();
     expect(cards()).toEqual(['Versi']);
-    expect(screen.queryByRole('region', { name: 'Peringatan' })).toBeNull();
-    // The welcome stays above the dashboard.
+    expect(screen.queryByRole('region', { name: 'Perlu perhatian' })).toBeNull();
+    // The welcome stays under the title, and a user without any library block gets the hint to the command palette.
     expect(screen.getByText('Selamat datang, Ani.')).toBeTruthy();
+    expect(screen.getByText(/^Pilih menu untuk mulai bekerja/)).toBeTruthy();
   });
 
   it('a super admin sees every section: version, last backup, queue and scheduler (no licence card)', async () => {
     startApp({ me: superMe(), path: '/admin', routes: { 'GET dashboard': () => full() } });
-    await screen.findByRole('heading', { level: 2, name: 'Versi' });
-    expect(cards()).toEqual(['Peringatan', 'Versi', 'Cadangan terakhir', 'Antrean tugas', 'Penjadwal']);
+    await screen.findByRole('heading', { level: 3, name: 'Versi' });
+    expect(cards()).toEqual(['Versi', 'Cadangan terakhir', 'Antrean tugas', 'Penjadwal']);
     expect(screen.queryByRole('region', { name: 'Lisensi' })).toBeNull();
     expect(screen.queryByRole('link', { name: /Lisensi/ })).toBeNull();
     const queue = screen.getByRole('region', { name: 'Antrean tugas' });
@@ -157,7 +160,7 @@ describe('system dashboard', () => {
         'GET events': events,
       },
     });
-    expect(await screen.findByRole('region', { name: 'Peringatan' })).toBeTruthy();
+    expect(await screen.findByRole('region', { name: 'Perlu perhatian' })).toBeTruthy();
     expect(answers).toBe(2);
     const channels = app.requests.find((r) => r.path === 'events')?.query.get('channels')?.split(',') ?? [];
     expect(channels).toEqual(expect.arrayContaining(['system.status', 'system.backup']));
@@ -190,7 +193,7 @@ describe('system dashboard', () => {
         'GET events': events,
       },
     });
-    await screen.findByRole('region', { name: 'Peringatan' });
+    await screen.findByRole('region', { name: 'Perlu perhatian' });
     await waitFor(() => expect(hinted).toBe(true));
     // Time for the answer to reach the realtime client and for any read it caused to go out.
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -208,10 +211,12 @@ describe('system dashboard: updates (1d Task 29)', () => {
     pinned: null,
   };
 
-  it('the update card shows the release found and links to Pembaruan (/admin/updates)', async () => {
+  it('the update card shows the release found and links to Pembaruan (/admin/updates); "Perlu perhatian" says it is there', async () => {
     startApp({ me: superMe(), path: '/admin', routes: { 'GET dashboard': () => full({ version: { ...VERSION, update: UPDATE }, alerts: [] }) } });
     const card = await screen.findByRole('region', { name: 'Pembaruan' });
     expect(cards()).toEqual(['Versi', 'Pembaruan', 'Cadangan terakhir', 'Antrean tugas', 'Penjadwal']);
+    const attention = screen.getByRole('region', { name: 'Perlu perhatian' });
+    expect(within(attention).getByRole('link', { name: 'Pembaruan 0.2.0 tersedia' }).getAttribute('href')).toBe('/admin/updates');
     expect(within(card).getByText('0.2.0')).toBeTruthy();
     expect(within(card).getByRole('link', { name: 'Buka Pembaruan' }).getAttribute('href')).toBe('/admin/updates');
     expect(within(card).queryByText(/tidak mencakup/)).toBeNull();
@@ -234,6 +239,7 @@ describe('system dashboard: updates (1d Task 29)', () => {
     const card = await screen.findByRole('region', { name: 'Pembaruan' });
     expect(within(card).getByText('Tidak ada pembaruan')).toBeTruthy();
     expect(within(card).getByText('Belum pernah')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Perlu perhatian' })).toBeNull();
   });
 
   it('no update card without the update section (a staff member without system.update.read)', async () => {
@@ -246,17 +252,22 @@ describe('system dashboard: updates (1d Task 29)', () => {
     expect(cards()).toEqual(['Versi', 'Antrean tugas']);
   });
 
-  it('the alerts of 1d show their message and the page that explains them', async () => {
+  it('the alerts of 1d show their message and the page that explains them, errors first', async () => {
     const alerts: Alert[] = [
       { kind: 'schema_hold', severity: 'error', messageKey: 'alert.schema_hold', link: '/admin/updates' },
       { kind: 'update_blocked', severity: 'warning', messageKey: 'alert.update_blocked', link: '/admin/updates' },
       { kind: 'bundled_ignored', severity: 'info', messageKey: 'alert.bundled_ignored', link: '/admin/updates' },
     ];
     startApp({ me: superMe(), path: '/admin', routes: { 'GET dashboard': () => full({ alerts }) } });
-    const region = await screen.findByRole('region', { name: 'Peringatan' });
+    const region = await screen.findByRole('region', { name: 'Perlu perhatian' });
     for (const alert of alerts) {
       const item = within(region).getByText(MESSAGES.id[alert.messageKey as keyof typeof MESSAGES.id]).closest('li') as HTMLElement;
       expect(within(item).getByRole('link').getAttribute('href'), alert.kind).toBe(alert.link);
     }
+    expect([...region.querySelectorAll('[data-attention-item]')].map((li) => li.getAttribute('data-attention-item'))).toEqual([
+      'alert.schema_hold',
+      'alert.update_blocked',
+      'alert.bundled_ignored',
+    ]);
   });
 });

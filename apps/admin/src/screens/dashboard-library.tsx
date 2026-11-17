@@ -1,4 +1,5 @@
 import type { CollectionStatistics, LoanStatistics, MemberStatistics, VisitStatistics } from '@altis/shared/api/library-statistics';
+import type { VisitSummary } from '@altis/shared/api/visits';
 import { Link } from '@tanstack/react-router';
 import { useId, type ReactNode } from 'react';
 import { BarChart } from '@/components/bar-chart';
@@ -14,13 +15,14 @@ import { useApiQuery, useMe } from '@/lib/me';
  *
  * - Koleksi (`catalog.records.read`): titles and copies in the stock today, copies received this year;
  * - Anggota (`members.records.read`): members on the register, valid today, joined this year;
- * - Kunjungan (`visits.records.read`): people this month and this year, with a compact chart of the year's months;
+ * - Kunjungan (`visits.records.read`): people today (the whole library, `GET visits/summary`), this month and this year,
+ *   with a compact chart of the year's months;
  * - Peminjaman (`circulation.records.read`): loans this month and this year (with the chart), open and overdue loans.
  *
  * Each card links to the screen holding the rows; the section links to the reports for a holder of the statistics
  * reports. A user who reads none of the four sees nothing. The figures are counts only (no person in them), read in the
- * background and kept five minutes. Like the strip of today's numbers, the section and its cards are labelled regions
- * with plain captions, not headings: the system dashboard's cards below are the page's sections.
+ * background and kept five minutes (today's visits every minute, like the other figures of today). The section is one
+ * of Beranda's sections (a heading of level 2), its cards headed one level below.
  */
 
 const STALE_MS = 5 * 60_000;
@@ -44,9 +46,9 @@ function StatCard({ title, to, linkLabel, children, chart }: { title: string; to
   const id = useId();
   return (
     <section aria-labelledby={id} className="flex flex-col gap-3 rounded-lg border bg-card p-4" data-library-card="">
-      <p id={id} className="text-sm font-semibold">
+      <h3 id={id} className="text-sm font-bold">
         {title}
-      </p>
+      </h3>
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">{children}</dl>
       {chart}
       <Link to={to} className="mt-auto self-start text-sm text-primary underline-offset-4 hover:underline">
@@ -91,15 +93,22 @@ export function LibraryStatistics() {
   const members = useApiQuery<MemberStatistics>(options('members', 'members/statistics', reads.members));
   const visits = useApiQuery<VisitStatistics>(options('visits', 'visits/statistics', reads.visits));
   const loans = useApiQuery<LoanStatistics>(options('loans', 'circulation/statistics', reads.loans));
+  const visitsToday = useApiQuery<VisitSummary>({
+    queryKey: ['dashboard', 'library', 'visits-today'],
+    path: 'visits/summary',
+    enabled: reads.visits,
+    request: { background: true },
+    refetchInterval: 60_000,
+  });
   const headingId = useId();
   if (!reads.catalog && !reads.members && !reads.visits && !reads.loans) return null;
   const year = collection.data?.year ?? members.data?.year ?? visits.data?.year ?? loans.data?.year;
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3" data-library-statistics="">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p id={headingId} className="text-base font-semibold">
+        <h2 id={headingId} className="text-base font-bold">
           {t('dashboard.library.title')}
-        </p>
+        </h2>
         {holds(me, 'reports.statistics.read') && (
           <Link to="/admin/reports" className="text-sm text-primary underline-offset-4 hover:underline">
             {t('dashboard.library.reports')}
@@ -127,6 +136,7 @@ export function LibraryStatistics() {
             to="/admin/layanan/kunjungan"
             linkLabel={t('dashboard.library.visits_open')}
             chart={<MonthsChart title={t('dashboard.library.visits_chart', { year: year ?? '' })} byMonth={visits.data?.byMonth} />}>
+            <Figure label={t('dashboard.today.visits')} value={visitsToday.data?.total} />
             <Figure label={t('dashboard.library.this_month')} value={visits.data?.thisMonth} />
             <Figure label={t('dashboard.library.this_year', { year: year ?? '' })} value={visits.data?.thisYear} />
           </StatCard>
