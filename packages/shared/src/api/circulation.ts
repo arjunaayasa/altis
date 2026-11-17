@@ -80,6 +80,8 @@ export interface LoanMemberRef {
   name: string;
   className: string | null;
   typeId: string;
+  /** The member's phone: only on the loan search, and only for a caller who also holds `members.records.read`. */
+  phone?: string | null;
 }
 
 // ---- the desk: members -----------------------------------------------------------------------------------------------
@@ -153,6 +155,11 @@ export interface DeskMemberView {
   borrowRefusal: 'MEMBER_SUSPENDED' | 'MEMBER_EXPIRED' | 'CIRC_LIMIT_REACHED' | 'CIRC_MEMBER_BLOCKED' | null;
   /** The open loans, the oldest due date first. */
   loans: DeskLoanView[];
+  /**
+   * The loan period and renewals of the rule the member's type borrows under for any collection and material (the
+   * general rule of the type); null when no rule covers the type. `others`: more specific rules apply to some loans.
+   */
+  loanRule?: TypeLoanRule | null;
   /** The member's active holds (ready first, then waiting by the time they were placed), at every branch. */
   holds: HoldView[];
   warnings: CirculationWarningView[];
@@ -230,6 +237,8 @@ export interface ReturnResponse {
   version: number;
   memberId: string | null;
   memberNo: string | null;
+  /** The borrower's name (the desk sees members); null once the loan was anonymised. */
+  memberName?: string | null;
   item: LoanItemRef;
   record: LoanRecordRef;
   loanedOn: string;
@@ -715,6 +724,71 @@ export interface LimitReachedMeta {
 /** `meta` of CIRC_RENEW_REFUSED. */
 export interface RenewRefusedMeta {
   reason: RenewRefusal;
+}
+
+// ---- Komunitas (staff screens' data) ---------------------------------------------------------------------------------
+
+/** "Due soon": an open loan due from today to this many days ahead, in its own branch's calendar. */
+export const DUE_SOON_DAYS = 3;
+
+/**
+ * `POST circulation/loans/search` (a POST read: `q` never goes in a URL) → `LoanListResponse` (`circulation.records.read`):
+ * the open loans past due (`overdue`; `minDaysLate`, default 1) or due from today to {@link DUE_SOON_DAYS} days ahead
+ * (`due_soon`), each by its own branch's today; narrowed by `q` (the member number, or every word of the name), the
+ * member's class (exact), member type and branch. By due date, then id (cursor `<dueOn>.<id>`). A member's `phone`
+ * comes only for a caller who also holds `members.records.read`.
+ */
+export const LoanSearchBody = z.strictObject({
+  tab: z.enum(['overdue', 'due_soon']).default('overdue'),
+  q: shortText(191).optional(),
+  className: shortText(64).optional(),
+  memberTypeId: ulidField.optional(),
+  branchId: ulidField.optional(),
+  minDaysLate: z.int().min(1).max(32_767).optional(),
+  cursor: cursorQuery.cursor,
+  limit: z.int().min(1).max(200).default(50),
+});
+
+export type LoanSearchBody = z.infer<typeof LoanSearchBody>;
+
+/** `GET circulation/loans/classes` (`circulation.records.read`): the classes of the members holding an open loan, by name. */
+export interface LoanClassesResponse {
+  items: string[];
+}
+
+/**
+ * The loan terms a member type borrows under for any collection and material: the general rule of the type (its own
+ * rule, else the library's general one). `loanable` false: that rule refuses loans. `others`: how many live rules
+ * name a collection type, a material type or a branch and so apply instead to some of the type's loans.
+ */
+export interface TypeLoanRule {
+  policyId: string;
+  code: string;
+  loanDays: number;
+  renewLimit: number;
+  loanable: boolean;
+  others: number;
+}
+
+/** `POST branches/:branchId/circulation/items/glance` (a POST read; `circulation.desk.use` there) → `DeskItemGlance`. */
+export const DeskItemGlanceBody = z.strictObject({ barcode: rawBarcodeField });
+
+export type DeskItemGlanceBody = z.infer<typeof DeskItemGlanceBody>;
+
+/**
+ * What the desk may say about a scanned item under a refusal, without naming any member: its title and barcode, its
+ * status and branch, the due date of its open loan (whoever holds it) and whether a copy is kept on the hold shelf.
+ * 404 NOT_FOUND for a barcode no live item has.
+ */
+export interface DeskItemGlance {
+  barcode: string;
+  title: string;
+  status: string;
+  branchCode: string;
+  /** The due date of the item's open loan; null when it is not on loan. */
+  dueOn: string | null;
+  /** The copy is kept on a hold shelf for a member's hold. */
+  onHoldShelf: boolean;
 }
 
 // ---- helpers ---------------------------------------------------------------------------------------------------------

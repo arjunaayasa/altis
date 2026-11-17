@@ -5,6 +5,8 @@ import type { Selectable, Transaction, Updateable } from 'kysely';
 import { codeKey } from '../catalog/data/keys.js';
 import type { TxCtx } from '../context.js';
 import { memberTypeNotFound, memberValidationFailed, parseMemberBody, takenOnRace, type Db } from './common.js';
+// ---- Komunitas (staff screens' data) ----
+import { typeLoanRules } from '../circulation/policies.js';
 
 // Member types: what kind of member someone is (pupil, teacher, the public, ...), how long a membership lasts
 // (`membership_days`, null = never expires), how many open loans a member may hold (`loan_limit`, null = no limit, 0 =
@@ -69,7 +71,12 @@ export async function listMemberTypes(db: Db, q: MemberTypeListQuery): Promise<M
     db,
     rows.map((r) => r.id),
   );
-  return rows.map((r) => toView(r, counts.get(r.id) ?? 0));
+  // ---- Komunitas (staff screens' data): each type's general loan terms, read-only here ----
+  const rules = await typeLoanRules(
+    db,
+    rows.map((r) => r.id),
+  );
+  return rows.map((r) => ({ ...toView(r, counts.get(r.id) ?? 0), loanRule: rules.get(r.id) ?? null }));
 }
 
 /** The member type `id` as its view, or NOT_FOUND. */

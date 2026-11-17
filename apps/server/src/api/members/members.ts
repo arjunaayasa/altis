@@ -1,4 +1,4 @@
-import { archiveMember, createMember, extendMember, getMember, listMemberEvents, lookupMember, searchMembers, updateMember } from '@altis/core';
+import { archiveMember, createMember, extendMember, getMember, listMemberEvents, lookupMember, memberClassNames, searchMembers, updateMember } from '@altis/core';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import {
   ArchiveBody,
@@ -8,6 +8,7 @@ import {
   MemberLookupBody,
   MemberPatchBody,
   MemberSearchBody,
+  type MemberClassesResponse,
   type MemberEventsResponse,
   type MemberSearchResponse,
   type MemberView,
@@ -26,6 +27,7 @@ import { route, type RouteDecl } from '../../http/route.js';
 //   DELETE members/:id          members.records.manage   ArchiveBody → StoreResponse              members.member.archive
 //   POST   members/:id/extend   members.records.manage   MemberExtendBody → StoreResponse         members.member.extend
 //   GET    members/:id/events   members.records.read     MemberEventsQuery → MemberEventsResponse
+//   GET    members/classes      members.records.read     → MemberClassesResponse (before members/:id)
 //
 // Search and lookup are POST reads: a name or a member number never goes in a URL. Suspending and reactivating are a
 // PATCH of `status` (audited as an update; the history says `suspended` or `reactivated`). Archive, suspend and every
@@ -155,10 +157,26 @@ const membersEvents = route({
   },
 });
 
+// ---- Komunitas (staff screens' data): the class filter of the member list ----
+const membersClasses = route({
+  id: 'members.classes',
+  method: 'GET',
+  path: `${API}/classes`,
+  permission: 'members.records.read',
+  idempotency: 'none',
+  audit: null,
+  handler: async (rc) => {
+    const body: MemberClassesResponse = { items: await memberClassNames(rc.db.db) };
+    return { body };
+  },
+});
+
 export const MEMBER_ROUTES: RouteDecl[] = [
   membersSearch,
   membersLookup,
   membersCreate,
+  // ---- Komunitas (staff screens' data): before members/:id, which would take `classes` for an id ----
+  membersClasses,
   membersGet,
   membersUpdate,
   membersArchive,
