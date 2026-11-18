@@ -107,7 +107,7 @@ test('a librarian catalogues a record, adds its item and prints their labels; th
     await openNavPage(page, '/admin/catalog/records');
     await expect(page).toHaveURL(/\/admin\/catalog\/records$/);
     await expect(page.getByRole('heading', { level: 1, name: T('catalog.records.list.title'), exact: true })).toBeVisible();
-    await page.getByRole('link', { name: T('catalog.records.list.new'), exact: true }).click();
+    await page.getByRole('link', { name: T('catalog.records.list.new'), exact: true }).first().click();
     await expect(page).toHaveURL(/\/admin\/catalog\/records\/new$/);
     await expect(page.getByRole('heading', { level: 1, name: T('catalog.records.new.title'), exact: true })).toBeVisible();
 

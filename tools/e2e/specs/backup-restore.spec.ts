@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises';
 import type { Page } from '@playwright/test';
 import type { BackupItem, BackupListResponse } from '@altis/shared/api/backups';
 import { ApiError, StaffApi, createStaff, type RequestFactory, type StaffUser } from '../lib/api.js';
-import { T, expect, passReauth, signIn, test } from '../fixtures.js';
+import { T, chooseFromMenu, expect, passReauth, signIn, test } from '../fixtures.js';
 
 // Backup and restore through the admin UI (spec §9.9, §9.10, §13.3 "Backup"; acceptance A6; plan 1c Task 34), on the
 // suite's install (standalone, SQLite, the worker running):
@@ -91,7 +91,7 @@ test('A6 through the UI: backup, download with a passphrase, change, upload, res
   await page.keyboard.press('Escape');
 
   // 2. The download, prepared with a passphrase (the first reauth of this session), then fetched.
-  await madeRow.getByRole('button', { name: startsWith(T('backups.action.prepare')) }).click();
+  await chooseFromMenu(page, madeRow, startsWith(T('backups.more_named', { time: '' })), startsWith(T('backups.action.prepare')));
   const prepare = page.getByRole('dialog', { name: T('backups.prepare.title') });
   await prepare.getByLabel(T('backups.prepare.passphrase'), { exact: true }).fill(PASSPHRASE);
   await prepare.getByLabel(T('backups.prepare.passphrase_again'), { exact: true }).fill(PASSPHRASE);
@@ -120,7 +120,7 @@ test('A6 through the UI: backup, download with a passphrase, change, upload, res
   await expect(archiveRow).toHaveCount(1);
 
   // 5. Restore from it, with its passphrase; the operations page follows the op to its end.
-  await archiveRow.getByRole('button', { name: startsWith(T('backups.action.restore')) }).click();
+  await chooseFromMenu(page, archiveRow, startsWith(T('backups.more_named', { time: '' })), startsWith(T('backups.action.restore')));
   const restore = page.getByRole('dialog', { name: T('backups.restore.title') });
   await restore.getByLabel(T('backups.restore.passphrase'), { exact: true }).fill(PASSPHRASE);
   const confirmName = restore.getByLabel(T('backups.restore.confirm_name', { name: library }), { exact: true });
