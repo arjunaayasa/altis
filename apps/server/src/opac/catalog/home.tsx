@@ -4,10 +4,12 @@ import {
   OPAC_HOME_DEFAULT,
   OPAC_HOME_HERO_SIZE,
   OPAC_HOME_PHOTO_SIZE,
+  opacHomeSlidesAt,
   opacHomeTextIn,
   type OpacHomeContent,
   type OpacHomeHours,
   type OpacHomePhoto,
+  type OpacHomeSlide,
 } from '@altis/shared/api/opac-home';
 import type { JSX } from 'hono/jsx/jsx-runtime';
 import { ContactLines, type HeroBand } from '../layout.js';
@@ -508,25 +510,46 @@ function isoWeekday(date: string): number {
 }
 
 /**
- * The hero band of `home` in `locale`: its photo (if any) under its overlay, the library colour, its heading (the
- * page's language, else the other, else the library's name) and the welcome text (likewise).
+ * The slide the hero band shows at `now`: the first of the hero's slides that is switched on and whose days (calendar
+ * days of the library's time zone; UTC when the setting names none `Intl` knows) hold today; null: none, so the band
+ * has no photo.
  */
-function heroOf(home: OpacHomeContent, libraryName: string, welcome: { id: string | null; en: string | null }, locale: Locale): HeroBand {
-  const title = opacHomeTextIn(home.title, locale);
-  const lead = opacHomeTextIn(welcome, locale);
+export function heroSlideAt(home: Pick<OpacHomeContent, 'hero'>, timeZone: string, now: number): OpacHomeSlide | null {
+  let shown: OpacHomeSlide[];
+  try {
+    shown = opacHomeSlidesAt(home.hero, timeZone, now);
+  } catch {
+    shown = opacHomeSlidesAt(home.hero, 'UTC', now);
+  }
+  return shown[0] ?? null;
+}
+
+/**
+ * The hero band of `home` in `locale`: the photo of `slide` (if any) under its overlay, the library colour, the
+ * heading (the slide's title, else the page's heading, else the library's name) and the lead sentence (the slide's
+ * subtitle, else the welcome text), each in the page's language, else the other.
+ */
+function heroOf(
+  home: OpacHomeContent,
+  slide: OpacHomeSlide | null,
+  libraryName: string,
+  welcome: { id: string | null; en: string | null },
+  locale: Locale,
+): HeroBand {
+  const title = (slide === null ? null : opacHomeTextIn(slide.title, locale)) ?? opacHomeTextIn(home.title, locale);
+  const lead = (slide === null ? null : opacHomeTextIn(slide.subtitle, locale)) ?? opacHomeTextIn(welcome, locale);
   return {
     title: title === null ? libraryName : title.text,
     titleLang: title === null || title.lang === locale ? undefined : title.lang,
     lead: lead === null ? null : lead.text,
     leadLang: lead === null || lead.lang === locale ? undefined : lead.lang,
     photo:
-      home.hero === null
+      slide === null
         ? null
         : {
-            src: fileSrc(home.hero.fileId),
-            alt: home.hero.alt,
-            position: home.hero.position,
-            overlay: home.hero.overlay,
+            src: fileSrc(slide.fileId),
+            alt: slide.alt,
+            position: slide.position,
             width: OPAC_HOME_HERO_SIZE.width,
             height: OPAC_HOME_HERO_SIZE.height,
           },
@@ -581,14 +604,16 @@ export async function homeResponse(rc: HomeSource): Promise<Response> {
   const weekday = closedToday ? null : isoWeekday(today);
   const todayHours = weekday === null ? [] : home.hours.filter((h) => h.weekdays.includes(weekday));
   const year = ctx.year ?? yearOf(rc.now);
+  // Until the hero is a slider, the band shows the first slide that is on today.
+  const slide = heroSlideAt(home, timeZone, rc.now);
   return opacPage(rc, ctx, {
     title: `${ctx.libraryName} · ${t(locale, 'opac.home.title')}`,
     description: opacText(locale, 'shell.home.description', { library: ctx.libraryName }),
     canonicalPath: '/',
     robots: 'index',
     headerSearch: false,
-    hero: heroOf(home, ctx.libraryName, { id: welcomeId, en: welcomeEn }, locale),
-    openGraph: home.hero === null ? {} : { image: fileSrc(home.hero.fileId) },
+    hero: heroOf(home, slide, ctx.libraryName, { id: welcomeId, en: welcomeEn }, locale),
+    openGraph: slide === null ? {} : { image: fileSrc(slide.fileId) },
     jsonLd: [libraryJsonLd({ name: ctx.libraryName, address, baseUrl: ctx.baseUrl }), webSiteJsonLd({ name: ctx.libraryName, baseUrl: ctx.baseUrl, locale })],
     body: () => (
       <>

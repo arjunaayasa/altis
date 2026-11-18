@@ -1,26 +1,39 @@
 /**
  * The OPAC home page as the library's profile site: what the admin screen OPAC › Halaman awal edits and the OPAC home
- * page shows. One setting (`opac.home`) holds the page's own content: the hero photo (with its position and the
- * darkness of the overlay over it), the library colour of a hero without a photo, the heading, the "about" block with
- * its photo and two facts, the services, up to four facility photos, the opening hours (each row with the weekdays it
- * covers, so the page can mark today's) and which blocks show. The hero's lead sentence is the welcome text of each
- * language (`opac.welcome.id`, `opac.welcome.en`), edited on the same screen. Photos are JPEG uploads of the context
- * `opac.home_photo`, cropped in the browser (the hero to 16:9, the others to 4:3) and claimed as public files of the
- * setting when it is saved.
+ * page shows. One setting (`opac.home`) holds the page's own content: the hero's slides (each a photo with its texts,
+ * an optional button and the days it shows), the library colour, the heading, the "about" block with its photo and two
+ * facts, the library's profile (its history and timeline, vision, mission and the people who run it), the services, up
+ * to four facility photos, a gallery, the opening hours (each row with the weekdays it covers, so the page can mark
+ * today's) and which blocks show. Photos are JPEG uploads of the context `opac.home_photo`, cropped in the browser (a
+ * slide to 16:9, the others to 4:3) and claimed as public files of the setting when it is saved.
  *
- * The heading and the "about" paragraph are written per language (Indonesian and English); a page in one language
- * shows the other's text when its own is blank. A content saved before they were (one text each) still reads: that
- * text is the Indonesian one, which the English page then shows as before. The services, captions and hours are the
+ * Texts the visitor reads are written per language (Indonesian and English); a page in one language shows the other's
+ * text when its own is blank. A content saved before a text was per language (one text) still reads: that text is the
+ * Indonesian one, which the English page then shows as before. The services, facility captions and hours are the
  * library's own text in the library's language.
+ *
+ * A slide's text stands on a panel of the library colour beside its photo, never over the photo, so it needs no
+ * darkening of the photo: its contrast is that of white on the library colour, which the colour's own field checks.
+ * A slide without a title shows the page's heading, and without a subtitle the welcome text of the language
+ * (`opac.welcome.id`, `opac.welcome.en`, edited on the same screen). A slide's button leads to a place of this site,
+ * given as a kind and a reference (never a free URL).
+ *
+ * A content saved when the hero was one photo (`{fileId, alt, position, overlay}`) still reads: that photo is the one
+ * slide, shown always, with no texts of its own (so the page's heading and the welcome text, as before); the darkness
+ * of the old overlay is dropped.
  *
  * The library's logo (shown with its name in the site's header and footer) is an upload of the same context, fitted in
  * the browser onto a white tile, with its alternative text. The public contact (a telephone number and an e-mail
- * address the library publishes) is part of the content too; the address may not be any user's or member's own.
+ * address the library publishes) is part of the content too; the address may not be any user's or member's own. The
+ * people of the profile are names and roles the staff type in for publication; they are never read from member or
+ * user records.
  *
  * No Node built-ins here: the browser bundles this module. Import it as `@altis/shared/api/opac-home`.
  */
 import { z } from 'zod';
+import { isCalendarDate, localDate } from '../dates.js';
 import { ulidField } from './common.js';
+import { pageSlugField } from './opac-pages.js';
 import type { OpacAccent } from './settings.js';
 
 /** The blocks of the home page an admin can switch off, in the order the page shows them. */
@@ -56,9 +69,27 @@ export const OPAC_HOME_LIMITS = Object.freeze({
   hoursTime: 40,
   /** The welcome texts keep the width of their settings. */
   welcome: 1000,
+  // The hero's slides.
+  slides: 6,
+  slideNote: 60,
+  slideTitle: 80,
+  slideSubtitle: 200,
+  ctaLabel: 40,
+  targetPath: 200,
+  // The library's profile.
+  history: 4000,
+  timeline: 12,
+  timelineText: 240,
+  vision: 400,
+  mission: 8,
+  missionText: 240,
+  staff: 24,
+  staffName: 80,
+  staffRole: 80,
+  gallery: 8,
 });
 
-/** The hero photo is cropped in the browser to this 16:9 size. */
+/** A slide's photo is cropped in the browser to this 16:9 size. */
 export const OPAC_HOME_HERO_SIZE = Object.freeze({ width: 1600, height: 900 });
 /** The "about" and facility photos are cropped in the browser to this 4:3 size. */
 export const OPAC_HOME_PHOTO_SIZE = Object.freeze({ width: 1200, height: 900 });
@@ -66,18 +97,10 @@ export const OPAC_HOME_PHOTO_SIZE = Object.freeze({ width: 1200, height: 900 });
 export const OPAC_HOME_PHOTO_MAX_BYTES = 500 * 1024;
 /** The smallest and largest side of a photo the server accepts (its dimensions are read from the JPEG itself). */
 export const OPAC_HOME_PHOTO_SIDES = Object.freeze({ min: 240, max: 2400 });
-/** The hero photo's vertical position (`object-position`), in steps of 10 from the top (0) to the bottom (100). */
+/** A slide photo's vertical position (`object-position`), in steps of 10 from the top (0) to the bottom (100). */
 export const OPAC_HOME_POSITION_STEP = 10;
 
-/**
- * The darkness of the even overlay over the hero photo, in percent. Its floor keeps the band's white text at 4.5:1 or
- * more (WCAG AA for normal text) over any photo, a pure white one included: the overlay colour is
- * {@link OPAC_HOME_OVERLAY_RGB}, and one step lighter than the floor would fall under 4.5:1.
- */
-export const OPAC_HOME_OVERLAY = Object.freeze({ min: 60, max: 80, step: 5, default: 60 });
-/** The overlay's colour (a blue-tinted near black), as the OPAC theme paints it. */
-export const OPAC_HOME_OVERLAY_RGB: readonly [number, number, number] = Object.freeze([8, 12, 20]) as readonly [number, number, number];
-/** The contrast white text must keep on the library colour (and over the photo under its overlay). */
+/** The contrast white text must keep on the library colour (the header bar and the panel of a slide's text). */
 export const OPAC_HOME_MIN_CONTRAST = 4.5;
 
 /** The relative luminance (WCAG 2) of an sRGB colour of 0-255 channels. */
@@ -94,12 +117,6 @@ export function contrastWithWhite(rgb: readonly [number, number, number]): numbe
   return 1.05 / (relativeLuminance(rgb) + 0.05);
 }
 
-/** The colour of a white pixel under the overlay at `percent` darkness. */
-export function overlayOnWhite(percent: number): [number, number, number] {
-  const a = percent / 100;
-  return OPAC_HOME_OVERLAY_RGB.map((c) => 255 * (1 - a) + c * a) as [number, number, number];
-}
-
 /** A library colour as the setting holds it: `#` and six lower-case hex digits. */
 export const OPAC_HOME_BRAND_PATTERN = /^#[0-9a-f]{6}$/;
 
@@ -110,7 +127,7 @@ export function brandRgb(value: unknown): [number, number, number] | null {
 }
 
 /**
- * The library colour: a hex colour (`#0f766e`, any case, stored lower case) dark enough for the band's white text
+ * The library colour: a hex colour (`#0f766e`, any case, stored lower case) dark enough for white text on it
  * (`low_contrast` otherwise). Only a value of this form ever reaches the page's style, rebuilt from its digits.
  */
 export const opacHomeBrandField = z
@@ -159,6 +176,12 @@ function perLanguage(value: unknown): unknown {
 
 /** A text of at most `max` code points in each language (see {@link OpacHomeText}). */
 const localized = (max: number) => z.preprocess(perLanguage, z.strictObject({ id: text(max).nullable(), en: text(max).nullable() }));
+
+/** As {@link localized}, with a text in one language at least (`required` otherwise). */
+const requiredLocalized = (max: number) =>
+  localized(max).superRefine((value, ctx) => {
+    if (opacHomeTextIn(value, 'id') === null) ctx.addIssue({ code: 'custom', message: 'required', params: { code: 'required' } });
+  });
 
 /**
  * The text of `value` a page in `lang` shows: its own when it is not blank, else the other language's, with the
@@ -211,15 +234,205 @@ export const OpacHomeContact = z.strictObject({
 
 export type OpacHomeContact = z.infer<typeof OpacHomeContact>;
 
-/** The hero photo: as a photo, without a caption, with its vertical position and the darkness of its overlay. */
-export const OpacHomeHero = z.strictObject({
-  fileId: ulidField,
-  alt: required(OPAC_HOME_LIMITS.alt),
-  position: z.int().min(0).max(100).multipleOf(OPAC_HOME_POSITION_STEP),
-  overlay: z.int().min(OPAC_HOME_OVERLAY.min).max(OPAC_HOME_OVERLAY.max).multipleOf(OPAC_HOME_OVERLAY.step).default(OPAC_HOME_OVERLAY.default),
+// ---- The hero's slides ----
+/** How long a slide stays before the next one, in seconds. */
+export const OPAC_HOME_INTERVALS = Object.freeze([5, 7, 10] as const);
+
+export type OpacHomeInterval = (typeof OPAC_HOME_INTERVALS)[number];
+
+export const OPAC_HOME_INTERVAL_DEFAULT: OpacHomeInterval = 7;
+
+/** Where a slide's button leads: the catalogue's search, the library's profile, the news (or one post), or a path of this site. */
+export const OPAC_HOME_TARGET_KINDS = Object.freeze(['catalog', 'profile', 'news', 'path'] as const);
+
+export type OpacHomeTargetKind = (typeof OPAC_HOME_TARGET_KINDS)[number];
+
+/** A character a path of this site may not hold: a control character, a space, a backslash, a line or paragraph separator. */
+function unsafePathChar(code: number): boolean {
+  return code <= 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x5c || code === 0x2028 || code === 0x2029;
+}
+
+/**
+ * Whether `value` is a path of this site a button may lead to: it starts with one `/`, holds no `//` (so it is never
+ * read as another host), no backslash (which a browser reads as `/`), no space and no control character, and is at
+ * most {@link OPAC_HOME_LIMITS}.targetPath characters long. `/berita/rss`, `/cari?q=sejarah#hasil`; never
+ * `https://…`, `//host`, `/\\host`, `javascript:…`.
+ */
+export function isSafeInternalPath(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > OPAC_HOME_LIMITS.targetPath) return false;
+  if (!value.startsWith('/') || value.includes('//')) return false;
+  for (let i = 0; i < value.length; i++) if (unsafePathChar(value.charCodeAt(i))) return false;
+  return true;
+}
+
+/** A path of this site (see {@link isSafeInternalPath}); `invalid` otherwise. */
+export const opacHomePathField = z.string().superRefine((value, ctx) => {
+  if (!isSafeInternalPath(value)) ctx.addIssue({ code: 'custom', message: 'invalid', params: { code: 'invalid' } });
 });
 
+/**
+ * Where a slide's button leads, as a kind and a reference, never a free URL: the catalogue's search, the library's
+ * profile, the news list (or, with `ref`, the news post of that slug), or a path of this site.
+ */
+export const OpacHomeTarget = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('catalog') }),
+  z.strictObject({ kind: z.literal('profile') }),
+  z.strictObject({ kind: z.literal('news'), ref: pageSlugField.optional() }),
+  z.strictObject({ kind: z.literal('path'), ref: opacHomePathField }),
+]);
+
+export type OpacHomeTarget = z.infer<typeof OpacHomeTarget>;
+
+/** A calendar date `YYYY-MM-DD`. */
+const dateField = z.string().check((ctx) => {
+  if (!isCalendarDate(ctx.value)) ctx.issues.push({ code: 'invalid_format', format: 'date', input: ctx.value });
+});
+
+/** What names a slide within the hero: 1 to 32 of `A-Z a-z 0-9 _ -` (the editor gives each slide one when it is added). */
+export const opacHomeSlideIdField = z.string().regex(/^[A-Za-z0-9_-]{1,32}$/);
+
+/** A slide's button: its label (in one language at least) and where it leads. */
+export const OpacHomeCta = z.strictObject({
+  label: requiredLocalized(OPAC_HOME_LIMITS.ctaLabel),
+  target: OpacHomeTarget,
+});
+
+export type OpacHomeCta = z.infer<typeof OpacHomeCta>;
+
+/**
+ * One slide of the hero: its photo (an `opac.home_photo` upload with its alternative text and vertical position), a
+ * short note above the title, the title and the subtitle per language, an optional button, whether it shows at all,
+ * and the first and last day it shows (each null: no limit; the days are the library's, see {@link opacHomeSlideShown}).
+ */
+export const OpacHomeSlide = z
+  .strictObject({
+    id: opacHomeSlideIdField,
+    fileId: ulidField,
+    alt: required(OPAC_HOME_LIMITS.alt),
+    position: z.int().min(0).max(100).multipleOf(OPAC_HOME_POSITION_STEP),
+    note: localized(OPAC_HOME_LIMITS.slideNote),
+    title: localized(OPAC_HOME_LIMITS.slideTitle),
+    subtitle: localized(OPAC_HOME_LIMITS.slideSubtitle),
+    cta: OpacHomeCta.nullable(),
+    active: z.boolean(),
+    from: dateField.nullable(),
+    until: dateField.nullable(),
+  })
+  .superRefine((slide, ctx) => {
+    if (slide.from !== null && slide.until !== null && slide.from > slide.until) {
+      ctx.addIssue({ code: 'custom', path: ['until'], message: 'invalid', params: { code: 'invalid' } });
+    }
+  });
+
+export type OpacHomeSlide = z.infer<typeof OpacHomeSlide>;
+
+/** The id of the slide a hero saved as one photo reads as. */
+export const OPAC_HOME_LEGACY_SLIDE_ID = 'slide-1';
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * The value a hero saved before it had slides reads as: no hero (null, or none at all) is a hero without slides; one
+ * photo (`{fileId, alt, position}`, with or without the darkness of its old overlay, which is dropped) is its one
+ * slide, shown always, without texts or a button of its own.
+ */
+function heroWithSlides(value: unknown): unknown {
+  if (value === null || value === undefined) return { slides: [], autoplay: true, intervalSec: OPAC_HOME_INTERVAL_DEFAULT };
+  if (isRecord(value) && !('slides' in value) && 'fileId' in value) {
+    const none = { id: null, en: null };
+    return {
+      slides: [
+        {
+          id: OPAC_HOME_LEGACY_SLIDE_ID,
+          fileId: value['fileId'],
+          alt: value['alt'],
+          position: value['position'],
+          note: none,
+          title: none,
+          subtitle: none,
+          cta: null,
+          active: true,
+          from: null,
+          until: null,
+        },
+      ],
+      autoplay: true,
+      intervalSec: OPAC_HOME_INTERVAL_DEFAULT,
+    };
+  }
+  return value;
+}
+
+/** The hero: its slides in order (each id once), whether they advance by themselves, and how long each stays. */
+export const OpacHomeHero = z.preprocess(
+  heroWithSlides,
+  z.strictObject({
+    slides: z
+      .array(OpacHomeSlide)
+      .max(OPAC_HOME_LIMITS.slides)
+      .superRefine((slides, ctx) => {
+        const seen = new Set<string>();
+        slides.forEach((slide, i) => {
+          if (seen.has(slide.id)) ctx.addIssue({ code: 'custom', path: [i, 'id'], message: 'duplicate', params: { code: 'duplicate' } });
+          seen.add(slide.id);
+        });
+      }),
+    autoplay: z.boolean().default(true),
+    intervalSec: z.literal([...OPAC_HOME_INTERVALS]).default(OPAC_HOME_INTERVAL_DEFAULT),
+  }),
+);
+
 export type OpacHomeHero = z.infer<typeof OpacHomeHero>;
+
+/**
+ * Whether `slide` shows on the calendar day `today` (`YYYY-MM-DD`): it is switched on, and the day is neither before
+ * its first day nor after its last.
+ */
+export function opacHomeSlideShown(slide: Pick<OpacHomeSlide, 'active' | 'from' | 'until'>, today: string): boolean {
+  if (!slide.active) return false;
+  if (slide.from !== null && today < slide.from) return false;
+  return slide.until === null || today <= slide.until;
+}
+
+/**
+ * The slides of `hero` that show at the instant `epochMs`, in their order: a slide's days are calendar days of the
+ * library's time zone (`library.timezone`), so a slide whose last day is today shows until the library's midnight.
+ *
+ * @throws RangeError for a time zone `Intl` does not know
+ */
+export function opacHomeSlidesAt(hero: Pick<OpacHomeHero, 'slides'>, timeZone: string, epochMs: number): OpacHomeSlide[] {
+  const today = localDate(timeZone, epochMs);
+  return hero.slides.filter((slide) => opacHomeSlideShown(slide, today));
+}
+
+// ---- The library's profile ----
+/** A photo of the gallery: an `opac.home_photo` upload, its alternative text (required) and a caption per language. */
+export const OpacHomeGalleryPhoto = z.strictObject({
+  fileId: ulidField,
+  alt: required(OPAC_HOME_LIMITS.alt),
+  caption: localized(OPAC_HOME_LIMITS.caption),
+});
+
+export type OpacHomeGalleryPhoto = z.infer<typeof OpacHomeGalleryPhoto>;
+
+/** One entry of the library's timeline: a year and what happened. */
+export const OpacHomeTimelineEntry = z.strictObject({
+  year: z.int().min(OPAC_HOME_FOUNDED.min).max(OPAC_HOME_FOUNDED.max),
+  text: requiredLocalized(OPAC_HOME_LIMITS.timelineText),
+});
+
+export type OpacHomeTimelineEntry = z.infer<typeof OpacHomeTimelineEntry>;
+
+/**
+ * One of the people who run the library, as the profile names them: a name and a role, typed in for publication by
+ * the staff. Never a member's or a user's record.
+ */
+export const OpacHomeStaff = z.strictObject({
+  name: required(OPAC_HOME_LIMITS.staffName),
+  role: localized(OPAC_HOME_LIMITS.staffRole),
+});
+
+export type OpacHomeStaff = z.infer<typeof OpacHomeStaff>;
 
 /** One service of the library: a name and a short explanation. */
 export const OpacHomeService = z.strictObject({
@@ -261,29 +474,39 @@ export const OpacHomeBlocks = z.strictObject(
 
 export type OpacHomeBlocks = z.infer<typeof OpacHomeBlocks>;
 
-/** The file ids a content names: the hero, the "about" photo and the facility photos. */
-export function opacHomeFileIds(home: Pick<OpacHomeContent, 'hero' | 'logo' | 'about' | 'facilities'>): string[] {
-  const ids: string[] = [];
-  if (home.hero !== null) ids.push(home.hero.fileId);
-  if (home.logo !== null) ids.push(home.logo.fileId);
-  if (home.about.photo !== null) ids.push(home.about.photo.fileId);
-  for (const f of home.facilities) ids.push(f.fileId);
-  return ids;
+/** Each photo a content names, by its place in the content: the slides, the logo, the "about" photo, the facilities, the gallery. */
+export function opacHomeFilePaths(home: Pick<OpacHomeContent, 'hero' | 'logo' | 'about' | 'facilities' | 'gallery'>): { fileId: string; path: (string | number)[] }[] {
+  const found: { fileId: string; path: (string | number)[] }[] = [];
+  home.hero.slides.forEach((slide, i) => found.push({ fileId: slide.fileId, path: ['hero', 'slides', i, 'fileId'] }));
+  if (home.logo !== null) found.push({ fileId: home.logo.fileId, path: ['logo', 'fileId'] });
+  if (home.about.photo !== null) found.push({ fileId: home.about.photo.fileId, path: ['about', 'photo', 'fileId'] });
+  home.facilities.forEach((f, i) => found.push({ fileId: f.fileId, path: ['facilities', i, 'fileId'] }));
+  home.gallery.forEach((g, i) => found.push({ fileId: g.fileId, path: ['gallery', i, 'fileId'] }));
+  return found;
 }
+
+/** The file ids a content names: every slide's photo, the logo, the "about" photo, the facility and the gallery photos. */
+export function opacHomeFileIds(home: Pick<OpacHomeContent, 'hero' | 'logo' | 'about' | 'facilities' | 'gallery'>): string[] {
+  return opacHomeFilePaths(home).map((f) => f.fileId);
+}
+
+const NO_TEXT = Object.freeze({ id: null, en: null });
 
 /** The value of the setting `opac.home`. A photo is used once at most. */
 export const OpacHomeContent = z
   .strictObject({
-    /** The hero's heading in each language; none in either: the library's name. */
+    /** The page's heading in each language (a slide without a title of its own shows it); none in either: the library's name. */
     title: localized(OPAC_HOME_LIMITS.title),
-    hero: OpacHomeHero.nullable(),
-    /** The band's colour without a photo; null: the colour of the OPAC's accent. */
+    hero: OpacHomeHero,
+    /** The library colour (the header bar, the panel of a slide's text); null: the colour of the OPAC's accent. */
     brand: opacHomeBrandField.nullable().default(null),
     about: z.strictObject({
       text: localized(OPAC_HOME_LIMITS.aboutText),
       photo: OpacHomePhoto.nullable(),
       founded: z.int().min(OPAC_HOME_FOUNDED.min).max(OPAC_HOME_FOUNDED.max).nullable(),
       librarians: z.int().min(0).max(OPAC_HOME_LIBRARIANS_MAX).nullable(),
+      /** The library's history, for its profile (paragraphs apart by a blank line). */
+      history: localized(OPAC_HOME_LIMITS.history),
     }),
     services: z.array(OpacHomeService).max(OPAC_HOME_LIMITS.services),
     facilities: z.array(OpacHomePhoto).max(OPAC_HOME_LIMITS.facilities),
@@ -294,17 +517,20 @@ export const OpacHomeContent = z
     logo: OpacHomeLogo.nullable().default(null),
     /** The telephone number and e-mail address the site publishes. */
     contact: OpacHomeContact.default({ phone: null, email: null }),
+    // ---- The library's profile (a content saved before it reads each as none) ----
+    /** The library's timeline, in the order the profile lists it. */
+    timeline: z.array(OpacHomeTimelineEntry).max(OPAC_HOME_LIMITS.timeline).default([]),
+    vision: localized(OPAC_HOME_LIMITS.vision),
+    mission: z.array(requiredLocalized(OPAC_HOME_LIMITS.missionText)).max(OPAC_HOME_LIMITS.mission).default([]),
+    /** The people who run the library, as typed in for publication. */
+    staff: z.array(OpacHomeStaff).max(OPAC_HOME_LIMITS.staff).default([]),
+    gallery: z.array(OpacHomeGalleryPhoto).max(OPAC_HOME_LIMITS.gallery).default([]),
   })
   .superRefine((home, ctx) => {
     const seen = new Set<string>();
-    const paths: [string, (string | number)[]][] = [];
-    if (home.hero !== null) paths.push([home.hero.fileId, ['hero', 'fileId']]);
-    if (home.logo !== null) paths.push([home.logo.fileId, ['logo', 'fileId']]);
-    if (home.about.photo !== null) paths.push([home.about.photo.fileId, ['about', 'photo', 'fileId']]);
-    home.facilities.forEach((f, i) => paths.push([f.fileId, ['facilities', i, 'fileId']]));
-    for (const [id, path] of paths) {
-      if (seen.has(id)) ctx.addIssue({ code: 'custom', path, message: 'duplicate', params: { code: 'duplicate' } });
-      seen.add(id);
+    for (const { fileId, path } of opacHomeFilePaths(home)) {
+      if (seen.has(fileId)) ctx.addIssue({ code: 'custom', path, message: 'duplicate', params: { code: 'duplicate' } });
+      seen.add(fileId);
     }
   });
 
@@ -313,18 +539,23 @@ export type OpacHomeContent = z.infer<typeof OpacHomeContent>;
 /** What a library that has not set up its home page shows: no photo or profile, the blocks at their defaults. */
 export const OPAC_HOME_DEFAULT: OpacHomeContent = Object.freeze({
   title: Object.freeze({ id: null, en: null }),
-  hero: null,
+  hero: Object.freeze({ slides: Object.freeze([]) as unknown as OpacHomeSlide[], autoplay: true, intervalSec: OPAC_HOME_INTERVAL_DEFAULT }),
   brand: null,
-  about: Object.freeze({ text: Object.freeze({ id: null, en: null }), photo: null, founded: null, librarians: null }),
+  about: Object.freeze({ text: NO_TEXT, photo: null, founded: null, librarians: null, history: NO_TEXT }),
   services: Object.freeze([]) as unknown as OpacHomeService[],
   facilities: Object.freeze([]) as unknown as OpacHomePhoto[],
   hours: Object.freeze([]) as unknown as OpacHomeHours[],
   blocks: Object.freeze({ ...OPAC_HOME_BLOCK_DEFAULTS }),
   logo: null,
   contact: Object.freeze({ phone: null, email: null }),
+  timeline: Object.freeze([]) as unknown as OpacHomeTimelineEntry[],
+  vision: NO_TEXT,
+  mission: Object.freeze([]) as unknown as OpacHomeText[],
+  staff: Object.freeze([]) as unknown as OpacHomeStaff[],
+  gallery: Object.freeze([]) as unknown as OpacHomeGalleryPhoto[],
 }) as OpacHomeContent;
 
-/** A welcome text (the hero's lead sentence) of one language; null or blank: none. */
+/** A welcome text (the subtitle of a slide without one of its own) of one language; null or blank: none. */
 export const opacHomeWelcomeField = z.string().max(OPAC_HOME_LIMITS.welcome).nullable();
 
 /** The revision of what the screen loaded: 16 lower-case hex digits. */
@@ -336,7 +567,7 @@ export interface OpacHomeView {
   welcome: { id: string | null; en: string | null };
   /** Changes whenever the content or a welcome text changes; a save names the one it started from. */
   revision: string;
-  /** For the preview: the hero's heading without a title of its own, and its colour without a photo. */
+  /** For the preview: the heading of a page without a title of its own, and the colour without a library colour. */
   libraryName: string;
   accent: OpacAccent;
 }

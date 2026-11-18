@@ -24,6 +24,7 @@ import { recordingLogger, sampleConfig } from '../support.js';
 const ctx = testDbContext();
 const NOW = Date.UTC(2026, 10, 15, 5, 0, 0);
 const DAY = 86_400_000;
+const NO_TEXT = { id: null, en: null };
 const CONFIG = sampleConfig();
 const HTML = { Accept: 'text/html' };
 
@@ -315,12 +316,16 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     await setHome({
       ...OPAC_HOME_DEFAULT,
       title: { id: 'Ruang baca <untuk> semua', en: null },
-      hero: { fileId: photoId, alt: 'Gedung "B" perpustakaan', position: 40, overlay: 70 },
+      hero: {
+        ...OPAC_HOME_DEFAULT.hero,
+        slides: [{ id: 'slide-1', fileId: photoId, alt: 'Gedung "B" perpustakaan', position: 40, note: NO_TEXT, title: NO_TEXT, subtitle: NO_TEXT, cta: null, active: true, from: null, until: null }],
+      },
       about: {
         text: { id: 'Berdiri sejak 1987.\nMelayani siswa & guru.', en: 'Founded in 1987.' },
         photo: { fileId: aboutPhotoId, alt: 'Ruang baca', caption: 'Lantai 1' },
         founded: 1987,
         librarians: 3,
+        history: NO_TEXT,
       },
       services: [{ title: 'Peminjaman <buku>', text: 'Bawa kartu anggota.' }],
       facilities: [],
@@ -331,7 +336,7 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
       ],
     });
     const html = (await get('/')).text;
-    expect(html).toContain('<header class="site-header hero-band hero-photo hero-ov-70">');
+    expect(html).toContain('<header class="site-header hero-band hero-photo hero-ov-60">');
     expect(html).toContain(`<img class="hero-img hero-pos-40" src="/files/${photoId}" alt="Gedung &quot;B&quot; perpustakaan" width="1600" height="900" decoding="async"/>`);
     expect(html).toContain('<h1>Ruang baca &lt;untuk&gt; semua</h1>');
     expect(html).toContain('<meta property="og:image" content="');
@@ -397,17 +402,16 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     }
   });
 
-  it('the overlay never lighter than its floor; the library colour without a photo as a nonce style of six hex digits, nothing else', async () => {
+  it('a hero that advances at a pace the setting does not know is refused as a whole; the library colour without a photo as a nonce style of six hex digits, nothing else', async () => {
     const stored = (await h.db.selectFrom('settings').select('value').where('key', '=', 'opac.home').executeTakeFirstOrThrow()).value!;
     const home = JSON.parse(stored) as OpacHomeContent;
     try {
-      // A row edited by hand to a lighter overlay is refused as a whole (the page falls back to the default content).
-      await h.db.updateTable('settings').set({ value: JSON.stringify({ ...home, hero: { ...home.hero, overlay: 40 } }) }).where('key', '=', 'opac.home').execute();
+      // A row edited by hand to an unknown pace is refused as a whole (the page falls back to the default content).
+      await h.db.updateTable('settings').set({ value: JSON.stringify({ ...home, hero: { ...home.hero, intervalSec: 3 } }) }).where('key', '=', 'opac.home').execute();
       let html = (await get('/')).text;
-      expect(html).not.toContain('hero-ov-40');
       expect(html).toContain('<header class="site-header hero-band">');
 
-      await setHome({ ...home, hero: null, brand: '#1E3A8A' });
+      await setHome({ ...home, hero: OPAC_HOME_DEFAULT.hero, brand: '#1E3A8A' });
       const reply = await get('/');
       html = reply.text;
       const nonce = /<meta name="csp-nonce" content="([^"]+)"/.exec(html)?.[1];

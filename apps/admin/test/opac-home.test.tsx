@@ -33,6 +33,12 @@ function view(o: Partial<OpacHomeView['home']> = {}): OpacHomeView {
   };
 }
 
+/** A hero of one slide: the photo `fileId`, shown always, with no texts of its own. */
+const heroOf = (fileId: string): OpacHomeView['home']['hero'] => ({
+  ...OPAC_HOME_DEFAULT.hero,
+  slides: [{ id: 'slide-1', fileId, alt: 'Gedung', position: 50, note: { id: null, en: null }, title: { id: null, en: null }, subtitle: { id: null, en: null }, cta: null, active: true, from: null, until: null }],
+});
+
 const puts = (requests: FakeRequest[]): unknown[] => requests.filter((r) => r.method === 'PUT' && r.path === 'opac/home').map((r) => r.body);
 /** The outcome of a save: said under the page head, before the form. */
 async function outcome(text: string): Promise<HTMLElement> {
@@ -112,7 +118,7 @@ describe('OPAC › Halaman awal', () => {
     const { requests } = startApp({
       me: adminMe(),
       path: '/admin/opac/beranda',
-      routes: { 'GET opac/home': () => view({ hero: { fileId: PHOTO, alt: 'Gedung', position: 50, overlay: 60 } }) },
+      routes: { 'GET opac/home': () => view({ hero: heroOf(PHOTO) }) },
     });
     const alt = (await screen.findByLabelText(t('opacHome.photo.alt'), undefined, FIRST)) as HTMLInputElement;
     fireEvent.change(alt, { target: { value: '   ' } });
@@ -127,7 +133,7 @@ describe('OPAC › Halaman awal', () => {
   });
 
   it('the preview has the hero band\'s proportions, not the photo\'s 16:9: on a wide screen "Posisi foto" moves the photo, on a phone its sides are cut', async () => {
-    startApp({ me: adminMe(), path: '/admin/opac/beranda', routes: { 'GET opac/home': () => view({ hero: { fileId: PHOTO, alt: 'Gedung', position: 50, overlay: 60 } }) } });
+    startApp({ me: adminMe(), path: '/admin/opac/beranda', routes: { 'GET opac/home': () => view({ hero: heroOf(PHOTO) }) } });
     const wide = await screen.findByRole('figure', { name: t('opacHome.preview.wide') }, FIRST);
     const phone = screen.getByRole('figure', { name: t('opacHome.preview.phone') });
     const photo = (frame: HTMLElement): HTMLImageElement => frame.querySelector('img')!;
@@ -145,23 +151,16 @@ describe('OPAC › Halaman awal', () => {
     expect(within(wide).getAllByText('Perpustakaan SMA 1').length).toBeGreaterThan(0);
   });
 
-  it('the overlay slider darkens the preview from its floor, the library colour fills a band without a photo, and both are saved', async () => {
+  it('the library colour fills a band without a photo, and both are saved', async () => {
     const { requests } = startApp({
       me: adminMe(),
       path: '/admin/opac/beranda',
       routes: {
-        'GET opac/home': () => view({ hero: { fileId: PHOTO, alt: 'Gedung', position: 50, overlay: 60 } }),
+        'GET opac/home': () => view({ hero: heroOf(PHOTO) }),
         'PUT opac/home': () => ({ revision: 'fedcba9876543210', changed: ['opac.home'] }),
       },
     });
     const wide = await screen.findByRole('figure', { name: t('opacHome.preview.wide') }, FIRST);
-    const overlay = (): HTMLElement => wide.querySelector<HTMLElement>('[data-overlay]')!;
-    expect(overlay().style.backgroundColor).toBe('rgba(8, 12, 20, 0.6)');
-    const slider = screen.getByLabelText(t('opacHome.hero.overlay')) as HTMLInputElement;
-    expect([slider.min, slider.max, slider.step, slider.value]).toEqual(['60', '80', '5', '60']);
-    fireEvent.change(slider, { target: { value: '75' } });
-    expect(overlay().style.backgroundColor).toBe('rgba(8, 12, 20, 0.75)');
-
     // Too light a colour is refused before sending, with its own message; a dark one is taken (and stored lower case).
     const brand = screen.getByLabelText(t('opacHome.brand.label')) as HTMLInputElement;
     fireEvent.change(brand, { target: { value: '#ffd966' } });
@@ -180,7 +179,7 @@ describe('OPAC › Halaman awal', () => {
     fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
     await screen.findByText(t('opacHome.saved'));
     expect(puts(requests)).toEqual([
-      expect.objectContaining({ home: expect.objectContaining({ hero: null, brand: '#1e3a8a' }) }),
+      expect.objectContaining({ home: expect.objectContaining({ hero: OPAC_HOME_DEFAULT.hero, brand: '#1e3a8a' }) }),
     ]);
   });
 

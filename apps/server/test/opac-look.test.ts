@@ -131,7 +131,7 @@ describe('the theme colours', () => {
 
 const HOME: OpacHomeContent = {
   ...OPAC_HOME_DEFAULT,
-  about: { text: { id: 'Berdiri sejak 1987.', en: null }, photo: null, founded: null, librarians: null },
+  about: { ...OPAC_HOME_DEFAULT.about, text: { id: 'Berdiri sejak 1987.', en: null } },
   services: [{ title: 'Peminjaman', text: null }],
   hours: [
     { days: 'Senin–Jumat', time: '07.00–15.00', weekdays: [1, 2, 3, 4, 5] },
