@@ -5,6 +5,7 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useCallback, useId, useState, type ComponentProps, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { Field, NoticeAlert, ProblemAlert, RootError, describedBy } from '@/components/form-field';
+import { PageBrand } from '@/components/shell/brand';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,25 +41,31 @@ export function useContinue(): (res: Pick<LoginResponse, 'stage' | 'mustChangePa
   );
 }
 
-/** The frame of every sign-in page: the library's name, then a card with the page's title and content. */
+/**
+ * The frame of every sign-in page: one card (360 px; wider for a page with more to show) on the page's grey, with the
+ * library's brand (its name as text until it has a logo), the page's title and its content; under the card, the way
+ * back to the public site and the version of ALTIS.
+ */
 export function SignInFrame({ title, description, wide = false, children }: { title: string; description?: string; wide?: boolean; children: ReactNode }) {
+  const t = useT();
   const me = useMe();
   return (
-    <main className="flex min-h-dvh items-start justify-center bg-layer px-4 py-10 sm:items-center">
-      <div className={cn('w-full', wide ? 'max-w-lg' : 'max-w-sm')}>
-        <div className="mb-5 grid justify-items-center gap-0.5 text-center">
-          <p className="text-base font-bold tracking-wide" translate="no">
-            ALTIS
-          </p>
-          {me !== undefined && <p className="text-meta text-muted-foreground">{me.library.name}</p>}
-        </div>
-        <section className="grid gap-5 rounded-lg border bg-background p-6">
-          <header className="grid gap-1">
+    <main className="flex min-h-dvh items-start justify-center bg-page p-6 sm:items-center">
+      <div className={cn('w-full', wide ? 'max-w-lg' : 'max-w-[360px]')}>
+        <section className="rounded-lg border bg-background px-7 pt-7 pb-6">
+          {me !== undefined && <PageBrand name={me.library.name} className="mb-5" />}
+          <header className="mb-5">
             <h1 className="text-xl leading-tight font-bold">{title}</h1>
-            {description !== undefined && <p className="text-sm text-muted-foreground">{description}</p>}
+            {description !== undefined && <p className="mt-0.5 text-muted-foreground">{description}</p>}
           </header>
-          {children}
+          <div className="grid gap-5">{children}</div>
         </section>
+        <div className="mt-3.5 flex flex-wrap justify-between gap-x-3 gap-y-1 text-meta text-muted-foreground">
+          <a href="/" className="text-accent-text underline-offset-4 hover:underline">
+            {t('login.back_to_site')}
+          </a>
+          {me !== undefined && <span translate="no">ALTIS {me.build}</span>}
+        </div>
       </div>
     </main>
   );

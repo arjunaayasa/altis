@@ -1,8 +1,9 @@
 import { LOCALES, type Locale } from '@altis/shared';
 import type { MeResponse } from '@altis/shared/api/auth';
 import { useNavigate } from '@tanstack/react-router';
+import { ChevronDownIcon } from 'lucide-react';
 import { useSetLanguage } from '@/components/command-palette';
-import { Button } from '@/components/ui/button';
+import { initials } from '@/components/layout/member-photo';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,8 +22,9 @@ type SignedIn = Extract<MeResponse, { authenticated: true }>;
 const GROUP_LABEL = 'px-2 pt-1.5 pb-1 text-xs font-semibold text-faint';
 
 /**
- * The user menu of the top bar, under the user's name: the profile, the colour theme of this browser (Terang / Gelap /
- * Ikuti sistem), the language and signing out. No icons; the radio dot marks the choices in use.
+ * The user menu of the top bar, under the user's initials (in a small circle) and name; on a narrow screen the
+ * initials alone, the button still named by the user. It holds the profile, the colour theme of this browser (Terang /
+ * Gelap / Ikuti sistem), the language and signing out; the radio dot marks the choices in use.
  */
 export function UserMenu({ me, onLogout }: { me: SignedIn; onLogout(): void }) {
   const t = useT();
@@ -33,9 +35,17 @@ export function UserMenu({ me, onLogout }: { me: SignedIn; onLogout(): void }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="max-w-40 font-normal text-muted-foreground hover:text-foreground" aria-label={t('shell.user_menu', { name: me.user.name })}>
-          <span className="truncate">{me.user.name}</span>
-        </Button>
+        <button
+          type="button"
+          aria-label={t('shell.user_menu', { name: me.user.name })}
+          className="flex h-8 max-w-52 shrink-0 items-center gap-2 rounded-md px-1.5 text-ui font-medium transition-colors duration-150 ease-out hover:bg-layer-2"
+        >
+          <span aria-hidden="true" className="grid size-6.5 shrink-0 place-items-center rounded-full border border-border-strong bg-layer-2 text-[0.6875rem] font-semibold text-muted-foreground">
+            {initials(me.user.name)}
+          </span>
+          <span className="truncate max-lg:hidden">{me.user.name}</span>
+          <ChevronDownIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground max-lg:hidden" />
+        </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-56">
         <DropdownMenuLabel className="grid gap-0.5 font-normal">
