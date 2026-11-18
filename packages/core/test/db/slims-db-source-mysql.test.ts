@@ -42,11 +42,13 @@ import { FIXTURE_TABLES, SLIMS_FIXTURE_SEED } from '../support/slims-fixture/ind
 //   from its own dump into a fresh database `slims_src_<random>` (as root; the migration reads it as the test user,
 //   granted SELECT only), every table with the fixture's row count and no warning from the server;
 // - the real job migrates it twice into a fresh ALTIS database each time, from the dump (staged upload) and from the
-//   database, with the same SLiMS folder (`--files-dir`: the fixture's files and `images/persons/`). The dump it
-//   migrates holds the same rows with each table's rows in the server's primary-key order, the order the database
-//   source reads in (as mysqldump writes an InnoDB table): some stages depend on the order rows come in (the first
-//   level-1 author of a record is its main entry, links are numbered as they come, the first of two duplicate
-//   authorities is kept), and the fixture's own dump lists a few tables out of key order, as a MyISAM table may be;
+//   database, with the same SLiMS folder (`--files-dir`: the fixture's files and `images/persons/`). Some stages
+//   depend on the order rows come in (the first level-1 author of a record is its main entry, links are numbered as
+//   they come, the first of two duplicate authorities is kept). The author and subject links (`biblio_author`,
+//   `biblio_topic`) keep the fixture's own order, the order they were entered in and out of key order, on both paths:
+//   the fixture's tables are MyISAM, which gives its rows in that order, and the database source reads those two
+//   tables in the table's own order, as mysqldump does. Every other table the dump path migrates has its rows in the
+//   server's primary-key order, the order the database source reads it in (the fixture lists a few out of key order);
 // - both runs end with the same rows in every ALTIS table the migration writes (ids replaced by stable names), the same
 //   legacy map, counts, report rows and summary, the same members, copies, titles and photos; the member photos are
 //   stored (two), or reported (not a JPEG, missing, too large) alike.
@@ -74,6 +76,9 @@ const STAFF_ID = newId(NOW);
  * a fixture change that adds one must be looked at.
  */
 const ADJUSTMENTS = ['cut biblio.isbn_issn', 'trailing_spaces mst_content_type.code2'];
+
+/** The SLiMS tables both paths read in the order their rows were entered (see the top of this file). */
+const ENTERED_ORDER = ['biblio_author', 'biblio_topic'];
 
 /** ALTIS tables a migration does not write, or whose rows are bookkeeping of the run itself (ids, clocks, chains). */
 const NOT_COMPARED = new Set([
@@ -121,6 +126,15 @@ const cellText = (v: unknown): string => (Buffer.isBuffer(v) ? v.toString('utf8'
 /** A row as JSON (bytes as hex, big integers as numbers), to find the rows the target was prepared with. */
 const rawJson = (row: Row): string =>
   JSON.stringify(row, (_k, v: unknown) => (v instanceof Uint8Array ? Buffer.from(v).toString('hex') : typeof v === 'bigint' ? Number(v) : v));
+
+/** Two numeric primary keys compared column by column. */
+function compareKeys(a: readonly unknown[], b: readonly unknown[]): number {
+  for (let i = 0; i < a.length; i += 1) {
+    const d = Number(a[i]) - Number(b[i]);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
 
 /** The rows only `a`, and only `b`, hold (as multisets), at most `limit` of each. */
 function differences(a: readonly string[], b: readonly string[], limit = 5): { onlyDump: string[]; onlyDb: string[] } | null {
@@ -187,10 +201,10 @@ describe.skipIf(!ctx.available || !MYSQL)(`SLiMS migration from a MySQL database
       await loader.close();
     }
     await admin.query(`GRANT SELECT ON ??.* TO ?@'%'`, [sourceDb, TEST_DB_USER]);
-    // The rows of each table with a key in the order the database source reads them.
+    // The rows of each table with a key in the order the database source reads them (the links in their own order).
     const order = new Map<string, string[]>();
     for (const t of FIXTURE_TABLES) {
-      if (t.primaryKey.length === 0 || (fixture.data.rows.get(t.name)?.length ?? 0) === 0) continue;
+      if (t.primaryKey.length === 0 || (fixture.data.rows.get(t.name)?.length ?? 0) === 0 || ENTERED_ORDER.includes(t.name)) continue;
       const list = t.primaryKey.map(() => '??').join(', ');
       const keys = await admin.query(`SELECT ${list} FROM ??.?? ORDER BY ${list}`, [...t.primaryKey, sourceDb, t.name, ...t.primaryKey]);
       order.set(t.name, keys.map((r) => t.primaryKey.map((c) => cellText(r[c])).join('\u0000')));
@@ -521,6 +535,15 @@ describe.skipIf(!ctx.available || !MYSQL)(`SLiMS migration from a MySQL database
     expect(counts, 'rows per SLiMS table in MySQL').toEqual(want);
     // The tables the fixture lists out of key order (the dump path migrates them in key order, see the top).
     expect(reordered.every((t) => fixture.expected.tables[t] !== undefined)).toBe(true);
+    // The links: MyISAM tables, as the fixture creates them, whose rows the fixture lists out of key order.
+    for (const t of ENTERED_ORDER) {
+      const [info] = await admin!.query('SELECT ENGINE AS engine FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?', [sourceDb, t]);
+      expect([t, cellText(info?.['engine'])]).toEqual([t, 'MyISAM']);
+      const key = FIXTURE_TABLES.find((x) => x.name === t)!.primaryKey;
+      const rows = fixture.data.rows.get(t)!;
+      const outOfOrder = rows.filter((r, i) => i > 0 && compareKeys(key.map((c) => r[c]), key.map((c) => rows[i - 1]![c])) < 0).length;
+      expect(outOfOrder, `${t}: rows the fixture lists out of key order`).toBeGreaterThan(0);
+    }
     // The latin1 table's Windows-1252 text arrived as the same characters.
     for (const t of fixture.expected.traps.cp1252) {
       const key = FIXTURE_TABLES.find((x) => x.name === t.table)!.primaryKey;

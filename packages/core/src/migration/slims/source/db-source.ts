@@ -15,6 +15,11 @@ import type { SlimsDbConfig, SlimsRow, SlimsSource, SlimsTableInfo } from './typ
 //   comparison `(a, b) > (?, ?)`; the cursor is `k:` and the JSON of that key. A table without a primary key is paged
 //   by LIMIT/OFFSET (cursor `o:<offset>`) and flagged `no_pk`. A text key value travels back as text, so the server
 //   compares it in the column's collation, as it orders it.
+// - The tables whose row order the migration's result depends on (IN_TABLE_ORDER: the author and subject links of a
+//   record, whose first level-1 author is its main entry and whose links are numbered as they come) are read in the
+//   table's own order, as mysqldump reads them (no ORDER BY), paged by LIMIT/OFFSET: a MyISAM table, as SLiMS creates
+//   them, gives its rows in the order they were entered (the order the librarian added the authors), an InnoDB table
+//   in primary-key order. The database path and the dump path then see the same order.
 // - Text cells come back as text when their bytes are valid UTF-8 and as bytes otherwise (textCell), as from a dump.
 //
 // The usage import (spec §11.2) opens it with its own list (`tables`: only those tables are listed, counted and read,
@@ -31,6 +36,9 @@ import type { SlimsDbConfig, SlimsRow, SlimsSource, SlimsTableInfo } from './typ
 export const DB_CONNECT_TIMEOUT_MS = 10_000;
 /** The most rows one call reads (§11.1). */
 export const DB_BATCH_MAX = 500;
+
+/** The tables read in their own order rather than by primary key (see the module comment). */
+const IN_TABLE_ORDER: ReadonlySet<string> = new Set(['biblio_author', 'biblio_topic']);
 
 export interface OpenDbSourceOptions {
   connectTimeoutMs?: number;
@@ -214,15 +222,18 @@ export async function openDbSource(cfg: SlimsDbConfig, o: OpenDbSourceOptions = 
       const out = (r: Record<string, unknown>): SlimsRow => (transform === undefined ? cells(r, columns) : transform(table, cells(r, columns)));
       const key = info.primaryKey;
       const secret = Object.hasOwn(secrets, table) ? secrets[table]! : [];
-      const keyset = key.length > 0 && key.every((c) => columns.includes(c) && !secret.includes(c));
+      const inTableOrder = projection === undefined && IN_TABLE_ORDER.has(table);
+      const keyset = !inTableOrder && key.length > 0 && key.every((c) => columns.includes(c) && !secret.includes(c));
 
       if (!keyset) {
-        // No key (flagged no_pk), or one a cursor must not carry: by offset, in key order when there is a key.
+        // No key (flagged no_pk), one a cursor must not carry, or a table read in its own order: by offset, in key
+        // order when there is a key to order by.
         const m = after === null ? null : /^o:(\d{1,15})$/.exec(after);
         if (after !== null && m === null) throw new TypeError('rows: not a cursor of this source');
         const offset = m === null ? 0 : Number(m[1]);
-        const order = key.length === 0 ? '' : ` ORDER BY ${placeholders(key.length, '??')}`;
-        const raw = await query(`${select}${order} LIMIT ? OFFSET ?`, [...columns, table, ...key, take, offset]);
+        const by = key.length === 0 || inTableOrder ? [] : key;
+        const order = by.length === 0 ? '' : ` ORDER BY ${placeholders(by.length, '??')}`;
+        const raw = await query(`${select}${order} LIMIT ? OFFSET ?`, [...columns, table, ...by, take, offset]);
         return { rows: raw.map(out), next: raw.length === take ? `o:${offset + take}` : null };
       }
 

@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { openDbSource, type SlimsDbConfig } from '../../src/migration/slims/source/index.js';
 
 // The direct-connection source (spec §11.1): SELECT only, keyset pages of at most 500 rows by primary key (a row
-// comparison for a composite key), LIMIT/OFFSET for a table without one (flagged `no_pk`), every identifier a `??`
-// value. A fake ForeignMysql stands in for the server; the real MariaDB variant runs in Task 39.
+// comparison for a composite key), LIMIT/OFFSET for a table without one (flagged `no_pk`) and for the author and
+// subject links (in the table's own order), every identifier a `??` value. A fake ForeignMysql stands in for the server; the real MariaDB variant runs in Task 39.
 
 const CFG: SlimsDbConfig = { host: 'db.example', port: 3306, user: 'baca', password: 'x', database: 'slims', tls: false };
 
@@ -17,7 +17,10 @@ interface Table {
 
 const b = (s: string): Buffer => Buffer.from(s, 'utf8');
 
-/** A SLiMS database in memory: item (1 200 rows), biblio_custom (cf_* columns), biblio_author (composite key), biblio_attachment (no key), mst_language (text key). */
+/**
+ * A SLiMS database in memory: item (1 200 rows), biblio_custom (cf_* columns), biblio_relation (composite key), biblio_author
+ * (composite key, rows out of key order), biblio_attachment (no key), mst_language (text key).
+ */
 function database(): Map<string, Table> {
   const tables = new Map<string, Table>();
   tables.set('item', {
@@ -33,10 +36,22 @@ function database(): Map<string, Table> {
       { biblio_id: 2, cf_4c5d6: null, cf_7e8f9: b('Café') },
     ],
   });
+  tables.set('biblio_relation', {
+    columns: ['biblio_id', 'rel_biblio_id', 'rel_type'],
+    primaryKey: ['biblio_id', 'rel_biblio_id'],
+    rows: [1, 2, 3].flatMap((bid) => [1, 2].map((rid) => ({ biblio_id: bid, rel_biblio_id: rid, rel_type: rid }))),
+  });
+  // In the order the authors were entered, not in key order (a MyISAM table gives them so).
   tables.set('biblio_author', {
     columns: ['biblio_id', 'author_id', 'level'],
     primaryKey: ['biblio_id', 'author_id'],
-    rows: [1, 2, 3].flatMap((bid) => [1, 2].map((aid) => ({ biblio_id: bid, author_id: aid, level: aid }))),
+    rows: [
+      { biblio_id: 2, author_id: 9, level: 1 },
+      { biblio_id: 2, author_id: 3, level: 1 },
+      { biblio_id: 1, author_id: 5, level: 2 },
+      { biblio_id: 1, author_id: 4, level: 1 },
+      { biblio_id: 3, author_id: 1, level: 1 },
+    ],
   });
   tables.set('biblio_attachment', { columns: ['biblio_id', 'file_id'], primaryKey: [], rows: Array.from({ length: 7 }, (_, i) => ({ biblio_id: i + 1, file_id: i + 1 })) });
   tables.set('mst_language', {
@@ -183,9 +198,9 @@ describe('openDbSource', () => {
   it('pages a composite key by row comparison, a text key by its text, and a table without a key by offset', async () => {
     const server = fakeServer(database());
     const source = await openDbSource(CFG, { connect: server.connect });
-    const first = await source.rows('biblio_author', null, 4);
-    const second = await source.rows('biblio_author', first.next, 4);
-    expect([...first.rows, ...second.rows].map((r) => [r['biblio_id'], r['author_id']])).toEqual([
+    const first = await source.rows('biblio_relation', null, 4);
+    const second = await source.rows('biblio_relation', first.next, 4);
+    expect([...first.rows, ...second.rows].map((r) => [r['biblio_id'], r['rel_biblio_id']])).toEqual([
       [1, 1],
       [1, 2],
       [2, 1],
@@ -195,7 +210,7 @@ describe('openDbSource', () => {
     ]);
     expect(second.next).toBeNull();
     expect(server.log.at(-1)!.sql).toBe('SELECT ??, ??, ?? FROM ?? WHERE (??, ??) > (?, ?) ORDER BY ??, ?? LIMIT ?');
-    expect(server.log.at(-1)!.params.slice(4, 8)).toEqual(['biblio_id', 'author_id', 2, 2]);
+    expect(server.log.at(-1)!.params.slice(4, 8)).toEqual(['biblio_id', 'rel_biblio_id', 2, 2]);
 
     const lang1 = await source.rows('mst_language', null, 2);
     const lang2 = await source.rows('mst_language', lang1.next, 2);
@@ -207,6 +222,24 @@ describe('openDbSource', () => {
     expect([...a.rows, ...z.rows].map((r) => r['file_id'])).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(server.log.at(-1)!.sql).toBe('SELECT ??, ?? FROM ?? LIMIT ? OFFSET ?');
     expect(z.next).toBeNull();
+    await source.close();
+  });
+
+  it('reads the author and subject links in the order of the table itself, as mysqldump does, paged by offset', async () => {
+    const server = fakeServer(database());
+    const source = await openDbSource(CFG, { connect: server.connect });
+    const first = await source.rows('biblio_author', null, 3);
+    const second = await source.rows('biblio_author', first.next, 3);
+    expect([...first.rows, ...second.rows].map((r) => [r['biblio_id'], r['author_id']])).toEqual([
+      [2, 9],
+      [2, 3],
+      [1, 5],
+      [1, 4],
+      [3, 1],
+    ]);
+    expect([first.next, second.next]).toEqual(['o:3', null]);
+    expect(server.log.at(-1)).toEqual({ sql: 'SELECT ??, ??, ?? FROM ?? LIMIT ? OFFSET ?', params: ['biblio_id', 'author_id', 'level', 'biblio_author', 3, 3] });
+    await expect(source.rows('biblio_author', 'k:[1,1]', 3)).rejects.toThrow(TypeError);
     await source.close();
   });
 
