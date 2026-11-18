@@ -3,13 +3,15 @@ import { PageHead } from '@/components/layout';
 import { EDITION, editionName } from '@/edition';
 import { useT } from '@/i18n';
 import { useMe } from '@/lib/me';
+import { SystemDetails } from '@/screens/dashboard';
 
 /**
  * Tentang (spec §13.3 "Kerangka admin: halaman Tentang"; every signed-in staff user): the build this admin SPA is
  * (`__ALTIS_BUILD__`), the server's own when it already runs another one, the edition ("Edisi Komunitas"), the
  * software licence (AGPL-3.0-only) with the link to the source code (AGPL §13: whoever uses ALTIS over a network is
  * offered its source; ruling R24), and the third-party notices the release ships (`GET /legal/third-party-notices.txt`,
- * the same text as THIRD_PARTY_NOTICES.txt).
+ * the same text as THIRD_PARTY_NOTICES.txt), and the section "Sistem" (screens/dashboard.tsx): the versions, the
+ * update check, the last backup, the job queue and the scheduler, each for a user who may see it.
  */
 export function AboutScreen() {
   const t = useT();
@@ -59,6 +61,7 @@ export function AboutScreen() {
         </a>
         <p className="text-muted-foreground">{t('about.notices_hint')}</p>
       </section>
+      <SystemDetails />
     </div>
   );
 }

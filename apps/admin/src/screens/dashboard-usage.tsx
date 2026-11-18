@@ -90,7 +90,7 @@ function Subjects({ subjects, placeholder }: { subjects: readonly SubjectLoans[]
         <>
           <ul className="flex flex-col" aria-label={t('dashboard.home.subjects.caption', { days: DASHBOARD_USAGE_DAYS })}>
             {subjects.map((s) => (
-              <li key={s.main} className="grid grid-cols-[minmax(7rem,11rem)_minmax(0,1fr)_2.5rem] items-center gap-2.5 py-[5px] text-meta xl:grid-cols-[minmax(8rem,14rem)_minmax(0,1fr)_2.5rem]" data-subject={s.main}>
+              <li key={s.main} className="grid grid-cols-[minmax(7rem,11rem)_minmax(0,1fr)_2.5rem] items-center gap-2.5 py-[5px] text-meta" data-subject={s.main}>
                 <span className="truncate text-muted-foreground" title={subjectName(t, s)}>
                   {subjectName(t, s)}
                 </span>
@@ -181,9 +181,7 @@ function TopTitles({ titles, placeholder }: { titles: readonly TopTitle[]; place
   );
 }
 
-const ROW = 'grid gap-4 min-[1060px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]';
-
-/** The loans by subject and the most borrowed titles, side by side (see the top of this file); nothing without them. */
+/** The loans by subject and the most borrowed titles, two blocks of the row they stand in (see the top of this file); nothing without them. */
 export function UsageBlocks() {
   const me = useMe();
   const library = useLibraryToday();
@@ -191,18 +189,18 @@ export function UsageBlocks() {
     if (!holds(me, 'reports.statistics.read')) return null;
     const retry = library.isError ? () => void library.refetch() : null;
     return (
-      <div className={ROW}>
+      <>
         <Subjects subjects={[]} placeholder={<Placeholder retry={retry} announce />} />
         <TopTitles titles={[]} placeholder={<Placeholder retry={retry} announce={false} />} />
-      </div>
+      </>
     );
   }
   const usage = library.data.usage;
   if (usage === null) return null;
   return (
-    <div className={ROW}>
+    <>
       <Subjects subjects={usage.bySubject} />
       <TopTitles titles={usage.topTitles} />
-    </div>
+    </>
   );
 }
