@@ -81,6 +81,7 @@ export const SHELL_CSS: string = [
   '.topstrip .wrap{display:flex;align-items:center;gap:1.5rem;min-height:2.25rem}',
   '.topstrip a{color:inherit}',
   '.topstrip .ico{width:.875rem;height:.875rem;vertical-align:-.125rem;margin-right:.25rem}',
+  '.top-today{white-space:nowrap}',
   '.open-dot{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;background:var(--ok);margin-right:.375rem}',
   '.open-dot-off{background:var(--border-strong)}',
   '.lang{display:flex;align-items:center;margin-left:auto}',
@@ -262,7 +263,7 @@ export const SHELL_CSS: string = [
 
   // Narrow screens: the menu becomes the `<details>`, the footer two columns.
   '@media (max-width:68.74rem){.mainnav{gap:1.25rem}.site-header .wrap{gap:1.5rem}}',
-  '@media (max-width:53.74rem){.hide-s{display:none!important}.mainnav{display:none}.mobnav{display:block}' +
+  '@media (max-width:53.74rem){.hide-s{display:none!important}.mainnav{display:none}.mobnav{display:block}.topstrip .wrap{gap:.75rem}' +
     '.site-header .wrap{min-height:3.75rem}.sitelogo img{height:2.125rem}.sitelogo{max-width:75%}' +
     '.search-row{flex-wrap:wrap}.search-join{flex-basis:100%}.search-join select{width:7rem}.search-row .btn{width:100%}' +
     '.pagehead h1{font-size:1.5rem}.section-head{flex-direction:column;gap:.25rem;margin-bottom:1rem}.section-head h2{font-size:1.375rem}' +
