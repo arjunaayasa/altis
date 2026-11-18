@@ -2,24 +2,48 @@ import type { Permission } from '@altis/shared';
 import type { MeResponse } from '@altis/shared/api/auth';
 import { editionNav } from '@/edition';
 import type { AdminKey } from '@/i18n';
+import { ArrowLeftRightIcon, BookOpenIcon, ChartColumnIcon, GlobeIcon, HouseIcon, ShieldIcon, UsersIcon, type LucideIcon } from 'lucide-react';
 
 /**
- * The shell's sections (spec §13.3 "Kerangka admin": navigation by permission). An item shows when the signed-in
+ * The shell's navigation (spec §13.3 "Kerangka admin": navigation by permission). An item shows when the signed-in
  * user holds its permission (a super admin holds every one) and, for `superAdminOnly`, is a super admin. Hiding is a
  * convenience only: the server refuses whatever the menus hide (§4.8).
  *
- * Phase 2 (its spec §13; plan Task 2) groups them: Katalog, OPAC, then Sistem (the Phase 1 screens); Beranda stays
- * above the groups. The shell and the command palette show each group under its heading (`nav.group.<group>`). The
- * community milestones add Laporan (reports and accreditation) after Katalog, and Layanan (the circulation desk and its
- * lists) and Anggota (members) between Katalog and Laporan.
- *
- * The shell shows them as modules (at the end of this file): a module bar with Beranda and each group the user sees,
- * and a sidebar with the pages of the active module only (Beranda adds its shortcuts). The palette lists every item.
+ * The items are grouped: Layanan (the circulation desk and its lists), Anggota, Katalog, Laporan (reports and
+ * accreditation), Situs / OPAC and Sistem; Beranda stays above the groups. The sidebar (components/shell/sidebar.tsx)
+ * shows Beranda as a link and each group the user sees as a collapsible entry with its icon, under three section
+ * labels ({@link NAV_SECTIONS}); the command palette lists every item under its group's heading
+ * (`nav.group.<group>`).
  */
 export type NavGroup = 'catalog' | 'circulation' | 'members' | 'reports' | 'opac' | 'system';
 
-/** The groups in the order the shell and the palette show them. */
-export const NAV_GROUPS: readonly NavGroup[] = Object.freeze(['catalog', 'circulation', 'members', 'reports', 'opac', 'system'] as const);
+/** The groups in the order the sidebar and the palette show them. */
+export const NAV_GROUPS: readonly NavGroup[] = Object.freeze(['circulation', 'members', 'catalog', 'reports', 'opac', 'system'] as const);
+
+/** The three labelled parts of the sidebar: daily work, the collection, the site and the system. */
+export type NavSectionId = 'daily' | 'collection' | 'site';
+
+/** The sections in the order of the sidebar; each is labelled `nav.section.<id>`. */
+export const NAV_SECTIONS: readonly NavSectionId[] = Object.freeze(['daily', 'collection', 'site'] as const);
+
+/** What the sidebar draws for a group: its icon and the section it is listed under. */
+export interface NavGroupLook {
+  icon: LucideIcon;
+  section: NavSectionId;
+}
+
+/** The look of Beranda, the one entry above the groups. */
+export const NAV_HOME: NavGroupLook = Object.freeze({ icon: HouseIcon, section: 'daily' });
+
+/** The icon and the section of each group. */
+export const NAV_GROUP_LOOK: Readonly<Record<NavGroup, NavGroupLook>> = Object.freeze({
+  circulation: { icon: ArrowLeftRightIcon, section: 'daily' },
+  members: { icon: UsersIcon, section: 'daily' },
+  catalog: { icon: BookOpenIcon, section: 'collection' },
+  reports: { icon: ChartColumnIcon, section: 'collection' },
+  opac: { icon: GlobeIcon, section: 'site' },
+  system: { icon: ShieldIcon, section: 'site' },
+});
 
 export interface NavItem {
   to: string;
@@ -49,7 +73,10 @@ export const NAV: readonly NavItem[] = Object.freeze([
   { to: '/admin/catalog/labels', labelKey: 'nav.catalog.labels', permission: 'catalog.records.read', group: 'catalog' },
   { to: '/admin/catalog/duplicates', labelKey: 'nav.catalog.duplicates', permission: 'catalog.records.manage', group: 'catalog' },
   { to: '/admin/catalog/migration', labelKey: 'nav.catalog.migration', permission: 'catalog.migration.run', group: 'catalog' },
-  // OPAC
+  // Situs / OPAC: the home page as the library's profile site, the site's identity (name, logo, icon), then the
+  // pages and news. All three need the same permission.
+  { to: '/admin/opac/beranda', labelKey: 'nav.opac.home', permission: 'opac.pages.manage', group: 'opac' },
+  { to: '/admin/opac/identitas', labelKey: 'nav.opac.identity', permission: 'opac.pages.manage', group: 'opac' },
   { to: '/admin/opac/pages', labelKey: 'nav.opac.pages', permission: 'opac.pages.manage', group: 'opac' },
   // Sistem: the Phase 1 screens.
   { to: '/admin/users', labelKey: 'nav.users', permission: 'system.users.read', group: 'system' },
@@ -98,8 +125,6 @@ export const NAV: readonly NavItem[] = Object.freeze([
   { to: '/admin/anggota/bebas-pustaka', labelKey: 'nav.members.clearances', permission: 'members.records.manage', group: 'members' },
   // ---- Komunitas K2 (members extended) ----
   { to: '/admin/anggota/kartu', labelKey: 'nav.members.cards', permission: 'members.records.read', group: 'members' },
-  // ---- Komunitas (OPAC home page): the home page as the library's profile site ----
-  { to: '/admin/opac/beranda', labelKey: 'nav.opac.home', permission: 'opac.pages.manage', group: 'opac' },
   // The edition's own items (ruling R2, edition/index.ts), after the community ones: none in the community edition.
   ...editionNav,
 ] satisfies NavItem[]);
@@ -109,7 +134,7 @@ export function visibleNav(me: MeResponse | undefined): NavItem[] {
   return NAV.filter(navFilter(me));
 }
 
-/** The test {@link visibleNav} applies to an item (the same for the shortcuts of Beranda); false for every item until `me` is fully signed in. */
+/** The test {@link visibleNav} applies to an item; false for every item until `me` is fully signed in. */
 function navFilter(me: MeResponse | undefined): (item: NavItem) => boolean {
   if (me === undefined || !me.authenticated || me.stage !== 'full') return () => false;
   const held = new Set<string>(me.permissions);
@@ -137,8 +162,8 @@ export function activeNavPath(items: readonly NavItem[], pathname: string): stri
   return best;
 }
 
-/** One heading of the navigation: its group (null for the items above the groups) and its visible items. */
-export interface NavSection {
+/** One entry of the navigation: Beranda's items (`group` null) or a group, with its visible items and its look. */
+export interface NavSection extends NavGroupLook {
   group: NavGroup | null;
   items: NavItem[];
 }
@@ -151,34 +176,34 @@ export function visibleNavSections(me: MeResponse | undefined): NavSection[] {
   const items = visibleNav(me);
   const sections: NavSection[] = [];
   const top = items.filter((item) => item.group === undefined);
-  if (top.length > 0) sections.push({ group: null, items: top });
+  if (top.length > 0) sections.push({ group: null, items: top, ...NAV_HOME });
   for (const group of NAV_GROUPS) {
     const inGroup = items.filter((item) => item.group === group);
-    if (inGroup.length > 0) sections.push({ group, items: inGroup });
+    if (inGroup.length > 0) sections.push({ group, items: inGroup, ...NAV_GROUP_LOOK[group] });
   }
   return sections;
 }
 
-// ---- Modules: the module bar and the sidebar of the shell ----
+// ---- Modules: the entries of the sidebar ----
 
 /**
- * A module of the shell: Beranda (`home`, the items of no group) or one nav group. The module bar under the top bar
- * lists the modules the user sees, in this order; the sidebar lists the pages of the active one only.
+ * A module of the shell: Beranda (`home`, the items of no group) or one nav group. The sidebar lists the modules the
+ * user sees, in this order; the top bar names the module of the page shown.
  */
 export type NavModule = 'home' | NavGroup;
 
-/** The modules in the order of the module bar. */
+/** The modules in the order of the sidebar. */
 export const NAV_MODULES: readonly NavModule[] = Object.freeze(['home', ...NAV_GROUPS] as const);
 
-/** A module the user sees, with its visible pages (never empty) in the order of {@link NAV}. */
-export interface ModuleView {
+/** A module the user sees, with its visible pages (never empty) in the order of {@link NAV}, and its look. */
+export interface ModuleView extends NavGroupLook {
   module: NavModule;
   items: NavItem[];
 }
 
 /** {@link visibleNavSections} as modules: Beranda for the ungrouped items, then each group that has a visible item. */
 export function visibleModules(me: MeResponse | undefined): ModuleView[] {
-  return visibleNavSections(me).map((section) => ({ module: section.group ?? 'home', items: section.items }));
+  return visibleNavSections(me).map(({ group, ...rest }) => ({ module: group ?? 'home', ...rest }));
 }
 
 /** The first two segments of a path (`/admin/catalog/runs/1` → `/admin/catalog`): the area a page lies in. */
@@ -190,7 +215,7 @@ function areaOf(path: string): string {
  * The module the page at `pathname` belongs to, among `modules` (what {@link visibleModules} answers): the module of
  * the visible item {@link activeNavPath} marks; else, for a page under no visible item (a detail page of its own path,
  * a page the user's menus hide), the module whose items share the page's area (`/admin/catalog/runs/1` → Katalog);
- * else Beranda (the profile, a path no route serves).
+ * else Beranda (the profile, a path no route serves). The sidebar opens that module's group.
  */
 export function activeModule(modules: readonly ModuleView[], pathname: string): NavModule {
   const items = modules.flatMap((m) => m.items);
@@ -207,20 +232,4 @@ export function activeModule(modules: readonly ModuleView[], pathname: string): 
 
 function moduleOfItem(item: NavItem): NavModule {
   return item.group ?? 'home';
-}
-
-/**
- * The shortcuts the sidebar of Beranda lists under "Pintasan": the everyday pages of the desk and of the member list,
- * each behind the permission its page needs. Shown under the same rules as {@link NAV} ({@link visibleShortcuts}).
- */
-export const HOME_SHORTCUTS: readonly NavItem[] = Object.freeze([
-  { to: '/admin/layanan', labelKey: 'nav.circulation.desk', permission: 'circulation.desk.use', anyBranch: true },
-  { to: '/admin/layanan/kembali', labelKey: 'nav.circulation.quick_return', permission: 'circulation.desk.use', anyBranch: true },
-  { to: '/admin/anggota/baru', labelKey: 'shell.shortcut.add_member', permission: 'members.records.manage' },
-  { to: '/admin/anggota/impor', labelKey: 'nav.members.import', permission: 'members.import.run' },
-] satisfies NavItem[]);
-
-/** The shortcuts of Beranda `me` may open. */
-export function visibleShortcuts(me: MeResponse | undefined): NavItem[] {
-  return HOME_SHORTCUTS.filter(navFilter(me));
 }

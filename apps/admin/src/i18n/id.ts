@@ -33,7 +33,7 @@ export const ADMIN_ID = {
   // ---- Phase 2 (catalog): Task 2 ----
   // The groups of the navigation (Phase 2 spec §13) and the catalog and OPAC sections, named as the spec names them.
   'nav.group.catalog': 'Katalog',
-  'nav.group.opac': 'OPAC',
+  'nav.group.opac': 'Situs / OPAC',
   'nav.group.system': 'Sistem',
   'nav.catalog.records': 'Bibliografi',
   'nav.catalog.items': 'Eksemplar',
