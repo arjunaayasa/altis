@@ -8,7 +8,7 @@ import { assignRole, createStaff, enableTwoFactor } from '../lib/api.js';
 import { CspRecorder, guardContext, pageViolations } from '../lib/csp.js';
 import { moduleBar, openNavPage } from '../lib/nav.js';
 import { tr, type TextKey } from '../lib/text.js';
-import { T, expect, expectHome, passReauth, signIn, test } from '../fixtures.js';
+import { T, chooseFromMenu, expect, expectHome, passReauth, signIn, submitFilter, test } from '../fixtures.js';
 
 // No CSP violation anywhere a user goes (spec §7.4; exit check A11 of 1b): the sign-in pages, every entry of the admin
 // navigation and the pages under it, the command palette, every dialog of the screens, in Indonesian and in English,
@@ -204,20 +204,21 @@ for (const locale of LOCALES) {
 
     await clean(csp, 'users: the confirmations, the reauth dialog and the temporary password', async () => {
       await openNavPage(page, '/admin/users', t);
-      await page.getByLabel(t('users.search'), { exact: true }).fill(target.username);
-      await page.getByRole('button', { name: t('users.search_submit'), exact: true }).click();
+      const search = page.getByLabel(t('users.search'), { exact: true });
+      await search.fill(target.username);
+      await submitFilter(search);
       const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: target.username, exact: true }) });
       await expect(row).toHaveCount(1);
 
       for (const action of ['disable', 'reset_2fa'] as const) {
-        await row.getByRole('button', { name: t(`users.action.${action}`), exact: true }).click();
+        await chooseFromMenu(page, row, t('users.more_named', { name: target.name }), t(`users.action.${action}`));
         const confirm = page.getByRole('alertdialog', { name: t(`users.confirm.${action}.title`, { name: target.name }) });
         await expect(confirm).toBeVisible();
         await confirm.getByRole('button', { name: t('form.cancel'), exact: true }).click();
         await expect(confirm).toBeHidden();
       }
 
-      await row.getByRole('button', { name: t('users.action.reset_password'), exact: true }).click();
+      await chooseFromMenu(page, row, t('users.more_named', { name: target.name }), t('users.action.reset_password'));
       const confirm = page.getByRole('alertdialog', { name: t('users.confirm.reset_password.title', { name: target.name }) });
       await confirm.getByRole('button', { name: t('users.action.reset_password'), exact: true }).click();
       // A fresh session has no re-authentication: the dialog asks for the password.
@@ -240,7 +241,7 @@ for (const locale of LOCALES) {
     await clean(csp, 'branches: the archive confirmation', async () => {
       await openNavPage(page, '/admin/branches', t);
       const row = page.getByRole('row').filter({ hasText: branch.name });
-      await row.getByRole('button', { name: t('branches.action.archive'), exact: true }).click();
+      await chooseFromMenu(page, row, t('branches.more_named', { name: branch.name }), t('branches.action.archive'));
       const confirm = page.getByRole('alertdialog', { name: t('branches.confirm.archive.title', { name: branch.name }) });
       await expect(confirm).toBeVisible();
       await confirm.getByRole('button', { name: t('form.cancel'), exact: true }).click();

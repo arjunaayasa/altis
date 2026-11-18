@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { newPassword } from '../lib/api.js';
-import { T, enrolInProfile, expect, expectHome, passReauth, signIn, signOut, submitPassword, test } from '../fixtures.js';
+import { T, chooseFromMenu, enrolInProfile, expect, expectHome, passReauth, signIn, signOut, submitFilter, submitPassword, test } from '../fixtures.js';
 import { moduleBar, navLink, openNavPage } from '../lib/nav.js';
 
 // Staff administration in the browser (spec §7.1–§7.3, §13.3 "Pengguna"; Tasks 19, 29): the super admin creates
@@ -16,8 +16,9 @@ const PETUGAS = { username: 'petugas', name: 'Petugas Sirkulasi', email: 'petuga
 async function petugasRow(page: Page) {
   await openNavPage(page, '/admin/users');
   await expect(page.getByRole('heading', { level: 1, name: T('nav.users'), exact: true })).toBeVisible();
-  await page.getByLabel(T('users.search'), { exact: true }).fill(PETUGAS.username);
-  await page.getByRole('button', { name: T('users.search_submit'), exact: true }).click();
+  const search = page.getByLabel(T('users.search'), { exact: true });
+  await search.fill(PETUGAS.username);
+  await submitFilter(search);
   const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: PETUGAS.username, exact: true }) });
   await expect(row).toHaveCount(1);
   return row;
@@ -71,7 +72,7 @@ test('super admin: create petugas as Admin, reset its 2FA (reauth), reset its pa
   await signIn(admin2, admin);
   const row = await petugasRow(admin2);
   // "Atur ulang 2FA" shows only for a user with 2FA on.
-  await row.getByRole('button', { name: T('users.action.reset_2fa'), exact: true }).click();
+  await chooseFromMenu(admin2, row, T('users.more_named', { name: PETUGAS.name }), T('users.action.reset_2fa'));
   const confirm2fa = admin2.getByRole('alertdialog', { name: T('users.confirm.reset_2fa.title', { name: PETUGAS.name }) });
   await confirm2fa.getByRole('button', { name: T('users.action.reset_2fa'), exact: true }).click();
   await passReauth(admin2, admin.password, { expectDialog: true });
@@ -84,7 +85,7 @@ test('super admin: create petugas as Admin, reset its 2FA (reauth), reset its pa
 
   // 4. The super admin resets petugas's password: a temporary password, shown once.
   const sameRow = await petugasRow(admin2);
-  await sameRow.getByRole('button', { name: T('users.action.reset_password'), exact: true }).click();
+  await chooseFromMenu(admin2, sameRow, T('users.more_named', { name: PETUGAS.name }), T('users.action.reset_password'));
   const confirmPassword = admin2.getByRole('alertdialog', { name: T('users.confirm.reset_password.title', { name: PETUGAS.name }) });
   await confirmPassword.getByRole('button', { name: T('users.action.reset_password'), exact: true }).click();
   const shown = admin2.getByRole('dialog', { name: T('users.temp_password.title') });
