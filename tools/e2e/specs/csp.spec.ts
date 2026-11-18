@@ -3,10 +3,10 @@ import type { Page } from '@playwright/test';
 import { LOCALES, type Locale } from '@altis/shared';
 import type { BranchItem } from '@altis/shared/api/branches';
 import type { RoleItem } from '@altis/shared/api/roles';
-import { NAV as ADMIN_NAV, NAV_MODULES } from '../../../apps/admin/src/lib/nav.js';
+import { NAV as ADMIN_NAV, NAV_GROUPS } from '../../../apps/admin/src/lib/nav.js';
 import { assignRole, createStaff, enableTwoFactor } from '../lib/api.js';
 import { CspRecorder, guardContext, pageViolations } from '../lib/csp.js';
-import { moduleBar, openNavPage } from '../lib/nav.js';
+import { groupButtons, mainNav, openNavPage } from '../lib/nav.js';
 import { tr, type TextKey } from '../lib/text.js';
 import { T, chooseFromMenu, expect, expectHome, passReauth, signIn, submitFilter, test } from '../fixtures.js';
 
@@ -174,8 +174,9 @@ for (const locale of LOCALES) {
       });
     }
 
-    await clean(csp, 'nav: the module bar shows every module', async () => {
-      await expect(moduleBar(page, t).getByRole('link')).toHaveCount(NAV_MODULES.length);
+    await clean(csp, 'nav: the sidebar shows Beranda and every group', async () => {
+      await expect(mainNav(page, t).getByRole('link', { name: t('nav.home'), exact: true })).toBeVisible();
+      await expect(groupButtons(page, t)).toHaveCount(NAV_GROUPS.length);
     });
     for (const item of NAV) {
       await clean(csp, `nav: ${t(item.key)}`, async () => {

@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { newPassword } from '../lib/api.js';
 import { T, chooseFromMenu, enrolInProfile, expect, expectHome, passReauth, signIn, signOut, submitFilter, submitPassword, test } from '../fixtures.js';
-import { moduleBar, navLink, openNavPage } from '../lib/nav.js';
+import { navLink, openGroup, openNavPage } from '../lib/nav.js';
 
 // Staff administration in the browser (spec §7.1–§7.3, §13.3 "Pengguna"; Tasks 19, 29): the super admin creates
 // `petugas` with the role Admin; petugas changes the required password and enables 2FA; the super admin resets
@@ -59,7 +59,7 @@ test('super admin: create petugas as Admin, reset its 2FA (reauth), reset its pa
   await petugas.getByRole('button', { name: T('profile.password.submit'), exact: true }).click();
   await expectHome(petugas);
   // The role Admin shows its sections.
-  await moduleBar(petugas).getByRole('link', { name: T('nav.group.system'), exact: true }).click();
+  await openGroup(petugas, T('nav.group.system'));
   await expect(navLink(petugas, '/admin/users')).toBeVisible();
   await enrolInProfile(petugas);
   await petugas.getByRole('button', { name: T('twofa.sign_in_again'), exact: true }).click();
