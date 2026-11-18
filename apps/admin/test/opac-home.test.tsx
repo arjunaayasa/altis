@@ -9,7 +9,7 @@ import { adminMe, problem, signedIn, startApp, type FakeRequest } from './fake-a
 // the hero preview following the unsaved draft, the unsaved mark and "Batalkan perubahan", the PUT body (the whole
 // content with the revision it was loaded at, blanks as null), the field errors checked before sending, the 409 of a
 // save another admin made first, the crop panel's "Pakai foto ini" (which sends no save of the page and puts the photo
-// in the draft), the logo (fitted onto a white tile, its alternative text required) and the public contact (a member's
+// in the draft), the note where the logo was (it is set under Identitas situs now) and the public contact (a member's
 // or user's e-mail refused by the server on its field), and the screen without the permission. The outcome of a save
 // is said under the page head, above the form.
 
@@ -276,35 +276,22 @@ describe('OPAC › Halaman awal', () => {
     expect(puts(requests).map((b) => (b as { revision: string }).revision)).toEqual(['aaaaaaaaaaaaaaaa']);
   });
 
-  it('the logo: fitted whole onto a white tile and uploaded, its alternative text required; the contact saved as typed, blanks as none', async () => {
-    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 600, height: 150, close: vi.fn() })));
-    const drawImage = vi.fn();
-    const fillRect = vi.fn();
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({ drawImage, fillRect })) as unknown as HTMLCanvasElement['getContext']);
-    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((done: BlobCallback) => done(new Blob(['x'], { type: 'image/jpeg' })));
-    vi.mocked(uploadFile).mockResolvedValue({ uploadId: LOGO } as never);
+  it('the logo is set under Identitas situs: a note links there, and the logo that was loaded is sent back unchanged; the contact saved as typed, blanks as none', async () => {
     const { requests } = startApp({
       me: adminMe(),
       path: '/admin/opac/beranda',
-      routes: { 'GET opac/home': () => view(), 'PUT opac/home': () => ({ revision: 'fedcba9876543210', changed: ['opac.home'] }) },
+      routes: {
+        'GET opac/home': () => view({ logo: { fileId: LOGO, alt: 'Logo perpustakaan' } }),
+        'PUT opac/home': () => ({ revision: 'fedcba9876543210', changed: ['opac.home'] }),
+      },
     });
-    expect(await screen.findByText(t('opacHome.logo.none'), undefined, FIRST)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText(t('opacHome.logo.upload')), { target: { files: [new File([new Uint8Array(10)], 'logo.png', { type: 'image/png' })] } });
-    expect(await screen.findByLabelText(t('opacHome.logo.replace'))).toBeTruthy();
-    // A 4:1 logo: a tile 960 × 240, white first, the logo over it whole (no crop, no panel).
-    expect(fillRect).toHaveBeenCalledWith(0, 0, 960, 240);
-    expect(drawImage).toHaveBeenLastCalledWith(expect.anything(), 0, 0, 960, 240);
-    expect(vi.mocked(uploadFile)).toHaveBeenCalledWith(expect.any(Blob), { context: 'opac.home_photo' });
-    expect(screen.queryByRole('region', { name: t('opacHome.crop.title') })).toBeNull();
+    expect(await screen.findByText(t('siteIdentity.moved.note'), { exact: false }, FIRST)).toBeTruthy();
+    expect(screen.getByRole('link', { name: t('siteIdentity.moved.link') }).getAttribute('href')).toBe('/admin/opac/identitas');
+    // No logo field is left on this form.
+    expect(screen.queryByLabelText(/logo/i)).toBeNull();
+    expect(document.querySelector(`img[src$="${LOGO}"]`)).toBeNull();
 
-    // Without its alternative text the logo is refused before sending.
     fireEvent.change(screen.getByLabelText(t('opacHome.contact.phone')), { target: { value: ' (021) 555-0101 ' } });
-    fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
-    await outcome(t('opacHome.fix_fields'));
-    const alt = screen.getByLabelText(t('opacHome.logo.alt'));
-    expect(alt.getAttribute('aria-invalid')).toBe('true');
-    expect(puts(requests)).toEqual([]);
-    fireEvent.change(alt, { target: { value: 'Logo perpustakaan' } });
     fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
     await screen.findByText(t('opacHome.saved'));
     expect(puts(requests)).toEqual([

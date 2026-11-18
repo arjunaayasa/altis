@@ -1,4 +1,4 @@
-import { OPAC_HOME_LOGO_SIZE, OPAC_HOME_PHOTO_MAX_BYTES } from '@altis/shared/api/opac-home';
+import { OPAC_HOME_PHOTO_MAX_BYTES } from '@altis/shared/api/opac-home';
 import { useEffect, useState } from 'react';
 import { Field, ProblemAlert } from '@/components/form-field';
 import { InlinePanel, StatusText } from '@/components/layout';
@@ -10,8 +10,7 @@ import { useT } from '@/i18n';
  * cover a canvas of the target size (the hero 1600 × 900, the other photos 1200 × 900) at the zoom and offset the admin
  * picks, and encoded as a JPEG of at most 500 KB (the quality lowered step by step), which is what gets uploaded. The
  * canvas re-encoding leaves no metadata behind; the server strips it anyway and checks the type and the size again.
- * The crop opens as a panel under the control that chose the photo (not a dialog). The logo is not cropped: it is
- * fitted whole onto a white tile (`fitLogo`).
+ * The crop opens as a panel under the control that chose the photo (not a dialog).
  */
 
 /** The largest file the browser is asked to decode. */
@@ -65,31 +64,6 @@ export async function jpegOf(canvas: HTMLCanvasElement): Promise<Blob | null> {
     if (blob !== null && blob.size <= OPAC_HOME_PHOTO_MAX_BYTES) return blob;
   }
   return null;
-}
-
-/** The size of the logo's tile for an image of `width` × `height`: 240 px high, as wide as the logo (square to 4:1). */
-export function logoTileSize(width: number, height: number): { width: number; height: number } {
-  const { height: h, minWidth, maxWidth } = OPAC_HOME_LOGO_SIZE;
-  const wide = Math.round((h * width) / Math.max(1, height));
-  return { width: Math.min(maxWidth, Math.max(minWidth, wide)), height: h };
-}
-
-/** The logo fitted whole and centred on a white tile of {@link logoTileSize} (a JPEG has no transparency). */
-export function fitLogo(img: PhotoSource): HTMLCanvasElement {
-  const size = logoTileSize(img.width, img.height);
-  const canvas = document.createElement('canvas');
-  canvas.width = size.width;
-  canvas.height = size.height;
-  const ctx = canvas.getContext('2d');
-  if (ctx === null) return canvas;
-  const scale = Math.min(size.width / img.width, size.height / img.height);
-  const w = img.width * scale;
-  const h = img.height * scale;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, size.width, size.height);
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(img, (size.width - w) / 2, (size.height - h) / 2, w, h);
-  return canvas;
 }
 
 /** The crop panel: the framed preview, zoom and offsets, then the JPEG handed to `onSave`. */
