@@ -12,9 +12,9 @@ import { T, chooseFromMenu, expect, expectHome, passReauth, signIn, submitFilter
 
 // No CSP violation anywhere a user goes (spec §7.4; exit check A11 of 1b): the sign-in pages, every entry of the admin
 // navigation and the pages under it, the command palette, every dialog of the screens, in Indonesian and in English,
-// and the OPAC home in both languages. The guard of fixtures.ts checks the whole test; each step here is also checked on
-// its own, so that a violation names the step it happened in. A canary proves first that the guard sees a violation at
-// all, in this browser.
+// and the OPAC home, the member sign-in and the guestbook activation in both languages. The guard of fixtures.ts checks
+// the whole test; each step here is also checked on its own, so that a violation names the step it happened in. A
+// canary proves first that the guard sees a violation at all, in this browser.
 
 /**
  * Every entry of the admin navigation, from the table the SPA's shell renders (apps/admin/src/lib/nav.ts): an entry
@@ -125,6 +125,26 @@ test('OPAC home in both languages', async ({ page, csp }) => {
     await page.getByRole('navigation', { name: tr('id', 'opac.lang.switch') }).getByRole('link', { name: LANGUAGE_NAME.en, exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   });
+});
+
+// The member area's sign-in page and the guestbook station's activation page are server-rendered pages of their own
+// (a browser without a session or a paired station sees them); their flows are opac-account.spec.ts and
+// visits.spec.ts.
+test('OPAC member sign-in and guestbook activation in both languages', async ({ page, csp }) => {
+  for (const locale of LOCALES) {
+    await clean(csp, `member sign-in (${locale})`, async () => {
+      const res = await page.goto(`/akun/masuk?lang=${locale}`);
+      expect(res?.status()).toBe(200);
+      await expect(page.locator('html')).toHaveAttribute('lang', locale);
+      await expect(page.locator('form[action^="/akun/masuk"] input[name="memberNo"]')).toBeVisible();
+    });
+    await clean(csp, `guestbook activation (${locale})`, async () => {
+      const res = await page.goto(`/kunjungan/aktifkan?lang=${locale}`);
+      expect(res?.status()).toBe(200);
+      await expect(page.locator('html')).toHaveAttribute('lang', locale);
+      await expect(page.locator('form[action^="/kunjungan/aktifkan"] input[name="code"]')).toBeVisible();
+    });
+  }
 });
 
 for (const locale of LOCALES) {
