@@ -25,6 +25,7 @@ In the examples, `things.*` keys stand for the screen's own i18n keys (every tex
 | `table.tsx` | `DenseTable`, `DenseColumn`, `TABLE` (the classes, for a table drawn by hand), `SkeletonTable`, `SKELETON_BAR` |
 | `selection-bar.tsx` | `BulkBar` (`SelectionBar` is its older name), `SelectionAction` |
 | `inline-panel.tsx` | `InlinePanel` |
+| `editor-drawer.tsx` | `EditorDrawer` |
 | `more-menu.tsx` | `MoreMenu`, `MoreMenuItem`, `MoreMenuRule` |
 | `states.tsx` | `EmptyState`, `LoadingState`, `ErrorState` |
 | `callout.tsx` | `Callout`, `PageError` |
@@ -240,16 +241,44 @@ and its object; its buttons are `size="sm"`, the submit first.
 
 ## 6. When a dialog is allowed
 
-Only these three, each with its existing component:
+Only these four, each with its existing component:
 
 | Case | Component |
 |---|---|
 | Confirming an action that destroys or cannot simply be taken back (archive, delete, disable, reset) | `ConfirmDialog` |
 | Confirming the password before a sensitive action | `ReauthDialog` (it opens by itself on `AUTH_REAUTH_REQUIRED`) |
 | Showing a secret that is shown only once (a token, a recovery code, a new password) | `OneTimeSecretDialog` |
+| Editing one item of a list that is part of a larger form, when the item has too many fields for a row (a slide of the home page: photo, texts in two languages, button, dates) | `EditorDrawer` |
 
 Everything else is an `InlinePanel` or a page of its own: forms, pickers, bulk actions, details, help, previews. A
 destructive bulk action asks its question in words inside its panel, with a `variant="destructive"` submit.
+
+**`EditorDrawer`** is a panel on the right of the window (at most 880 px, the whole width on a phone), over the
+scrim: the item's name as its heading and one sentence under it, the fields in two columns (one on a narrow screen),
+and a foot with the item's switch on the left, then Batal and the submit. It is a modal dialog: the focus stays
+inside, Esc and the close button leave without keeping the changes, a click on the scrim does nothing, and the focus
+goes back to the button that opened it. Its submit **applies the item to the page's draft**; nothing is sent to the
+server until the page's own Save, and the sentence under the heading says so. It is not for a record with a page of
+its own, for a confirmation, or for anything a row or an `InlinePanel` can hold.
+
+```tsx
+<EditorDrawer
+  open
+  title={t('things.item.edit', { n })}
+  description={t('things.item.applies_on_save')}
+  closeLabel={t('things.item.close')}
+  onSubmit={apply}
+  onClose={cancel}
+  footer={
+    <>
+      <Button type="button" variant="ghost" className="ml-auto" onClick={cancel}>{t('form.cancel')}</Button>
+      <Button type="submit">{t('things.item.done')}</Button>
+    </>
+  }>
+  <div className="grid content-start gap-4">…</div>
+  <div className="grid content-start gap-4">…</div>
+</EditorDrawer>
+```
 
 ```tsx
 <ConfirmDialog open destructive title={t('members.archive.title', { name })} description={t('members.archive.body')} confirmLabel={t('members.action.archive_confirm')} onConfirm={archive} onClose={close} />
@@ -458,7 +487,7 @@ theme by themselves, so no `dark:` override, no hex value, no `text-red-600`, no
 - decorate a big number (an icon beside it, a coloured tile, a trend arrow, a percentage chip, a sparkline);
 - greet the user with a coloured welcome banner, or fill space with pictures, floating badges or ornaments;
 - nest cards, or round anything more than 6 px (but a switch and the user's initials);
-- open a dialog for anything that is not in section 6;
+- open a dialog or a drawer for anything that is not in section 6;
 - add a second primary button to a page header;
 - use a colour without its word, or a placeholder instead of a label;
 - use an emoji as an icon.
