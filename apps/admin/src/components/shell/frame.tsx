@@ -1,6 +1,6 @@
 import type { MeResponse } from '@altis/shared/api/auth';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { BrandProps } from '@/components/shell/brand';
+import { useBrand } from '@/components/shell/brand';
 import { Sidebar, moduleLabel } from '@/components/shell/sidebar';
 import { useSidebarCollapsed } from '@/components/shell/sidebar-state';
 import { TopBar } from '@/components/shell/top-bar';
@@ -49,8 +49,8 @@ export function ShellFrame({ me, pathname, onPalette, onLogout, children }: { me
   const page = view?.items.find((item) => item.to === current);
   // Beranda is one page: its crumb is the module alone.
   const crumbs = { module: moduleLabel(t, active), page: page === undefined || active === 'home' ? null : t(page.labelKey) };
-  // The library's own logo and icon come with the site's identity; until then its name stands as text.
-  const brand: BrandProps = { name: me.library.name };
+  // The library's own logo and icon come with the site's identity; until it is read its name stands as text.
+  const brand = useBrand(me.library.name);
 
   // The drawer just opened: the focus goes into it, on the marked page if there is one. Just closed by Escape, the
   // scrim or its close button: back to the menu button.

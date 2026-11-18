@@ -87,6 +87,19 @@ export function fakeServer(fetchMock: Mock<typeof fetch>, me: () => MeResponse, 
     const method = init?.method ?? 'GET';
     const path = String(input).replace(/^\/api\/v1\//, '');
     const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined;
+    // The brand of the sidebar and the sign-in page: a site without a logo, unless the test answers it itself. It is
+    // not kept in `calls`, so no test that counts its own requests sees it.
+    if (method === 'GET' && path === 'site/identity/public' && !table.has('GET site/identity/public')) {
+      return json({
+        name: me().library.name,
+        tagline: { id: null, en: null },
+        showNameBesideLogo: true,
+        logo: null,
+        logoDark: null,
+        hasIcon: false,
+        icon: { '32': '/site-icon/32.png', '180': '/site-icon/180.png', '192': '/site-icon/192.png' },
+      });
+    }
     const n = fetchMock.mock.calls.length - 1;
     calls.push({ method, path, body, order: fetchMock.mock.invocationCallOrder[n] ?? 0 });
     const handler = table.get(`${method} ${path}`);

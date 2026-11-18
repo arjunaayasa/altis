@@ -5,7 +5,7 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useCallback, useId, useState, type ComponentProps, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { Field, NoticeAlert, ProblemAlert, RootError, describedBy } from '@/components/form-field';
-import { PageBrand } from '@/components/shell/brand';
+import { PageBrand, brandOf } from '@/components/shell/brand';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +13,7 @@ import { useT } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
 import { FORM_PARSE, applyServerErrors, hasFieldErrors } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
+import { useSiteIdentity } from '@/lib/site-identity';
 import { continueAt, refreshMe, validateSignInSearch, type SignInSearch } from '@/lib/sign-in';
 import { cn } from '@/lib/utils';
 
@@ -43,17 +44,20 @@ export function useContinue(): (res: Pick<LoginResponse, 'stage' | 'mustChangePa
 
 /**
  * The frame of every sign-in page: one card (360 px; wider for a page with more to show) on the page's grey, with the
- * library's brand (its name as text until it has a logo), the page's title and its content; under the card, the way
+ * library's brand (its logo, or its name as text), the page's title and its content; under the card, the way
  * back to the public site and the version of ALTIS.
  */
 export function SignInFrame({ title, description, wide = false, children }: { title: string; description?: string; wide?: boolean; children: ReactNode }) {
   const t = useT();
   const me = useMe();
+  // The site's identity needs no session. Until it answers (or when it fails) the library's name stands as text.
+  const identity = useSiteIdentity();
+  const brand = identity !== undefined ? brandOf(identity, identity.name) : me !== undefined ? brandOf(undefined, me.library.name) : undefined;
   return (
     <main className="flex min-h-dvh items-start justify-center bg-page p-6 sm:items-center">
       <div className={cn('w-full', wide ? 'max-w-lg' : 'max-w-[360px]')}>
         <section className="rounded-lg border bg-background px-7 pt-7 pb-6">
-          {me !== undefined && <PageBrand name={me.library.name} className="mb-5" />}
+          {brand !== undefined && <PageBrand {...brand} className="mb-5" />}
           <header className="mb-5">
             <h1 className="text-xl leading-tight font-bold">{title}</h1>
             {description !== undefined && <p className="mt-0.5 text-muted-foreground">{description}</p>}
