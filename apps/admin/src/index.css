@@ -333,6 +333,27 @@
   [data-slot='card'] > form > [data-slot='form-bar'] {
     padding: 0.75rem 1rem;
   }
+  /* A part with a section head of its own (a form, a section) that stands bare on the page: a padded card. */
+  :has(> [data-slot='section-head']):not(:is([data-slot='card'], [data-slot='side-section'], [data-slot='form-section']) *, [data-slot='card']),
+  :is(section, aside, form):has(> h2:first-child):not(:is([data-slot='card'], [data-slot='side-section'], [data-slot='form-section'], [role='dialog']) *, [data-slot]) {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--background);
+    padding: 1rem;
+  }
+  /* The bar that follows a run of form sections outside a card is that card's foot. */
+  [data-slot='form-section']:not([data-slot='card'] *):has(+ [data-slot='form-bar']) {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  [data-slot='form-section']:not([data-slot='card'] *) + [data-slot='form-bar'] {
+    border: 1px solid var(--border);
+    border-top-width: 0;
+    border-bottom-left-radius: var(--radius);
+    border-bottom-right-radius: var(--radius);
+    background: var(--background);
+    padding: 0.75rem 1rem;
+  }
   [data-slot='side-section']:not([data-slot='card'] *),
   [data-slot='empty-state']:not([data-slot='card'] *) {
     border: 1px solid var(--border);

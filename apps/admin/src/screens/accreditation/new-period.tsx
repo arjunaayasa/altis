@@ -4,7 +4,7 @@ import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import { useNavigate } from '@tanstack/react-router';
 import { useState, type FormEvent, type JSX } from 'react';
 import { ProblemAlert } from '@/components/form-field';
-import { BackLink, Callout, ErrorState, FORM_FULL, FormBar, LoadingState, PageHead } from '@/components/layout';
+import { BackLink, Callout, ErrorState, FORM_FULL, FormBar, LoadingState, PageHead, PANEL } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
@@ -243,7 +243,7 @@ function CreateForm({ instruments, periods }: { instruments: InstrumentsResponse
   const showLevel = levels.length > 0 && (school || libraryType === null || libraryType === 'sekolah');
 
   return (
-    <form noValidate onSubmit={(e) => void submit(e)} className="grid gap-4">
+    <form noValidate onSubmit={(e) => void submit(e)} className={cn(PANEL, 'grid gap-4')}>
       <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
         <TextField
           label={t('accreditation.new.name')}

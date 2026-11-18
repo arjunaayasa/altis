@@ -321,7 +321,7 @@ export function MembersListScreen() {
         <SkeletonTable label={t('shell.loading')} />
       ) : nothingAtAll ? (
         <section aria-labelledby={`${ids}-empty`} className="grid max-w-[62ch] gap-3 py-6">
-          <h2 id={`${ids}-empty`} className="text-base font-bold">
+          <h2 id={`${ids}-empty`} className="text-heading font-semibold">
             {t('members.empty_all')}
           </h2>
           <p className="text-sm text-muted-foreground">{t('members.empty_all_hint')}</p>

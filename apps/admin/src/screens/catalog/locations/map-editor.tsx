@@ -334,7 +334,7 @@ export function MapEditor({
   return (
     <section aria-labelledby={headingId} className={cn('grid gap-4 rounded-lg border p-4', LAYER)}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id={headingId} ref={heading} tabIndex={-1} className="text-base font-bold outline-none">
+        <h2 id={headingId} ref={heading} tabIndex={-1} className="text-heading font-semibold outline-none">
           {t('catalog.locations.map.title', { name: room.name })}
         </h2>
         <Button type="button" variant="outline" size="sm" className="bg-background" onClick={onClose}>

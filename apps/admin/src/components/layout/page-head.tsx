@@ -57,7 +57,7 @@ export function BackLink({ to, search, children }: { to: string; search?: object
  */
 export function SectionHead({ title, id, aside, className }: { title: ReactNode; id?: string; aside?: ReactNode; className?: string }) {
   return (
-    <div className={cn('flex flex-wrap items-baseline justify-between gap-2', className)}>
+    <div data-slot="section-head" className={cn('flex flex-wrap items-baseline justify-between gap-2', className)}>
       <h2 id={id} className="text-heading font-semibold">
         {title}
       </h2>

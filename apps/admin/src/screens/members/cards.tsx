@@ -5,7 +5,7 @@ import type { MembersSettingsView } from '@altis/shared/api/settings';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { CheckField, Field, Notice, ProblemAlert, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
-import { DenseTable, FORM_FULL, FormBar, FormSection, PageHead, Section, type DenseColumn } from '@/components/layout';
+import { DenseTable, FORM_FULL, FormBar, FormSection, PageHead, Section, type DenseColumn, PANEL } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
@@ -13,6 +13,7 @@ import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
 import { problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
+import { cn } from '@/lib/utils';
 import { postForPdf, readCardQueue, useCardQueue, writeCardQueue, type CardQueueEntry } from './tools';
 
 /**
@@ -250,7 +251,7 @@ export function MemberCardsScreen() {
   return (
     <div className="grid max-w-5xl gap-6">
       <PageHead title={t('members.tools.cards.title')} intro={t('members.tools.cards.intro')} />
-      <form noValidate onSubmit={(e) => void add(e)} className="grid gap-1.5">
+      <form noValidate onSubmit={(e) => void add(e)} className={cn(PANEL, 'grid gap-1.5')}>
         <div className="flex flex-wrap items-end gap-2">
           <Field label={t('members.tools.cards.scan')} className="min-w-0 flex-[1_1_260px]">
             {(c) => <Input {...c} autoComplete="off" maxLength={200} value={scan} onChange={(e) => setScan(e.target.value)} />}

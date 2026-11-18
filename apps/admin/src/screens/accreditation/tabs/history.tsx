@@ -65,7 +65,7 @@ function FreezePanel({ ctx }: { ctx: TabContext }) {
 
   return (
     <section aria-label={t('accreditation.workspace.history.freeze.title')} className="grid gap-3">
-      <h3 className="text-base font-bold">{t('accreditation.workspace.history.freeze.title')}</h3>
+      <h3 className="text-heading font-semibold">{t('accreditation.workspace.history.freeze.title')}</h3>
       <p className="text-sm text-muted-foreground">{t('accreditation.workspace.history.freeze.text')}</p>
       {ctx.canManage ? (
         <>
@@ -109,7 +109,7 @@ function UnfreezePanel({ ctx }: { ctx: TabContext }) {
 
   return (
     <section aria-label={t('accreditation.workspace.history.unfreeze.title')} className="grid gap-3">
-      <h3 className="text-base font-bold">{t('accreditation.workspace.history.unfreeze.title')}</h3>
+      <h3 className="text-heading font-semibold">{t('accreditation.workspace.history.unfreeze.title')}</h3>
       {ctx.period.frozenAt !== null && <p className="text-sm">{t('accreditation.workspace.history.frozen', { time: f.dateTime(ctx.period.frozenAt) })}</p>}
       <p className="text-sm text-muted-foreground">{t('accreditation.workspace.history.unfreeze.text')}</p>
       {ctx.canManage ? (
@@ -158,7 +158,7 @@ function Snapshots({ periodId }: { periodId: string }) {
 
   return (
     <section aria-label={t('accreditation.workspace.history.snapshots.title')} className="grid min-w-0 gap-3">
-      <h3 className="text-base font-bold">{t('accreditation.workspace.history.snapshots.title')}</h3>
+      <h3 className="text-heading font-semibold">{t('accreditation.workspace.history.snapshots.title')}</h3>
       {list === undefined ? (
         snapshots.isError ? (
           <ErrorState error={snapshots.error} onRetry={() => void snapshots.refetch()} retrying={snapshots.isFetching} />

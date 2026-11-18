@@ -1,5 +1,5 @@
 // The layout pieces of the admin screens (README.md in this folder says how a screen is put together with them).
-export { CARD, CARD_HEAD, CARD_TITLE, Card, CardBody, CardHead } from './card';
+export { CARD, CARD_HEAD, CARD_TITLE, PANEL, Card, CardBody, CardHead } from './card';
 export { Callout, PageError } from './callout';
 export { EditorDrawer } from './editor-drawer';
 export { FactList, StatRow, StatStrip, type StatRowItem } from './figures';

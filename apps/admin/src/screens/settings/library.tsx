@@ -57,18 +57,18 @@ const SECTIONS: readonly { to: string; labelKey: AdminKey }[] = [
 ];
 
 /**
- * The frame of the settings pages: the page head, the links between the groups (one line of links under the head, the
- * current group marked; they wrap on a narrow screen) and the page's parts.
+ * The frame of the settings pages: the page head, the links between the groups (a list down the left on a wide
+ * screen, one line of links under the head on a narrow one; the current group marked) and the page's parts.
  */
 export function SettingsPage({ children }: { children: ReactNode }) {
   const t = useT();
   return (
-    <div className="grid max-w-5xl gap-6">
-      <div className="grid gap-4">
-        <PageHead title={t('nav.settings')} intro={t('settings.intro')} />
-        <LinkTabs label={t('settings.sections')} items={SECTIONS.map((section) => ({ to: section.to, label: t(section.labelKey) }))} />
+    <div className="grid gap-4">
+      <PageHead title={t('nav.settings')} intro={t('settings.intro')} />
+      <div className="grid items-start gap-4 lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-6">
+        <LinkTabs side label={t('settings.sections')} items={SECTIONS.map((section) => ({ to: section.to, label: t(section.labelKey) }))} />
+        <div className="grid max-w-4xl min-w-0 gap-4">{children}</div>
       </div>
-      <div className="grid min-w-0 gap-6">{children}</div>
     </div>
   );
 }

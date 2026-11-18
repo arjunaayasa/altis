@@ -92,7 +92,7 @@ export function BrowserTests({ onSaved }: { onSaved(): void }) {
 
   return (
     <section aria-labelledby={titleId} className="grid max-w-[75ch] gap-3 border-t pt-4">
-      <h2 id={titleId} className="text-base font-bold">
+      <h2 id={titleId} className="text-heading font-semibold">
         {t('diagnostics.probe.title')}
       </h2>
       <p className="text-sm text-muted-foreground">{t('diagnostics.probe.description')}</p>

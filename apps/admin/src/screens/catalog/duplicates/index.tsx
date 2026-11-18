@@ -4,12 +4,13 @@ import { useId, useState } from 'react';
 import { useDateTime } from '@/components/data-table';
 import { Notice, ProblemAlert } from '@/components/form-field';
 import { JobProgress } from '@/components/job-progress';
-import { DenseTable, ErrorState, LAYER, LoadingState, PageError, PageHead, SectionHead, Tag } from '@/components/layout';
+import { DenseTable, ErrorState, LAYER, LoadingState, PageError, PageHead, SectionHead, Tag, PANEL } from '@/components/layout';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { useLocale, useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
 import { useApiQuery, useMe } from '@/lib/me';
+import { cn } from '@/lib/utils';
 import { RUNS_KEY, dedupeSummaryOf, isRunActive, reportHref, runKey } from '../exchange/summary-view';
 import { Compare } from './compare';
 
@@ -205,7 +206,7 @@ export function DuplicatesScreen() {
           ) : following !== null ? (
             <FollowScan key={following.runId} started={following} onDone={() => setEnded(following.runId)} />
           ) : lastRun === undefined ? (
-            <p className="text-sm text-muted-foreground">{t('catalog.duplicates.never')}</p>
+            <p className={cn(PANEL, 'text-muted-foreground')}>{t('catalog.duplicates.never')}</p>
           ) : (
             <ScanResult key={lastRun.id} run={lastRun} />
           )}

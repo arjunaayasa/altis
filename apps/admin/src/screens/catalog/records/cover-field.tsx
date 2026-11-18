@@ -98,7 +98,7 @@ export function CoverField({
 
   return (
     <section aria-labelledby={headingId} className="grid content-start gap-3 p-4" aria-busy={busy || undefined}>
-      <h2 id={headingId} className="text-base font-bold">
+      <h2 id={headingId} className="text-heading font-semibold">
         {t('catalog.records.section.cover')}
       </h2>
       {coverFileId === null ? (

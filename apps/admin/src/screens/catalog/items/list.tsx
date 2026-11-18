@@ -5,7 +5,7 @@ import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { AddToPrintQueue } from '@/components/catalog/print-queue';
 import { Badge, Field, Notice, SELECT_CLASS } from '@/components/form-field';
-import { DenseTable, ErrorState, FilterField, FilterRow, PageHead, SelectionBar, SkeletonTable, type DenseColumn } from '@/components/layout';
+import { DenseTable, ErrorState, FilterField, FilterRow, PageHead, SelectionBar, SkeletonTable, type DenseColumn, PANEL } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type TKey } from '@/i18n';
@@ -14,6 +14,7 @@ import { problemText } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
 import { useScannerInput } from '@/lib/scanner';
 import { ItemStatusBadge } from '@/screens/circulation/common';
+import { cn } from '@/lib/utils';
 import { BulkPanel } from './bulk-dialog';
 import {
   ITEMS_KEY,
@@ -111,7 +112,7 @@ function ScanField({ paused }: { paused: boolean }) {
   };
 
   return (
-    <form noValidate aria-label={t('catalog.items.scan.label')} className="grid max-w-2xl gap-3" onSubmit={submit}>
+    <form noValidate aria-label={t('catalog.items.scan.label')} className={cn(PANEL, 'grid gap-3')} onSubmit={submit}>
       <Field label={t('catalog.items.scan.label')} hint={t('catalog.items.scan.hint')} error={fieldError ?? undefined} className="min-w-0">
         {(c) => (
           <div className="flex gap-2">

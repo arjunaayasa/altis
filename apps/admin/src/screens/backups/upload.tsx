@@ -169,7 +169,7 @@ export function UploadPanel({ onUploaded }: { onUploaded(item: BackupItem): void
 
   return (
     <section aria-labelledby={titleId} className="grid min-w-0 content-start gap-3">
-      <h2 id={titleId} className="text-base font-bold">
+      <h2 id={titleId} className="text-heading font-semibold">
         {t('backups.upload.title')}
       </h2>
       <p className="text-sm text-muted-foreground">{t('backups.upload.description')}</p>

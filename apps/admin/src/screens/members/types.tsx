@@ -414,7 +414,7 @@ export function MemberTypesScreen() {
         )
       ) : empty ? (
         <section className="grid max-w-[62ch] gap-3 py-4">
-          <h2 className="text-base font-bold">{t('members.types.empty')}</h2>
+          <h2 className="text-heading font-semibold">{t('members.types.empty')}</h2>
           <p className="text-sm text-muted-foreground">{t('members.types.empty_hint')}</p>
         </section>
       ) : (
