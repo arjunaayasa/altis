@@ -151,6 +151,33 @@ describe.skipIf(!ctx.available)(`Halaman & Berita API [${engineLabel()}]`, () =>
     expect([unknown.status, code(unknown)]).toEqual([404, 'NOT_FOUND']);
   });
 
+  it('the agenda of a news post: created, read, listed by category, patched; its field errors name their paths', async () => {
+    const start = NOW + 10 * 24 * 3_600_000;
+    const { id } = stored(await editor.send('post', PAGES, page('bedah-buku', { kind: 'news', category: 'agenda', eventStartsAt: start, eventEndsAt: start + 7_200_000, eventPlace: 'Ruang baca lantai 2' })));
+    stored(await editor.send('post', PAGES, page('kabar-koleksi', { kind: 'news', category: 'collection' })));
+    expect((await editor.get(`${PAGES}/${id}`)).json).toMatchObject({ category: 'agenda', eventStartsAt: start, eventEndsAt: start + 7_200_000, eventPlace: 'Ruang baca lantai 2' });
+    const listed = (await editor.get(`${PAGES}?kind=news&category=agenda`)).json as PageListResponse;
+    expect(listed.items.map((p) => [p.id, p.category, p.eventStartsAt])).toEqual([[id, 'agenda', start]]);
+    expect((await editor.get(`${PAGES}?kind=news&category=lain`)).status).toBe(422);
+
+    const patched = await editor.send('patch', `${PAGES}/${id}`, { version: 0, category: 'activity', eventEndsAt: null });
+    expect([patched.status, patched.json]).toEqual([200, { id, version: 1 }]);
+    expect((await editor.get(`${PAGES}/${id}`)).json).toMatchObject({ category: 'activity', eventStartsAt: start, eventEndsAt: null, eventPlace: 'Ruang baca lantai 2' });
+
+    const endFirst = await editor.send('patch', `${PAGES}/${id}`, { version: 1, eventEndsAt: start - 1 });
+    expect([endFirst.status, errors(endFirst)]).toEqual([422, [{ path: 'eventEndsAt', code: 'invalid' }]]);
+    const noStart = await editor.send('post', PAGES, page('tanpa-mulai', { kind: 'news', eventEndsAt: start }));
+    expect([noStart.status, errors(noStart)]).toEqual([422, [{ path: 'eventEndsAt', code: 'invalid' }]]);
+    const onPage = await editor.send('post', PAGES, page('bukan-berita', { category: 'agenda' }));
+    expect([onPage.status, errors(onPage)]).toEqual([422, [{ path: 'category', code: 'invalid' }]]);
+    const unknownCategory = await editor.send('post', PAGES, page('kategori-lain', { kind: 'news', category: 'lain' }));
+    expect(unknownCategory.status).toBe(422);
+    const longPlace = await editor.send('patch', `${PAGES}/${id}`, { version: 1, eventPlace: 'r'.repeat(161) });
+    expect([longPlace.status, errors(longPlace).map((e) => e.path)]).toEqual([422, ['eventPlace']]);
+    // Nothing of the refused writes was stored.
+    expect((await editor.get(`${PAGES}/${id}`)).json).toMatchObject({ version: 1, category: 'activity', eventEndsAt: null });
+  });
+
   it('preview answers the HTML the OPAC would show: Markdown rendered, HTML sanitized (S6)', async () => {
     const lastSeq = async (): Promise<number> => Number((await h.db.selectFrom('audit_head').select('last_seq').where('id', '=', 1).executeTakeFirstOrThrow()).last_seq);
     const before = await lastSeq();
