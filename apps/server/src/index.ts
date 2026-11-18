@@ -60,6 +60,7 @@ import { createReleaseFence, releaseRestart } from './http/release-fence.js';
 import { announceInstallCode, createInstallService } from './install/gate.js';
 import { createJobRuntime, jobHandlers, opKinds, testClockOffsetMs, updateRestoreRunner } from './jobs/runtime.js';
 import { createLogger, type LogFields, type Logger } from './logger.js';
+import { loadOpacFonts } from './opac/fonts.js';
 import { embeddedRootKeys, installedKeysets, refusesDevKids } from './release-keys.js';
 import { trackRetirement } from './retirements.js';
 import { appUpdateKindDeps, createAppEdition, createAppOps, createAppUpdateSource, jobMailer, type AppUpdates } from './services.js';
@@ -478,6 +479,8 @@ export async function start(ctx: BootContext): Promise<void> {
   // version, which therefore identifies the build for X-Altis-Build.
   const release = { dir: ctx.release.dir, previousDir: previousReleaseDir(ctx, log) };
   const where = { release, env, dataDir: ctx.dataDir, appRoot: ctx.appRoot, runtime: ctx.runtime, log };
+  // The OPAC's font files, read once from this release (opac/fonts.ts); without them the pages use the system font.
+  await loadOpacFonts(ctx.release.dir, log);
   // The app's clock (services.clock): the install code start() announces is dated by it, as the wizard's routes are.
   // 1c Task 13 (M23): plus ALTIS_TEST_CLOCK_OFFSET_MS in the test profile.
   const clockOffset = testClockOffsetMs(env);

@@ -15,11 +15,13 @@
 //   white on the dark bars) at least 3:1 against what it surrounds. The header bar's text is white on the library's
 //   colour (at least 4.5:1, the setting refuses less) or on the deep default of each accent; the footer's texts are at
 //   least 4.5:1 on the footer.
-// - Nothing is fetched: no @import, no web font, no url(). The CSP allows the app's own origin and `data:` images only.
+// - Nothing is fetched: no @import and no url(). The typeface's `@font-face` rules are not part of these modules
+//   (fonts.ts); the CSP allows the app's own origin and `data:` images only.
 // - Mobile first: one column, a 1 rem gutter, long words wrap (`overflow-wrap`), targets are at least 2.75 rem high.
 // - Motion: hover and state changes ease out in 150 ms; none at all when the visitor asks for reduced motion.
 
 import { oklchHex } from './color.js';
+import { OPAC_FONT_STACK } from './fonts.js';
 
 /** The accent names, the six values of the `opac.accent` setting (Task 8). */
 export const ACCENTS = Object.freeze(['teal', 'blue', 'green', 'purple', 'red', 'slate'] as const);
@@ -128,7 +130,7 @@ function schemeTokens(scheme: 'light' | 'dark'): string {
 export const BASE_CSS: string = [
   // Tokens.
   `:root{color-scheme:light dark;${schemeTokens('light')};` +
-    '--font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;' +
+    `--font:${OPAC_FONT_STACK};` +
     '--gutter:1rem;--measure:42rem;--wide:73.75rem;--radius:.5rem;--radius-sm:.375rem;' +
     // Phase 2 Task 21: the catalogue's shared tokens.
     '--focus:var(--accent);--accent-soft:color-mix(in srgb,var(--accent) 12%,var(--bg));--card-bg:var(--surface);' +

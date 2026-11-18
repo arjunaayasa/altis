@@ -1,5 +1,7 @@
 import { execFile, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fsp from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -22,6 +24,7 @@ import {
   type TrustedKey,
 } from '@altis/crypto';
 import { MIN_SERVER_VERSIONS, migrationsForLevel, type TestFixtureLevel } from '@altis/db';
+import { OPAC_FONTS, OPAC_FONT_FILE_NAME, OPAC_FONT_PACKAGE, type OpacFont } from '@altis/opac-theme';
 import { loadKeyFile, runCli as signCli, type LoadedKeyFile } from '@altis/sign-cli';
 import { ADMIN_ASSET_NAME } from '@altis/platform';
 import { compareSemver, isSemver } from '@altis/shared';
@@ -50,7 +53,7 @@ import { writeZip } from './zip.js';
 //   from the repository root: AGPL-3.0-only),
 //   bundled-release/<version>/{server.mjs, manifest.json, manifest.sig, keyset.json, .complete,
 //                              public/THIRD_PARTY_NOTICES.txt, public/admin/index.html, public/admin/install.html,
-//                              public/admin/assets/*}
+//                              public/admin/assets/*, public/opac/*.woff2}
 //
 // Keys (spec §8.3, Task 17 rulings, ruling R65):
 // - test: the dev keys of tools/keys/dev: dev-rel-1 signs, the dev root (roots.json) is embedded, the dev keyset
@@ -104,6 +107,10 @@ import { writeZip } from './zip.js';
 //   bundle is made of: it joins the licence and native-module checks and the notices. The notices are also shipped as
 //   public/THIRD_PARTY_NOTICES.txt (the same text), which the server serves at /legal/third-party-notices.txt. Two
 //   release builds of one checkout must not run at the same time (they share apps/admin/dist).
+// - The OPAC's font files (@altis/opac-theme OPAC_FONTS): copied out of the pinned font package into
+//   bundled-release/<v>/public/opac/ under their content-hashed names, which the server serves at /assets/<name>. The
+//   package must be the recorded version and each file the recorded one (OPAC_FONT_INVALID otherwise); the files join
+//   the licence check and the notices as inputs of the release.
 //
 // Reproducible: the manifest's buildId is the git commit and releasedAt its commit date (UTC), so two builds of one
 // commit and profile give a byte-identical zip (Ed25519 signatures are deterministic; see zip.ts for the archive).
@@ -164,6 +171,8 @@ export interface BuildReport {
   zipBytes: number;
   /** The bytes of the admin SPA's files (public/admin), uncompressed. */
   adminBytes: number;
+  /** The bytes of the OPAC's font files (public/opac), uncompressed. */
+  opacFontBytes: number;
   files: { path: string; size: number }[];
   notices: { packages: { name: string; version: string; license: string | null }[] };
 }
@@ -785,6 +794,57 @@ async function buildAdmin(profile: ReleaseProfile, version: string): Promise<Adm
   return { files, inputs };
 }
 
+/** A font file of the OPAC as the release ships it. */
+interface OpacFontFile {
+  /** Its name under public/opac. */
+  name: string;
+  data: Buffer;
+  /** The file it was copied from, relative to the repository root (POSIX): an input of the release. */
+  input: string;
+}
+
+/**
+ * The OPAC's font files, read from the font package this tool depends on (`packageDir`: test seam).
+ *
+ * @throws Error `OPAC_FONT_INVALID:<file> (<why>)` when the package is not the recorded version, or a file is missing,
+ *   not the recorded one, or badly named
+ */
+export async function readOpacFontFiles(fonts: readonly OpacFont[] = OPAC_FONTS, packageDir?: string): Promise<OpacFontFile[]> {
+  const invalid = (subject: string, why: string): Error => new Error(`OPAC_FONT_INVALID:${subject} (${why})`);
+  let dir = packageDir;
+  if (dir === undefined) {
+    try {
+      dir = path.dirname(await fsp.realpath(createRequire(import.meta.url).resolve(`${OPAC_FONT_PACKAGE.name}/package.json`)));
+    } catch (error) {
+      throw invalid(OPAC_FONT_PACKAGE.name, `the package is not installed: ${messageOf(error)}`);
+    }
+  }
+  let version: unknown;
+  try {
+    version = (JSON.parse(await fsp.readFile(path.join(dir, 'package.json'), 'utf8')) as { version?: unknown }).version;
+  } catch (error) {
+    throw invalid(OPAC_FONT_PACKAGE.name, `its package.json cannot be read: ${messageOf(error)}`);
+  }
+  if (version !== OPAC_FONT_PACKAGE.version) {
+    throw invalid(OPAC_FONT_PACKAGE.name, `version ${JSON.stringify(version)}, not the recorded ${OPAC_FONT_PACKAGE.version}`);
+  }
+  const files: OpacFontFile[] = [];
+  for (const font of fonts) {
+    if (!OPAC_FONT_FILE_NAME.test(font.file)) throw invalid(font.file, 'not a font file name the server serves');
+    const source = path.join(dir, ...font.source.split('/'));
+    let data: Buffer;
+    try {
+      data = await fsp.readFile(source);
+    } catch (error) {
+      throw invalid(font.source, `cannot be read: ${messageOf(error)}`);
+    }
+    const sha256 = createHash('sha256').update(data).digest('hex');
+    if (sha256 !== font.sha256) throw invalid(font.source, `SHA-256 ${sha256}, not the recorded ${font.sha256}`);
+    files.push({ name: font.file, data, input: path.relative(REPO_ROOT, source).split(path.sep).join('/') });
+  }
+  return files;
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Staging → zip
 
@@ -875,12 +935,14 @@ export async function buildRelease(o: BuildReleaseOptions): Promise<BuildRelease
       sourcemapFile: appMap,
     });
     const admin = await buildAdmin(o.profile, o.version);
+    const opacFonts = await readOpacFontFiles();
 
     // Guards over what the bundles contain (the admin's runs in the browser: its imports are not checked here).
     const inputs = [
       ...Object.keys(server.metafile.inputs),
       ...Object.keys(app.metafile.inputs),
       ...admin.inputs,
+      ...opacFonts.map((font) => font.input),
       ...(o.extraBundleInputs ?? []),
     ];
     checkNativeInputs(inputs);
@@ -903,6 +965,8 @@ export async function buildRelease(o: BuildReleaseOptions): Promise<BuildRelease
       await fsp.mkdir(path.dirname(target), { recursive: true });
       await fsp.writeFile(target, file.data);
     }
+    await fsp.mkdir(path.join(releaseDir, 'public', 'opac'), { recursive: true });
+    for (const font of opacFonts) await fsp.writeFile(path.join(releaseDir, 'public', 'opac', font.name), font.data);
     await fsp.writeFile(path.join(releaseDir, 'public', 'THIRD_PARTY_NOTICES.txt'), notices.text);
     await fsp.writeFile(path.join(releaseDir, KEYSET_FILE), keys.keysetBytes);
     await fsp.writeFile(path.join(root, 'package.json'), packageJsonText(o.version));
@@ -948,6 +1012,7 @@ export async function buildRelease(o: BuildReleaseOptions): Promise<BuildRelease
     const report: BuildReport = {
       zipBytes: zip.length,
       adminBytes: admin.files.reduce((sum, file) => sum + file.data.length, 0),
+      opacFontBytes: opacFonts.reduce((sum, font) => sum + font.data.length, 0),
       files: entries.map((e) => ({ path: e.path, size: e.data.length })),
       notices: { packages: notices.packages.map((p) => ({ name: p.name, version: p.version, license: p.license ?? null })) },
     };

@@ -5,6 +5,7 @@ import { OPAC_HOME_OVERLAY, brandRgb, phoneHref } from '@altis/shared/api/opac-h
 import type { Child, PropsWithChildren } from 'hono/jsx';
 import { opacText } from './catalog/messages.js';
 import { OPAC_SEARCH_SCOPES, type OpacSearchScope } from './catalog/search-params.js';
+import { FONT_TYPE, opacFontPreloads, opacStylesheetFile } from './fonts.js';
 
 // The frame of every OPAC page (spec §4.9, §7.4, §9.2, decision D30; Phase 2 Task 21): `<html lang data-accent>`, the
 // head, a skip link to the content, a header bar in the library's colour with the library name, the member area link,
@@ -22,7 +23,10 @@ import { OPAC_SEARCH_SCOPES, type OpacSearchScope } from './catalog/search-param
 /** The first 10 hex digits of the SHA-256 of OPAC_CSS, computed once at module load (M30). */
 export const OPAC_CSS_HASH: string = sha256hex(OPAC_CSS).slice(0, 10);
 
-/** The file name the stylesheet is served under (`opac.assets`): it changes whenever the CSS does. */
+/**
+ * The file name the stylesheet is served under (`opac.assets`): it changes whenever the CSS does. While the font files
+ * are served the pages link the same stylesheet with the `@font-face` rules in front (fonts.ts), under a name of its own.
+ */
 export const OPAC_CSS_FILE = `opac-${OPAC_CSS_HASH}.css`;
 
 /** The id of `<main>`, the skip link's target. */
@@ -359,7 +363,11 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
         {refresh === undefined ? null : <meta http-equiv="refresh" content={String(refresh)} />}
         <title>{title}</title>
         <link rel="icon" href={NO_ICON} />
-        <link rel="stylesheet" href={`/assets/${OPAC_CSS_FILE}`} />
+        {/* The typeface (fonts.ts): only while its files are served. A font is fetched without credentials, hence `crossorigin`. */}
+        {opacFontPreloads().map((file) => (
+          <link rel="preload" as="font" type={FONT_TYPE} href={`/assets/${file}`} crossorigin="anonymous" />
+        ))}
+        <link rel="stylesheet" href={`/assets/${opacStylesheetFile(OPAC_CSS_FILE)}`} />
         {brand === null ? null : <style nonce={nonce}>{`.site-header{--hero-bg:${brand}}`}</style>}
         {props.head ?? null}
       </head>
