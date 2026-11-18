@@ -28,4 +28,8 @@ export const ORPHAN_UPLOAD_CONTEXTS: readonly OrphanUploadContext[] = Object.fre
   // ---- Komunitas (OPAC home page) ----
   // A home page photo never saved with the page, or one the saved page no longer names.
   Object.freeze<OrphanUploadContext>({ context: 'opac.home_photo', sweptBy: 'reports.housekeeping' }),
+  // ---- Site identity ----
+  // A logo or site icon never saved with the identity, or one the saved identity no longer names.
+  Object.freeze<OrphanUploadContext>({ context: 'site.logo', sweptBy: 'reports.housekeeping' }),
+  Object.freeze<OrphanUploadContext>({ context: 'site.icon', sweptBy: 'reports.housekeeping' }),
 ]);

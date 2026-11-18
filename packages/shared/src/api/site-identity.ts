@@ -39,7 +39,7 @@ export type SiteIconSize = (typeof SITE_ICON_SIZES)[number];
 
 /** The path the icon of `size` is served at, with or without a site icon (then a built-in one). */
 export function siteIconPath(size: SiteIconSize): string {
-  return `/site-icon-${size}.png`;
+  return `/site-icon/${size}.png`;
 }
 
 /** A trimmed text of at most `max` code points. */

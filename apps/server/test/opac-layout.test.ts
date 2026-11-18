@@ -211,9 +211,15 @@ describe('opacPage: the frame (§9.2)', () => {
     expect(await (await page()).text()).not.toMatch(/<script/i);
   });
 
-  it('head: an empty data: icon the policy allows, so the browser asks for no /favicon.ico (a 404 in its console)', async () => {
+  it('head: the site icon on a page of the site, an empty data: icon on a bare page, so the browser asks for no /favicon.ico (a 404 in its console)', async () => {
     const res = await page();
-    expect(await res.text()).toContain('<link rel="icon" href="data:,"/>');
+    const html = await res.text();
+    expect(html).toContain('<link rel="icon" type="image/png" sizes="32x32" href="/site-icon/32.png"/>');
+    expect(html).toContain('<link rel="icon" type="image/png" sizes="192x192" href="/site-icon/192.png"/>');
+    expect(html).toContain('<link rel="apple-touch-icon" href="/site-icon/180.png"/>');
+    expect(html).not.toContain('href="data:,"');
+    expect(res.headers.get('content-security-policy')).toMatch(/img-src 'self'/);
+    // A maintenance or error page may be shown while the icon route cannot answer: it names the empty icon the policy allows.
     expect(res.headers.get('content-security-policy')).toMatch(/img-src [^;]*\bdata:/);
     const base = { locale: 'en' as const, nonce: 'abc_DEF-123' };
     for (const html of [renderMaintenance(base), renderError({ ...base, code: 'ABCD1234' })]) expect(html).toContain('<link rel="icon" href="data:,"/>');

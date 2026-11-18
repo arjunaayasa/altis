@@ -2,6 +2,7 @@ import { sha256hex } from '@altis/core';
 import { DEFAULT_ACCENT, OPAC_CSS, isAccent } from '@altis/opac-theme';
 import { COMMUNITY_SOURCE_URL, LOCALES, t, type Locale } from '@altis/shared';
 import { brandRgb, phoneHref } from '@altis/shared/api/opac-home';
+import { siteIconPath } from '@altis/shared/api/site-identity';
 import type { Child, PropsWithChildren } from 'hono/jsx';
 import { opacText } from './catalog/messages.js';
 import { OPAC_SEARCH_SCOPES, type OpacSearchScope } from './catalog/search-params.js';
@@ -33,8 +34,9 @@ export const OPAC_CSS_FILE = `opac-${OPAC_CSS_HASH}.css`;
 export const MAIN_ID = 'isi';
 
 /**
- * The page icon: an empty `data:` URL (the CSP's `img-src` allows `data:`). Without an icon link a browser asks for
- * `/favicon.ico`, which ALTIS does not serve, and logs the 404 as an error on every first page load.
+ * No page icon: an empty `data:` URL (the CSP's `img-src` allows `data:`), for a page shown while the icon route may
+ * not answer (an update in progress). Without an icon link a browser asks for `/favicon.ico`, which ALTIS does not
+ * serve, and logs the 404 as an error. Every other page links the site icon (`/site-icon/<size>.png`).
  */
 export const NO_ICON = 'data:,';
 
@@ -358,7 +360,12 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
         {robots === undefined ? null : <meta name="robots" content={robots} />}
         {refresh === undefined ? null : <meta http-equiv="refresh" content={String(refresh)} />}
         <title>{title}</title>
-        <link rel="icon" href={NO_ICON} />
+        {/* The site icon (the library's own, or the built-in one) on a page of the running site; a bare page (an error,
+            maintenance) may be shown while that route cannot answer, and names no icon. */}
+        {frame === undefined ? <link rel="icon" href={NO_ICON} /> : null}
+        {frame === undefined ? null : <link rel="icon" type="image/png" sizes="32x32" href={siteIconPath(32)} />}
+        {frame === undefined ? null : <link rel="icon" type="image/png" sizes="192x192" href={siteIconPath(192)} />}
+        {frame === undefined ? null : <link rel="apple-touch-icon" href={siteIconPath(180)} />}
         {/* The typeface (fonts.ts): only while its files are served. A font is fetched without credentials, hence `crossorigin`. */}
         {opacFontPreloads().map((file) => (
           <link rel="preload" as="font" type={FONT_TYPE} href={`/assets/${file}`} crossorigin="anonymous" />

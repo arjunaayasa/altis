@@ -38,6 +38,8 @@ import { z } from 'zod';
 import { CardProfile, DEFAULT_CARD_PROFILE } from '@altis/shared/api/member-ops';
 // ---- Komunitas (OPAC home page) ----
 import { OPAC_HOME_DEFAULT, OpacHomeContent } from '@altis/shared/api/opac-home';
+// ---- Site identity ----
+import { SiteIdentity } from '@altis/shared/api/site-identity';
 
 // The registry of settings (spec §6.5, §7.6; D26, D41): every key the `settings` table may hold, with the group
 // the admin screens file it under, its scope, its Zod schema and its default. A row that is absent reads as the
@@ -141,7 +143,9 @@ export type SettingKey =
   | `circulation.notices.${'dueSoonDays' | 'overdueEveryDays' | 'overdueMax' | 'holdReady'}`
   | `email.template.${'circulation_due_soon' | 'circulation_overdue' | 'circulation_hold_ready'}.${'id' | 'en'}.${'subject' | 'body'}`
   // ---- Komunitas (OPAC home page) ----
-  | 'opac.home';
+  | 'opac.home'
+  // ---- Site identity ----
+  | 'site.identity';
 
 export interface SettingDef {
   group: SettingsGroup;
@@ -644,6 +648,11 @@ export const SETTINGS: Readonly<Record<SettingKey, SettingDef>> = Object.freeze(
   // facility photos, the opening hours and the blocks shown. Edited on its own screen (`opac/home`, permission
   // `opac.pages.manage`), not through `settings/opac`; its photos are files of this setting.
   'opac.home': def({ group: 'opac', schema: OpacHomeContent, default: seed(OpacHomeContent, OPAC_HOME_DEFAULT) }),
+  // ---- Site identity ----
+  // The library's logo, its logo for dark backgrounds, the site icon, the site's name and tagline. Null until it is
+  // saved for the first time (the home page's old logo and the library's name count until then). Edited on its own
+  // screen (`site/identity`, permission `opac.pages.manage`); its images are files of this setting.
+  'site.identity': def({ group: 'opac', schema: SiteIdentity.nullable(), default: null }),
 });
 
 /** The registered keys in registry order. */

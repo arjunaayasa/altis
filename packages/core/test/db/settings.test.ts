@@ -238,6 +238,15 @@ const SAMPLE: Record<SettingKey, unknown> = {
     logo: { fileId: '01J0000000000000000000000E', alt: 'Logo perpustakaan' },
     contact: { phone: '(021) 555-0101', email: 'perpustakaan@contoh.example' },
   },
+  // ---- Site identity ----
+  'site.identity': {
+    logo: { fileId: '01J0000000000000000000000F', alt: 'Logo perpustakaan' },
+    logoDark: null,
+    icon: { fileId: '01J0000000000000000000000G' },
+    name: 'Perpustakaan Contoh',
+    tagline: { id: 'Membaca untuk semua', en: null },
+    showNameBesideLogo: false,
+  },
 };
 
 /** Every key of scope `instance` (machine state of this installation, kept by a restore), in registry order; all are in group `system`. */
@@ -334,7 +343,7 @@ describe('SETTINGS registry', () => {
     expect(groupKeys('email')).toHaveLength(17); // the sender name, the password reset (4) and the three member notices (12)
     expect(groupKeys('security')).toEqual(['security.password_min_length', 'security.session_idle_minutes']);
     // The OPAC home page's content comes last; its own screen edits it (not `settings/opac`).
-    expect(groupKeys('opac')).toEqual(['opac.welcome.id', 'opac.welcome.en', 'opac.accent', ...PHASE2_OPAC_KEYS, 'opac.home']);
+    expect(groupKeys('opac')).toEqual(['opac.welcome.id', 'opac.welcome.en', 'opac.accent', ...PHASE2_OPAC_KEYS, 'opac.home', 'site.identity']);
     expect(groupKeys('catalog')).toEqual(CATALOG_KEYS);
     expect(groupKeys('smtp')).toEqual([
       'smtp.host',
@@ -395,9 +404,11 @@ describe('SETTINGS registry', () => {
       'privacy.members.anonymizeArchivedAfterYears',
     ]);
     expect(GROUPS.flatMap((g) => groupKeys(g)).sort()).toEqual(Object.keys(SETTINGS).sort());
-    // The group is the key's first segment, but for the instance keys of 1c that read `audit.*` and `realtime.*`: all system.
+    // The group is the key's first segment, but for the instance keys of 1c that read `audit.*` and `realtime.*` (all
+    // system) and for the site identity, which is filed with the public site's settings (`opac`) and edited on a screen
+    // of its own, as the home page is.
     for (const key of Object.keys(SETTINGS) as SettingKey[]) {
-      expect(SETTINGS[key].group, key).toBe(INSTANCE_KEYS.includes(key) ? 'system' : key.split('.')[0]);
+      expect(SETTINGS[key].group, key).toBe(INSTANCE_KEYS.includes(key) ? 'system' : key === 'site.identity' ? 'opac' : key.split('.')[0]);
     }
   });
 
@@ -1477,7 +1488,9 @@ describe.skipIf(!ctx.available)(`settings service [${engineLabel()}]`, () => {
       // Everything reads back as written (the secret as isSet).
       const all = Object.keys(SETTINGS) as SettingKey[];
       const read = await readSettings(h.db, all, keyring);
-      for (const key of all) expect(read[key], key).toEqual(key === 'smtp.password' ? { isSet: true } : SAMPLE[key]);
+      // The home page's sample has the shape of an older save: it reads back as the schema completes it.
+      const written = (key: SettingKey): unknown => (key === 'opac.home' ? SETTINGS[key].schema.parse(SAMPLE[key]) : SAMPLE[key]);
+      for (const key of all) expect(read[key], key).toEqual(key === 'smtp.password' ? { isSet: true } : written(key));
     });
 
     it('a write puts a row with a wrong scope back to the registered one', async () => {

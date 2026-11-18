@@ -83,6 +83,13 @@ describe('UPLOAD_CONTEXTS', () => {
     expect(Object.values(UPLOAD_CONTEXTS).filter((c) => c?.imageSides !== undefined).map((c) => c!.name)).toEqual(['opac.home_photo']);
   });
 
+  // ---- Site identity ----
+  it('the logo and the site icon: PNG only, at most 1 MiB, for whoever manages the OPAC pages; the only contexts the server stores again', () => {
+    expect(uploadContext('site.logo')).toEqual({ name: 'site.logo', permission: 'opac.pages.manage', maxBytes: MIB, magic: ['png'], kind: 'file', reencode: 'logo' });
+    expect(uploadContext('site.icon')).toEqual({ name: 'site.icon', permission: 'opac.pages.manage', maxBytes: MIB, magic: ['png'], kind: 'file', reencode: 'icon' });
+    expect(Object.values(UPLOAD_CONTEXTS).filter((c) => c?.reencode !== undefined).map((c) => c!.name)).toEqual(['site.logo', 'site.icon']);
+  });
+
   it('every name of UPLOAD_CONTEXT_NAMES is a context of the test build, and nothing else is', () => {
     expect(Object.keys(UPLOAD_CONTEXTS).sort()).toEqual([...UPLOAD_CONTEXT_NAMES].sort());
     for (const name of UPLOAD_CONTEXT_NAMES) expect(uploadContext(name)?.name).toBe(name);
@@ -111,6 +118,8 @@ describe('ORPHAN_UPLOAD_CONTEXTS', () => {
       { context: 'members.photo', sweptBy: 'reports.housekeeping' },
       { context: 'members.card_asset', sweptBy: 'reports.housekeeping' },
       { context: 'opac.home_photo', sweptBy: 'reports.housekeeping' },
+      { context: 'site.logo', sweptBy: 'reports.housekeeping' },
+      { context: 'site.icon', sweptBy: 'reports.housekeeping' },
     ]);
     expect(Object.isFrozen(ORPHAN_UPLOAD_CONTEXTS)).toBe(true);
   });

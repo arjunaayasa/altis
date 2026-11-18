@@ -1,8 +1,9 @@
-import { jsonForHtmlScript, type SafeHtml } from '@altis/core';
+import { jsonForHtmlScript, publicSiteIdentity, resolveSiteIdentity, type SafeHtml } from '@altis/core';
 import type { DbHandle } from '@altis/db';
 import { DEFAULT_ACCENT, isAccent } from '@altis/opac-theme';
 import { LOCALES, isLocale, localDate, resolveLocale, type Locale } from '@altis/shared';
 import { OPAC_HOME_DEFAULT, opacHomeTextIn, type OpacHomeContent } from '@altis/shared/api/opac-home';
+import type { SiteIdentity } from '@altis/shared/api/site-identity';
 import type { Context } from 'hono';
 import { raw } from 'hono/html';
 import type { JSX } from 'hono/jsx/jsx-runtime';
@@ -79,15 +80,24 @@ export interface SiteInfo {
   contentLang?: Locale | undefined;
 }
 
-/** The site of `home` with `address` and whether news is published (see SiteInfo). */
-export function siteInfo(home: OpacHomeContent, address: string | null, news: boolean): SiteInfo {
+/** The logo of the site identity in force (the saved one, else the home page's old logo), as the pages show it. */
+export function siteLogo(stored: SiteIdentity | null, home: Pick<OpacHomeContent, 'logo'>, libraryName: string): SiteLogo | null {
+  const logo = publicSiteIdentity(resolveSiteIdentity(stored, home).identity, libraryName).logo;
+  return logo === null ? null : { src: logo.url, alt: logo.alt };
+}
+
+/**
+ * The site of `home` with `address` and whether news is published (see SiteInfo). `logo` is the site identity's
+ * ({@link siteLogo}); left out, it is the one `home` still holds.
+ */
+export function siteInfo(home: OpacHomeContent, address: string | null, news: boolean, logo?: SiteLogo | null): SiteInfo {
   const b = home.blocks;
   const about = home.about;
   const hasAddress = address !== null && address.trim() !== '';
   const aboutText = opacHomeTextIn(about.text, 'id') ?? opacHomeTextIn(about.text, 'en');
   // A content saved before the contact and the logo existed reads them as none.
   const contact: OpacHomeContent['contact'] | undefined = home.contact;
-  const logo: OpacHomeContent['logo'] | undefined = home.logo;
+  const old: OpacHomeContent['logo'] | undefined = home.logo;
   const phone = contact?.phone === undefined || contact.phone === null || contact.phone.trim() === '' ? null : contact.phone;
   const email = contact?.email === undefined || contact.email === null || contact.email.trim() === '' ? null : contact.email;
   return {
@@ -98,23 +108,26 @@ export function siteInfo(home: OpacHomeContent, address: string | null, news: bo
     services: b.services && (home.services.length > 0 || home.facilities.length > 0),
     contact: b.visit && (hasAddress || home.hours.length > 0 || phone !== null || email !== null),
     news,
-    logo: logo === undefined || logo === null ? null : { src: `/files/${encodeURIComponent(logo.fileId)}`, alt: logo.alt },
+    logo: logo !== undefined ? logo : old === undefined || old === null ? null : { src: `/files/${encodeURIComponent(old.fileId)}`, alt: old.alt },
     phone,
     email,
   };
 }
 
 /**
- * The library's site as the menu and the footer show it (SiteInfo, without its content language): `library.address`
- * and `opac.home` through the settings cache, and whether a news post is published at `now`.
+ * The library's site as the menu and the footer show it (SiteInfo, without its content language): `library.address`,
+ * `opac.home` and the site identity through the settings cache, and whether a news post is published at `now`.
  */
 export async function readSiteInfo(settings: AppServices['settings'], handle: DbHandle['db'], now: number): Promise<SiteInfo> {
-  const [address, home, news] = await Promise.all([
+  const [address, home, news, identity, libraryName] = await Promise.all([
     settings.get<string | null>(handle, 'library.address'),
     settings.get<OpacHomeContent>(handle, 'opac.home'),
     hasPublishedNews(handle, now),
+    settings.get<SiteIdentity | null>(handle, 'site.identity'),
+    settings.get<string>(handle, 'library.name'),
   ]);
-  return siteInfo(home ?? OPAC_HOME_DEFAULT, address ?? null, news);
+  const content = home ?? OPAC_HOME_DEFAULT;
+  return siteInfo(content, address ?? null, news, siteLogo(identity ?? null, content, libraryName));
 }
 
 /** The language of the library's own texts (`library.locale`) on a page in `locale`, when it is another one. */

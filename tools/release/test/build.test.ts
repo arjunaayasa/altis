@@ -233,8 +233,10 @@ describe('test-profile release 0.1.0-test', () => {
       if (body!.trim() !== '') expect(tag).toContain('nonce="__CSP_NONCE__"');
       else expect(tag).toMatch(/\ssrc="\/admin\/assets\/[^"]+\.js"/);
     }
-    // Every <link> names an asset too, but for the empty `data:` icon that spares the browser a /favicon.ico request.
-    for (const [, href] of html.matchAll(/<link\b[^>]*\shref="([^"]+)"/gi)) expect(href).toMatch(/^(\/admin\/assets\/|data:,$)/);
+    // Every <link> names an asset too, but for the site icon, which the server answers at /site-icon/<size>.png.
+    for (const [, href] of html.matchAll(/<link\b[^>]*\shref="([^"]+)"/gi)) expect(href).toMatch(/^(\/admin\/assets\/|\/site-icon\/(?:32|180|192)\.png$)/);
+    expect(html).toContain('<link rel="icon" type="image/png" sizes="32x32" href="/site-icon/32.png"');
+    expect(html).toContain('<link rel="apple-touch-icon" href="/site-icon/180.png"');
 
     // Built for this release: the version the API answers with (X-Altis-Build) is the SPA's own (the minifier may quote
     // it with any of ' " `).

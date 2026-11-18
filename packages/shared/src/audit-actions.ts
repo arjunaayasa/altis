@@ -237,6 +237,9 @@ export const AUDIT_ACTIONS = Object.freeze([
   // ---- Komunitas (OPAC home page) ----
   // the home page's content saved (`meta`: the settings that changed, never a value)
   'opac.home.update',
+  // ---- Site identity ----
+  // the site's identity saved (`meta.fields`: the fields that changed, never a value or a file's bytes)
+  'site.identity.update',
 ] as const);
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
