@@ -84,6 +84,16 @@ describe('waitHealthy', () => {
     await expect(waitHealthy(base, { timeoutMs: 2000, pollMs: 10 })).rejects.toThrow(/did not answer 200 within 2000 ms \(last: 503/);
   });
 
+  it('names the last answer, not the request the deadline cut short', async () => {
+    let calls = 0;
+    // The first request gets 503; every later one is never answered, so the last request runs into the deadline.
+    const base = await serve((_req, res) => {
+      calls += 1;
+      if (calls === 1) res.writeHead(503).end('{"status":"starting"}');
+    });
+    await expect(waitHealthy(base, { timeoutMs: 300, pollMs: 10 })).rejects.toThrow(/did not answer 200 within 300 ms \(last: 503/);
+  });
+
   it('retries a refused connection', async () => {
     const port = await freePort();
     await expect(waitHealthy(`http://127.0.0.1:${port}`, { timeoutMs: 150, pollMs: 10 })).rejects.toThrow(/ECONNREFUSED/);
