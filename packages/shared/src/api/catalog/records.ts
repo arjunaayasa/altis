@@ -66,6 +66,35 @@ export interface RecordListResponse {
   page: number | null;
 }
 
+/** The saved views of the admin list: every live record, the live ones without a live item, hidden ones, archived ones. */
+export const RECORD_VIEWS = Object.freeze(['all', 'no_items', 'hidden', 'archived'] as const);
+
+export type RecordView = (typeof RECORD_VIEWS)[number];
+
+/**
+ * `GET catalog/records/counts`: the filters of {@link RecordListQuery} that a plain count can apply (no search text,
+ * no order, no page).
+ */
+export const RecordCountsQuery = z.strictObject({
+  materialTypeId: ulidField.optional(),
+  hidden: z.enum(['only', 'exclude']).optional(),
+  archived: z.stringbool().optional(),
+  hasItems: z.stringbool().optional(),
+  changedFrom: epochMsQuery.optional(),
+  changedTo: epochMsQuery.optional(),
+});
+
+export type RecordCountsQuery = z.infer<typeof RecordCountsQuery>;
+
+/**
+ * `GET catalog/records/counts`: `views` holds how many records each saved view lists with no other filter (the server
+ * may keep these for a short while); `total` is how many records the list holds for the filters of the request.
+ */
+export interface RecordCountsResponse {
+  views: Record<RecordView, number>;
+  total: number;
+}
+
 // ---- authority references ------------------------------------------------------------------------------------------
 
 /** An agent: `{id}` of an existing one, or the agent to find by `(type, name + dates)` or create. */

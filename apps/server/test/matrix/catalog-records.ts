@@ -84,6 +84,7 @@ const record = (o: { archived?: boolean } = {}): MatrixFixture => async (s) => (
 export const MATRIX: AreaMatrix = {
   rows: {
     'catalog.records.list': 'GET /api/v1/catalog/records | P:catalog.records.read | - | - | read | deny | none | null | - | -',
+    'catalog.records.counts': 'GET /api/v1/catalog/records/counts | P:catalog.records.read | - | - | read | deny | none | null | - | -',
     'catalog.records.get': 'GET /api/v1/catalog/records/:id | P:catalog.records.read | - | - | read | deny | none | null | - | -',
     'catalog.records.create':
       'POST /api/v1/catalog/records | P:catalog.records.manage | - | - | write | deny | store | catalog.record.create | handler | -',
@@ -102,6 +103,7 @@ export const MATRIX: AreaMatrix = {
   },
   fixtures: {
     'catalog.records.list': async () => ({ query: { limit: '5', sort: 'title' } }),
+    'catalog.records.counts': async () => ({ query: { hasItems: 'false' } }),
     'catalog.records.get': async (s) => ({ params: { id: await seedRecord(s) } }),
     'catalog.records.create': async (s) => ({
       body: {
