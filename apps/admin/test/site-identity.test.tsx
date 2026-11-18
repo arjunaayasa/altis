@@ -225,7 +225,8 @@ describe('Situs / OPAC › Identitas situs', () => {
     expect(blob.type).toBe('image/png');
     expect(options).toEqual({ context: 'site.logo' });
     expect(screen.getByText(t('siteIdentity.image.fresh', { name: 'logo.jpg', width: 960, height: 240, size: 2 }))).toBeTruthy();
-    expect(preview('header').querySelector('img')).not.toBeNull();
+    // Until it is saved the fresh PNG is shown from itself.
+    expect(preview('header').querySelector('img')!.getAttribute('src')).toMatch(/^data:image\/png;base64,/);
 
     // The icon: the centre square, at most 512 px a side.
     choose(t('siteIdentity.icon.upload'), pngFile('ikon.png'));

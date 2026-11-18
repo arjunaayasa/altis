@@ -157,3 +157,13 @@ export async function sitePngOf(file: Blob, kind: SiteImageKind): Promise<SitePn
     bitmap.close();
   }
 }
+
+/** `blob` as a `data:` address, for showing a fresh image before it is saved. */
+export function dataUrlOf(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => (typeof reader.result === 'string' ? resolve(reader.result) : reject(new TypeError('the image cannot be read')));
+    reader.onerror = () => reject(new TypeError('the image cannot be read'));
+    reader.readAsDataURL(blob);
+  });
+}

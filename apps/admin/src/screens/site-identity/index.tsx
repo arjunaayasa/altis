@@ -24,7 +24,7 @@ import { useDirtyGuard } from '@/lib/dirty-forms';
 import { fieldErrorKey } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { SITE_IDENTITY_PUBLIC_KEY } from '@/lib/site-identity';
-import { SITE_IMAGE_ACCEPT, SiteImageError, sitePngOf, type SiteImageKind } from '@/lib/site-image';
+import { SITE_IMAGE_ACCEPT, SiteImageError, dataUrlOf, sitePngOf, type SiteImageKind } from '@/lib/site-image';
 import { uploadFile } from '@/lib/upload';
 import { cn } from '@/lib/utils';
 
@@ -149,11 +149,6 @@ export function imageRefusalText(t: ReturnType<typeof useT>, error: unknown, kin
   return t('siteIdentity.image.upload_failed');
 }
 
-/** The address the browser shows a fresh PNG from, before it is saved (the upload's own address where it cannot). */
-function previewUrl(blob: Blob, fileId: string): string {
-  return typeof URL.createObjectURL === 'function' ? URL.createObjectURL(blob) : fileSrc(fileId);
-}
-
 /** The screen: its head, then the editor once the identity is loaded. */
 export function SiteIdentityScreen() {
   const t = useT();
@@ -264,7 +259,9 @@ function ImageField({
     try {
       const png = await sitePngOf(file, kind);
       const { uploadId } = await uploadFile(png.blob, { context: kind === 'icon' ? SITE_ICON_CONTEXT : SITE_LOGO_CONTEXT });
-      onChange({ fileId: uploadId, url: previewUrl(png.blob, uploadId), fresh: { name: file.name, width: png.width, height: png.height, bytes: png.blob.size } });
+      // Shown from the PNG itself until it is saved (a `data:` address, which the page's content policy allows).
+      const url = await dataUrlOf(png.blob).catch(() => fileSrc(uploadId));
+      onChange({ fileId: uploadId, url, fresh: { name: file.name, width: png.width, height: png.height, bytes: png.blob.size } });
     } catch (problem) {
       setError(imageRefusalText(t, problem, kind, file));
     } finally {
