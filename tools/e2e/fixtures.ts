@@ -144,9 +144,12 @@ export async function signIn(page: Page, c: Credentials): Promise<void> {
   await expectHome(page);
 }
 
-/** "Keluar" in the header. */
+/** "Keluar" in the user menu of the top bar (the button named after the user). */
 export async function signOut(page: Page, locale: Locale = 'id'): Promise<void> {
-  await page.getByRole('button', { name: tr(locale, 'palette.logout'), exact: true }).click();
+  const [before, after] = tr(locale, 'shell.user_menu', { name: '\u0000' }).split('\u0000') as [string, string];
+  const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await page.getByRole('banner').getByRole('button', { name: new RegExp(`^${escape(before)}.+${escape(after)}$`) }).click();
+  await page.getByRole('menuitem', { name: tr(locale, 'palette.logout'), exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/login(\?|$)/);
 }
 
