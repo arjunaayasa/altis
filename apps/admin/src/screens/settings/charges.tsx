@@ -1,12 +1,11 @@
 import type { CirculationSettingsBody, CirculationSettingsView } from '@altis/shared/api/settings';
 import { useQueryClient } from '@tanstack/react-query';
 import { useId, useState, type FormEvent } from 'react';
-import { SideSection } from '@/components/layout';
-import { Field, SELECT_CLASS } from '@/components/form-field';
+import { CheckField, Field, SELECT_CLASS } from '@/components/form-field';
 import { Input } from '@/components/ui/input';
 import { useT, type TKey } from '@/i18n';
 import { useDirtyGuard } from '@/lib/dirty-forms';
-import { SettingsFooter, saveSettings, type SaveOutcome } from './library';
+import { SettingsFooter, SettingsSection, saveSettings, type SaveOutcome } from './library';
 
 /**
  * Two more forms of Pengaturan › Sirkulasi, both in the group `circulation`:
@@ -109,35 +108,44 @@ export function FinesSettingsForm({ initial, canManage }: { initial: Circulation
   };
 
   return (
-    <SideSection title={t('charges.settings.title')} intro={t('charges.settings.intro')}>
-      <form noValidate className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => void submit(e)}>
+    <SettingsSection title={t('charges.settings.title')} intro={t('charges.settings.intro')}>
+      <form noValidate className="grid" onSubmit={(e) => void submit(e)}>
         <fieldset disabled={!canManage} className="contents">
-          <label className="flex items-center gap-2 text-sm sm:col-span-2">
-            <input type="checkbox" className="size-4 accent-primary" checked={skip} onChange={(e) => setSkip(e.target.checked)} />
-            {t('charges.settings.skip_closed')}
-          </label>
+          <CheckField label={t('charges.settings.skip_closed')} checked={skip} onChange={(e) => setSkip(e.target.checked)} />
           <Field label={t('charges.settings.block_unpaid')} hint={t('charges.settings.block_unpaid_hint')} error={limitError}>
             {(c) => <Input {...c} inputMode="decimal" autoComplete="off" value={limit} onChange={(e) => setLimit(e.target.value)} />}
           </Field>
-          <label className="flex items-center gap-2 self-end text-sm">
-            <input type="checkbox" className="size-4 accent-primary" checked={overdue} onChange={(e) => setOverdue(e.target.checked)} />
-            {t('charges.settings.block_overdue')}
-          </label>
+          <CheckField label={t('charges.settings.block_overdue')} checked={overdue} onChange={(e) => setOverdue(e.target.checked)} />
           <Field id={`${ids}-paper`} label={t('charges.settings.paper')}>
             <select id={`${ids}-paper`} className={SELECT_CLASS} value={String(paper)} onChange={(e) => setPaper(e.target.value === '58' ? 58 : 80)}>
               <option value="58">{t('charges.settings.paper_58')}</option>
               <option value="80">{t('charges.settings.paper_80')}</option>
             </select>
           </Field>
-          <div />
           <Field label={t('charges.settings.footer_id')}>{(c) => <Input {...c} maxLength={300} value={footerId} onChange={(e) => setFooterId(e.target.value)} />}</Field>
           <Field label={t('charges.settings.footer_en')}>{(c) => <Input {...c} maxLength={300} value={footerEn} onChange={(e) => setFooterEn(e.target.value)} />}</Field>
         </fieldset>
-        <div className="grid gap-4 sm:col-span-2">
-          <SettingsFooter canManage={canManage} busy={busy} outcome={outcome} problem={problem} rootError={undefined} />
-        </div>
+        <SettingsFooter
+          canManage={canManage}
+          busy={busy}
+          dirty={dirty}
+          onDiscard={() => {
+            setSkip(view.fines.skipClosedDays);
+            setLimit(decimalOf(view.block.unpaidOverMinor));
+            setOverdue(view.block.overdue);
+            setPaper(view.receipt.paperMm);
+            setFooterId(view.receipt.footer.id ?? '');
+            setFooterEn(view.receipt.footer.en ?? '');
+            setLimitError(undefined);
+            setOutcome(null);
+            setProblem(null);
+          }}
+          outcome={outcome}
+          problem={problem}
+          rootError={undefined}
+        />
       </form>
-    </SideSection>
+    </SettingsSection>
   );
 }
 
@@ -154,10 +162,7 @@ export function HoldsSettingsForm({ initial, canManage }: { initial: Circulation
   const dirty = JSON.stringify({ ...holds, pickupDays: days }) !== JSON.stringify({ ...view.holds, pickupDays: String(view.holds.pickupDays) });
   useDirtyGuard(dirty);
   const flag = (key: 'enabled' | 'opac' | 'onlyWhenNoneAvailable', label: TKey) => (
-    <label className="flex items-center gap-2 text-sm sm:col-span-2">
-      <input type="checkbox" className="size-4 accent-primary" checked={holds[key]} onChange={(e) => setHolds((h) => ({ ...h, [key]: e.target.checked }))} />
-      {t(label)}
-    </label>
+    <CheckField label={t(label)} checked={holds[key]} onChange={(e) => setHolds((h) => ({ ...h, [key]: e.target.checked }))} />
   );
 
   const submit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
@@ -194,8 +199,8 @@ export function HoldsSettingsForm({ initial, canManage }: { initial: Circulation
   };
 
   return (
-    <SideSection title={t('charges.settings.holds_title')} intro={t('charges.settings.holds_intro')}>
-      <form noValidate className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => void submit(e)}>
+    <SettingsSection title={t('charges.settings.holds_title')} intro={t('charges.settings.holds_intro')}>
+      <form noValidate className="grid" onSubmit={(e) => void submit(e)}>
         <fieldset disabled={!canManage} className="contents">
           {flag('enabled', 'charges.settings.holds_enabled')}
           {flag('opac', 'charges.settings.holds_opac')}
@@ -204,10 +209,22 @@ export function HoldsSettingsForm({ initial, canManage }: { initial: Circulation
             {(c) => <Input {...c} inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} />}
           </Field>
         </fieldset>
-        <div className="grid gap-4 sm:col-span-2">
-          <SettingsFooter canManage={canManage} busy={busy} outcome={outcome} problem={problem} rootError={undefined} />
-        </div>
+        <SettingsFooter
+          canManage={canManage}
+          busy={busy}
+          dirty={dirty}
+          onDiscard={() => {
+            setHolds(view.holds);
+            setDays(String(view.holds.pickupDays));
+            setDaysError(undefined);
+            setOutcome(null);
+            setProblem(null);
+          }}
+          outcome={outcome}
+          problem={problem}
+          rootError={undefined}
+        />
       </form>
-    </SideSection>
+    </SettingsSection>
   );
 }

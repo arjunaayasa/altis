@@ -1,6 +1,7 @@
 import { useId, useState, type KeyboardEvent } from 'react';
 import { useController, type Control, type FieldErrors } from 'react-hook-form';
 import { describedBy } from '@/components/form-field';
+import { SETTING_BLOCK } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -78,8 +79,10 @@ export function ChipListField({
   };
 
   return (
-    <div className="grid content-start gap-2">
-      <Label htmlFor={id}>{label}</Label>
+    <div className={cn(SETTING_BLOCK, 'content-start gap-2')}>
+      <Label htmlFor={id} className="font-semibold">
+        {label}
+      </Label>
       <ul aria-label={t('accreditation.settings.chips.list', { label })} className="flex flex-wrap gap-1.5">
         {value.map((entry, i) => (
           <li

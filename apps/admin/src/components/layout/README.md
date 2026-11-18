@@ -32,7 +32,7 @@ In the examples, `things.*` keys stand for the screen's own i18n keys (every tex
 | `callout.tsx` | `Callout`, `PageError` |
 | `status.tsx` | `StatusText`, `Tag`, the tone classes `TONE_TEXT`, `TONE_SURFACE`, `TAG_TONE`, `TAG_SHAPE`, `LAYER` |
 | `form-section.tsx` | `FormSection`, `SideSection`, `FormBar`, `FORM_FULL` |
-| `setting-row.tsx` | `SettingRow` |
+| `setting-row.tsx` | `SettingRow`, `SettingRowsScope` (a `Field` or `CheckField` inside is drawn as a row), `SettingBlock`, `SETTING_ROW`, `SETTING_BLOCK` |
 | `save-bar.tsx` | `SaveBar` |
 | `link-tabs.tsx` | `LinkTabs` |
 | `steps.tsx` | `Steps` |

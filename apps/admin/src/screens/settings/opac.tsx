@@ -6,12 +6,12 @@ import { useState } from 'react';
 import { useForm, useWatch, type Control } from 'react-hook-form';
 import { z } from 'zod';
 import { CheckField, Field, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
-import { Callout, SideSection } from '@/components/layout';
+import { Callout } from '@/components/layout';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
 import { useDirtyGuard } from '@/lib/dirty-forms';
 import { FORM_PARSE, applyServerErrors, hasFieldErrors } from '@/lib/form-errors';
-import { SettingsFooter, SettingsLoader, SettingsPage, blankToNull, saveSettings, wholeNumberIn, type SaveOutcome } from './library';
+import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, blankToNull, saveSettings, wholeNumberIn, type SaveOutcome } from './library';
 
 /**
  * Pengaturan → Tampilan OPAC (spec §13.3 "penampilan OPAC"; `PUT settings/opac`): the welcome text of the OPAC home
@@ -102,6 +102,11 @@ function OpacSettingsForm({ initial, canManage }: { initial: OpacSettings; canMa
   const { errors, isDirty, isSubmitting } = form.formState;
   useDirtyGuard(isDirty);
   const readOnly = !canManage;
+  const discard = (): void => {
+    form.reset();
+    setOutcome(null);
+    setProblem(null);
+  };
 
   const submit = form.handleSubmit(async (values) => {
     setProblem(null);
@@ -124,9 +129,9 @@ function OpacSettingsForm({ initial, canManage }: { initial: OpacSettings; canMa
   });
 
   return (
-    <SideSection title={t('settings.tab.opac')} intro={t('settings.opac.description')}>
-      <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
-        <Field label={t('settings.opac.accent')} hint={t('settings.opac.accent_hint')} error={errors.accent} className="max-w-xs">
+    <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
+      <SettingsSection title={t('settings.tab.opac')} intro={t('settings.opac.description')}>
+        <Field label={t('settings.opac.accent')} hint={t('settings.opac.accent_hint')} error={errors.accent}>
           {(c) => (
             <select {...c} className={SELECT_CLASS} {...form.register('accent')} disabled={readOnly}>
               {OPAC_ACCENTS.map((accent) => (
@@ -139,6 +144,7 @@ function OpacSettingsForm({ initial, canManage }: { initial: OpacSettings; canMa
         </Field>
         {LOCALES.map((locale) => (
           <Field
+            wide
             key={locale}
             label={t('settings.opac.welcome', { language: t(`palette.language.${locale}`) })}
             hint={t('settings.opac.welcome_hint')}
@@ -157,9 +163,8 @@ function OpacSettingsForm({ initial, canManage }: { initial: OpacSettings; canMa
           </Field>
         ))}
         {/* ---- Phase 2 (catalog): Task 28 ---- */}
-        <fieldset className="min-w-0 pt-2">
-          <legend className="mb-3 text-sm font-bold">{t('catalog.settings.opac.search_title')}</legend>
-          <div className="grid gap-4 sm:grid-cols-2">
+      </SettingsSection>
+      <SettingsSection title={t('catalog.settings.opac.search_title')}>
             <Field
               label={t('catalog.settings.opac.results_per_page')}
               hint={t('catalog.settings.opac.results_per_page_hint', { min: RESULTS_PER_PAGE.minValue ?? '', max: RESULTS_PER_PAGE.maxValue ?? '' })}
@@ -195,39 +200,32 @@ function OpacSettingsForm({ initial, canManage }: { initial: OpacSettings; canMa
               )}
             </Field>
             <CheckField
-              className="sm:col-span-2"
               label={t('catalog.settings.opac.indexable')}
               hint={t('catalog.settings.opac.indexable_hint')}
               {...form.register('indexable')}
               disabled={readOnly}
             />
             <CheckField
-              className="sm:col-span-2"
               label={t('catalog.settings.opac.show_shelf_map')}
               hint={t('catalog.settings.opac.show_shelf_map_hint')}
               {...form.register('showShelfMap')}
               disabled={readOnly}
             />
-          </div>
-        </fieldset>
-        <fieldset className="min-w-0 pt-2">
-          <legend className="mb-3 text-sm font-bold">{t('catalog.settings.opac.oai_title')}</legend>
-          <div className="grid gap-4">
+      </SettingsSection>
+      <SettingsSection title={t('catalog.settings.opac.oai_title')}>
             <CheckField
               label={t('catalog.settings.opac.oai_enabled')}
               hint={t('catalog.settings.opac.oai_enabled_hint', { path: '/oai' })}
               {...form.register('oai.enabled')}
               disabled={readOnly}
             />
-            <Field label={t('catalog.settings.opac.oai_admin_email')} hint={t('catalog.settings.opac.oai_admin_email_hint')} error={errors.oai?.adminEmail} className="max-w-md">
+            <Field label={t('catalog.settings.opac.oai_admin_email')} hint={t('catalog.settings.opac.oai_admin_email_hint')} error={errors.oai?.adminEmail}>
               {(c) => <Input {...c} type="email" autoComplete="email" maxLength={OAI_EMAIL_MAX} {...form.register('oai.adminEmail')} disabled={readOnly} />}
             </Field>
             <OaiWarning control={form.control} />
-          </div>
-        </fieldset>
-        <SettingsFooter canManage={canManage} busy={isSubmitting} outcome={outcome} problem={problem} rootError={errors.root?.['server']?.message} />
-      </form>
-    </SideSection>
+      </SettingsSection>
+        <SettingsFooter canManage={canManage} busy={isSubmitting} dirty={isDirty} onDiscard={discard} outcome={outcome} problem={problem} rootError={errors.root?.['server']?.message} />
+    </form>
   );
 }
 

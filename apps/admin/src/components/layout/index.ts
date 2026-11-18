@@ -15,7 +15,7 @@ export { MoreMenu, MoreMenuItem, MoreMenuRule } from './more-menu';
 export { BackLink, PageHead, PageHeader, Section, SectionHead } from './page-head';
 export { SaveBar } from './save-bar';
 export { BulkBar, SelectionBar, type SelectionAction } from './selection-bar';
-export { SettingRow, type SettingControl } from './setting-row';
+export { SETTING_BLOCK, SETTING_ROW, SettingBlock, SettingRow, SettingRowsScope, useSettingRows, type SettingControl } from './setting-row';
 export { EmptyState, ErrorState, LoadingState } from './states';
 export { LAYER, StatusText, TAG_SHAPE, TAG_TONE, TONE_SURFACE, TONE_TEXT, Tag, type StatusTone, type TagTone } from './status';
 export { Steps } from './steps';

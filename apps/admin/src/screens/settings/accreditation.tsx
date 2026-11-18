@@ -5,7 +5,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { useForm, useWatch, type UseFormReturn } from 'react-hook-form';
-import { SideSection } from '@/components/layout';
 import { CheckField, Field, Notice, SELECT_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +31,7 @@ import {
   type ChipListName,
   type PageKey,
 } from './accreditation/form';
-import { SettingsFooter, SettingsLoader, SettingsPage, saveSettings, type SaveOutcome } from './library';
+import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, saveSettings, type SaveOutcome } from './library';
 
 /**
  * Pengaturan › Akreditasi, `/admin/settings/accreditation`: the sixteen settings of the `accreditation` group in one
@@ -223,6 +222,11 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
   const { errors, isDirty, isSubmitting } = form.formState;
   useDirtyGuard(isDirty);
   const readOnly = !canManage;
+  const discard = (): void => {
+    form.reset();
+    setOutcome(null);
+    setProblem(null);
+  };
   const months = useMemo(() => monthNames(locale), [locale]);
 
   const pagesReadable = holds(me, 'opac.pages.manage');
@@ -272,11 +276,10 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
   });
 
   return (
-    <form noValidate className="grid gap-6" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
+    <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
       <p className="text-sm text-muted-foreground">{t('accreditation.settings.description')}</p>
 
-      <SideSection title={t('accreditation.settings.section.period')}>
-        <div className="grid gap-4 sm:grid-cols-2">
+      <SettingsSection title={t('accreditation.settings.section.period')}>
           <Field
             label={t('accreditation.settings.school_year_start_month')}
             hint={t('accreditation.settings.school_year_start_month_hint')}
@@ -293,13 +296,11 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
             )}
           </Field>
           <Field label={t('accreditation.settings.live_from')} hint={t('accreditation.settings.live_from_hint')} error={errorAt(form, 'liveFrom')}>
-            {(c) => <Input {...c} type="date" className="w-48" {...form.register('liveFrom')} disabled={readOnly} />}
+            {(c) => <Input {...c} type="date" {...form.register('liveFrom')} disabled={readOnly} />}
           </Field>
-        </div>
-      </SideSection>
+      </SettingsSection>
 
-      <SideSection title={t('accreditation.settings.section.collection')} intro={t('accreditation.settings.section.collection_hint')}>
-        <div className="grid gap-5 sm:grid-cols-2">
+      <SettingsSection title={t('accreditation.settings.section.collection')} intro={t('accreditation.settings.section.collection_hint')}>
           {COLLECTION_LISTS.map((list) => (
             <ChipListField
               key={list.name}
@@ -323,11 +324,9 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
               </select>
             )}
           </Field>
-        </div>
-      </SideSection>
+      </SettingsSection>
 
-      <SideSection title={t('accreditation.settings.section.thresholds')}>
-        <div className="grid gap-4 sm:grid-cols-2">
+      <SettingsSection title={t('accreditation.settings.section.thresholds')}>
           <NumberField
             form={form}
             name="k7.processedThresholdPct"
@@ -344,11 +343,9 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
             bound={BOUNDS.undatedShareMaxPct}
             readOnly={readOnly}
           />
-        </div>
-      </SideSection>
+      </SettingsSection>
 
-      <SideSection title={t('accreditation.settings.section.website')} intro={t('accreditation.settings.section.website_hint')}>
-        <div className="grid gap-4 sm:grid-cols-2">
+      <SettingsSection title={t('accreditation.settings.section.website')} intro={t('accreditation.settings.section.website_hint')}>
           {PAGE_KEYS.map((key) => (
             <PageField
               key={key}
@@ -369,11 +366,9 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
             readOnly={readOnly}
             mono={false}
           />
-        </div>
-      </SideSection>
+      </SettingsSection>
 
-      <SideSection title={t('accreditation.settings.section.evidence')}>
-        <div className="grid gap-4 sm:grid-cols-2">
+      <SettingsSection title={t('accreditation.settings.section.evidence')}>
           <NumberField
             form={form}
             name="evidence.maxMb"
@@ -390,11 +385,9 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
             bound={BOUNDS.evidenceMb}
             readOnly={readOnly}
           />
-        </div>
-      </SideSection>
+      </SettingsSection>
 
-      <SideSection title={t('accreditation.settings.section.usage')}>
-        <div className="grid gap-4">
+      <SettingsSection title={t('accreditation.settings.section.usage')}>
           <CheckField
             label={t('accreditation.settings.dedupe_legacy')}
             hint={t('accreditation.settings.dedupe_legacy_hint')}
@@ -405,7 +398,6 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
             label={t('accreditation.settings.unknown_group')}
             hint={t('accreditation.settings.unknown_group_hint')}
             error={errorAt(form, 'unknownMemberGroup.default')}
-            className="max-w-md"
           >
             {(c) => (
               <select {...c} className={SELECT_CLASS} {...form.register('unknownMemberGroup.default')} disabled={readOnly}>
@@ -417,8 +409,7 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
               </select>
             )}
           </Field>
-        </div>
-      </SideSection>
+      </SettingsSection>
 
       {newer !== null && (
         <Notice
@@ -441,7 +432,7 @@ function AccreditationSettingsForm({ initial, canManage }: { initial: Accreditat
           {t('accreditation.settings.changed_elsewhere')}
         </Notice>
       )}
-      <SettingsFooter canManage={canManage} busy={isSubmitting} outcome={outcome} problem={problem} rootError={errors.root?.['server']?.message} />
+      <SettingsFooter canManage={canManage} busy={isSubmitting} dirty={isDirty} onDiscard={discard} outcome={outcome} problem={problem} rootError={errors.root?.['server']?.message} />
     </form>
   );
 }
