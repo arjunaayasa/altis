@@ -22,7 +22,7 @@ export const TONE_SURFACE: Readonly<Record<StatusTone, string>> = {
   bad: 'border-bad-line bg-bad-bg',
 };
 
-/** The neutral second layer (side panels, inline panels, table heads). */
+/** The quiet neutral layer (side panels, inline panels, the group rows of a table). */
 export const LAYER = 'bg-layer';
 
 /** A status word in its colour; the word carries the meaning. */
@@ -38,11 +38,11 @@ export const TAG_TONE: Readonly<Record<TagTone, string>> = {
   warn: 'bg-warn-bg text-warn',
   bad: 'bg-bad-bg text-bad',
   neutral: 'bg-layer-2 text-muted-foreground',
-  accent: 'bg-accent-soft text-accent-text',
+  accent: 'bg-primary-soft text-accent-text',
 };
 
 /** The shape of a {@link Tag}. */
-export const TAG_SHAPE = 'inline-flex h-5.5 w-fit items-center rounded px-1.75 text-xs font-semibold whitespace-nowrap';
+export const TAG_SHAPE = 'inline-flex h-5.5 w-fit items-center gap-1 rounded-md px-1.75 text-fine font-semibold whitespace-nowrap [&_svg]:size-3.25 [&_svg]:shrink-0';
 
 /** A short labelled state (a member's status, "Batas penuh"): a tinted chip whose word says the state. */
 export function Tag({ tone = 'neutral', className, ...props }: ComponentProps<'span'> & { tone?: TagTone }) {

@@ -9,13 +9,13 @@ import type { ReactNode } from 'react';
 export function LinkTabs({ label, items }: { label: string; items: readonly { to: string; label: ReactNode }[] }) {
   return (
     <nav aria-label={label}>
-      <ul className="flex flex-wrap gap-x-1 border-b">
+      <ul className="flex flex-wrap gap-x-6 border-b">
         {items.map((item) => (
           <li key={item.to}>
             <Link
               to={item.to}
               activeOptions={{ exact: true }}
-              className="-mb-px block border-b-2 border-transparent px-2.5 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:text-foreground">
+              className="-mb-px block border-b-2 border-transparent py-2 font-medium text-muted-foreground hover:text-foreground data-[status=active]:border-primary data-[status=active]:font-semibold data-[status=active]:text-foreground">
               {item.label}
             </Link>
           </li>
