@@ -55,6 +55,8 @@ const STOCKTAKE_MIGRATIONS = ['0048_stocktakes'];
 const OPAC_HOME_MIGRATIONS = ['0049_opac_popular'];
 // ---- Komunitas (OPAC home page: loans per class) ----
 const OPAC_CLASS_MIGRATIONS = ['0050_opac_class_activity'];
+// ---- Komunitas (the agenda of the news) ----
+const NEWS_AGENDA_MIGRATIONS = ['0051_news_agenda'];
 
 describe('the Phase 2 migrations in the migration map (P2-06)', () => {
   it('appends 0020–0029 in order to the same frozen map; 0029_search_token_version is the last key', () => {
@@ -88,12 +90,13 @@ describe('the Phase 2 migrations in the migration map (P2-06)', () => {
     for (const name of all) expect(typeof PHASE1_MIGRATIONS[name]?.up).toBe('function');
   });
 
-  it('the loans per class of the OPAC home page open 0050; 0050_opac_class_activity is the last key', () => {
+  it('the loans per class of the OPAC home page open 0050, the agenda of the news follows; 0051_news_agenda is the last key', () => {
     const names = Object.keys(PHASE1_MIGRATIONS).sort();
-    expect(names.filter((n) => n >= '0050' && n < '0060')).toEqual(OPAC_CLASS_MIGRATIONS);
+    const all = [...OPAC_CLASS_MIGRATIONS, ...NEWS_AGENDA_MIGRATIONS];
+    expect(names.filter((n) => n >= '0050' && n < '0060')).toEqual(all);
     // The newest range on this branch (every earlier range sorts before it).
-    expect(names.at(-1)).toBe('0050_opac_class_activity');
-    for (const name of OPAC_CLASS_MIGRATIONS) expect(typeof PHASE1_MIGRATIONS[name]?.up).toBe('function');
+    expect(names.at(-1)).toBe('0051_news_agenda');
+    for (const name of all) expect(typeof PHASE1_MIGRATIONS[name]?.up).toBe('function');
   });
 });
 
@@ -132,15 +135,37 @@ describe.skipIf(!ctx.available)(`the Phase 2 migrations [${engineLabel()}]`, () 
     return rows.map((r) => String(r.col));
   }
 
-  it('migrates an empty database to 0050, and a second run reports it up to date', async () => {
+  it('migrates an empty database to 0051, and a second run reports it up to date', async () => {
     const first = await runMigrations(h, { appVersion: '0.1.0', dataDir, migrations: PHASE1_MIGRATIONS });
     expect(first.mode).toBe('migrated');
-    const newest = [...CATALOG_MIGRATIONS, ...K1_MIGRATIONS, ...CIRCULATION_MIGRATIONS, ...HOLDS_MIGRATIONS, ...CIRC_CORE_MIGRATIONS, ...VISITS_MIGRATIONS, ...MEMBER_AREA_MIGRATIONS, ...CHARGES_MIGRATIONS, ...NOTICES_MIGRATIONS, ...SLIMS_PEOPLE_MIGRATIONS, ...STOCKTAKE_MIGRATIONS, ...OPAC_HOME_MIGRATIONS, ...OPAC_CLASS_MIGRATIONS];
+    const newest = [...CATALOG_MIGRATIONS, ...K1_MIGRATIONS, ...CIRCULATION_MIGRATIONS, ...HOLDS_MIGRATIONS, ...CIRC_CORE_MIGRATIONS, ...VISITS_MIGRATIONS, ...MEMBER_AREA_MIGRATIONS, ...CHARGES_MIGRATIONS, ...NOTICES_MIGRATIONS, ...SLIMS_PEOPLE_MIGRATIONS, ...STOCKTAKE_MIGRATIONS, ...OPAC_HOME_MIGRATIONS, ...OPAC_CLASS_MIGRATIONS, ...NEWS_AGENDA_MIGRATIONS];
     expect(first.applied.slice(-newest.length)).toEqual(newest);
-    expect(first.schemaVersion).toBe('0050');
+    expect(first.schemaVersion).toBe('0051');
     const second = await runMigrations(h, { appVersion: '0.1.0', dataDir, migrations: PHASE1_MIGRATIONS });
-    expect(second).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0050', minCodeVersion: '0.0.0', edition: { mode: 'empty', applied: [] } });
-    expect(await h.db.selectFrom('schema_meta').select('schema_version').execute()).toEqual([{ schema_version: '0050' }]);
+    expect(second).toEqual({ mode: 'up-to-date', applied: [], schemaVersion: '0051', minCodeVersion: '0.0.0', edition: { mode: 'empty', applied: [] } });
+    expect(await h.db.selectFrom('schema_meta').select('schema_version').execute()).toEqual([{ schema_version: '0051' }]);
+  });
+
+  it('0051: pages has the four nullable agenda columns and the indexes of the coming events and of a category', async () => {
+    expect(await indexColumns('pages', 'ix_pages_kind_status_event_starts_at')).toEqual(['kind', 'status', 'event_starts_at']);
+    expect(await indexColumns('pages', 'ix_pages_kind_status_category_published_at')).toEqual(['kind', 'status', 'category', 'published_at']);
+    const id = '01HZZZZZZZZZZZZZZZZZZZNEWS';
+    const base = { kind: 'news', status: 'published', published_at: 1, created_at: 1, updated_at: 1 };
+    // A row written without them (as the release before this one writes it) leaves all four null.
+    await h.db.insertInto('pages').values({ ...base, id, slug_key: 'agenda-0051-plain' } as never).execute();
+    const plain = await h.db.selectFrom('pages').select(['category', 'event_starts_at', 'event_ends_at', 'event_place']).where('id', '=', id).executeTakeFirstOrThrow();
+    expect(plain).toEqual({ category: null, event_starts_at: null, event_ends_at: null, event_place: null });
+    // The times are epoch milliseconds, past 2^31; the place holds 160 characters.
+    const place = 'r'.repeat(160);
+    await h.db.updateTable('pages').set({ category: 'agenda', event_starts_at: 1_800_000_000_000, event_ends_at: 1_800_000_360_000, event_place: place }).where('id', '=', id).execute();
+    const full = await h.db.selectFrom('pages').select(['category', 'event_starts_at', 'event_ends_at', 'event_place']).where('id', '=', id).executeTakeFirstOrThrow();
+    expect({ ...full, event_starts_at: Number(full.event_starts_at), event_ends_at: Number(full.event_ends_at) }).toEqual({
+      category: 'agenda',
+      event_starts_at: 1_800_000_000_000,
+      event_ends_at: 1_800_000_360_000,
+      event_place: place,
+    });
+    await h.db.deleteFrom('pages').where('id', '=', id).execute();
   });
 
   it('S14: search_doc has the newest-first indexes (is_public, created_at) and (created_at)', async () => {

@@ -782,6 +782,14 @@ export interface PagesTable extends ArchivedTrail {
   show_in_nav: Generated<Flag>;
   cover_file_id: string | null;
   sort_order: Generated<number>;
+  /** Migration 0051, news only: `agenda` | `collection` | `announcement` | `activity`; null without a category. */
+  category: string | null;
+  /** Migration 0051, news only: the start of the event the news announces. */
+  event_starts_at: EpochMs | null;
+  /** Migration 0051, news only: its end; never set without a start, never before it. */
+  event_ends_at: EpochMs | null;
+  /** Migration 0051, news only: where the event is held. */
+  event_place: string | null;
 }
 
 /** Class data. `page_id` references pages (ON DELETE CASCADE). */
