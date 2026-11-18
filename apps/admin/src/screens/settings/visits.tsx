@@ -1,12 +1,11 @@
 import type { PrivacySettingsView, VisitsSettingsView } from '@altis/shared/api/settings';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
-import { SideSection } from '@/components/layout';
 import { CheckField, Field, Notice, ProblemAlert, TEXTAREA_CLASS } from '@/components/form-field';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/i18n';
-import { SettingsLoader, SettingsPage, saveSettings } from './library';
+import { useDirtyGuard } from '@/lib/dirty-forms';
+import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, saveSettings } from './library';
 
 /**
  * Pengaturan → Kunjungan (`PUT settings/visits`): the repeat window, whether the desk and the OPAC sign-in count as
@@ -28,6 +27,27 @@ function VisitsForm({ view, canManage }: { view: VisitsSettingsView; canManage: 
   const [problem, setProblem] = useState<unknown>(null);
   const [saved, setSaved] = useState(false);
   const [invalid, setInvalid] = useState(false);
+  const dirty =
+    dedupe !== String(view.dedupeMinutes) ||
+    fromDesk !== view.fromDesk ||
+    fromOnline !== view.fromOnline ||
+    askPurpose !== view.askPurpose ||
+    showPhoto !== view.station.showPhoto ||
+    welcomeId !== (view.station.welcome.id ?? '') ||
+    welcomeEn !== (view.station.welcome.en ?? '');
+  useDirtyGuard(dirty);
+  const discard = (): void => {
+    setDedupe(String(view.dedupeMinutes));
+    setFromDesk(view.fromDesk);
+    setFromOnline(view.fromOnline);
+    setAskPurpose(view.askPurpose);
+    setShowPhoto(view.station.showPhoto);
+    setWelcomeId(view.station.welcome.id ?? '');
+    setWelcomeEn(view.station.welcome.en ?? '');
+    setInvalid(false);
+    setProblem(null);
+    setSaved(false);
+  };
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
@@ -57,29 +77,25 @@ function VisitsForm({ view, canManage }: { view: VisitsSettingsView; canManage: 
   };
 
   return (
-    <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
-      <SideSection title={t('visits.settings.title')}>
+    <form noValidate onSubmit={(e) => void submit(e)} className="grid gap-4">
+      <SettingsSection title={t('visits.settings.title')}>
         <Field label={t('visits.settings.dedupe')} hint={t('visits.settings.dedupe_hint')} error={invalid ? 'visits.settings.invalid' : undefined}>
-          {(c) => <Input {...c} inputMode="numeric" disabled={!canManage} className="max-w-32" value={dedupe} onChange={(e) => setDedupe(e.target.value)} />}
+          {(c) => <Input {...c} inputMode="numeric" disabled={!canManage} value={dedupe} onChange={(e) => setDedupe(e.target.value)} />}
         </Field>
         <CheckField label={t('visits.settings.from_desk')} disabled={!canManage} checked={fromDesk} onChange={(e) => setFromDesk(e.target.checked)} />
         <CheckField label={t('visits.settings.from_online')} disabled={!canManage} checked={fromOnline} onChange={(e) => setFromOnline(e.target.checked)} />
         <CheckField label={t('visits.settings.ask_purpose')} disabled={!canManage} checked={askPurpose} onChange={(e) => setAskPurpose(e.target.checked)} />
         <CheckField label={t('visits.settings.show_photo')} disabled={!canManage} checked={showPhoto} onChange={(e) => setShowPhoto(e.target.checked)} />
-        <Field label={t('visits.settings.welcome_id')}>
+        <Field wide label={t('visits.settings.welcome_id')}>
           {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={300} disabled={!canManage} value={welcomeId} onChange={(e) => setWelcomeId(e.target.value)} />}
         </Field>
-        <Field label={t('visits.settings.welcome_en')}>
+        <Field wide label={t('visits.settings.welcome_en')}>
           {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={300} disabled={!canManage} value={welcomeEn} onChange={(e) => setWelcomeEn(e.target.value)} />}
         </Field>
-      </SideSection>
+      </SettingsSection>
       <ProblemAlert error={problem} />
       {saved && <Notice kind="success">{t('visits.settings.saved')}</Notice>}
-      {canManage && (
-        <Button type="submit" className="w-fit" disabled={busy}>
-          {t(busy ? 'form.saving' : 'visits.settings.save')}
-        </Button>
-      )}
+      <SettingsFooter canManage={canManage} busy={busy} dirty={dirty} onDiscard={discard} outcome={null} problem={null} rootError={undefined} />
     </form>
   );
 }
@@ -104,6 +120,16 @@ function PrivacyForm({ view, canManage }: { view: PrivacySettingsView; canManage
   const [problem, setProblem] = useState<unknown>(null);
   const [saved, setSaved] = useState(false);
   const [invalid, setInvalid] = useState<string[]>([]);
+  const dirty = loans !== text(view.loans.anonymizeAfterYears) || visits !== text(view.visits.anonymizeAfterYears) || members !== text(view.members.anonymizeArchivedAfterYears);
+  useDirtyGuard(dirty);
+  const discard = (): void => {
+    setLoans(text(view.loans.anonymizeAfterYears));
+    setVisits(text(view.visits.anonymizeAfterYears));
+    setMembers(text(view.members.anonymizeArchivedAfterYears));
+    setInvalid([]);
+    setProblem(null);
+    setSaved(false);
+  };
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
@@ -132,24 +158,20 @@ function PrivacyForm({ view, canManage }: { view: PrivacySettingsView; canManage
 
   const field = (key: 'loans' | 'visits' | 'members', label: string, value: string, set: (v: string) => void) => (
     <Field label={label} hint={t('visits.settings.years_hint')} error={invalid.includes(key) ? 'visits.settings.invalid' : undefined}>
-      {(c) => <Input {...c} inputMode="numeric" disabled={!canManage} className="max-w-32" value={value} onChange={(e) => set(e.target.value)} />}
+      {(c) => <Input {...c} inputMode="numeric" disabled={!canManage} value={value} onChange={(e) => set(e.target.value)} />}
     </Field>
   );
 
   return (
-    <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
-      <SideSection title={t('visits.settings.privacy_title')} intro={t('visits.settings.privacy_intro')}>
+    <form noValidate onSubmit={(e) => void submit(e)} className="grid gap-4">
+      <SettingsSection title={t('visits.settings.privacy_title')} intro={t('visits.settings.privacy_intro')}>
         {field('loans', t('visits.settings.loans_years'), loans, setLoans)}
         {field('visits', t('visits.settings.visits_years'), visits, setVisits)}
         {field('members', t('visits.settings.members_years'), members, setMembers)}
-      </SideSection>
+      </SettingsSection>
       <ProblemAlert error={problem} />
       {saved && <Notice kind="success">{t('visits.settings.saved')}</Notice>}
-      {canManage && (
-        <Button type="submit" className="w-fit" disabled={busy}>
-          {t(busy ? 'form.saving' : 'visits.settings.save')}
-        </Button>
-      )}
+      <SettingsFooter canManage={canManage} busy={busy} dirty={dirty} onDiscard={discard} outcome={null} problem={null} rootError={undefined} />
     </form>
   );
 }
