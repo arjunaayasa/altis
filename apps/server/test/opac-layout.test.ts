@@ -12,6 +12,7 @@ import { legacyRequest, searchRedirectPath } from '../src/opac/catalog/legacy.js
 import { libraryJsonLd, webSiteJsonLd } from '../src/opac/catalog/library-json-ld.js';
 import { opacText } from '../src/opac/catalog/messages.js';
 import { keptPath, keptQuery, opacPage, pageFrame, type OpacContext, type OpacPageOptions } from '../src/opac/catalog/page.js';
+import { OPAC_ADVANCED_PATH } from '../src/opac/catalog/search-params.js';
 import { opacStatusResponse } from '../src/opac/catalog/respond.js';
 import { robotsTxt } from '../src/opac/catalog/robots.js';
 import { SITEMAP_MAX_URLS, sitemapIndexXml, urlsetXml, w3cDate } from '../src/opac/catalog/sitemap.js';
@@ -19,8 +20,9 @@ import { NO_ICON } from '../src/opac/layout.js';
 import { renderError, renderMaintenance, renderNotFound } from '../src/opac/pages.js';
 
 // The OPAC shell's page frame and its pure parts (Phase 2 Task 21; spec §9.1, §9.2, §9.4, §9.7, §9.9; S6, S7, S17):
-// - opacPage: a skip link to <main>, a header with the library name, the menu pages, a GET search form to /cari with a
-//   labelled input and a language switch that keeps the path and the query; in <head> the canonical link, hreflang
+// - opacPage: a skip link to <main>, a strip with the language switch that keeps the path and the query, a header with
+//   the library name, the menu (a <details> on a narrow screen) and the member button, a GET search form to /cari with
+//   a labelled input on the pages that ask for it; in <head> the canonical link, hreflang
 //   id/en/x-default, OpenGraph basics and the robots meta; every absolute link from config.baseUrl, the path normalised
 //   so that a request for `//evil.example` never becomes a protocol-relative link (S7);
 // - the status page (S17) and the 1b pages in the same frame;
@@ -91,9 +93,9 @@ describe('opacPage: the frame (§9.2)', () => {
     const body = html.slice(html.indexOf('<body>'));
     expect(body).toMatch(new RegExp(`^<body><a class="skip-link" href="#isi">${esc(opacText('id', 'shell.skip_link'))}</a>`));
     expect(html).toContain('<main id="isi" tabindex="-1">');
-    expect(html).toContain('<a class="brand" href="/">Perpustakaan SMA &lt;1&gt;</a>');
-    expect(html).toContain(`<nav class="menu" aria-label="${esc(opacText('id', 'shell.nav.label'))}">`);
-    const menu = /<nav class="menu"[^>]*>([\s\S]*?)<\/nav>/.exec(html)![1]!;
+    expect(html).toContain('<a class="sitelogo" href="/"><span class="sitename">Perpustakaan SMA &lt;1&gt;</span></a>');
+    expect(html).toContain(`<nav class="mainnav" aria-label="${esc(opacText('id', 'shell.nav.label'))}">`);
+    const menu = /<nav class="mainnav"[^>]*>([\s\S]*?)<\/nav>/.exec(html)![1]!;
     // The site's own entries first (Beranda and Katalog always; the others only with a site that has them), then the
     // menu pages.
     expect([...menu.matchAll(/<a href="([^"]*)"[^>]*>([^<]*)<\/a>/g)].map((m) => [m[1], m[2]])).toEqual([
@@ -103,21 +105,32 @@ describe('opacPage: the frame (§9.2)', () => {
       ['/halaman/jam-buka', 'Jam buka'],
     ]);
     expect(menu).toContain('<a href="/halaman/jam-buka" lang="id">');
-    // On a narrow screen the menu gives way to one link to the catalogue.
-    expect(html).toContain(`<a class="nav-catalog" href="/cari">${esc(opacText('id', 'shell.menu.catalog'))}</a>`);
+    // The menu is plain links, no list around them.
+    expect(menu).not.toMatch(/<ul|<li/);
+    // On a narrow screen the menu is a <details> (it opens without a script): the same entries, then the member area.
+    const phone = /<details class="mobnav"><summary aria-label="([^"]*)">[\s\S]*?<\/summary><nav aria-label="([^"]*)">([\s\S]*?)<\/nav><\/details>/.exec(html)!;
+    expect(phone[1]).toBe(esc(opacText('id', 'shell.nav.open')));
+    expect(phone[2]).toBe(esc(opacText('id', 'shell.nav.label_mobile')));
+    expect(phone[2]).not.toBe(esc(opacText('id', 'shell.nav.label')));
+    expect([...phone[3]!.matchAll(/<a href="([^"]*)"/g)].map((m) => m[1])).toEqual(['/', '/cari', '/halaman/tentang-kami', '/halaman/jam-buka', '/akun']);
+    // The member area's button: a static link.
+    expect(html).toMatch(/<a class="btn btn-outline btn-sm akun-link hide-s" href="\/akun"><svg class="ico"[^>]*aria-hidden="true"[^>]*>/);
   });
 
   it('without pages the menu has the site\'s own entries; a context without a menu (the status pages) has none', async () => {
     const html = await (await page({}, '/x', { ...CTX, nav: [] })).text();
-    const menu = /<nav class="menu"[^>]*>([\s\S]*?)<\/nav>/.exec(html)![1]!;
+    const menu = /<nav class="mainnav"[^>]*>([\s\S]*?)<\/nav>/.exec(html)![1]!;
     expect([...menu.matchAll(/href="([^"]*)"/g)].map((m) => m[1])).toEqual(['/', '/cari']);
     const bare = await (await page({}, '/x', { locale: 'id', libraryName: 'P', accent: 'teal', baseUrl: BASE, indexable: true })).text();
-    expect(bare).not.toContain('class="menu"');
-    expect(bare).not.toContain('class="nav-catalog"');
+    expect(bare).not.toContain('class="mainnav"');
+    expect(bare).not.toContain('class="mobnav"');
+    // Without a menu the member button stays on a narrow screen too.
+    expect(bare).toContain('<a class="btn btn-outline btn-sm akun-link" href="/akun">');
   });
 
-  it('a GET search form to /cari whose input has a label; headerSearch: false leaves it out', async () => {
-    const html = await (await page()).text();
+  it('headerSearch: a GET search form to /cari whose input has a label, in the search band; without it (the default) none', async () => {
+    const html = await (await page({ headerSearch: true })).text();
+    expect(html).toContain('<div class="search-band"><div class="wrap"><form class="search-box"');
     const form = /<form class="search-box"[^>]*>[\s\S]*?<\/form>/.exec(html)?.[0];
     expect(form).toBeDefined();
     expect(form).toMatch(/^<form class="search-box" role="search" method="get" action="\/cari">/);
@@ -125,20 +138,24 @@ describe('opacPage: the frame (§9.2)', () => {
     expect(id).toBeDefined();
     expect(form).toContain(`<label for="${id}"`);
     expect(form).toContain(esc(opacText('id', 'shell.search.label')));
-    expect(form).toContain(`<button type="submit">${esc(opacText('id', 'shell.search.submit'))}</button>`);
+    // The field to search in is joined to the text, with a label of its own.
+    expect(form).toMatch(/<span class="search-join"><label for="([^"]+)" class="visually-hidden">[^<]+<\/label><select id="\1" name="ruas">/);
+    expect(form).toMatch(new RegExp(`<button type="submit" class="btn btn-primary"><svg class="ico"[^>]*aria-hidden="true"[^>]*>.*?</svg>${esc(opacText('id', 'shell.search.submit'))}</button>`));
     expect(form).not.toContain('name="lang"');
-    // The header's form is in the search band; the footer has a search field of its own.
-    const without = await (await page({ headerSearch: false })).text();
-    expect(without).not.toContain('class="search-band"');
-    expect(without.slice(0, without.indexOf('<footer'))).not.toContain('class="search-box"');
+    // The default: no search band, and no search form anywhere on the page (the footer has none).
+    for (const without of [await (await page()).text(), await (await page({ headerSearch: false })).text()]) {
+      expect(without).not.toContain('class="search-band"');
+      expect(without).not.toContain('<form');
+    }
   });
 
   it('?lang=en: the frame in English, and the menu, the brand and the search keep the language', async () => {
-    const html = await (await page({}, '/x?lang=en', { ...CTX, locale: 'en' })).text();
+    const html = await (await page({ headerSearch: true }, '/x?lang=en', { ...CTX, locale: 'en' })).text();
     expect(html).toContain(`<a class="skip-link" href="#isi">${esc(opacText('en', 'shell.skip_link'))}</a>`);
     expect(html).toContain(esc(opacText('en', 'shell.search.label')));
     expect(html).toContain(`aria-label="${esc(opacText('en', 'shell.nav.label'))}"`);
-    expect(html).toContain('<a class="brand" href="/?lang=en">');
+    expect(html).toContain('<a class="sitelogo" href="/?lang=en">');
+    expect(html).toContain('akun-link hide-s" href="/akun?lang=en">');
     expect(html).toContain('<a href="/halaman/tentang-kami?lang=en">');
     expect(html).toContain('<input type="hidden" name="lang" value="en"');
     for (const key of ['shell.skip_link', 'shell.search.label', 'shell.nav.label'] as const) {
@@ -281,14 +298,18 @@ describe('S7: links that keep the request path start with config.baseUrl', () =>
 });
 
 describe('opacStatusResponse in the frame (S17)', () => {
-  it('the status page has the skip link and the search form, no menu, noindex, and reads nothing', async () => {
+  it('the status page has the skip link and the member link, no menu, noindex, and reads nothing; a 404 offers the search', async () => {
     const res = await answer((c) => opacStatusResponse(c, 404), '/hilang?lang=en');
     expect(res.status).toBe(404);
     const html = await res.text();
     expect(html).toContain(`<h1>${esc(t('en', 'opac.not_found.title'))}</h1>`);
     expect(html).toContain('class="skip-link"');
+    // A page that is not there offers the search; any other status page has no search band.
     expect(html).toContain('class="search-box"');
-    expect(html).not.toContain('class="menu"');
+    expect(await (await answer((c) => opacStatusResponse(c, 410), '/hilang')).text()).not.toContain('class="search-box"');
+    expect(html).toContain('akun-link" href="/akun?lang=en"');
+    expect(html).not.toContain('class="mainnav"');
+    expect(html).not.toContain('class="mobnav"');
     expect(html).toContain('<meta name="robots" content="noindex"');
     expect(html).not.toContain('rel="canonical"');
     expect(langHref(html, 'id')).toBe('/hilang?lang=id');
@@ -323,7 +344,7 @@ describe('the 1b pages in the shell frame', () => {
       frame: { homeHref: '/', langHrefs: { id: `${BASE}/x?lang=id`, en: `${BASE}/x?lang=en` }, nav: NAV, search: { lang: null } },
     });
     expect(langHref(html, 'en')).toBe(`${BASE}/x?lang=en`);
-    expect(html).toContain('class="menu"');
+    expect(html).toContain('class="mainnav"');
     expect(html).toContain('class="search-box"');
   });
 });
@@ -450,8 +471,14 @@ describe('the shell theme (S16)', () => {
     for (const cls of [
       '.skip-link',
       '.skip-link:focus',
-      '.menu',
+      '.topstrip',
+      '.site-header',
+      '.mainnav',
+      '.mobnav',
       '.search-box',
+      '.search-join',
+      '.pagehead',
+      '.crumbs',
       '.visually-hidden',
       '.card-grid',
       '.card',
@@ -460,23 +487,27 @@ describe('the shell theme (S16)', () => {
       '.availability',
       '.status-ok',
       '.shelf-map',
-      '.class-grid',
-      '.news-list',
+      '.site-footer',
+      '.foot-cols',
     ]) {
       expect(SHELL_CSS, cls).toContain(`${cls}`);
     }
     expect(SHELL_CSS).toMatch(/:focus-visible\{outline:2px solid var\(--focus\);outline-offset:2px\}/);
+    for (const control of ['a', 'button', 'input', 'select', 'textarea', 'summary']) expect(SHELL_CSS, control).toMatch(new RegExp(`(?:^|[,\\n])${control}:focus-visible[,{]`));
     expect(OPAC_CSS).not.toMatch(/@import|url\(/);
   });
 
-  it('the header bar: a tablet puts the menu on a line of its own; a wide screen keeps it in the bar, wrapping in its box', () => {
-    expect(SHELL_CSS).toContain('@media (min-width:52rem){.menu{display:block;flex:1 1 100%;order:1}.nav-catalog{display:none}}');
-    expect(SHELL_CSS).toContain('@media (min-width:64rem){.menu{flex:1 1 0%;min-width:0;order:0}.menu ul{justify-content:flex-end}}');
+  it('the header: a wide screen shows the menu in a row and hides the phone menu; a narrow one swaps them', () => {
+    expect(SHELL_CSS).toContain('.mainnav{display:flex;gap:1.75rem;align-self:stretch;min-width:0}');
+    expect(SHELL_CSS).toContain('.mobnav{display:none;position:relative}');
+    expect(SHELL_CSS).toContain('@media (max-width:53.74rem){.hide-s{display:none!important}.mainnav{display:none}.mobnav{display:block}');
+    // The current entry is marked by more than its colour.
+    expect(SHELL_CSS).toContain('.mainnav a[aria-current]{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}');
   });
 
-  it('the footer: on a wide screen its grid has a column per block it shows', () => {
-    expect(SHELL_CSS).toContain('.foot-grid{grid-template-columns:1.2fr 1fr 1fr 1.3fr}.foot-grid-3{grid-template-columns:1fr 1fr 1.3fr}');
-    expect(SHELL_CSS).toContain('.foot-grid-2{grid-template-columns:1fr 1.3fr}');
+  it('the footer: four columns on a wide screen, two on a narrow one with the library across both', () => {
+    expect(SHELL_CSS).toContain('.foot-cols{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;');
+    expect(SHELL_CSS).toContain('.foot-cols{grid-template-columns:1fr 1fr;gap:2rem 1.5rem}.foot-cols>:first-child{grid-column:1/-1}');
   });
 
   it('a summary drawn as a flex row (the citations, the shelf map) carries a chevron that turns when it is open', () => {
@@ -490,13 +521,18 @@ describe('the shell theme (S16)', () => {
       const html = await (await page({}, `/x?lang=${locale}`, { ...CTX, locale })).text();
       const footer = /<footer class="site-footer">([\s\S]*?)<\/footer>/.exec(html)?.[1];
       expect(footer).toBeDefined();
+      // The site's name linking home first (its text is in a <span>), then the text links.
+      expect(footer).toContain(`<a class="sitelogo" href="/?lang=${locale}"><span class="sitename">Perpustakaan SMA &lt;1&gt;</span></a>`);
       expect([...footer!.matchAll(/<a ([^>]*)>([^<]*)<\/a>/g)].map((m) => [m[1], m[2]])).toEqual([
         [`href="/cari?lang=${locale}"`, esc(opacText(locale, 'shell.menu.catalog'))],
+        [`href="${OPAC_ADVANCED_PATH}?lang=${locale}"`, esc(opacText(locale, 'search.advanced.link'))],
         [`href="/halaman/tentang-kami?lang=${locale}"`, 'Tentang kami'],
         [`href="/halaman/jam-buka?lang=${locale}" lang="id"`, 'Jam buka'],
+        [`href="/akun?lang=${locale}"`, esc(opacText(locale, 'akun.header.link'))],
         [`href="${COMMUNITY_SOURCE_URL}" rel="noopener"`, esc(opacText(locale, 'shell.footer.source'))],
-        ['href="/admin/login"', esc(t(locale, 'opac.home.staff_login'))],
+        ['class="foot-staff" href="/admin/login"', esc(t(locale, 'opac.home.staff_login'))],
       ]);
+      expect([...footer!.matchAll(/<h2[^>]*>([^<]*)<\/h2>/g)].map((m) => m[1])).toEqual([esc(opacText(locale, 'shell.footer.links')), esc(opacText(locale, 'shell.footer.member'))]);
       expect(footer).toContain(`<span>${esc(opacText(locale, 'shell.footer.powered'))}</span>`);
     }
     expect(opacText('id', 'shell.footer.source')).toBe('Kode sumber (AGPL-3.0)');
@@ -509,7 +545,10 @@ describe('the shell theme (S16)', () => {
   it('every class the frame writes is styled', async () => {
     const html = await (await page({}, '/x')).text();
     const classes = new Set([...html.matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1]!.split(/\s+/)));
-    for (const cls of classes) expect(OPAC_CSS, cls).toContain(`.${cls}`);
+    expect(classes.size).toBeGreaterThan(15);
+    // Names without a rule of their own: each marks an element whose look comes from the classes or the block around it.
+    for (const hook of ['akun-link', 'foot-about']) classes.delete(hook);
+    for (const cls of classes) expect(OPAC_CSS, cls).toMatch(new RegExp(`\\.${cls}(?![\\w-])`));
   });
 
   it('the frame CSP header names the page nonce (unchanged from 1b)', async () => {

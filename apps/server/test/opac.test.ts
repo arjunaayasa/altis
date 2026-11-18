@@ -18,6 +18,7 @@ import { DomainError, LOCALES, t, type Locale } from '@altis/shared';
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 import { createApp } from '../src/app.js';
+import { OPAC_SLIDER_FILE, OPAC_SLIDER_JS } from '../src/opac/slider.js';
 import { cspHeader } from '../src/http/csp.js';
 import type { OpsFence } from '../src/http/ops-fence.js';
 import { opacText } from '../src/opac/catalog/messages.js';
@@ -220,6 +221,38 @@ describe('the stylesheet', () => {
     'opac.css',
     '..%2Fopac.css',
     '',
+  ])('/assets/%s: 404 problem NOT_FOUND', async (file) => {
+    const { app } = setup();
+    const res = await app.request(`/assets/${file}`);
+    expect(res.status).toBe(404);
+    expect(res.headers.get('cache-control')).not.toBe(IMMUTABLE);
+    expect(await problem(res)).toMatchObject({ status: 404, code: 'NOT_FOUND' });
+  });
+});
+
+describe("the hero slider's script", () => {
+  it('GET /assets/opac-slider-<hash>.js: 200, text/javascript, immutable, the very string of OPAC_SLIDER_JS, from memory', async () => {
+    expect(OPAC_SLIDER_FILE).toMatch(/^opac-slider-[0-9a-f]{10}\.js$/);
+    expect(OPAC_SLIDER_FILE).toBe(`opac-slider-${sha256hex(OPAC_SLIDER_JS).slice(0, 10)}.js`);
+    const { app, settings } = setup({}, { db: false });
+    const res = await app.request(`/assets/${OPAC_SLIDER_FILE}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('text/javascript; charset=utf-8');
+    expect(res.headers.get('cache-control')).toBe(IMMUTABLE);
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(await res.text()).toBe(OPAC_SLIDER_JS);
+    // Like the stylesheet it needs no database and no settings.
+    expect(settings.reads).toEqual([]);
+  });
+
+  it.each([
+    'opac-slider-0123456789.js',
+    'opac-slider.js',
+    `${OPAC_SLIDER_FILE}.map`,
+    OPAC_SLIDER_FILE.toUpperCase(),
+    OPAC_SLIDER_FILE.replace(/\.js$/, '.mjs'),
+    OPAC_SLIDER_FILE.replace('opac-slider-', 'opac-'),
+    `..%2F${OPAC_SLIDER_FILE}`,
   ])('/assets/%s: 404 problem NOT_FOUND', async (file) => {
     const { app } = setup();
     const res = await app.request(`/assets/${file}`);

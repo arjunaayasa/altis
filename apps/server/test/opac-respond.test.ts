@@ -1,6 +1,7 @@
 import { SETTINGS, sanitizedHtml, type SafeHtml, type SettingKey, type SettingsCache } from '@altis/core';
 import type { DbHandle } from '@altis/db';
 import { t } from '@altis/shared';
+import { SITE_IDENTITY_DEFAULT } from '@altis/shared/api/site-identity';
 import { Hono, type Context } from 'hono';
 import { Fragment, jsx } from 'hono/jsx';
 import type { JSX } from 'hono/jsx/jsx-runtime';
@@ -282,14 +283,57 @@ describe('opacContext', () => {
     });
     await app.request('/x', { headers: { Host: 'evil.example' } });
     // The site of the menu and the footer: nothing set up, no news published.
-    const site = { address: null, hours: [], brand: null, profile: false, services: false, contact: false, news: false, logo: null, phone: null, email: null };
+    const site = {
+      address: null,
+      hours: [],
+      brand: null,
+      profile: false,
+      services: false,
+      contact: false,
+      news: false,
+      gallery: false,
+      logo: null,
+      name: null,
+      tagline: { id: null, en: null },
+      phone: null,
+      email: null,
+      today: null,
+      contentLang: undefined,
+    };
     // The year of the footer's line: the request's, in the library's time zone (UTC when it cannot be read).
     const year = new Date().getUTCFullYear();
     expect(got).toEqual({ locale: 'en', libraryName: 'Perpus', accent: 'green', baseUrl: BASE, indexable: true, nav: [], site, year });
     // `library.name` twice: the page's own read, and the site details' (the logo's alternative text falls back to it).
-    expect(cache.reads.sort()).toEqual(['library.address', 'library.locale', 'library.name', 'library.name', 'library.timezone', 'opac.accent', 'opac.home', 'opac.indexable', 'site.identity']);
+    // `library.timezone` twice as well: the site's day (today's hours) and the year of the footer's line.
+    expect(cache.reads.sort()).toEqual([
+      'library.address',
+      'library.locale',
+      'library.name',
+      'library.name',
+      'library.timezone',
+      'library.timezone',
+      'opac.accent',
+      'opac.home',
+      'opac.indexable',
+      'site.identity',
+    ]);
     await app.request('/x?lang=id');
     expect(got?.locale).toBe('id');
+    // On a page in the other language the library's own texts are marked with theirs.
+    expect(got?.site?.contentLang).toBe('en');
+  });
+
+  it("the site identity's name, when it has one, is what the pages call the site; without one the library's name", async () => {
+    const identity = { ...SITE_IDENTITY_DEFAULT, name: 'Pustaka Lembah Hijau' };
+    let got: OpacContext | undefined;
+    const app = new Hono<AppEnv>();
+    app.get('/x', async (c) => {
+      got = await opacContext({ c, services: { settings: settings({ 'library.name': 'Perpus', 'site.identity': identity }) }, db, config: { baseUrl: BASE } });
+      return c.text('ok');
+    });
+    await app.request('/x');
+    expect(got?.libraryName).toBe('Pustaka Lembah Hijau');
+    expect(got?.site?.name).toBe('Pustaka Lembah Hijau');
   });
 
   it('an accent that is not one of the six is the default', async () => {

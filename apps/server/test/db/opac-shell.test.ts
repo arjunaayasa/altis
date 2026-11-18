@@ -457,24 +457,28 @@ describe.skipIf(!ctx.available)(`OPAC shell: home, robots, sitemaps, old SLiMS l
       expect(html).not.toContain('<SMA>');
       expect(html).not.toContain(esc(t('id', 'opac.home.coming_soon')));
       expect(html).not.toContain('name="robots"');
-      // The hero search form: GET /cari, a labelled input; the header has no second one (the footer has its own field).
-      const forms = [...html.slice(0, html.indexOf('<footer')).matchAll(/<form [^>]*>[\s\S]*?<\/form>/g)].map((m) => m[0]);
+      // The search under the hero: GET /cari, an input with its visible label; the page has no second form.
+      const forms = [...html.matchAll(/<form [^>]*>[\s\S]*?<\/form>/g)].map((m) => m[0]);
       expect(forms).toHaveLength(1);
-      expect(forms[0]).toMatch(/^<form class="search-box search-hero" role="search" method="get" action="\/cari">/);
+      expect(html).toContain('<div class="search-band home-search">');
+      expect(forms[0]).toMatch(/^<form class="search-box" role="search" method="get" action="\/cari">/);
       const input = /<input id="([^"]+)" type="search" name="q"/.exec(forms[0]!)?.[1];
-      expect(forms[0]).toContain(`<label for="${input}" class="visually-hidden">`);
+      expect(input).toBe('cari-beranda');
+      expect(forms[0]).toContain(`<label for="${input}" class="search-label">${esc(opacText('id', 'shell.search.label'))}</label>`);
       // The canonical link and every absolute URL from baseUrl.
       expect(html).toContain(`<link rel="canonical" href="${BASE}/"`);
       expect(html).not.toContain('evil.example');
     });
 
-    it('new titles: the newest public records first, opac.newTitlesCount (12) of them, the hidden one left out', async () => {
+    it('new titles: the newest public records first, six of them at most (opac.newTitlesCount is 12), the hidden one left out', async () => {
       const html = (await get('/')).text;
       const titles = section(html, 'judul-baru');
       expect(titles).toBeDefined();
       expect(titles).toContain(`<h2 id="judul-baru">${esc(opacText('id', 'shell.home.new_titles'))}</h2>`);
-      // "Lihat semua" in the head, then the twelve titles.
-      expect(hrefs(titles!)).toEqual(['/cari', ...newest.slice(0, 12).map((id, i) => recordUrlPath(id, `Buku Baru ${i}`))]);
+      // "Lihat semua" in the head, then the six titles (the classes follow in the same block).
+      const cards = titles!.slice(0, titles!.indexOf('</ul>'));
+      expect(cards).toContain('<ul class="card-grid home-titles">');
+      expect(hrefs(cards)).toEqual(['/cari', ...newest.slice(0, 6).map((id, i) => recordUrlPath(id, `Buku Baru ${i}`))]);
       expect(titles).not.toContain(hiddenNewest);
       expect(titles).toContain('Andrea Hirata');
     });
@@ -501,7 +505,7 @@ describe.skipIf(!ctx.available)(`OPAC shell: home, robots, sitemaps, old SLiMS l
     });
 
     it('DDC classes 0-9 link to /cari?kelas=N (M4)', async () => {
-      const block = section((await get('/')).text, 'jelajah-kelas');
+      const block = /<ul class="ddc" aria-labelledby="jelajah-kelas">([\s\S]*?)<\/ul>/.exec((await get('/')).text)?.[1];
       expect(block).toBeDefined();
       expect(hrefs(block!)).toEqual(Array.from({ length: 10 }, (_, n) => `/cari?kelas=${n}`));
       for (let n = 0; n < 10; n += 1) expect(block).toContain(esc(opacText('id', `shell.home.class.${n}` as 'shell.home.class.0')));
@@ -509,7 +513,7 @@ describe.skipIf(!ctx.available)(`OPAC shell: home, robots, sitemaps, old SLiMS l
 
     it('the menu: at most 8 published pages of the menu, by sort order', async () => {
       const html = (await get('/')).text;
-      const menu = /<nav class="menu"[^>]*>([\s\S]*?)<\/nav>/.exec(html)?.[1];
+      const menu = /<nav class="mainnav"[^>]*>([\s\S]*?)<\/nav>/.exec(html)?.[1];
       expect(menu).toBeDefined();
       // The site's own entries (Berita: news is published; Kontak: the library has an address), then the pages.
       expect(hrefs(menu!)).toEqual(['/', '/cari', '/berita', '/#kunjungi', ...[1, 2, 3, 4, 5, 6, 7, 8].map((k) => `/halaman/menu-${k}`)]);
@@ -541,7 +545,7 @@ describe.skipIf(!ctx.available)(`OPAC shell: home, robots, sitemaps, old SLiMS l
         expect(html, key).not.toContain(esc(opacText('id', key)));
       }
       expect(html).toContain('>News 1<');
-      const menu = /<nav class="menu"[^>]*>([\s\S]*?)<\/nav>/.exec(html)![1]!;
+      const menu = /<nav class="mainnav"[^>]*>([\s\S]*?)<\/nav>/.exec(html)![1]!;
       expect(menu).toContain('<a href="/halaman/menu-1?lang=en" lang="id">Menu 1</a>');
       expect(menu).toContain('<a href="/halaman/menu-2?lang=en">Menu EN 2</a>');
       expect(html).toContain(`<link rel="canonical" href="${BASE}/?lang=en"`);
@@ -552,7 +556,7 @@ describe.skipIf(!ctx.available)(`OPAC shell: home, robots, sitemaps, old SLiMS l
       try {
         const html = (await get('/')).text;
         // The welcome text is the hero's lead sentence (the OPAC home page as the library's profile site).
-        expect(html).toContain('<p class="hero-lead">Selamat datang &lt;di&gt; perpustakaan.</p>');
+        expect(html).toContain('<p class="slide-lead">Selamat datang &lt;di&gt; perpustakaan.</p>');
         expect(section(html, 'judul-baru')).toBeUndefined();
         expect(section(html, 'judul-unggulan')).toBeDefined();
       } finally {
@@ -584,6 +588,8 @@ describe.skipIf(!ctx.available)(`OPAC shell: home, robots, sitemaps, old SLiMS l
       const html = (await get('/')).text;
       const classes = new Set([...html.matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1]!.split(/\s+/)));
       expect(classes.size).toBeGreaterThan(15);
+      // Names without a rule of their own: each marks an element whose look comes from the classes or the block around it.
+      for (const hook of ['akun-link', 'foot-about', 'foot-tagline', 'top-today', 'home-search', 'map-link']) classes.delete(hook);
       for (const cls of classes) expect(OPAC_CSS, cls).toContain(`.${cls}`);
       expect(html).not.toMatch(/<[a-z][^>]*\sstyle=/i);
     });

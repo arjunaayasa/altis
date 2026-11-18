@@ -459,15 +459,17 @@ describe.skipIf(!ctx.available)(`OPAC search, facets and feeds [${engineLabel()}
       expect(byAuthor.text).toContain('<input id="cari-q" type="search" name="q" value="hirata"');
       expect(byAuthor.text).toContain(`<option value="pengarang" selected="">${opacText('id', 'search.scope.pengarang')}</option>`);
       expect(resultIds((await get('/cari?q=pelangi&ruas=judul')).text)).toEqual([id('laskar')]);
-      // A result row: the call number's line with the class, and the cloth strip of a title without a cover.
+      // A result row: the line with the class, and the substitute cover of a title without a cover.
       const card = cardOf((await get('/cari?q=pelangi')).text, id('laskar'));
-      expect(card).toContain('<span class="book-cover cover-8 book-cover-sm" aria-hidden="true"></span>');
+      expect(card).toContain('<span class="book-cover cover-8" aria-hidden="true"><span class="cover-text"><span class="cover-title">Laskar Pelangi</span>');
       expect(card).toContain(`800 ${opacText('id', 'shell.home.class.8')}`);
     });
 
     it('every class the search page writes is styled', async () => {
       const pages = await Promise.all(['/cari', '/cari?q=pendidkan', '/cari?q=pendidkan&persis=1', '/cari?jenis=BUKU&q=novel', '/cari?q=zzzzqqqq'].map((p) => get(p)));
       const classes = new Set(pages.flatMap((p) => [...p.text.matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1]!.split(/\s+/))));
+      // Names without a rule of their own: each marks an element whose look comes from the classes or the block around it.
+      for (const hook of ['akun-link', 'foot-about', 'foot-tagline', 'top-today']) classes.delete(hook);
       for (const cls of classes) expect(OPAC_CSS, cls).toContain(`.${cls}`);
     });
   });
