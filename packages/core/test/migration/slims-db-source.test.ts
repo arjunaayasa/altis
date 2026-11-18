@@ -19,7 +19,8 @@ const b = (s: string): Buffer => Buffer.from(s, 'utf8');
 
 /**
  * A SLiMS database in memory: item (1 200 rows), biblio_custom (cf_* columns), biblio_relation (composite key), biblio_author
- * (composite key, rows out of key order), biblio_attachment (no key), mst_language (text key).
+ * (composite key, rows out of key order), search_biblio (derived), altis_lokal (unknown, no key), biblio_attachment (no key),
+ * mst_language (text key).
  */
 function database(): Map<string, Table> {
   const tables = new Map<string, Table>();
@@ -53,6 +54,8 @@ function database(): Map<string, Table> {
       { biblio_id: 3, author_id: 1, level: 1 },
     ],
   });
+  tables.set('search_biblio', { columns: ['biblio_id', 'title'], primaryKey: ['biblio_id'], rows: [{ biblio_id: 1, title: b('Laskar Pelangi') }] });
+  tables.set('altis_lokal', { columns: ['id'], primaryKey: [], rows: [{ id: 1 }, { id: 2 }] });
   tables.set('biblio_attachment', { columns: ['biblio_id', 'file_id'], primaryKey: [], rows: Array.from({ length: 7 }, (_, i) => ({ biblio_id: i + 1, file_id: i + 1 })) });
   tables.set('mst_language', {
     columns: ['language_id', 'language_name'],
@@ -148,6 +151,9 @@ describe('openDbSource', () => {
     expect(tables.find((t) => t.name === 'item')).toEqual({ name: 'item', columns: ['item_id', 'biblio_id', 'item_code'], primaryKey: ['item_id'], rows: 1200 });
     expect(tables.find((t) => t.name === 'biblio_attachment')).toEqual({ name: 'biblio_attachment', columns: ['biblio_id', 'file_id'], primaryKey: [], rows: 7, flags: ['no_pk'] });
     expect(tables.find((t) => t.name === 'biblio_author')!.primaryKey).toEqual(['biblio_id', 'author_id']);
+    // A derived table is counted too (the report lists it with its rows); one the migration does not know is not.
+    expect(tables.find((t) => t.name === 'search_biblio')!.rows).toBe(1);
+    expect(tables.find((t) => t.name === 'altis_lokal')).toEqual({ name: 'altis_lokal', columns: ['id'], primaryKey: [], rows: null, flags: ['no_pk'] });
     await source.close();
     expect(server.closed).toBe(1);
   });

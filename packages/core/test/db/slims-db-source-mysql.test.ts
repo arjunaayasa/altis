@@ -59,8 +59,8 @@ import { FIXTURE_TABLES, SLIMS_FIXTURE_SEED } from '../support/slims-fixture/ind
 //   Windows-1252 bytes the dump holds; the dump path decodes them itself and counts the repair (`fixes`, `samples`,
 //   the charset sample, and a sample row of the report, so the report is longer). The text that lands in ALTIS is the
 //   same.
-// - A derived table (`search_biblio`): the database source does not count its rows (db-source.ts: `rows: null`), so
-//   the summary lists it with 0 rows where the dump path has the fixture's count.
+// - A table a stage reads that has no primary key on the server: the database source pages it by offset and the report
+//   says so (`no_pk`); the dump path reads its staged rows and has no such row.
 
 const ctx = testDbContext();
 const MYSQL = ctx.engine === 'mysql80' || ctx.engine === 'mysql84';
@@ -163,6 +163,8 @@ describe.skipIf(!ctx.available || !MYSQL)(`SLiMS migration from a MySQL database
   let orderedDumpGz: Buffer;
   /** The tables whose rows that order moved. */
   let reordered: string[];
+  /** The tables a stage reads that have no primary key on the server (sorted). */
+  let keyless: string[];
   const sourceDb = `slims_src_${randomBytes(4).toString('hex')}`;
   const port = ENGINE_SPECS[ctx.engine].port ?? 0;
   const staff: Actor = { type: 'staff', id: STAFF_ID, ip: null };
@@ -209,6 +211,13 @@ describe.skipIf(!ctx.available || !MYSQL)(`SLiMS migration from a MySQL database
       const keys = await admin.query(`SELECT ${list} FROM ??.?? ORDER BY ${list}`, [...t.primaryKey, sourceDb, t.name, ...t.primaryKey]);
       order.set(t.name, keys.map((r) => t.primaryKey.map((c) => cellText(r[c])).join('\u0000')));
     }
+    // The tables a stage reads that the server holds without a primary key.
+    const keyed = new Set(
+      (await admin.query("SELECT DISTINCT TABLE_NAME AS t FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? AND INDEX_NAME = 'PRIMARY'", [sourceDb])).map((r) => cellText(r['t'])),
+    );
+    keyless = FIXTURE_TABLES.map((t) => t.name)
+      .filter((t) => !keyed.has(t) && fixture.expected.roles.read.includes(t))
+      .sort();
     const ordered = renderDumpInOrder(fixture.data, order);
     orderedDumpGz = gzipSync(ordered.dump);
     reordered = ordered.reordered;
@@ -498,21 +507,14 @@ describe.skipIf(!ctx.available || !MYSQL)(`SLiMS migration from a MySQL database
     return { ...s, fixes, samples: s.samples.filter((x) => x.fix !== 'cp1252'), charset };
   }
 
-  /** The summary with the derived tables' source counts unknown (see the top of this file). */
-  function withDerivedUncounted(s: MigrationSummary, derived: readonly string[]): MigrationSummary {
-    const tables = Object.fromEntries(Object.entries(s.tables).map(([t, c]) => [t, derived.includes(t) ? { ...c, source: -1 } : c]));
-    const reconciliation = s.reconciliation === null ? null : { ...s.reconciliation, tables: s.reconciliation.tables.map((r) => (derived.includes(r.table) ? { ...r, source: -1 } : r)) };
-    return { ...s, tables, reconciliation };
-  }
-
   /**
    * What two runs must have the same of: the random check sample apart (each of its 20 pairs must match; the titles it
    * drew, `checkSource`, differ per run), and the report's size, which the dump path's Windows-1252 sample row changes.
    */
-  function comparable(s: MigrationSummary, derived: readonly string[]): Record<string, unknown> {
+  function comparable(s: MigrationSummary): Record<string, unknown> {
     // The stored summary carries the pipeline's own fields beside the API's: the drawn titles and where to resume.
     type Stored = MigrationSummary & { checkSource: Record<string, string>; resume: Record<string, unknown> & { reportBytes: number } };
-    const { checks, checkSource, resume, ...rest } = withDerivedUncounted(withoutLatin1Repairs(s), derived) as Stored;
+    const { checks, checkSource, resume, ...rest } = withoutLatin1Repairs(s) as Stored;
     expect(Object.keys(checkSource), 'the check sample names a record per pair').toHaveLength(checks.length);
     const { reportBytes, ...place } = resume;
     expect(reportBytes, 'the report was written').toBeGreaterThan(0);
@@ -584,10 +586,15 @@ describe.skipIf(!ctx.available || !MYSQL)(`SLiMS migration from a MySQL database
     expect(cp1252Fixes(viaDb.summary), 'database path: no Windows-1252 repair (the server converts latin1)').toEqual([]);
     expect(viaDb.summary.samples.filter((x) => x.fix === 'cp1252')).toEqual([]);
     expect(viaDb.summary.charset.filter((c) => c.cp1252 > 0)).toEqual([]);
+    // The derived tables are listed with the rows they hold on both paths.
+    expect(derived.length).toBeGreaterThan(0);
     for (const t of derived) {
-      expect([t, viaDump.summary.tables[t]?.source]).toEqual([t, fixture.expected.tables[t]!.source]);
-      expect([0, fixture.expected.tables[t]!.source], `database path: ${t}'s source count`).toContain(viaDb.summary.tables[t]?.source);
+      expect([t, viaDump.summary.tables[t]?.source, viaDb.summary.tables[t]?.source]).toEqual([t, fixture.expected.tables[t]!.source, fixture.expected.tables[t]!.source]);
     }
+    // `no_pk`: on the database path only, for each table a stage reads that has no primary key on the server.
+    const noPk = (o: Outcome): string[] => o.rows.filter((r) => r[2] === 'no_pk').map((r) => r[0]!);
+    expect(noPk(viaDump), 'dump path: no_pk rows').toEqual([]);
+    expect(noPk(viaDb), 'database path: no_pk rows').toEqual(keyless);
 
     // Every comparison is reported, not only the first that fails: counts (the clearest), the fingerprint, the
     // report, the summary, every row.
@@ -598,9 +605,9 @@ describe.skipIf(!ctx.available || !MYSQL)(`SLiMS migration from a MySQL database
     expect(viaDump.rows.filter(cp1252Sample).map((r) => r[0]), 'dump path: Windows-1252 samples, of the latin1 table only').toEqual(
       [...new Set(fixture.expected.traps.cp1252.map((t) => t.table))].sort(),
     );
-    const reportRows = (o: Outcome): string[] => o.rows.filter((r) => !cp1252Sample(r)).map((r) => JSON.stringify(r));
+    const reportRows = (o: Outcome): string[] => o.rows.filter((r) => !cp1252Sample(r) && r[2] !== 'no_pk').map((r) => JSON.stringify(r));
     expect.soft(differences(reportRows(viaDump), reportRows(viaDb), 20), 'report rows').toBeNull();
-    expect.soft(comparable(viaDb.summary, derived), 'summary').toEqual(comparable(viaDump.summary, derived));
+    expect.soft(comparable(viaDb.summary), 'summary').toEqual(comparable(viaDump.summary));
     const tables = [...new Set([...Object.keys(viaDump.snapshot), ...Object.keys(viaDb.snapshot)])].sort();
     const diff: Record<string, unknown> = {};
     for (const t of tables) {
