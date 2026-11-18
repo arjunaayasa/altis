@@ -17,7 +17,7 @@ export function GapList({ gaps }: { gaps: ScoreView['gaps'] }): JSX.Element {
   const shown = gaps.slice(0, GAPS_SHOWN);
   return (
     <section aria-labelledby={titleId} className="grid gap-3">
-      <h3 id={titleId} className="text-base font-bold">
+      <h3 id={titleId} className="text-heading font-semibold">
         {t('accreditation.workspace.gaps.title')}
       </h3>
       {shown.length === 0 ? (

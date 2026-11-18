@@ -9,8 +9,10 @@
 export const OPAC_HOME_ID = {
   // ---- audit.<action> ----
   'audit.opac.home.update': 'Mengubah halaman awal OPAC',
+  'audit.site.identity.update': 'Mengubah identitas situs',
 };
 
 export const OPAC_HOME_EN: Record<keyof typeof OPAC_HOME_ID, string> = {
   'audit.opac.home.update': 'Changed the OPAC home page',
+  'audit.site.identity.update': 'Changed the site identity',
 };

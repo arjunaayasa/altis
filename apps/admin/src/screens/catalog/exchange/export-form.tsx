@@ -170,7 +170,7 @@ function ExportRun({ started, chosen, onAgain }: { started: RunStarted; chosen: 
   const number = new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'id-ID');
   return (
     <section aria-labelledby={headingId} className="grid gap-3">
-      <h3 id={headingId} className="text-base font-bold">
+      <h3 id={headingId} className="text-heading font-semibold">
         {t(read ? 'catalog.exchange.export.result' : 'catalog.exchange.export.running')}
       </h3>
       <JobProgress
@@ -250,7 +250,7 @@ export function ExportForm({ selection, onDropSelection }: { selection: ExportSe
 
   return (
     <section aria-labelledby={headingId} className="grid gap-5">
-      <h2 id={headingId} className="text-base font-bold">
+      <h2 id={headingId} className="text-heading font-semibold">
         {t('catalog.exchange.export.title')}
       </h2>
       {started !== null ? (

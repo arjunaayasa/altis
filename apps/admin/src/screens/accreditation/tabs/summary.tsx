@@ -87,7 +87,7 @@ function Prerequisites({ prerequisites: p }: { prerequisites: PrerequisitesView 
   ];
   return (
     <section aria-labelledby={titleId} className="grid gap-3">
-      <h3 id={titleId} className="text-base font-bold">
+      <h3 id={titleId} className="text-heading font-semibold">
         {t('accreditation.workspace.prereq.title')}
       </h3>
       {!p.met && (
@@ -119,7 +119,7 @@ function Estimate({ score, met }: { score: ScoreView; met: boolean }) {
   const kind = score.na === null ? 'range' : met ? 'single' : 'exercise';
   return (
     <section aria-labelledby={titleId} className="grid gap-2">
-      <h3 id={titleId} className="text-base font-bold">
+      <h3 id={titleId} className="text-heading font-semibold">
         {t('accreditation.workspace.score.title')}
       </h3>
       <div data-score={kind} className="grid gap-1">
@@ -159,7 +159,7 @@ function MissingEvidence({ missing }: { missing: ResultsView['missingEvidence'] 
   const groups = missing.filter((g) => g.items.length > 0);
   return (
     <section aria-labelledby={titleId} className="grid gap-3">
-      <h3 id={titleId} className="text-base font-bold">
+      <h3 id={titleId} className="text-heading font-semibold">
         {t('accreditation.workspace.evidence_missing.title')}
       </h3>
       {groups.length === 0 ? (

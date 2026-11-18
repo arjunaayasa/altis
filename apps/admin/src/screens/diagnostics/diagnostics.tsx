@@ -735,8 +735,8 @@ function Block({ name, report }: { name: keyof DiagnosticsReport; report: Diagno
   const id = useId();
   const { title, Body } = BLOCKS[name];
   return (
-    <section data-diagnostics-block={name} aria-labelledby={id} className="grid min-w-0 content-start gap-3 border-t pt-4">
-      <h2 id={id} className="text-base font-bold">
+    <section data-diagnostics-block={name} aria-labelledby={id} className="grid min-w-0 content-start gap-3">
+      <h2 id={id} className="text-heading font-semibold">
         {t(title)}
       </h2>
       <Body report={report} />
@@ -814,7 +814,7 @@ function OpAttention() {
 
   return (
     <section aria-labelledby={titleId} className="grid gap-3 rounded-md border border-bad-line bg-bad-bg px-3.5 py-3">
-      <h2 id={titleId} className="text-base font-bold text-bad">
+      <h2 id={titleId} className="text-heading font-semibold text-bad">
         {t('diagnostics.op.title')}
       </h2>
       <p className="text-sm">{t('diagnostics.op.body', { kind })}</p>
@@ -901,7 +901,7 @@ export function DiagnosticsScreen() {
         )
       ) : (
         <>
-          <div className="grid gap-x-8 gap-y-6 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {BLOCK_ORDER.map((name) => (
               <Block key={name} name={name} report={report} />
             ))}

@@ -19,7 +19,7 @@ export const ADMIN_EN: Record<AdminKey, string> = {
   'nav.about': 'About',
   // ---- Phase 2 (catalog): Task 2 ----
   'nav.group.catalog': 'Catalogue',
-  'nav.group.opac': 'OPAC',
+  'nav.group.opac': 'Site / OPAC',
   'nav.group.system': 'System',
   'nav.catalog.records': 'Bibliographic records',
   'nav.catalog.items': 'Items',

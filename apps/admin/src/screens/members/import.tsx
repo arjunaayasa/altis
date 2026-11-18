@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useId, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
-import { Callout, DenseTable, StatStrip, StatusText, Steps, TABLE, Tag, type DenseColumn } from '@/components/layout';
+import { Callout, DenseTable, StatStrip, StatusText, Steps, TABLE, Tag, type DenseColumn, PageHeader } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT, type TKey, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
@@ -319,10 +319,7 @@ export function MemberImportScreen() {
 
   return (
     <div className="grid gap-6">
-      <div className="grid max-w-[75ch] gap-1">
-        <h1 className="text-xl leading-tight font-bold">{t('nav.members.import')}</h1>
-        <p className="text-sm text-muted-foreground">{t('members.import.page_intro')}</p>
-      </div>
+      <PageHeader title={t('nav.members.import')} description={t('members.import.page_intro')} />
       <Steps
         label={t('members.import.steps')}
         current={STEPS.indexOf(step)}
@@ -334,7 +331,7 @@ export function MemberImportScreen() {
 
       {step === 'file' && (
         <section aria-labelledby={`${ids}-h`} className="grid max-w-3xl gap-4">
-          <h2 id={`${ids}-h`} className="text-base font-bold">
+          <h2 id={`${ids}-h`} className="text-heading font-semibold">
             {t('members.import.step.file')}
           </h2>
           {fileError !== null && (
@@ -393,7 +390,7 @@ export function MemberImportScreen() {
       {step === 'mapping' && head !== null && (
         <section aria-labelledby={`${ids}-h`} className="grid gap-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 id={`${ids}-h`} className="text-base font-bold">
+            <h2 id={`${ids}-h`} className="text-heading font-semibold">
               {t('members.import.step.mapping')}
             </h2>
             <span className="text-sm text-muted-foreground">
@@ -527,7 +524,7 @@ export function MemberImportScreen() {
       {step === 'dry_run' && (
         <section className="grid gap-4" aria-labelledby={`${ids}-h`}>
           <div className="grid gap-1">
-            <h2 id={`${ids}-h`} className="text-base font-bold">
+            <h2 id={`${ids}-h`} className="text-heading font-semibold">
               {t('members.import.step.dry_run')}
             </h2>
             <p className="text-sm text-muted-foreground">{t('members.import.dry_run_note', { name: file?.name ?? '' })}</p>
@@ -552,7 +549,7 @@ export function MemberImportScreen() {
 
       {step === 'result' && (
         <section className="grid max-w-3xl gap-4" aria-labelledby={`${ids}-h`}>
-          <h2 id={`${ids}-h`} className="text-base font-bold">
+          <h2 id={`${ids}-h`} className="text-heading font-semibold">
             {t(realDone ? 'members.import.done_title' : 'members.import.running_title')}
           </h2>
           {!realDone && <p className="text-xs text-muted-foreground">{t('members.import.leave_ok')}</p>}

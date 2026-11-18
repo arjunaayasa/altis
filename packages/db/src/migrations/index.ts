@@ -48,6 +48,7 @@ import { stocktakes } from './0048_stocktakes.js';
 // ---- Komunitas (OPAC home page) ----
 import { opacPopular } from './0049_opac_popular.js';
 import { opacClassActivity } from './0050_opac_class_activity.js';
+import { newsAgenda } from './0051_news_agenda.js';
 
 /**
  * The Phase 1 tables (spec §6.5), their indexes and the columns added since, keyed by migration name (= file stem). All of them are expand-only
@@ -113,6 +114,8 @@ export const PHASE1_MIGRATIONS: Readonly<Record<string, AltisMigration>> = Objec
   '0049_opac_popular': opacPopular,
   // ---- Komunitas (OPAC home page: loans per class) ----
   '0050_opac_class_activity': opacClassActivity,
+  // ---- Komunitas (the agenda of the news) ----
+  '0051_news_agenda': newsAgenda,
 });
 
 // ---------------------------------------------------------------------------------------------------------------

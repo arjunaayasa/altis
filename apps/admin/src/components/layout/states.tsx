@@ -12,14 +12,14 @@ import { SKELETON_BAR } from './table';
  */
 
 /**
- * Nothing here yet: a heading that says so, a sentence on what to do, and the buttons that do it (the first one the
- * primary action). No picture, no icon.
+ * Nothing here yet: a heading that says so (15 px), a sentence on what to do, and the buttons that do it (the first
+ * one the primary action). No picture, no icon. Inside a `Card` it takes the card's side padding.
  */
 export function EmptyState({ title, children, actions, className }: { title: ReactNode; children?: ReactNode; actions?: ReactNode; className?: string }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className={cn('grid max-w-[62ch] gap-3 py-6', className)}>
-      <h2 id={id} className="text-base font-bold">
+    <section data-slot="empty-state" aria-labelledby={id} className={cn('grid gap-3 px-4 py-6 *:max-w-[62ch]', className)}>
+      <h2 id={id} className="text-heading font-semibold">
         {title}
       </h2>
       {children !== undefined && <div className="grid gap-1 text-sm text-muted-foreground">{children}</div>}

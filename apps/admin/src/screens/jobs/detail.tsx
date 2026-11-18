@@ -336,7 +336,7 @@ function JobDetail({ id }: { id: string }) {
         (outcome.kind === 'info' ? <NoticeAlert>{outcome.text}</NoticeAlert> : <Notice kind={outcome.kind}>{outcome.text}</Notice>)}
 
       <section aria-labelledby={factsId} className="grid gap-1">
-        <h2 id={factsId} className="text-base font-bold">
+        <h2 id={factsId} className="text-heading font-semibold">
           {t('jobs.detail.facts')}
         </h2>
         <dl className="grid">

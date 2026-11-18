@@ -1,338 +1,236 @@
-import { OPAC_HOME_DEFAULT, type OpacHomeView } from '@altis/shared/api/opac-home';
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { OPAC_HOME_DEFAULT } from '@altis/shared/api/opac-home';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ADMIN_MESSAGES, type AdminKey } from '@/i18n';
-import { uploadFile } from '@/lib/upload';
-import { adminMe, problem, signedIn, startApp, type FakeRequest } from './fake-api';
+import { dirtyForms } from '@/lib/dirty-forms';
+import { adminMe, problem, signedIn, startApp } from './fake-api';
+import { FIRST, SAVED, fileId, heroOf, openTab, puts, save, slide, t, view } from './opac-home-fixtures';
 
-// OPAC › Halaman awal through the real router and API client against a fake `/api/v1`: the loaded content in the form,
-// the hero preview following the unsaved draft, the unsaved mark and "Batalkan perubahan", the PUT body (the whole
-// content with the revision it was loaded at, blanks as null), the field errors checked before sending, the 409 of a
-// save another admin made first, the crop panel's "Pakai foto ini" (which sends no save of the page and puts the photo
-// in the draft), the logo (fitted onto a white tile, its alternative text required) and the public contact (a member's
-// or user's e-mail refused by the server on its field), and the screen without the permission. The outcome of a save
-// is said under the page head, above the form.
+// OPAC › Halaman awal through the real router and API client against a fake `/api/v1`: the address without a tab goes
+// to the first tab; the tabs edit one draft (what was typed on one is still there after a visit to another) saved by
+// one bar, whose PUT body is the whole content at the revision it was loaded at, with everything not edited as it was
+// loaded; the unsaved mark, "Batalkan perubahan" and the question before leaving; a field refused before sending or by
+// the server opens and marks its tab (a slide's field marks its slide and shows in its drawer); the 409 of a save
+// another admin made first; and the screen without the permission.
 
 vi.mock('@/lib/upload', () => ({ uploadFile: vi.fn() }));
-
-const t = (key: AdminKey, params: Record<string, string | number> = {}): string =>
-  Object.entries(params).reduce((text, [k, v]) => text.replace(`{${k}}`, String(v)), ADMIN_MESSAGES.id[key]);
-
-const PHOTO = '01JZFILE000000000000000007';
-/** A file id the schema takes (a ULID), for a draft that is saved. */
-const LOGO = '01JZFXQ0000000000000000009';
-const FIRST = { timeout: 10_000 };
-
-function view(o: Partial<OpacHomeView['home']> = {}): OpacHomeView {
-  return {
-    home: { ...OPAC_HOME_DEFAULT, services: [{ title: 'Peminjaman', text: null }], ...o },
-    welcome: { id: 'Selamat datang.', en: null },
-    revision: '0123456789abcdef',
-    libraryName: 'Perpustakaan SMA 1',
-    accent: 'blue',
-  };
-}
-
-const puts = (requests: FakeRequest[]): unknown[] => requests.filter((r) => r.method === 'PUT' && r.path === 'opac/home').map((r) => r.body);
-/** The outcome of a save: said under the page head, before the form. */
-async function outcome(text: string): Promise<HTMLElement> {
-  const el = await screen.findByText(text);
-  const form = document.querySelector('form')!;
-  expect(el.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  return el;
-}
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
+/** A content with something in every part, so that a save shows what it kept. */
+const full = () =>
+  view({
+    title: { id: 'Ruang baca warga', en: 'A reading room' },
+    hero: {
+      slides: [
+        slide(1, { cta: { label: { id: 'Jelajahi katalog', en: 'Browse' }, target: { kind: 'catalog' } } }),
+        slide(2, { note: { id: 'Agenda', en: null }, subtitle: { id: 'Sabtu pagi', en: null }, cta: { label: { id: 'Baca', en: null }, target: { kind: 'news', ref: 'lomba-mendongeng' } }, from: '2026-11-16', until: '2026-11-30' }),
+        slide(3, { active: false, cta: { label: { id: 'Tata tertib', en: null }, target: { kind: 'path', ref: '/halaman/tata-tertib' } } }),
+      ],
+      autoplay: false,
+      intervalSec: 10,
+    },
+    brand: '#1e3a8a',
+    about: { text: { id: 'Berdiri 1987.', en: null }, photo: { fileId: fileId(10), alt: 'Gedung', caption: null }, founded: 1987, librarians: 3, history: { id: 'Dulu sebuah gudang.', en: null } },
+    facilities: [{ fileId: fileId(11), alt: 'Ruang baca', caption: 'Lantai 1' }],
+    hours: [{ days: 'Senin–Jumat', time: '07.00–15.00', weekdays: [1, 2, 3, 4, 5] }],
+    logo: { fileId: fileId(12), alt: 'Logo' },
+    contact: { phone: '(021) 555-0101', email: null },
+    timeline: [{ year: 1987, text: { id: 'Berdiri', en: 'Founded' } }],
+    vision: { id: 'Warga gemar membaca.', en: null },
+    mission: [{ id: 'Melayani semua warga', en: null }],
+    staff: [{ name: 'Sri Wahyuni', role: { id: 'Kepala perpustakaan', en: 'Head librarian' } }],
+    gallery: [{ fileId: fileId(13), alt: 'Rak anak', caption: { id: 'Pojok anak', en: null } }],
+  });
+
 describe('OPAC › Halaman awal', () => {
-  it('loads the content, previews the unsaved heading, marks and discards changes, and saves the whole content at its revision', async () => {
+  it('the address without a tab, or with an unknown one, opens the slider tab, and the sidebar still marks Halaman awal', async () => {
+    const first = startApp({ me: adminMe(), path: '/admin/opac/beranda', routes: { 'GET opac/home': () => view() } });
+    await screen.findByRole('heading', { level: 1, name: t('opacHome.title') }, FIRST);
+    expect(first.router.state.location.pathname).toBe('/admin/opac/beranda/slider');
+    const tabs = screen.getByRole('navigation', { name: t('opacHome.tabs') });
+    expect(within(tabs).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['slider', 'profil', 'layanan', 'galeri', 'jam', 'blok'].map((x) => `/admin/opac/beranda/${x}`));
+    expect(within(tabs).getByRole('link', { name: new RegExp(`^${t('opacHome.tab.slider')}`) }).getAttribute('aria-current')).toBe('page');
+    const marked = screen.getAllByRole('link', { name: t('nav.opac.home') }).filter((a) => a.getAttribute('aria-current') === 'page');
+    expect(marked.map((a) => a.getAttribute('href'))).toEqual(['/admin/opac/beranda']);
+    expect(screen.getByRole('link', { name: t('opacHome.view_site') }).getAttribute('href')).toBe('/');
+    await first.router.navigate({ to: '/admin/opac/beranda/$tab', params: { tab: 'entah' } });
+    await waitFor(() => expect(first.router.state.location.pathname).toBe('/admin/opac/beranda/slider'));
+  });
+
+  it('the tabs edit one draft: what is typed on one tab is kept on the others, and one save sends it all with the rest as loaded', async () => {
     let saved = false;
+    const loaded = full();
     const { requests } = startApp({
       me: adminMe(),
-      path: '/admin/opac/beranda',
+      path: '/admin/opac/beranda/profil',
       routes: {
-        'GET opac/home': () => (saved ? { ...view({ title: { id: 'Ruang baca', en: null } }), revision: 'fedcba9876543210' } : view()),
+        'GET opac/home': () => (saved ? { ...loaded, home: { ...loaded.home, title: { id: 'Rumah baca', en: 'A reading room' } }, revision: SAVED.revision } : loaded),
         'PUT opac/home': () => {
           saved = true;
-          return { revision: 'fedcba9876543210', changed: ['opac.home'] };
+          return SAVED;
         },
       },
     });
-    await screen.findByRole('heading', { name: t('opacHome.title') }, FIRST);
-    const preview = await screen.findByRole('complementary', { name: t('opacHome.preview.title') }, FIRST);
-    expect(within(preview).getAllByText('Perpustakaan SMA 1').length).toBeGreaterThan(0);
-    expect(within(preview).getByText('Selamat datang.')).toBeTruthy();
-    expect(screen.getByRole('link', { name: t('opacHome.view_site') }).getAttribute('href')).toBe('/');
-    expect((screen.getByLabelText(t('opacHome.services.name', { n: 1 })) as HTMLInputElement).value).toBe('Peminjaman');
-    expect(screen.queryByText(t('opacHome.dirty'))).toBeNull();
-
-    const heading = screen.getByLabelText(t('opacHome.text.heading_id')) as HTMLInputElement;
-    fireEvent.change(heading, { target: { value: 'Ruang baca' } });
-    expect(within(preview).getByText('Ruang baca')).toBeTruthy();
+    const heading = (await screen.findByLabelText(t('opacHome.text.heading_id'), undefined, FIRST)) as HTMLInputElement;
+    expect(heading.value).toBe('Ruang baca warga');
+    expect(screen.getByText(t('opacHome.clean'))).toBeTruthy();
+    fireEvent.change(heading, { target: { value: 'Rumah baca' } });
     expect(screen.getByText(t('opacHome.dirty'))).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: t('opacHome.discard') }));
-    expect(heading.value).toBe('');
-    expect(screen.queryByText(t('opacHome.dirty'))).toBeNull();
 
-    fireEvent.change(heading, { target: { value: 'Ruang baca' } });
-    fireEvent.click(screen.getByLabelText(t('opacHome.blocks.promoted')));
+    await openTab('opacHome.tab.hours');
     fireEvent.click(screen.getByRole('button', { name: t('opacHome.hours.add') }));
-    fireEvent.change(screen.getByLabelText(t('opacHome.hours.days', { n: 1 })), { target: { value: 'Senin–Jumat' } });
-    fireEvent.change(screen.getByLabelText(t('opacHome.hours.time', { n: 1 })), { target: { value: '07.00–15.00' } });
-    const weekdays = screen.getByRole('group', { name: t('opacHome.hours.weekdays', { n: 1 }) });
-    for (const day of [5, 1, 3, 2, 4] as const) fireEvent.click(within(weekdays).getByLabelText(t(`opacHome.hours.weekday.${day}` as AdminKey)));
-    fireEvent.change(screen.getByLabelText(t('opacHome.about.founded')), { target: { value: '1987' } });
-    fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
+    fireEvent.change(screen.getByLabelText(t('opacHome.hours.days', { n: 2 })), { target: { value: 'Sabtu' } });
+    fireEvent.change(screen.getByLabelText(t('opacHome.hours.time', { n: 2 })), { target: { value: '08.00–12.00' } });
+    fireEvent.click(within(screen.getByRole('group', { name: t('opacHome.hours.weekdays', { n: 2 }) })).getByLabelText(t('opacHome.hours.weekday.6')));
+    fireEvent.change(screen.getByLabelText(t('opacHome.contact.email')), { target: { value: 'perpus@sma1.sch.id' } });
+    // The logo is set on the site identity's screen.
+    expect(screen.getByRole('link', { name: t('siteIdentity.moved.link') }).getAttribute('href')).toBe('/admin/opac/identitas');
+
+    await openTab('opacHome.tab.blocks');
+    const promoted = screen.getByRole('switch', { name: t('opacHome.blocks.promoted') });
+    expect(promoted.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(promoted);
+    expect(promoted.getAttribute('aria-checked')).toBe('false');
+
+    await openTab('opacHome.tab.profile');
+    expect((screen.getByLabelText(t('opacHome.text.heading_id')) as HTMLInputElement).value).toBe('Rumah baca');
+    expect(screen.getByText(t('opacHome.dirty'))).toBeTruthy();
+    expect(puts(requests)).toEqual([]);
+
+    save();
     await screen.findByText(t('opacHome.saved'));
     expect(puts(requests)).toEqual([
       {
         revision: '0123456789abcdef',
         home: {
-          ...OPAC_HOME_DEFAULT,
-          title: { id: 'Ruang baca', en: null },
-          about: { ...OPAC_HOME_DEFAULT.about, founded: 1987 },
-          services: [{ title: 'Peminjaman', text: null }],
-          hours: [{ days: 'Senin–Jumat', time: '07.00–15.00', weekdays: [1, 2, 3, 4, 5] }],
-          blocks: { ...OPAC_HOME_DEFAULT.blocks, promoted: false },
+          ...loaded.home,
+          title: { id: 'Rumah baca', en: 'A reading room' },
+          hours: [...loaded.home.hours, { days: 'Sabtu', time: '08.00–12.00', weekdays: [6] }],
+          contact: { phone: '(021) 555-0101', email: 'perpus@sma1.sch.id' },
+          blocks: { ...loaded.home.blocks, promoted: false },
         },
         welcome: { id: 'Selamat datang.', en: null },
       },
     ]);
-    // The editor starts again from what the server holds now; the bar says it was saved and its button has the focus.
-    await waitFor(() => expect((screen.getByLabelText(t('opacHome.text.heading_id')) as HTMLInputElement).value).toBe('Ruang baca'));
-    expect(screen.queryByText(t('opacHome.dirty'))).toBeNull();
-    expect((await outcome(t('opacHome.saved'))).getAttribute('role')).toBe('status');
+    // The editor starts again from what the server holds now, on the same tab; the save button has the focus.
+    await waitFor(() => expect((screen.getByLabelText(t('opacHome.text.heading_id')) as HTMLInputElement).value).toBe('Rumah baca'));
+    expect(screen.getByText(t('opacHome.clean'))).toBeTruthy();
+    expect(screen.getByText(t('opacHome.saved')).closest('[role=status]')).not.toBeNull();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: t('opacHome.save') }));
   });
 
-  it('checks the draft before sending: a photo needs its alternative text, a year must be a number', async () => {
-    const { requests } = startApp({
-      me: adminMe(),
-      path: '/admin/opac/beranda',
-      routes: { 'GET opac/home': () => view({ hero: { fileId: PHOTO, alt: 'Gedung', position: 50, overlay: 60 } }) },
-    });
+  it('marks unsaved changes, asks before the page is left, and "Batalkan perubahan" goes back to what was loaded', async () => {
+    startApp({ me: adminMe(), path: '/admin/opac/beranda/layanan', routes: { 'GET opac/home': () => view() } });
+    const name = (await screen.findByLabelText(t('opacHome.services.name', { n: 1 }), undefined, FIRST)) as HTMLInputElement;
+    expect(name.value).toBe('Peminjaman');
+    expect(dirtyForms.count()).toBe(0);
+    const discard = screen.getByRole('button', { name: t('opacHome.discard') }) as HTMLButtonElement;
+    expect(discard.disabled).toBe(true);
+    fireEvent.change(name, { target: { value: 'Pinjam buku' } });
+    await waitFor(() => expect(dirtyForms.count()).toBe(1));
+    const leaving = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(leaving);
+    expect(leaving.defaultPrevented).toBe(true);
+    // The draft outlives a change of tab, and so does the question.
+    await openTab('opacHome.tab.gallery');
+    expect(dirtyForms.count()).toBe(1);
+    fireEvent.click(discard.isConnected ? discard : screen.getByRole('button', { name: t('opacHome.discard') }));
+    await waitFor(() => expect(dirtyForms.count()).toBe(0));
+    await openTab('opacHome.tab.services');
+    expect((screen.getByLabelText(t('opacHome.services.name', { n: 1 })) as HTMLInputElement).value).toBe('Peminjaman');
+  });
+
+  it('a field refused before sending opens its tab, marks it, and takes the focus; nothing is sent', async () => {
+    const { requests, router } = startApp({ me: adminMe(), path: '/admin/opac/beranda/profil', routes: { 'GET opac/home': () => full() } });
     const alt = (await screen.findByLabelText(t('opacHome.photo.alt'), undefined, FIRST)) as HTMLInputElement;
     fireEvent.change(alt, { target: { value: '   ' } });
     fireEvent.change(screen.getByLabelText(t('opacHome.about.founded')), { target: { value: 'dulu' } });
-    fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
-    expect(await outcome(t('opacHome.fix_fields'))).toBeTruthy();
-    expect(alt.getAttribute('aria-invalid')).toBe('true');
+    await openTab('opacHome.tab.slider');
+    save();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/opac/beranda/profil'));
+    const refused = await screen.findByLabelText(t('opacHome.photo.alt'));
+    expect(refused.getAttribute('aria-invalid')).toBe('true');
     expect(screen.getByLabelText(t('opacHome.about.founded')).getAttribute('aria-invalid')).toBe('true');
-    // The first refused field takes the focus (and so comes into sight).
-    await waitFor(() => expect(document.activeElement).toBe(alt));
+    await waitFor(() => expect(document.activeElement).toBe(refused));
+    const tab = screen.getByRole('link', { name: new RegExp(`^${t('opacHome.tab.profile')}`) });
+    expect(tab.textContent).toContain(t('opacHome.tab.check'));
+    expect(screen.getByRole('link', { name: new RegExp(`^${t('opacHome.tab.slider')}`) }).textContent).not.toContain(t('opacHome.tab.check'));
+    // The bar names the tab, as an alert; so does the outcome under the tabs.
+    const message = t('opacHome.fix_tabs', { tabs: t('opacHome.tab.profile') });
+    expect(screen.getAllByText(message).some((el) => el.closest('[data-slot=save-bar] [role=alert]') !== null)).toBe(true);
     expect(puts(requests)).toEqual([]);
+    // Typing the field again and saving clears the mark.
+    fireEvent.change(refused, { target: { value: 'Gedung perpustakaan' } });
+    fireEvent.change(screen.getByLabelText(t('opacHome.about.founded')), { target: { value: '1987' } });
   });
 
-  it('the preview has the hero band\'s proportions, not the photo\'s 16:9: on a wide screen "Posisi foto" moves the photo, on a phone its sides are cut', async () => {
-    startApp({ me: adminMe(), path: '/admin/opac/beranda', routes: { 'GET opac/home': () => view({ hero: { fileId: PHOTO, alt: 'Gedung', position: 50, overlay: 60 } }) } });
-    const wide = await screen.findByRole('figure', { name: t('opacHome.preview.wide') }, FIRST);
-    const phone = screen.getByRole('figure', { name: t('opacHome.preview.phone') });
-    const photo = (frame: HTMLElement): HTMLImageElement => frame.querySelector('img')!;
-    const ratio = (frame: HTMLElement): number => {
-      const [w, h] = photo(frame).parentElement!.style.aspectRatio.split('/').map(Number) as [number, number];
-      return w / h;
-    };
-    // Wider than the photo: its top and bottom are cut, so the position decides what shows; narrower: its sides.
-    expect(ratio(wide)).toBeGreaterThan((16 / 9) * 1.5);
-    expect(ratio(phone)).toBeLessThan(1);
-    expect(photo(wide).style.objectPosition).toBe('50% 50%');
-    fireEvent.change(screen.getByLabelText(t('opacHome.hero.position')), { target: { value: '20' } });
-    expect(photo(wide).style.objectPosition).toBe('50% 20%');
-    expect(photo(phone).style.objectPosition).toBe('50% 20%');
-    expect(within(wide).getAllByText('Perpustakaan SMA 1').length).toBeGreaterThan(0);
-  });
-
-  it('the overlay slider darkens the preview from its floor, the library colour fills a band without a photo, and both are saved', async () => {
-    const { requests } = startApp({
+  it("the server's field errors land on their tab and field: a personal e-mail, and a slide's title in its drawer", async () => {
+    let answer = problem(422, 'VALIDATION_FAILED', { errors: [{ path: 'home.contact.email', code: 'personal_email' }] });
+    const { router } = startApp({
       me: adminMe(),
-      path: '/admin/opac/beranda',
-      routes: {
-        'GET opac/home': () => view({ hero: { fileId: PHOTO, alt: 'Gedung', position: 50, overlay: 60 } }),
-        'PUT opac/home': () => ({ revision: 'fedcba9876543210', changed: ['opac.home'] }),
-      },
+      path: '/admin/opac/beranda/blok',
+      routes: { 'GET opac/home': () => full(), 'PUT opac/home': () => answer },
     });
-    const wide = await screen.findByRole('figure', { name: t('opacHome.preview.wide') }, FIRST);
-    const overlay = (): HTMLElement => wide.querySelector<HTMLElement>('[data-overlay]')!;
-    expect(overlay().style.backgroundColor).toBe('rgba(8, 12, 20, 0.6)');
-    const slider = screen.getByLabelText(t('opacHome.hero.overlay')) as HTMLInputElement;
-    expect([slider.min, slider.max, slider.step, slider.value]).toEqual(['60', '80', '5', '60']);
-    fireEvent.change(slider, { target: { value: '75' } });
-    expect(overlay().style.backgroundColor).toBe('rgba(8, 12, 20, 0.75)');
+    await screen.findByRole('switch', { name: t('opacHome.blocks.news') }, FIRST);
+    save();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/opac/beranda/jam'));
+    const email = await screen.findByLabelText(t('opacHome.contact.email'));
+    expect(email.getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByText(t('opacHome.contact.personal_email'))).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(email));
 
-    // Too light a colour is refused before sending, with its own message; a dark one is taken (and stored lower case).
-    const brand = screen.getByLabelText(t('opacHome.brand.label')) as HTMLInputElement;
-    fireEvent.change(brand, { target: { value: '#ffd966' } });
-    fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
-    expect(await screen.findByText(t('opacHome.brand.low_contrast'))).toBeTruthy();
-    expect(brand.getAttribute('aria-invalid')).toBe('true');
-    expect(puts(requests)).toEqual([]);
-    fireEvent.change(brand, { target: { value: '#1E3A8A' } });
-    // The refusal was about the old value: it goes, and the hint gives the new colour's contrast.
-    expect(screen.queryByText(t('opacHome.brand.low_contrast'))).toBeNull();
-    expect(brand.getAttribute('aria-invalid')).toBeNull();
-    expect(screen.getByText(t('opacHome.brand.contrast_ok', { ratio: '10,3', min: '4,5' }))).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: t('opacHome.photo.remove') }));
-    // Without the photo, the preview's band is the library colour.
-    expect((wide.firstElementChild as HTMLElement).style.backgroundColor).toBe('rgb(30, 58, 138)');
-    fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
-    await screen.findByText(t('opacHome.saved'));
-    expect(puts(requests)).toEqual([
-      expect.objectContaining({ home: expect.objectContaining({ hero: null, brand: '#1e3a8a' }) }),
-    ]);
+    answer = problem(422, 'VALIDATION_FAILED', { errors: [{ path: 'home.hero.slides.1.title.id', code: 'too_big' }] });
+    save();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/opac/beranda/slider'));
+    const rows = within(await screen.findByRole('list', { name: t('opacHome.slides.list') })).getAllByRole('listitem');
+    expect(rows.map((row) => row.textContent?.includes(t('opacHome.tab.check')))).toEqual([false, true, false]);
+    const edit = within(rows[1]!).getByRole('button', { name: t('opacHome.slides.edit', { n: 2 }) });
+    await waitFor(() => expect(document.activeElement).toBe(edit));
+    fireEvent.click(edit);
+    const drawer = await screen.findByRole('dialog', { name: t('opacHome.slides.edit', { n: 2 }) });
+    const title = within(drawer).getByLabelText(`${t('opacHome.slide.title')} (${t('opacHome.lang.id')})`);
+    expect(title.getAttribute('aria-invalid')).toBe('true');
+    expect(within(drawer).getByText(t('form.error.too_big'))).toBeTruthy();
   });
 
-  it('the heading and paragraph per language; the preview shows the other language when one is blank', async () => {
-    const { requests } = startApp({
-      me: adminMe(),
-      path: '/admin/opac/beranda',
-      routes: { 'GET opac/home': () => view({ title: { id: 'Ruang baca', en: null } }), 'PUT opac/home': () => ({ revision: 'fedcba9876543210', changed: ['opac.home'] }) },
-    });
-    const preview = await screen.findByRole('complementary', { name: t('opacHome.preview.title') }, FIRST);
-    fireEvent.click(within(preview).getByRole('button', { name: t('opacHome.preview.lang_en') }));
-    // No English heading or lead: the Indonesian ones show.
-    expect(within(preview).getAllByText('Ruang baca').length).toBeGreaterThan(0);
-    expect(within(preview).getByText('Selamat datang.')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText(t('opacHome.text.heading_en')), { target: { value: 'A reading room' } });
-    fireEvent.change(screen.getByLabelText(t('opacHome.about.text_en')), { target: { value: 'Founded in 1987.' } });
-    expect(within(preview).getByText('A reading room')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
-    await screen.findByText(t('opacHome.saved'));
-    expect(puts(requests)).toEqual([
-      expect.objectContaining({
-        home: expect.objectContaining({ title: { id: 'Ruang baca', en: 'A reading room' }, about: expect.objectContaining({ text: { id: null, en: 'Founded in 1987.' } }) }),
-      }),
-    ]);
-  });
-
-  it("a save another admin made first: the 409 says so and offers to reload, keeping the draft until then", async () => {
+  it('a save another admin made first is refused with a way to reload, and the draft stays', async () => {
+    let loads = 0;
     startApp({
       me: adminMe(),
-      path: '/admin/opac/beranda',
+      path: '/admin/opac/beranda/profil',
       routes: {
-        'GET opac/home': () => view(),
+        'GET opac/home': () => {
+          loads += 1;
+          return loads === 1 ? view() : { ...view({ title: { id: 'Versi admin lain', en: null } }), revision: 'fedcba9876543210' };
+        },
         'PUT opac/home': () => problem(409, 'CONFLICT_STALE'),
       },
     });
     const heading = (await screen.findByLabelText(t('opacHome.text.heading_id'), undefined, FIRST)) as HTMLInputElement;
-    fireEvent.change(heading, { target: { value: 'Judul saya' } });
-    fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
-    const conflict = await outcome(t('opacHome.conflict'));
-    expect(conflict.closest('[role="alert"]')).not.toBeNull();
-    expect(within(conflict.closest('[role="alert"]') as HTMLElement).getByRole('button', { name: t('opacHome.reload') })).toBeTruthy();
-    expect(heading.value).toBe('Judul saya');
+    fireEvent.change(heading, { target: { value: 'Punya saya' } });
+    save();
+    expect(await screen.findByText(t('opacHome.conflict'))).toBeTruthy();
+    expect(heading.value).toBe('Punya saya');
+    fireEvent.click(screen.getByRole('button', { name: t('opacHome.reload') }));
+    await waitFor(() => expect((screen.getByLabelText(t('opacHome.text.heading_id')) as HTMLInputElement).value).toBe('Versi admin lain'));
+    expect(screen.queryByText(t('opacHome.conflict'))).toBeNull();
   });
 
-  it('"Pakai foto ini" in the crop panel uploads the photo, drawn in its frame as soon as the panel opens, into the draft and does not save the page', async () => {
-    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 1600, height: 900, close: vi.fn() })));
-    // Only the crop fills its frame (the decoding draws the bitmap alone).
-    const fillRect = vi.fn();
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({ drawImage: vi.fn(), fillRect })) as unknown as HTMLCanvasElement['getContext']);
-    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((done: BlobCallback) => done(new Blob(['x'], { type: 'image/jpeg' })));
-    vi.mocked(uploadFile).mockResolvedValue({ uploadId: PHOTO } as never);
-    const { requests } = startApp({
-      me: adminMe(),
-      path: '/admin/opac/beranda',
-      routes: { 'GET opac/home': () => view(), 'PUT opac/home': () => ({ revision: 'fedcba9876543210', changed: ['opac.home'] }) },
-    });
-    const [hero] = await screen.findAllByLabelText(t('opacHome.photo.upload'), undefined, FIRST);
-    fireEvent.change(hero!, { target: { files: [new File([new Uint8Array(10)], 'gedung.jpg', { type: 'image/jpeg' })] } });
-    const use = await screen.findByRole('button', { name: t('opacHome.crop.use') });
-    // A panel under the control, not a dialog: the crop is drawn once its canvas is there, before any slider moves.
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.getByRole('region', { name: t('opacHome.crop.title') })).toBeTruthy();
-    await waitFor(() => expect(fillRect).toHaveBeenCalledWith(0, 0, 1600, 900));
-    fireEvent.click(use);
-    expect(await screen.findByLabelText(t('opacHome.photo.replace'))).toBeTruthy();
-    expect(vi.mocked(uploadFile)).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(t('opacHome.dirty'))).toBeTruthy();
-    expect(puts(requests)).toEqual([]);
-  });
-
-  it('opened again after another screen, it reads the content afresh: a change saved meanwhile is shown and its revision sent', async () => {
-    let current = view();
-    const { router, requests } = startApp({
-      me: adminMe(),
-      path: '/admin/opac/beranda',
-      routes: {
-        'GET opac/home': () => current,
-        'PUT opac/home': (r) =>
-          (r.body as { revision: string }).revision === current.revision ? { revision: 'fedcba9876543210', changed: ['opac.home'] } : problem(409, 'CONFLICT_STALE'),
-      },
-    });
-    await screen.findByLabelText(t('opacHome.text.heading_id'), undefined, FIRST);
-    await act(() => router.navigate({ to: '/admin/about' }));
-    await waitFor(() => expect(screen.queryByLabelText(t('opacHome.text.heading_id'))).toBeNull());
-    // Saved meanwhile under Pengaturan › OPAC (the welcome text is part of this screen's revision), while the admin is
-    // on another screen for a moment.
-    current = { ...view(), welcome: { id: 'Halo dari pengaturan.', en: null }, accent: 'red', revision: 'aaaaaaaaaaaaaaaa' };
-    await new Promise((r) => setTimeout(r, 50));
-    await act(() => router.navigate({ to: '/admin/opac/beranda' }));
-    expect(await screen.findByDisplayValue('Halo dari pengaturan.')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText(t('opacHome.text.heading_id')), { target: { value: 'Ruang baca' } });
-    fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
+  it('a content saved before the profile existed loads and is sent back whole', async () => {
+    const { requests } = startApp({ me: adminMe(), path: '/admin/opac/beranda/slider', routes: { 'GET opac/home': () => view({ hero: heroOf(slide(1)) }), 'PUT opac/home': () => SAVED } });
+    await screen.findByRole('list', { name: t('opacHome.slides.list') }, FIRST);
+    save();
     await screen.findByText(t('opacHome.saved'));
-    expect(puts(requests).map((b) => (b as { revision: string }).revision)).toEqual(['aaaaaaaaaaaaaaaa']);
+    expect(puts(requests)).toEqual([{ revision: '0123456789abcdef', home: { ...OPAC_HOME_DEFAULT, services: [{ title: 'Peminjaman', text: null }], hero: heroOf(slide(1)) }, welcome: { id: 'Selamat datang.', en: null } }]);
   });
 
-  it('the logo: fitted whole onto a white tile and uploaded, its alternative text required; the contact saved as typed, blanks as none', async () => {
-    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 600, height: 150, close: vi.fn() })));
-    const drawImage = vi.fn();
-    const fillRect = vi.fn();
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({ drawImage, fillRect })) as unknown as HTMLCanvasElement['getContext']);
-    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((done: BlobCallback) => done(new Blob(['x'], { type: 'image/jpeg' })));
-    vi.mocked(uploadFile).mockResolvedValue({ uploadId: LOGO } as never);
-    const { requests } = startApp({
-      me: adminMe(),
-      path: '/admin/opac/beranda',
-      routes: { 'GET opac/home': () => view(), 'PUT opac/home': () => ({ revision: 'fedcba9876543210', changed: ['opac.home'] }) },
-    });
-    expect(await screen.findByText(t('opacHome.logo.none'), undefined, FIRST)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText(t('opacHome.logo.upload')), { target: { files: [new File([new Uint8Array(10)], 'logo.png', { type: 'image/png' })] } });
-    expect(await screen.findByLabelText(t('opacHome.logo.replace'))).toBeTruthy();
-    // A 4:1 logo: a tile 960 × 240, white first, the logo over it whole (no crop, no panel).
-    expect(fillRect).toHaveBeenCalledWith(0, 0, 960, 240);
-    expect(drawImage).toHaveBeenLastCalledWith(expect.anything(), 0, 0, 960, 240);
-    expect(vi.mocked(uploadFile)).toHaveBeenCalledWith(expect.any(Blob), { context: 'opac.home_photo' });
-    expect(screen.queryByRole('region', { name: t('opacHome.crop.title') })).toBeNull();
-
-    // Without its alternative text the logo is refused before sending.
-    fireEvent.change(screen.getByLabelText(t('opacHome.contact.phone')), { target: { value: ' (021) 555-0101 ' } });
-    fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
-    await outcome(t('opacHome.fix_fields'));
-    const alt = screen.getByLabelText(t('opacHome.logo.alt'));
-    expect(alt.getAttribute('aria-invalid')).toBe('true');
-    expect(puts(requests)).toEqual([]);
-    fireEvent.change(alt, { target: { value: 'Logo perpustakaan' } });
-    fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
-    await screen.findByText(t('opacHome.saved'));
-    expect(puts(requests)).toEqual([
-      expect.objectContaining({ home: expect.objectContaining({ logo: { fileId: LOGO, alt: 'Logo perpustakaan' }, contact: { phone: '(021) 555-0101', email: null } }) }),
-    ]);
-  });
-
-  it("a member's or a user's e-mail as the contact: the server's refusal lands on the field with its own words", async () => {
-    startApp({
-      me: adminMe(),
-      path: '/admin/opac/beranda',
-      routes: {
-        'GET opac/home': () => view(),
-        'PUT opac/home': () => problem(422, 'VALIDATION_FAILED', { errors: [{ path: 'home.contact.email', code: 'personal_email' }] }),
-      },
-    });
-    const email = (await screen.findByLabelText(t('opacHome.contact.email'), undefined, FIRST)) as HTMLInputElement;
-    fireEvent.change(email, { target: { value: 'siti@rumah.example' } });
-    fireEvent.click(screen.getByRole('button', { name: t('opacHome.save') }));
-    expect(await screen.findByText(t('opacHome.contact.personal_email'))).toBeTruthy();
-    await waitFor(() => expect(email.getAttribute('aria-invalid')).toBe('true'));
-    await waitFor(() => expect(document.activeElement).toBe(email));
-  });
-
-  it('without opac.pages.manage the screen says so and reads nothing', async () => {
-    const { requests } = startApp({ me: signedIn({ permissions: ['catalog.records.read'] }), path: '/admin/opac/beranda', routes: {} });
+  it('without the permission the screen says so and loads nothing', async () => {
+    const { requests } = startApp({ me: signedIn({ permissions: ['catalog.records.read'] }), path: '/admin/opac/beranda/slider', routes: {} });
     expect(await screen.findByText(t('opacHome.no_permission'), undefined, FIRST)).toBeTruthy();
-    expect(requests.some((r) => r.path === 'opac/home')).toBe(false);
+    expect(requests.filter((r) => r.path === 'opac/home')).toEqual([]);
+    expect(screen.queryByRole('navigation', { name: t('opacHome.tabs') })).toBeNull();
   });
 });

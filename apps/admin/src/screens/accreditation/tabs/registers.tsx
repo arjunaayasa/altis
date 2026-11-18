@@ -31,7 +31,7 @@ export function RegistersTab(props: { periodId: string }): JSX.Element {
   return (
     <section aria-labelledby={headingId} className="grid min-w-0 gap-4" data-period-id={props.periodId}>
       <div className="grid max-w-[75ch] gap-1">
-        <h2 id={headingId} className="text-base font-bold">
+        <h2 id={headingId} className="text-heading font-semibold">
           {t('accreditation.registers.title')}
         </h2>
         <p className="text-sm text-muted-foreground">{t('accreditation.registers.intro')}</p>

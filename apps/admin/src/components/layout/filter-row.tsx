@@ -39,6 +39,7 @@ export function FilterRow({
         if (onSubmit === undefined) event.preventDefault();
         else onSubmit(event);
       }}
+      data-slot="filter-row"
       className={cn('flex flex-wrap items-end gap-3', className)}>
       {children}
       {actions !== undefined && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

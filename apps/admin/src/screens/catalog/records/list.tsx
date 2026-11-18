@@ -8,7 +8,7 @@ import { useMemo, useRef, useState } from 'react';
 import { AddToPrintQueue } from '@/components/catalog/print-queue';
 import { useDateTime } from '@/components/data-table';
 import { Badge, CheckField, Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
-import { DenseTable, EmptyState, ErrorState, FilterField, FilterRow, PageHead, SelectionBar, SkeletonTable, type DenseColumn } from '@/components/layout';
+import { Card, DenseTable, EmptyState, ErrorState, FilterField, FilterRow, FilterTabs, PageHead, SelectionBar, SkeletonTable, type DenseColumn, type FilterTab } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT, type Translate } from '@/i18n';
@@ -270,33 +270,29 @@ export function RecordsListScreen() {
       header: <span className="sr-only">{t('catalog.records.col.cover')}</span>,
       cell: (r) =>
         r.coverFileId === null ? (
-          <span className="block h-12 w-9 rounded border bg-layer-2" title={t('catalog.records.list.no_cover')} />
+          <span className="block h-8 w-6 rounded-sm border bg-layer-2" title={t('catalog.records.list.no_cover')} />
         ) : (
-          <img src={`/files/${encodeURIComponent(r.coverFileId)}`} alt="" loading="lazy" width={36} height={48} className="h-12 w-9 rounded border object-cover" />
+          <img src={`/files/${encodeURIComponent(r.coverFileId)}`} alt="" loading="lazy" width={24} height={32} className="h-8 w-6 rounded-sm border object-cover" />
         ),
     },
     {
       id: 'title',
-      header: t('catalog.records.col.title'),
+      header: t('catalog.records.col.title_only'),
       cell: (r) => (
-        <span className="flex min-w-48 flex-col gap-0.5">
-          <Link to={`/admin/catalog/records/${encodeURIComponent(r.id)}`} className="w-fit font-semibold text-accent-text underline-offset-4 hover:underline">
+        <span className="flex min-w-48 flex-wrap items-center gap-x-2 gap-y-0.5">
+          <Link to={`/admin/catalog/records/${encodeURIComponent(r.id)}`} className="font-semibold text-foreground underline-offset-4 hover:text-accent-text hover:underline">
             {r.title}
           </Link>
           {r.subtitle !== null && <span className="text-muted-foreground">{r.subtitle}</span>}
-          {r.mainAgent !== null && <span className="text-muted-foreground">{r.mainAgent}</span>}
-          {(r.archived || !r.opacVisible) && (
-            <span className="flex flex-wrap gap-1 pt-0.5">
-              {r.archived && <Badge tone="warning">{t('catalog.records.badge.archived')}</Badge>}
-              {!r.opacVisible && <Badge>{t('catalog.records.badge.hidden')}</Badge>}
-            </span>
-          )}
+          {r.archived && <Badge tone="warning">{t('catalog.records.badge.archived')}</Badge>}
+          {!r.opacVisible && <Badge>{t('catalog.records.badge.hidden')}</Badge>}
         </span>
       ),
     },
+    { id: 'author', header: t('catalog.records.col.author'), cell: (r) => r.mainAgent ?? '' },
     { id: 'type', header: t('catalog.records.col.type'), className: 'whitespace-nowrap', cell: (r) => typeName(t, types.data?.items, r.materialTypeId, locale) },
     { id: 'year', header: t('catalog.records.col.year'), cell: (r) => r.year ?? '' },
-    { id: 'call', header: t('catalog.records.col.call_number'), className: 'whitespace-nowrap', cell: (r) => r.callNumber ?? '' },
+    { id: 'call', header: t('catalog.records.col.call_number'), className: 'font-mono text-meta whitespace-nowrap', cell: (r) => r.callNumber ?? '' },
     { id: 'items', header: t('catalog.records.col.items'), className: 'text-right', headClassName: 'text-right', cell: (r) => r.itemCount },
     {
       id: 'changed',
@@ -315,6 +311,7 @@ export function RecordsListScreen() {
   const searchMode = first !== undefined && first.page !== null;
   const atPageLimit = searchMode && last !== undefined && last.page === SEARCH_PAGES_MAX && (last.total ?? 0) > SEARCH_PAGES_MAX * PAGE_SIZE;
   const filtered = Object.keys(search).length > 0;
+  const filterCount = Object.keys(search).filter((k) => k !== 'sort').length;
   const nothingAtAll = !filtered && list.data !== undefined && rows.length === 0 && !list.hasNextPage;
   const typeLabel = (m: MaterialTypeView): string => (locale === 'en' ? m.nameEn : m.nameId);
   const clearButton = (
@@ -323,8 +320,25 @@ export function RecordsListScreen() {
     </Button>
   );
 
+  // The saved views: each is one filter of the address on its own, so a view and the filter row never disagree.
+  const view = Object.keys(search).every((k) => k === 'sort')
+    ? 'all'
+    : search.hasItems === false && filterCount === 1
+      ? 'no_items'
+      : search.hidden === 'only' && filterCount === 1
+        ? 'hidden'
+        : search.archived === true && filterCount === 1
+          ? 'archived'
+          : '';
+  const views: FilterTab[] = [
+    { id: 'all', label: t('catalog.records.view.all'), to: '/admin/catalog/records' },
+    { id: 'no_items', label: t('catalog.records.filter.items_no'), to: '/admin/catalog/records', search: { hasItems: false } },
+    { id: 'hidden', label: t('catalog.records.view.hidden'), to: '/admin/catalog/records', search: { hidden: 'only' } },
+    { id: 'archived', label: t('catalog.records.view.archived'), to: '/admin/catalog/records', search: { archived: true } },
+  ];
+
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-4">
       <PageHead
         title={t('catalog.records.list.title')}
         intro={t('catalog.records.list.intro')}
@@ -346,6 +360,9 @@ export function RecordsListScreen() {
         }
       />
 
+      <FilterTabs label={t('catalog.records.view.label')} value={view} items={views} />
+
+      <Card>
       <FilterRow
         label={t('catalog.records.list.filters')}
         onSubmit={(e) => {
@@ -431,7 +448,9 @@ export function RecordsListScreen() {
       </FilterRow>
 
       {list.isError && list.data === undefined ? (
-        <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
+        <div className="p-4">
+          <ErrorState error={list.error} onRetry={() => void list.refetch()} retrying={list.isFetching} />
+        </div>
       ) : list.data === undefined ? (
         <SkeletonTable label={t('shell.loading')} columns={8} />
       ) : nothingAtAll ? (
@@ -456,7 +475,7 @@ export function RecordsListScreen() {
           <p>{t('catalog.records.list.empty_all_hint')}</p>
         </EmptyState>
       ) : (
-        <div className="grid gap-3">
+        <>
           <SelectionBar
             count={selected.size}
             label={t('catalog.records.list.selected', { count: number.format(selected.size) })}
@@ -501,9 +520,13 @@ export function RecordsListScreen() {
               </span>
             }
           />
-          {list.isFetchNextPageError && <ProblemAlert error={list.error} />}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-muted-foreground">
+          {list.isFetchNextPageError && (
+            <div className="border-t p-4">
+              <ProblemAlert error={list.error} />
+            </div>
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2.5">
+            <p className="text-meta text-muted-foreground">
               {searchMode && first.total !== null
                 ? first.total >= TOTAL_CAP
                   ? t('catalog.records.list.total_many', { count: number.format(TOTAL_CAP) })
@@ -516,9 +539,10 @@ export function RecordsListScreen() {
               </Button>
             )}
           </div>
-          {atPageLimit && <p className="text-sm text-muted-foreground">{t('catalog.records.list.page_limit', { count: number.format(SEARCH_PAGES_MAX * PAGE_SIZE) })}</p>}
-        </div>
+          {atPageLimit && <p className="border-t px-4 py-2.5 text-meta text-muted-foreground">{t('catalog.records.list.page_limit', { count: number.format(SEARCH_PAGES_MAX * PAGE_SIZE) })}</p>}
+        </>
       )}
+      </Card>
     </div>
   );
 }

@@ -6,7 +6,17 @@
  * No Node built-ins here: the browser bundles this module. Import it as `@altis/shared/api/opac-pages`.
  */
 import { z } from 'zod';
-import { BODY_FORMATS, PAGE_KINDS, PAGE_STATUSES, type BodyFormat, type PageKind, type PageStatus } from '../catalog-vocab.js';
+import {
+  BODY_FORMATS,
+  EVENT_PLACE_MAX,
+  NEWS_CATEGORIES,
+  PAGE_KINDS,
+  PAGE_STATUSES,
+  type BodyFormat,
+  type NewsCategory,
+  type PageKind,
+  type PageStatus,
+} from '../catalog-vocab.js';
 import { cursorQuery, epochMsField, longText, shortText, sortOrderField, type Paged } from './catalog/common.js';
 import { ulidField, versionField } from './common.js';
 
@@ -36,15 +46,68 @@ const pageFields = {
   sortOrder: sortOrderField,
 };
 
+/**
+ * The agenda of a news post: its category and the event it announces. All four are for `kind = news` only and may be
+ * null (or left out); see {@link newsAgendaErrors} for the rules between them.
+ */
+const agendaFields = {
+  category: z.enum(NEWS_CATEGORIES).nullable().optional(),
+  /** Epoch ms: when the event starts. */
+  eventStartsAt: epochMsField.nullable().optional(),
+  /** Epoch ms: when it ends; never without a start, never before it. */
+  eventEndsAt: epochMsField.nullable().optional(),
+  /** Where it is held; a blank place is none. */
+  eventPlace: shortText(EVENT_PLACE_MAX).nullable().optional(),
+};
+
+/** The agenda of a page as it is stored or about to be. */
+export interface NewsAgenda {
+  category: NewsCategory | null;
+  eventStartsAt: number | null;
+  eventEndsAt: number | null;
+  eventPlace: string | null;
+}
+
+/** The names of the agenda fields, in the order they are reported. */
+export const NEWS_AGENDA_FIELDS = Object.freeze(['category', 'eventStartsAt', 'eventEndsAt', 'eventPlace'] as const);
+
+/**
+ * The field errors of `agenda` on a page of `kind`: a page that is not news has no agenda (`invalid` at each field
+ * that is set); an event's end needs its start and is not before it (`invalid` at `eventEndsAt`), and so does its
+ * place (`invalid` at `eventPlace`).
+ */
+export function newsAgendaErrors(kind: PageKind, agenda: NewsAgenda): { path: (typeof NEWS_AGENDA_FIELDS)[number]; code: 'invalid' }[] {
+  if (kind !== 'news') return NEWS_AGENDA_FIELDS.filter((name) => agenda[name] !== null).map((path) => ({ path, code: 'invalid' as const }));
+  const errors: { path: (typeof NEWS_AGENDA_FIELDS)[number]; code: 'invalid' }[] = [];
+  if (agenda.eventEndsAt !== null && (agenda.eventStartsAt === null || agenda.eventEndsAt < agenda.eventStartsAt)) errors.push({ path: 'eventEndsAt', code: 'invalid' });
+  if (agenda.eventPlace !== null && agenda.eventStartsAt === null) errors.push({ path: 'eventPlace', code: 'invalid' });
+  return errors;
+}
+
+/** The agenda a body states: a field left out is null, a blank place is none. */
+export function newsAgendaOf(input: { category?: NewsCategory | null | undefined; eventStartsAt?: number | null | undefined; eventEndsAt?: number | null | undefined; eventPlace?: string | null | undefined }): NewsAgenda {
+  const place = input.eventPlace ?? null;
+  return { category: input.category ?? null, eventStartsAt: input.eventStartsAt ?? null, eventEndsAt: input.eventEndsAt ?? null, eventPlace: place === null || place.trim() === '' ? null : place };
+}
+
 /** `POST opac/pages`. */
-export const PageBody = z.strictObject({
-  ...pageFields,
-  translations: z.strictObject({ id: PageTranslationInput, en: PageTranslationInput.optional() }),
-});
+export const PageBody = z
+  .strictObject({
+    ...pageFields,
+    ...agendaFields,
+    translations: z.strictObject({ id: PageTranslationInput, en: PageTranslationInput.optional() }),
+  })
+  .check((ctx) => {
+    for (const e of newsAgendaErrors(ctx.value.kind, newsAgendaOf(ctx.value))) ctx.issues.push({ code: 'custom', input: ctx.value[e.path], path: [e.path], params: { code: e.code } });
+  });
 
 export type PageBody = z.infer<typeof PageBody>;
 
-/** `PATCH opac/pages/:id`: only the fields sent change; a translation sent replaces it, `en: null` removes English. */
+/**
+ * `PATCH opac/pages/:id`: only the fields sent change; a translation sent replaces it, `en: null` removes English.
+ * The agenda is checked against the page as the patch leaves it ({@link newsAgendaErrors}); a news post that becomes a
+ * page loses its agenda.
+ */
 export const PagePatchBody = z.strictObject({
   version: versionField,
   kind: pageFields.kind.optional(),
@@ -54,13 +117,20 @@ export const PagePatchBody = z.strictObject({
   showInNav: pageFields.showInNav.optional(),
   coverFileId: pageFields.coverFileId,
   sortOrder: pageFields.sortOrder.optional(),
+  ...agendaFields,
   translations: z.strictObject({ id: PageTranslationInput.optional(), en: PageTranslationInput.nullable().optional() }).optional(),
 });
 
 export type PagePatchBody = z.infer<typeof PagePatchBody>;
 
 /** `GET opac/pages?kind=&status=`. */
-export const PageListQuery = z.strictObject({ kind: z.enum(PAGE_KINDS), status: z.enum(PAGE_STATUSES).optional(), ...cursorQuery });
+export const PageListQuery = z.strictObject({
+  kind: z.enum(PAGE_KINDS),
+  status: z.enum(PAGE_STATUSES).optional(),
+  /** Only the news of this category. */
+  category: z.enum(NEWS_CATEGORIES).optional(),
+  ...cursorQuery,
+});
 
 export type PageListQuery = z.infer<typeof PageListQuery>;
 
@@ -93,6 +163,11 @@ export interface PageView {
   showInNav: boolean;
   coverFileId: string | null;
   sortOrder: number;
+  /** News only (null on a page): its category and the event it announces. */
+  category: NewsCategory | null;
+  eventStartsAt: number | null;
+  eventEndsAt: number | null;
+  eventPlace: string | null;
   translations: { id: PageTranslationView; en: PageTranslationView | null };
   archived: boolean;
   createdAt: number;
@@ -108,6 +183,9 @@ export interface PageListItem {
   status: PageStatus;
   publishedAt: number | null;
   showInNav: boolean;
+  /** News only: its category and the start of its event. */
+  category: NewsCategory | null;
+  eventStartsAt: number | null;
   /** The Indonesian title. */
   title: string;
   hasEnglish: boolean;

@@ -1040,10 +1040,10 @@ describe('audit coverage: the community scripts own every community action, once
 });
 
 describe('audit coverage: the members and circulation scripts own every members and circulation action, once', () => {
-  it('the ten areas list the 46 actions between them, each in exactly one, under names of their own', () => {
+  it('the eleven areas list the 47 actions between them, each in exactly one, under names of their own', () => {
     // Members and circulation 15, holds 5, then the circulation core (8), the member area (5), charges and payments (4)
-    // the notices (2), the SLiMS cut-over checklist (1), stocktake (5) and the OPAC home page (1).
-    expect(MEMBERS_CIRCULATION_ACTIONS).toHaveLength(46);
+    // the notices (2), the SLiMS cut-over checklist (1), stocktake (5), the OPAC home page (1) and the site identity (1).
+    expect(MEMBERS_CIRCULATION_ACTIONS).toHaveLength(47);
     expect(Object.keys(MEMBERS_CIRCULATION_AUDIT_SCRIPTS)).toEqual([
       'members',
       'circulation',
@@ -1055,6 +1055,7 @@ describe('audit coverage: the members and circulation scripts own every members 
       'slims-people',
       'stocktake',
       'opac-home',
+      'site-identity',
     ]);
     const others = { ...PHASE2_AUDIT_SCRIPTS, ...KOMUNITAS_AUDIT_SCRIPTS };
     expect(Object.keys(MEMBERS_CIRCULATION_AUDIT_SCRIPTS).filter((area) => Object.hasOwn(others, area))).toEqual([]);

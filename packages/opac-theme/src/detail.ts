@@ -10,32 +10,39 @@ export const DETAIL_CSS: string = [
   // The page's two articles: the record and the attachment viewer.
   '.record,.viewer{display:block;min-width:0}',
 
-  // The record's header: the cover (or the substitute cover) in a narrow column beside the heading.
-  '.record-header{display:grid;gap:1.25rem 2rem;align-items:start;margin:0 0 1.5rem}',
-  '.record-header>.record-cover,.record-header>.book-cover{width:9rem}',
-  '.record-cover{display:block;width:100%;height:auto;aspect-ratio:2/3;object-fit:cover;border-radius:2px 5px 5px 2px;background:var(--layer-2)}',
+  // The record: the cover in a narrow column, the record itself, and a box beside it with the call number, what the
+  // copies allow now and the member's actions.
+  '.record{display:grid;grid-template-columns:minmax(0,1fr);gap:1.5rem;align-items:start}',
+  '.record-cover-col{width:9rem}',
+  '.record-main{min-width:0}',
+  '.record-header{display:block;margin:0 0 1rem}',
+  '.record-cover{display:block;width:100%;height:auto;aspect-ratio:2/3;object-fit:cover;border-radius:2px;background:var(--layer-2)}',
   '.record-heading{display:grid;gap:.25rem;min-width:0}',
-  '.record-heading h1{margin:0;font-size:clamp(1.5rem,1.3rem + .8vw,1.75rem);line-height:1.2;overflow-wrap:anywhere}',
+  '.record-heading h1{margin:0;font-size:1.75rem;line-height:1.2;letter-spacing:-.01em;overflow-wrap:anywhere}',
   '.record-subtitle{font-weight:400}',
   '.record-type{margin:0;color:var(--muted);font-size:.9375rem}',
-  // What the copies allow now, in the words of the title's card.
-  '.record-shelf{margin:.25rem 0 0;font-size:1rem}',
-  '.record-responsibility{margin:0;font-size:1.0625rem}',
+  '.record-shelf{margin:.75rem 0 .5rem;font-size:.875rem}',
+  '.record-responsibility{margin:0;color:var(--muted)}',
   '.record-agents{display:flex;flex-wrap:wrap;gap:0 1rem;margin:0;padding:0;list-style:none}',
-  '.record-agents li{display:inline-flex;align-items:center;flex-wrap:wrap;min-height:2.75rem}',
+  '.record-agents li{display:inline-flex;align-items:center;flex-wrap:wrap;min-height:2rem}',
   '.record-agents a{font-weight:600}',
   '.record-role,.record-dates{color:var(--muted);font-weight:400}',
+  '.record-side{display:grid;gap:0}',
+  '.shelf-mark{margin:0}',
+  '.shelf-mark small{display:block;font-size:.84375rem;color:var(--muted)}',
+  '.shelf-mark b{font:600 1.1875rem var(--mono);overflow-wrap:anywhere}',
 
   // The sections and the description list (one column; label beside value from 40 rem).
-  '.record-section{margin:2.25rem 0 0}',
-  '.record-section h2{margin:0 0 .75rem;font-size:1.25rem}',
+  '.record-section{margin:2rem 0 0}',
+  '.record-section h2{margin:0 0 .5rem;font-size:1.25rem}',
   '.record-text{max-width:var(--measure);white-space:pre-line;overflow-wrap:anywhere}',
-  '.record-fields{display:grid;gap:.25rem 1.25rem;margin:0;font-size:.9375rem}',
+  '.record-fields{display:grid;margin:0;font-size:.9375rem;border-bottom:1px solid var(--border)}',
   '.record-fields dt{color:var(--muted)}',
-  '.record-fields dd{margin:0 0 .5rem;overflow-wrap:anywhere}',
+  '.record-fields dt{padding:.5rem 0 0;border-top:1px solid var(--border)}',
+  '.record-fields dd{margin:0;padding:0 0 .5rem;overflow-wrap:anywhere}',
   '.record-subjects{display:flex;flex-wrap:wrap;gap:.5rem;margin:0;padding:0;list-style:none}',
-  '.record-subjects a{display:inline-flex;align-items:center;min-height:2.25rem;padding:0 .75rem;background:var(--bg);' +
-    'border:1px solid var(--border-strong);border-radius:999px;color:var(--text);font-size:.9375rem;text-decoration:none}',
+  '.record-subjects a{display:inline-flex;align-items:center;min-height:2rem;padding:0 .625rem;background:var(--bg);' +
+    'border:1px solid var(--border-strong);border-radius:var(--radius-sm);color:var(--text);font-size:.9375rem;text-decoration:none}',
   '.record-subjects a:hover{border-color:var(--accent);color:var(--accent)}',
   '.record-relations,.attachment-list,.download-list{display:grid;gap:.25rem;margin:0;padding:0;list-style:none}',
   '.record-relations li,.attachment-list li,.download-list li{display:flex;flex-wrap:wrap;align-items:center;gap:0 .5rem;min-height:2.75rem}',
@@ -68,8 +75,8 @@ export const DETAIL_CSS: string = [
   '.viewer h1{margin:0 0 .25rem;overflow-wrap:anywhere}',
   '.viewer-kind{margin:0 0 1rem;color:var(--muted)}',
   '.viewer-actions{display:flex;flex-wrap:wrap;gap:.75rem;margin:1rem 0}',
-  '.button{display:inline-flex;align-items:center;justify-content:center;min-height:2.75rem;padding:0 1.25rem;border:1px solid var(--border-strong);' +
-    'border-radius:var(--radius-sm);color:var(--text);font-weight:700;text-decoration:none}',
+  '.button{display:inline-flex;align-items:center;justify-content:center;min-height:2.5rem;padding:0 1rem;border:1px solid var(--border-strong);' +
+    'border-radius:var(--radius-sm);color:var(--text);font-weight:600;font-size:.9375rem;text-decoration:none}',
   '.button-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}',
   '.viewer-hint{color:var(--muted);font-size:.875rem}',
   '.viewer-media{display:block;width:100%;max-width:48rem;margin:1rem 0}',
@@ -80,8 +87,9 @@ export const DETAIL_CSS: string = [
   '.leaving h2{margin:0 0 .5rem;font-size:1.125rem}',
   '.viewer-url{color:var(--muted);font-size:.875rem;overflow-wrap:anywhere}',
 
-  // Wider screens: the cover beside the heading, the description in two columns.
-  '@media (min-width:44rem){.record-header{grid-template-columns:11.25rem minmax(0,1fr)}' +
-    '.record-header>.record-cover,.record-header>.book-cover{width:100%}' +
-    '.record-fields{grid-template-columns:minmax(9rem,max-content) 1fr}.record-fields dd{margin:0}}',
+  // Wider screens: the cover beside the record, the description's label beside its value; wide: the box as a third column.
+  '@media (min-width:44rem){.record{grid-template-columns:10rem minmax(0,1fr);gap:2rem}.record-cover-col{width:auto}' +
+    '.record-side{grid-column:1/-1}' +
+    '.record-fields{grid-template-columns:8.75rem minmax(0,1fr)}.record-fields dt,.record-fields dd{padding:.5rem 0;border-top:1px solid var(--border)}}',
+  '@media (min-width:68.75rem){.record{grid-template-columns:12.5rem minmax(0,1fr) 17.5rem;gap:2.5rem}.record-side{grid-column:auto}}',
 ].join('\n');

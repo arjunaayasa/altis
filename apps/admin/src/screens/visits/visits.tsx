@@ -488,7 +488,7 @@ export function StationsScreen() {
           <p className="text-muted-foreground">{t('visits.stations.code_hint', { time: time(code.expiresAt) })}</p>
         </Callout>
       )}
-      <form noValidate aria-label={t('visits.stations.create')} onSubmit={(e) => void create(e)} className="flex flex-wrap items-end gap-3">
+      <form noValidate aria-label={t('visits.stations.create')} onSubmit={(e) => void create(e)} className="flex flex-wrap items-end gap-3 rounded-lg border bg-background p-4">
         <Field label={t('visits.stations.name')} className="min-w-0 flex-[2_1_220px]">
           {(c) => <Input {...c} maxLength={191} value={name} onChange={(e) => setName(e.target.value)} />}
         </Field>

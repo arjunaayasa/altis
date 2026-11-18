@@ -203,7 +203,7 @@ function PeriodHeader({ period, instrument }: { period: PeriodView; instrument: 
   return (
     <div className="grid gap-1 text-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-base font-bold">{period.name}</h2>
+        <h2 className="text-heading font-semibold">{period.name}</h2>
         <Tag tone={period.status === 'frozen' ? 'warn' : 'neutral'}>{t(vocabKey('period_status', period.status))}</Tag>
       </div>
       {instrument === undefined ? (

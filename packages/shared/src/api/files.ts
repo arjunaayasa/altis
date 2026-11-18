@@ -43,6 +43,10 @@ export const UPLOAD_CONTEXT_NAMES = [
   // ---- Komunitas (OPAC home page) ----
   // The photos of the OPAC home page (the hero, the "about" photo, the facility photos), stored as public files.
   'opac.home_photo',
+  // ---- Site identity ----
+  // The library's logo and its site icon: PNG, decoded and stored again by the server, public once the identity names them.
+  'site.logo',
+  'site.icon',
 ] as const;
 
 export type UploadContextName = (typeof UPLOAD_CONTEXT_NAMES)[number];

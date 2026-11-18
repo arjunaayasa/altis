@@ -201,7 +201,7 @@ export function ReportView({ run, unclosed = false }: { run: RunView; unclosed?:
   return (
     <section aria-labelledby={titleId} className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id={titleId} className="text-base font-bold">
+        <h2 id={titleId} className="text-heading font-semibold">
           {t(run.dryRun ? 'catalog.migration.report.title_dry' : 'catalog.migration.report.title_real')}
         </h2>
         {run.reportFileId !== null && (

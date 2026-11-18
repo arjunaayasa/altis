@@ -2,6 +2,7 @@ import { permissionCatalog, systemRolePermissions, type Permission } from '@alti
 import type { MeResponse } from '@altis/shared/api/auth';
 import type { BranchItem } from '@altis/shared/api/branches';
 import type { PermissionListResponse, RoleItem } from '@altis/shared/api/roles';
+import type { SiteIdentityPublic } from '@altis/shared/api/site-identity';
 import type { UserDetail } from '@altis/shared/api/users';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router';
@@ -36,6 +37,18 @@ export const adminMe = (): SignedIn => signedIn({ permissions: systemRolePermiss
 
 /** A `super_admin`. */
 export const superMe = (): SignedIn => signedIn({ permissions: systemRolePermissions('super_admin'), superAdmin: true });
+
+/** `GET site/identity/public` of a site that set nothing: the library's name, no logo, the built-in icon. */
+export const publicIdentity = (name: string, o: Partial<SiteIdentityPublic> = {}): SiteIdentityPublic => ({
+  name,
+  tagline: { id: null, en: null },
+  showNameBesideLogo: true,
+  logo: null,
+  logoDark: null,
+  hasIcon: false,
+  icon: { '32': '/site-icon/32.png', '180': '/site-icon/180.png', '192': '/site-icon/192.png' },
+  ...o,
+});
 
 export interface FakeRequest {
   method: string;
@@ -83,6 +96,9 @@ export function startApp(o: { me: MeResponse; path: string; routes: Record<strin
     const path = url.pathname.replace(/^\/api\/v1\//, '');
     const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined;
     if (path === 'auth/me' && method === 'GET') return json(o.me);
+    // The brand of the sidebar and the sign-in page: a site without a logo, unless the test answers it itself. It is
+    // not kept in `requests`, so no test that counts its own requests sees it.
+    if (path === 'site/identity/public' && method === 'GET' && o.routes['GET site/identity/public'] === undefined) return json(publicIdentity(o.me.library.name));
     for (const [key, handler] of Object.entries(o.routes)) {
       const [m, pattern] = key.split(' ') as [string, string];
       if (m !== method) continue;

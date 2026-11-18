@@ -3,7 +3,7 @@ import type { MeResponse } from '@altis/shared/api/auth';
 import { describe, expect, it } from 'vitest';
 import { editionNav } from '@/edition';
 import { ADMIN_MESSAGES } from '@/i18n';
-import { HOME_SHORTCUTS, NAV, NAV_GROUPS, NAV_MODULES, activeModule, activeNavPath, visibleModules, visibleNav, visibleNavSections, visibleShortcuts } from '@/lib/nav';
+import { NAV, NAV_GROUPS, NAV_GROUP_LOOK, NAV_HOME, NAV_MODULES, NAV_SECTIONS, activeModule, activeNavPath, visibleModules, visibleNav, visibleNavSections } from '@/lib/nav';
 
 // Permission-based navigation (spec §13.3 "Kerangka admin"). The menus only hide: the server refuses whatever they
 // hide anyway (§4.8).
@@ -91,28 +91,31 @@ const MEMBERS_SECTIONS: [string, string][] = [
   ['/admin/anggota/kartu', 'members.records.read'],
 ];
 
-/** The OPAC home page as the library's profile site, after the members block. */
-const OPAC_HOME_SECTIONS: [string, string][] = [['/admin/opac/beranda', 'opac.pages.manage']];
+/** Situs / OPAC: the home page, the site's identity, then the pages and news, all behind one permission. */
+const OPAC_SECTIONS: [string, string][] = [
+  ['/admin/opac/beranda', 'opac.pages.manage'],
+  ['/admin/opac/identitas', 'opac.pages.manage'],
+  ['/admin/opac/pages', 'opac.pages.manage'],
+];
 
 const sectionsOf = (m: FullMe) => visibleNavSections(m).map((s) => [s.group, paths(s.items)]);
 
 describe('NAV', () => {
-  it('lists the shell sections with their permissions: Beranda, Katalog, OPAC and Sistem, then the Laporan, Layanan, Anggota and OPAC home page blocks at the end', () => {
+  it('lists the shell sections with their permissions: Beranda, Katalog, Situs / OPAC and Sistem, then the Laporan, Layanan and Anggota blocks', () => {
     expect(NAV.map((item) => [item.to, item.permission ?? null])).toEqual([
       ['/admin', null],
       ...CATALOG_SECTIONS,
-      ['/admin/opac/pages', 'opac.pages.manage'],
+      ...OPAC_SECTIONS,
       ...SYSTEM_SECTIONS,
       ...REPORTS_SECTIONS,
       ...CIRCULATION_SECTIONS,
       ...MEMBERS_SECTIONS,
-      ...OPAC_HOME_SECTIONS,
     ]);
     for (const item of NAV) expect(item.labelKey).toMatch(/^nav\./);
   });
 
-  it('NAV_GROUPS orders catalog, circulation, members, reports, opac, system; Beranda alone is ungrouped, every Phase 1 section is system', () => {
-    expect([...NAV_GROUPS]).toEqual(['catalog', 'circulation', 'members', 'reports', 'opac', 'system']);
+  it('NAV_GROUPS orders circulation, members, catalog, reports, opac, system; Beranda alone is ungrouped, every Phase 1 section is system', () => {
+    expect([...NAV_GROUPS]).toEqual(['circulation', 'members', 'catalog', 'reports', 'opac', 'system']);
     expect(NAV.filter((item) => item.group === 'circulation').map((item) => item.to)).toEqual(CIRCULATION_SECTIONS.map(([to]) => to));
     expect(NAV.filter((item) => item.group === 'members').map((item) => item.to)).toEqual(MEMBERS_SECTIONS.map(([to]) => to));
     expect(NAV.filter((item) => item.group === 'reports').map((item) => [item.to, item.labelKey])).toEqual([
@@ -122,7 +125,11 @@ describe('NAV', () => {
     expect(NAV.filter((item) => item.group === undefined).map((item) => item.to)).toEqual(['/admin']);
     expect(NAV.filter((item) => item.group === 'system').map((item) => item.to)).toEqual(SYSTEM_SECTIONS.map(([to]) => to));
     expect(NAV.filter((item) => item.group === 'catalog').map((item) => item.to)).toEqual(CATALOG_SECTIONS.map(([to]) => to));
-    expect(NAV.filter((item) => item.group === 'opac').map((item) => item.to)).toEqual(['/admin/opac/pages', '/admin/opac/beranda']);
+    expect(NAV.filter((item) => item.group === 'opac').map((item) => [item.to, item.labelKey])).toEqual([
+      ['/admin/opac/beranda', 'nav.opac.home'],
+      ['/admin/opac/identitas', 'nav.opac.identity'],
+      ['/admin/opac/pages', 'nav.opac.pages'],
+    ]);
     // M1: Migrasi SLiMS follows its permission, which a super admin may grant to a custom role.
     expect(NAV.find((item) => item.to === '/admin/catalog/migration')).toMatchObject({ permission: 'catalog.migration.run' });
     expect(NAV.some((item) => item.superAdminOnly === true)).toBe(false);
@@ -134,14 +141,33 @@ describe('NAV', () => {
     expect(Object.keys(ADMIN_MESSAGES.id).filter((key) => key === 'nav.license' || key.startsWith('licensing.'))).toEqual([]);
   });
 
-  it('every label and group heading has its text in both languages', () => {
-    const keys = [...NAV.map((item) => item.labelKey), ...NAV_GROUPS.map((group) => `nav.group.${group}` as const)];
+  it('every label, group heading and section label has its text in both languages', () => {
+    const keys = [...NAV.map((item) => item.labelKey), ...NAV_GROUPS.map((group) => `nav.group.${group}` as const), ...NAV_SECTIONS.map((section) => `nav.section.${section}` as const)];
     for (const key of keys) {
       expect(ADMIN_MESSAGES.id[key], `id ${key}`).toBeTruthy();
       expect(ADMIN_MESSAGES.en[key], `en ${key}`).toBeTruthy();
-      // No English left in the Indonesian text; OPAC is a name in both.
-      if (key !== 'nav.group.opac') expect(ADMIN_MESSAGES.id[key], key).not.toBe(ADMIN_MESSAGES.en[key]);
+      // No English left in the Indonesian text.
+      expect(ADMIN_MESSAGES.id[key], key).not.toBe(ADMIN_MESSAGES.en[key]);
     }
+    expect(ADMIN_MESSAGES.id['nav.group.opac']).toBe('Situs / OPAC');
+    expect(NAV_SECTIONS.map((section) => ADMIN_MESSAGES.id[`nav.section.${section}`])).toEqual(['Kerja harian', 'Koleksi', 'Situs & sistem']);
+  });
+
+  it('the sidebar sections: Beranda, Layanan and Anggota are daily work; Katalog and Laporan the collection; Situs / OPAC and Sistem the site', () => {
+    expect([...NAV_SECTIONS]).toEqual(['daily', 'collection', 'site']);
+    expect(NAV_HOME.section).toBe('daily');
+    expect(NAV_GROUPS.map((group) => [group, NAV_GROUP_LOOK[group].section])).toEqual([
+      ['circulation', 'daily'],
+      ['members', 'daily'],
+      ['catalog', 'collection'],
+      ['reports', 'collection'],
+      ['opac', 'site'],
+      ['system', 'site'],
+    ]);
+    // Each entry has an icon of its own.
+    const icons = [NAV_HOME.icon, ...NAV_GROUPS.map((group) => NAV_GROUP_LOOK[group].icon)];
+    expect(new Set(icons).size).toBe(icons.length);
+    for (const icon of icons) expect(icon).toBeTruthy();
   });
 });
 
@@ -153,7 +179,7 @@ describe('visibleNav', () => {
     expect(items).toEqual([
       '/admin',
       ...CATALOG_SECTIONS.map(([to]) => to).filter((to) => to !== '/admin/catalog/migration'),
-      '/admin/opac/pages',
+      ...OPAC_SECTIONS.map(([to]) => to),
       '/admin/users',
       '/admin/roles',
       '/admin/branches',
@@ -168,7 +194,6 @@ describe('visibleNav', () => {
       '/admin/accreditation',
       ...CIRCULATION_SECTIONS.map(([to]) => to),
       ...MEMBERS_SECTIONS.map(([to]) => to),
-      ...OPAC_HOME_SECTIONS.map(([to]) => to),
     ]);
   });
 
@@ -231,26 +256,26 @@ describe('visibleNav', () => {
     ]);
   });
 
-  it('a super admin sees the six groups catalog, circulation, members, reports, opac, system in that order, with every item', () => {
+  it('a super admin sees the six groups circulation, members, catalog, reports, opac, system in that order, with every item', () => {
     const sections = visibleNavSections(me({ permissions: systemRolePermissions('super_admin'), superAdmin: true }));
-    expect(sections.map((s) => s.group)).toEqual([null, 'catalog', 'circulation', 'members', 'reports', 'opac', 'system']);
+    expect(sections.map((s) => s.group)).toEqual([null, 'circulation', 'members', 'catalog', 'reports', 'opac', 'system']);
+    expect(sections.map((s) => s.section)).toEqual(['daily', 'daily', 'daily', 'collection', 'collection', 'site', 'site']);
     expect(sections.flatMap((s) => paths(s.items))).toEqual([
       '/admin',
-      ...CATALOG_SECTIONS.map(([to]) => to),
       ...CIRCULATION_SECTIONS.map(([to]) => to),
       ...MEMBERS_SECTIONS.map(([to]) => to),
+      ...CATALOG_SECTIONS.map(([to]) => to),
       ...REPORTS_SECTIONS.map(([to]) => to),
-      '/admin/opac/pages',
-      '/admin/opac/beranda',
+      ...OPAC_SECTIONS.map(([to]) => to),
       ...SYSTEM_SECTIONS.map(([to]) => to),
     ]);
     expect([...sections.flatMap((s) => paths(s.items))].sort()).toEqual([...paths(NAV)].sort());
   });
 
-  it('opac.pages.manage alone shows the OPAC group with Halaman & Berita and Halaman awal', () => {
+  it('opac.pages.manage alone shows the Situs / OPAC group with Halaman awal, Identitas situs and Halaman & Berita', () => {
     expect(sectionsOf(me({ permissions: ['opac.pages.manage'] }))).toEqual([
       [null, ['/admin']],
-      ['opac', ['/admin/opac/pages', '/admin/opac/beranda']],
+      ['opac', ['/admin/opac/beranda', '/admin/opac/identitas', '/admin/opac/pages']],
       ['system', ['/admin/about']],
     ]);
   });
@@ -312,7 +337,7 @@ describe('activeNavPath: the one menu item a page marks', () => {
   });
 });
 
-describe('modules: the module bar and the sidebar', () => {
+describe('modules: the entries of the sidebar', () => {
   const modulesOf = (m: FullMe) => visibleModules(m).map((v) => [v.module, paths(v.items)]);
 
   it('NAV_MODULES: Beranda, then the groups in their order', () => {
@@ -321,7 +346,9 @@ describe('modules: the module bar and the sidebar', () => {
 
   it('a module shows when the user sees one of its pages; Beranda holds the ungrouped items', () => {
     const superAdmin = me({ permissions: [], superAdmin: true });
-    expect(visibleModules(superAdmin).map((v) => v.module)).toEqual(['home', 'catalog', 'circulation', 'members', 'reports', 'opac', 'system']);
+    expect(visibleModules(superAdmin).map((v) => v.module)).toEqual(['home', 'circulation', 'members', 'catalog', 'reports', 'opac', 'system']);
+    // Each comes with the icon and the section the sidebar draws it with.
+    expect(visibleModules(superAdmin).map((v) => [v.icon, v.section])).toEqual([[NAV_HOME.icon, 'daily'], ...NAV_GROUPS.map((group) => [NAV_GROUP_LOOK[group].icon, NAV_GROUP_LOOK[group].section])]);
     expect(modulesOf(superAdmin)[0]).toEqual(['home', ['/admin']]);
     // The same split as the sections.
     expect(visibleModules(superAdmin).map((v) => v.items)).toEqual(visibleNavSections(superAdmin).map((s) => s.items));
@@ -367,30 +394,5 @@ describe('modules: the module bar and the sidebar', () => {
     expect(activeModule(reader, '/admin/catalog/records')).toBe('home');
     // Sistem is (Tentang): a page of it the user cannot open still shows that module.
     expect(activeModule(reader, '/admin/users')).toBe('system');
-  });
-
-  it('HOME_SHORTCUTS: the desk, quick return, a new member and the member import, behind the permission of each page', () => {
-    expect(HOME_SHORTCUTS.map((item) => [item.to, item.permission, item.anyBranch ?? false])).toEqual([
-      ['/admin/layanan', 'circulation.desk.use', true],
-      ['/admin/layanan/kembali', 'circulation.desk.use', true],
-      ['/admin/anggota/baru', 'members.records.manage', false],
-      ['/admin/anggota/impor', 'members.import.run', false],
-    ]);
-    for (const item of HOME_SHORTCUTS) {
-      expect(ADMIN_MESSAGES.id[item.labelKey], item.labelKey).toBeTruthy();
-      expect(ADMIN_MESSAGES.en[item.labelKey], item.labelKey).toBeTruthy();
-    }
-  });
-
-  it('visibleShortcuts: filtered as the menus are', () => {
-    expect(paths(visibleShortcuts(me({ permissions: [], superAdmin: true })))).toEqual(paths(HOME_SHORTCUTS));
-    expect(paths(visibleShortcuts(me({ permissions: [...systemRolePermissions('admin')] })))).toEqual(paths(HOME_SHORTCUTS));
-    expect(paths(visibleShortcuts(me({ permissions: [], branchPermissions: { b1: ['circulation.desk.use'] } })))).toEqual([
-      '/admin/layanan',
-      '/admin/layanan/kembali',
-    ]);
-    expect(paths(visibleShortcuts(me({ permissions: ['members.records.read'] })))).toEqual([]);
-    expect(paths(visibleShortcuts(me({ permissions: ['members.records.manage', 'members.import.run'] })))).toEqual(['/admin/anggota/baru', '/admin/anggota/impor']);
-    expect(visibleShortcuts(undefined)).toEqual([]);
   });
 });

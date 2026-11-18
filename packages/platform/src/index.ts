@@ -21,7 +21,7 @@ export type { RotatingFile, RotatingFileOptions } from './rotating-file.js';
 export { CLI_INPUT_MAX_BYTES, readCliInputFile } from './cli-input.js';
 export type { ReadCliInputOptions } from './cli-input.js';
 export { configMtimeMs } from './mtime.js';
-export { ADMIN_ASSET_NAME, parseCurrentState, readPreviousRelease, readReleaseFile, releaseDir } from './release-files.js';
+export { ADMIN_ASSET_NAME, OPAC_FONT_NAME, parseCurrentState, readPreviousRelease, readReleaseFile, releaseDir } from './release-files.js';
 export type { CurrentState, ReleaseFileKind, ReleaseRef, ReleaseSource } from './release-files.js';
 export { ALTISBAK_ENTRY, altisbakCentralPath, backupImportedPath, backupPartPath, extractedEntryPath, opKeepPath } from './datapath.js';
 export type { DataPath } from './datapath.js';

@@ -56,9 +56,9 @@ export interface Dateline {
 }
 
 /**
- * One page or news post: its title, its date (news), its cover, its summary as a lead (news) and its body. `lang` marks
- * content that is not in the page's language (`locale`), and the date line, written in the page's language, is then
- * marked back.
+ * One page or news post: its kind and date (news), its title, its summary as a lead (news), its cover, the event it
+ * announces (news with one) and its body. `lang` marks content that is not in the page's language (`locale`), and the
+ * line with the kind and the date, written in the page's language, is then marked back.
  */
 export function PageArticle(props: {
   locale: Locale;
@@ -66,19 +66,31 @@ export function PageArticle(props: {
   lang: 'id' | null;
   coverFileId: string | null;
   dateline?: Dateline | null;
+  /** The word of the post's kind, before its date. */
+  category?: string | null;
+  /** The box with the event's time and place, between the cover and the body. */
+  event?: JSX.Element | null;
   lead?: boolean;
 }): JSX.Element {
   const { text, lang, coverFileId, dateline } = props;
+  const category = props.category ?? null;
   return (
     <article class="page-article" lang={lang ?? undefined}>
-      <h1>{text.title}</h1>
       {dateline === undefined || dateline === null ? null : (
-        <p class="page-meta" lang={lang === null ? undefined : props.locale}>
+        <p class="page-meta newsmeta" lang={lang === null ? undefined : props.locale}>
+          {category === null ? null : (
+            <>
+              <b>{category}</b>
+              {' · '}
+            </>
+          )}
           <time datetime={new Date(dateline.ms).toISOString()}>{dateline.text}</time>
         </p>
       )}
-      {coverFileId === null ? null : <img class="page-cover" src={`/files/${encodeURIComponent(coverFileId)}`} alt="" decoding="async" />}
+      <h1>{text.title}</h1>
       {props.lead === true && text.summary !== null && text.summary.trim() !== '' ? <p class="page-lead">{text.summary}</p> : null}
+      {coverFileId === null ? null : <img class="page-cover" src={`/files/${encodeURIComponent(coverFileId)}`} alt="" decoding="async" />}
+      {props.event ?? null}
       <div class="page-body">{safeHtml(text.bodyFormat === 'html' ? sanitizedHtml(text.body) : renderMarkdown(text.body))}</div>
     </article>
   );
@@ -91,10 +103,10 @@ export function pageView(o: { locale: Locale; page: OpacPublishedPage }): { titl
     title: text.title,
     description: metaDescription(text.summary ?? text.title),
     body: (
-      <>
+      <div class="article">
         <FallbackNote locale={o.locale} lang={lang} />
         <PageArticle locale={o.locale} text={text} lang={lang} coverFileId={o.page.coverFileId} />
-      </>
+      </div>
     ),
   };
 }

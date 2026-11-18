@@ -62,7 +62,7 @@ export function RecoveryCodes({ codes }: { codes: readonly string[] }) {
   const text = [t('codes.file_header', { library: me?.library.name ?? 'ALTIS', username }), '', ...codes, ''].join('\r\n');
   return (
     <section aria-labelledby={headingId} className="grid gap-3">
-      <h2 id={headingId} className="text-base font-bold">
+      <h2 id={headingId} className="text-heading font-semibold">
         {t('codes.heading')}
       </h2>
       <p className="text-sm text-muted-foreground">{t('codes.description')}</p>

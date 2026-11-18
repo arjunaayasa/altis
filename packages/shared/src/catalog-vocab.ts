@@ -372,6 +372,17 @@ export const PAGE_KINDS = Object.freeze(['page', 'news'] as const);
 
 export type PageKind = (typeof PAGE_KINDS)[number];
 
+/**
+ * What kind of news a news post is, stored as these codes (a post may have none): an event of the agenda, news of the
+ * collection, an announcement, a report of an activity.
+ */
+export const NEWS_CATEGORIES = Object.freeze(['agenda', 'collection', 'announcement', 'activity'] as const);
+
+export type NewsCategory = (typeof NEWS_CATEGORIES)[number];
+
+/** The longest place of a news post's event. */
+export const EVENT_PLACE_MAX = 160;
+
 /** A page is a draft or published; a published page with a future `published_at` is scheduled. */
 export const PAGE_STATUSES = Object.freeze(['draft', 'published'] as const);
 

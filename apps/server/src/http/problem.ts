@@ -118,6 +118,9 @@ export const PROBLEM_REASONS: Readonly<Partial<Record<ErrorCode, readonly string
   BACKUP_INVALID: Object.freeze(['format', 'checksum', 'signature', 'path', 'bomb', 'schema', 'entry']),
   UPLOAD_CHUNK_INVALID: Object.freeze(['order', 'size']),
   UPLOAD_MISMATCH: Object.freeze(['size', 'sha256']),
+  // Why an image was refused after the server decoded it (the logo and icon of the site's identity): the admin says
+  // it in words and knows the limits themselves.
+  UPLOAD_TYPE_REFUSED: Object.freeze(['damaged', 'interlaced', 'dimensions', 'too_small']),
   JOB_NOT_RETRYABLE: Object.freeze(['origin_only', 'state']),
   // 1c (Task 9): another request holds the upload's lock, or took it over; the client sends the same request again.
   TX_CONFLICT: Object.freeze(['upload_busy']),

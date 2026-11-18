@@ -1,4 +1,15 @@
-import { BODY_FORMATS, PAGE_LOCALES, PAGE_STATUSES, type BodyFormat, type PageKind, type PageLocale, type PageStatus } from '@altis/shared';
+import {
+  BODY_FORMATS,
+  EVENT_PLACE_MAX,
+  NEWS_CATEGORIES,
+  PAGE_LOCALES,
+  PAGE_STATUSES,
+  type BodyFormat,
+  type NewsCategory,
+  type PageKind,
+  type PageLocale,
+  type PageStatus,
+} from '@altis/shared';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import {
   PageBody,
@@ -37,6 +48,9 @@ import { PAGES_KEY, fromLocalInput, kindOf, opacPath, pageHref, pagesListHref, p
  *   publication time (empty: when it is saved as published; a future time schedules it), shown in the OPAC menu, the
  *   order. Content per language on two tabs: Indonesian (required) and English (optional, behind a check box: without
  *   it the OPAC shows the Indonesian text); each has a title, a summary, a body format and the body.
+ * - Agenda (news only): the category (or none) and the event the post announces, its start and end (`datetime-local`,
+ *   the browser's time zone, as the publication time) and its place. An end or a place needs a start and the end is
+ *   not before it: said at the field before anything is sent.
  * - The body's preview is the server's own rendering (`POST opac/pages/preview`, sanitized exactly as the OPAC does),
  *   shown only in `<iframe sandbox="" srcDoc>`: no scripts, an opaque origin, never the admin's own DOM (S6).
  * - An image is uploaded as `opac.page_image` (lib/upload.ts) and inserted where the cursor was:
@@ -63,6 +77,12 @@ interface PageFormValues {
   showInNav: boolean;
   /** A number field's text. */
   sortOrder: string;
+  /** News only: the category, '' for none. */
+  category: NewsCategory | '';
+  /** News only: `datetime-local` values of the event, '' for none. */
+  eventStartsAt: string;
+  eventEndsAt: string;
+  eventPlace: string;
   /** Whether the English translation is kept (or added). */
   hasEnglish: boolean;
   translations: Record<PageLocale, TranslationValues>;
@@ -88,6 +108,10 @@ function formValues(page: PageView | null): PageFormValues {
       publishedAt: '',
       showInNav: false,
       sortOrder: '0',
+      category: '',
+      eventStartsAt: '',
+      eventEndsAt: '',
+      eventPlace: '',
       hasEnglish: false,
       translations: { id: { ...BLANK_TRANSLATION }, en: { ...BLANK_TRANSLATION } },
     };
@@ -98,6 +122,10 @@ function formValues(page: PageView | null): PageFormValues {
     publishedAt: toLocalInput(page.publishedAt),
     showInNav: page.showInNav,
     sortOrder: String(page.sortOrder),
+    category: page.category ?? '',
+    eventStartsAt: toLocalInput(page.eventStartsAt),
+    eventEndsAt: toLocalInput(page.eventEndsAt),
+    eventPlace: page.eventPlace ?? '',
     hasEnglish: page.translations.en !== null,
     translations: { id: translationValues(page.translations.id), en: translationValues(page.translations.en) },
   };
@@ -114,25 +142,47 @@ const sameTranslation = (a: TranslationValues, b: TranslationValues): boolean =>
 /** The order as a number (an empty field is 0; anything else the contract checks). */
 const sortOrderOf = (text: string): number => (text.trim() === '' ? 0 : Number(text));
 
-function createBody(kind: PageKind, v: PageFormValues, publishedAt: number | null): unknown {
+/** The times of the form, read from their `datetime-local` fields. */
+interface FormTimes {
+  publishedAt: number | null;
+  eventStartsAt: number | null;
+  eventEndsAt: number | null;
+}
+
+/** The place as it is sent: trimmed, null for a blank one. */
+const placeOf = (text: string): string | null => (text.trim() === '' ? null : text.trim());
+
+function createBody(kind: PageKind, v: PageFormValues, times: FormTimes): unknown {
+  const place = placeOf(v.eventPlace);
   return {
     kind,
     slug: v.slug,
     status: v.status,
-    ...(publishedAt === null ? {} : { publishedAt }),
+    ...(times.publishedAt === null ? {} : { publishedAt: times.publishedAt }),
     showInNav: v.showInNav,
     sortOrder: sortOrderOf(v.sortOrder),
+    // The agenda is a news post's: a page sends none of it.
+    ...(kind !== 'news' || v.category === '' ? {} : { category: v.category }),
+    ...(kind !== 'news' || times.eventStartsAt === null ? {} : { eventStartsAt: times.eventStartsAt }),
+    ...(kind !== 'news' || times.eventEndsAt === null ? {} : { eventEndsAt: times.eventEndsAt }),
+    ...(kind !== 'news' || place === null ? {} : { eventPlace: place }),
     translations: { id: translationInput(v.translations.id), ...(v.hasEnglish ? { en: translationInput(v.translations.en) } : {}) },
   };
 }
 
 /** The patch from `base` to `v`: the version and only what changed (a changed translation is sent whole). */
-function patchBody(base: Baseline, v: PageFormValues, publishedAt: number | null): Record<string, unknown> {
+function patchBody(kind: PageKind, base: Baseline, v: PageFormValues, times: FormTimes): Record<string, unknown> {
   const before = base.values;
   const body: Record<string, unknown> = { version: base.version };
   if (v.slug !== before.slug) body['slug'] = v.slug;
   if (v.status !== before.status) body['status'] = v.status;
-  if (v.publishedAt !== before.publishedAt) body['publishedAt'] = publishedAt;
+  if (v.publishedAt !== before.publishedAt) body['publishedAt'] = times.publishedAt;
+  if (kind === 'news') {
+    if (v.category !== before.category) body['category'] = v.category === '' ? null : v.category;
+    if (v.eventStartsAt !== before.eventStartsAt) body['eventStartsAt'] = times.eventStartsAt;
+    if (v.eventEndsAt !== before.eventEndsAt) body['eventEndsAt'] = times.eventEndsAt;
+    if (placeOf(v.eventPlace) !== placeOf(before.eventPlace)) body['eventPlace'] = placeOf(v.eventPlace);
+  }
   if (v.showInNav !== before.showInNav) body['showInNav'] = v.showInNav;
   if (sortOrderOf(v.sortOrder) !== sortOrderOf(before.sortOrder)) body['sortOrder'] = sortOrderOf(v.sortOrder);
   const translations: Record<string, unknown> = {};
@@ -159,6 +209,10 @@ const FIELDS: ReadonlySet<string> = new Set([
   'publishedAt',
   'showInNav',
   'sortOrder',
+  'category',
+  'eventStartsAt',
+  'eventEndsAt',
+  'eventPlace',
   ...PAGE_LOCALES.flatMap((l) => ['title', 'summary', 'bodyFormat', 'body'].map((f) => `translations.${l}.${f}`)),
 ]);
 
@@ -427,11 +481,35 @@ function PageEditor({ page, kind, onReload }: { page: PageView | null; kind: Pag
     setProblem(null);
     setSaved(false);
     const publishedAt = fromLocalInput(values.publishedAt);
-    if (publishedAt === 'invalid') {
-      placeErrors([{ path: 'publishedAt', code: 'invalid_format', message: 'form.error.invalid_format' }]);
+    const eventStartsAt = kind === 'news' ? fromLocalInput(values.eventStartsAt) : null;
+    const eventEndsAt = kind === 'news' ? fromLocalInput(values.eventEndsAt) : null;
+    const found: { path: string; code: string; message: string }[] = [];
+    for (const [path, value] of [
+      ['publishedAt', publishedAt],
+      ['eventStartsAt', eventStartsAt],
+      ['eventEndsAt', eventEndsAt],
+    ] as const) {
+      if (value === 'invalid') found.push({ path, code: 'invalid_format', message: 'form.error.invalid_format' });
+    }
+    if (publishedAt === 'invalid' || eventStartsAt === 'invalid' || eventEndsAt === 'invalid') {
+      placeErrors(found);
       return;
     }
-    const raw = page === null ? createBody(kind, values, publishedAt) : patchBody(baseline, values, publishedAt);
+    // The rules of an event (the contract's, with a sentence of their own): an end or a place needs a start, and the
+    // end is not before it.
+    if (kind === 'news') {
+      if (eventStartsAt === null && (eventEndsAt !== null || placeOf(values.eventPlace) !== null)) {
+        found.push({ path: 'eventStartsAt', code: 'required', message: 'pages.event.start_required' });
+      } else if (eventStartsAt !== null && eventEndsAt !== null && eventEndsAt < eventStartsAt) {
+        found.push({ path: 'eventEndsAt', code: 'invalid', message: 'pages.event.end_before_start' });
+      }
+      if (found.length > 0) {
+        placeErrors(found);
+        return;
+      }
+    }
+    const times: FormTimes = { publishedAt, eventStartsAt, eventEndsAt };
+    const raw = page === null ? createBody(kind, values, times) : patchBody(kind, baseline, values, times);
     // Nothing changed since the last save: nothing to send.
     if (page !== null && Object.keys(raw as object).length === 1) return;
     const parsed = page === null ? PageBody.safeParse(raw, FORM_PARSE) : PagePatchBody.safeParse(raw, FORM_PARSE);
@@ -518,6 +596,32 @@ function PageEditor({ page, kind, onReload }: { page: PageView | null; kind: Pag
             </Field>
             <CheckField className={FORM_FULL} label={t('pages.field.show_in_nav')} hint={t('pages.field.show_in_nav_hint')} {...form.register('showInNav')} />
           </FormSection>
+
+          {kind === 'news' && (
+            <FormSection title={t('pages.agenda')} intro={t('pages.agenda.intro')} className="xl:[&>fieldset]:grid-cols-2">
+              <Field label={t('pages.field.category')} hint={t('pages.field.category_hint')} error={errors.category}>
+                {(c) => (
+                  <select {...c} className={SELECT_CLASS} {...form.register('category')}>
+                    <option value="">{t('pages.category.none')}</option>
+                    {NEWS_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {t(`pages.category.${category}`)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+              <Field label={t('pages.field.event_place')} hint={t('pages.field.event_place_hint')} error={errors.eventPlace}>
+                {(c) => <Input {...c} maxLength={EVENT_PLACE_MAX} autoComplete="off" {...form.register('eventPlace')} />}
+              </Field>
+              <Field label={t('pages.field.event_starts_at')} hint={t('pages.field.event_starts_at_hint')} error={errors.eventStartsAt}>
+                {(c) => <Input {...c} type="datetime-local" {...form.register('eventStartsAt')} />}
+              </Field>
+              <Field label={t('pages.field.event_ends_at')} hint={t('pages.field.event_ends_at_hint')} error={errors.eventEndsAt}>
+                {(c) => <Input {...c} type="datetime-local" {...form.register('eventEndsAt')} />}
+              </Field>
+            </FormSection>
+          )}
 
           <FormSection title={t('pages.translations')}>
             <Tabs value={tab} onValueChange={(value) => setTab(value as PageLocale)} className={cn('min-w-0', FORM_FULL)}>

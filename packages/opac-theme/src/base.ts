@@ -1,25 +1,26 @@
-// The base module of @altis/opac-theme (Phase 2 Task 3, S16: the 1b stylesheet moved here): the tokens, the accents
-// and the page frame every OPAC page shares (the dark header bar in the library's colour, the search band, the dark
-// footer). Every other module writes its CSS with these tokens, and index.ts joins them in a fixed order.
+// The base module of @altis/opac-theme: the tokens, the accents and the page frame every OPAC page shares. Every other
+// module writes its CSS with these tokens, and index.ts joins them in a fixed order.
 //
-// - The visual system: calm, dense and easy to scan. Neutrals carry almost everything; the accent is only for links,
-//   actions, the selection and focus; the statuses (`--ok`, `--warn`, `--danger`) always come with words. No gradient,
-//   no blur, no shadow except on the floating search card. Radius 6 px on controls, 8 px on containers; 1 px lines.
-// - Layout plus tokens: every colour, the page width and the gutter are custom properties on `:root`; a library's
-//   accent is the one token that changes, through the `[data-accent=<name>]` blocks (the `data-accent` attribute is on
-//   `<html>`). The light and dark schemes follow the visitor's system (`prefers-color-scheme`); the dark one is its own
-//   set of values (darker canvas, a darker second layer, lighter lines and accent), not an inversion.
+// - The visual system: a tidy, restrained library site. One accent (the library colour) on neutral greys; flat colours
+//   only (no gradient anywhere), thin 1 px lines rather than shadows (a shadow only under the phone menu), radius 4 px
+//   on controls and 6 px on cards and photos, a 4/8 px grid, letter spacing 0 (large headings -0.01em), body 16 px on
+//   a line height of 1.5, headings 1.2-1.25. The statuses (`--ok`, `--warn`, `--danger`) always come with words.
+// - Layout plus tokens: every colour, the page width and the gutter are custom properties on `:root`. The accent is
+//   the token that changes: one of six named accents through the `[data-accent=<name>]` blocks (the attribute is on
+//   `<html>`), or the library's own colour, whose tokens the page writes in a style element (brand.ts). The light and
+//   dark schemes follow the visitor's system (`prefers-color-scheme`); the dark one is its own set of values.
 // - Contrast: each accent is at least 4.5:1 against the page and the second layer as link colour, and the text on an
 //   accent background (`--accent-ink`) at least 4.5:1 against the accent, in both schemes. The muted texts and the
-//   status colours are at least 4.5:1 on the page and the second layer of their scheme; the focus ring (the accent, or
-//   white on the dark bars) at least 3:1 against what it surrounds. The header bar's text is white on the library's
-//   colour (at least 4.5:1, the setting refuses less) or on the deep default of each accent; the footer's texts are at
-//   least 4.5:1 on the footer.
-// - Nothing is fetched: no @import, no web font, no url(). The CSP allows the app's own origin and `data:` images only.
-// - Mobile first: one column, a 1 rem gutter, long words wrap (`overflow-wrap`), targets are at least 2.75 rem high.
+//   status colours are at least 4.5:1 on the page and the second layer of their scheme; the focus ring at least 3:1
+//   against what it surrounds. The panel of a slide (`--panel`) carries white text at 4.5:1 or more; the footer's
+//   texts are at least 4.5:1 on the footer.
+// - Nothing is fetched: no @import and no url(). The typeface's `@font-face` rules are not part of these modules
+//   (fonts.ts); the CSP allows the app's own origin and `data:` images only.
+// - Long words wrap (`overflow-wrap`); a link or button is at least 2.5 rem high where it stands alone.
 // - Motion: hover and state changes ease out in 150 ms; none at all when the visitor asks for reduced motion.
 
-import { oklchHex } from './color.js';
+import { hexRgb, oklchHex, rgbToOklch } from './color.js';
+import { OPAC_FONT_STACK } from './fonts.js';
 
 /** The accent names, the six values of the `opac.accent` setting (Task 8). */
 export const ACCENTS = Object.freeze(['teal', 'blue', 'green', 'purple', 'red', 'slate'] as const);
@@ -52,10 +53,10 @@ export const ACCENT_COLORS: Readonly<Record<AccentName, { light: string; dark: s
 });
 
 /**
- * The header bar's colour of each accent when the library set no colour of its own: a deep, muted shade of the
- * accent's hue (white text on it is above 12:1), a step darker in the dark scheme.
+ * The panel behind a slide's text for each accent when the library set no colour of its own: the accent of the light
+ * scheme (white text on it is above 4.5:1), and a deep, muted shade of its hue in the dark scheme.
  */
-export const BAR_COLORS: Readonly<Record<AccentName, { light: string; dark: string }>> = Object.freeze(
+export const PANEL_COLORS: Readonly<Record<AccentName, { light: string; dark: string }>> = Object.freeze(
   Object.fromEntries(
     (
       [
@@ -66,7 +67,7 @@ export const BAR_COLORS: Readonly<Record<AccentName, { light: string; dark: stri
         ['red', 25, 0.07],
         ['slate', 255, 0.02],
       ] as const
-    ).map(([name, hue, chroma]) => [name, { light: oklchHex(0.3, chroma, hue), dark: oklchHex(0.25, chroma * 0.7, hue) }]),
+    ).map(([name, hue, chroma]) => [name, { light: ACCENT_COLORS[name].light, dark: oklchHex(0.32, chroma, hue) }]),
   ) as Record<AccentName, { light: string; dark: string }>,
 );
 
@@ -74,40 +75,58 @@ export const BAR_COLORS: Readonly<Record<AccentName, { light: string; dark: stri
 export const SCHEME_COLORS = Object.freeze({
   light: Object.freeze({
     bg: '#ffffff',
-    layer: oklchHex(0.976, 0.004, 255),
-    layer2: oklchHex(0.952, 0.006, 255),
-    text: oklchHex(0.23, 0.015, 255),
-    muted: oklchHex(0.44, 0.014, 255),
-    faint: oklchHex(0.54, 0.012, 255),
-    border: oklchHex(0.91, 0.006, 255),
-    borderStrong: oklchHex(0.82, 0.01, 255),
-    ok: oklchHex(0.46, 0.11, 150),
-    warn: oklchHex(0.47, 0.1, 65),
-    danger: oklchHex(0.5, 0.17, 25),
-    footBg: oklchHex(0.24, 0.02, 255),
-    footText: oklchHex(0.94, 0.006, 255),
-    footMuted: oklchHex(0.76, 0.014, 255),
+    layer: '#f5f6f6',
+    layer2: '#eceeee',
+    text: '#1b1f1e',
+    muted: '#59625f',
+    faint: '#66706c',
+    border: '#dde1e0',
+    borderStrong: '#bcc3c1',
+    ok: '#1b6e45',
+    warn: '#7d5200',
+    danger: '#a8271f',
+    okBg: '#e9f3ed',
+    warnBg: '#faf0d9',
+    footBg: '#1e2221',
+    footText: '#e8ebea',
+    footMuted: '#a9b1ae',
+    footLine: '#363c3a',
   }),
   dark: Object.freeze({
-    bg: oklchHex(0.205, 0.008, 255),
-    layer: oklchHex(0.18, 0.008, 255),
-    layer2: oklchHex(0.255, 0.01, 255),
-    text: oklchHex(0.94, 0.005, 255),
-    muted: oklchHex(0.78, 0.01, 255),
-    faint: oklchHex(0.68, 0.01, 255),
-    border: oklchHex(0.3, 0.01, 255),
-    borderStrong: oklchHex(0.41, 0.012, 255),
-    ok: oklchHex(0.8, 0.11, 150),
-    warn: oklchHex(0.84, 0.1, 82),
-    danger: oklchHex(0.78, 0.12, 25),
-    footBg: oklchHex(0.15, 0.008, 255),
-    footText: oklchHex(0.94, 0.006, 255),
-    footMuted: oklchHex(0.76, 0.014, 255),
+    bg: '#131615',
+    layer: '#1a1e1d',
+    layer2: '#222726',
+    text: '#e8ebea',
+    muted: '#a6aeab',
+    faint: '#949c99',
+    border: '#2d3331',
+    borderStrong: '#454d4a',
+    ok: '#74c79a',
+    warn: '#e2b75e',
+    danger: '#f0938b',
+    okBg: '#16291f',
+    warnBg: '#2c2513',
+    footBg: '#0d0f0f',
+    footText: '#e8ebea',
+    footMuted: '#a9b1ae',
+    footLine: '#2a2f2d',
   }),
 });
 
-const accentBlocks = (scheme: 'light' | 'dark'): string =>
-  ACCENTS.map((name) => `[data-accent=${name}]{--accent:${ACCENT_COLORS[name][scheme]};--hero-bg:${BAR_COLORS[name][scheme]}}`).join('');
+/** A shade of `hex`: its OKLCH lightness moved by `by`, hue and chroma kept. */
+function shade(hex: string, by: number): string {
+  const [l, c, h] = rgbToOklch(hexRgb(hex));
+  return oklchHex(Math.min(1, Math.max(0, l + by)), c, h);
+}
+
+/** The accent tokens of one named accent in one scheme: the accent, its hover shade, and the panel of a slide's text. */
+function accentTokens(name: AccentName, scheme: 'light' | 'dark'): string {
+  const accent = ACCENT_COLORS[name][scheme];
+  const hover = shade(accent, scheme === 'light' ? -0.07 : 0.06);
+  return `--accent:${accent};--accent-hover:${hover};--panel:${scheme === 'light' ? PANEL_COLORS[name].light : PANEL_COLORS[name].dark}`;
+}
+
+const accentBlocks = (scheme: 'light' | 'dark'): string => ACCENTS.map((name) => `[data-accent=${name}]{${accentTokens(name, scheme)}}`).join('');
 
 /** The colour tokens of one scheme. */
 function schemeTokens(scheme: 'light' | 'dark'): string {
@@ -115,69 +134,73 @@ function schemeTokens(scheme: 'light' | 'dark'): string {
   return (
     `--bg:${c.bg};--surface:${c.bg};--layer:${c.layer};--layer-2:${c.layer2};--text:${c.text};--muted:${c.muted};--faint:${c.faint};` +
     `--border:${c.border};--border-strong:${c.borderStrong};--ok:${c.ok};--warn:${c.warn};--danger:${c.danger};` +
-    `--foot-bg:${c.footBg};--foot-text:${c.footText};--foot-muted:${c.footMuted};` +
-    `--accent:${ACCENT_COLORS[DEFAULT_ACCENT][scheme]};--hero-bg:${BAR_COLORS[DEFAULT_ACCENT][scheme]};` +
+    `--ok-bg:${c.okBg};--warn-bg:${c.warnBg};` +
+    `--foot-bg:${c.footBg};--foot-text:${c.footText};--foot-muted:${c.footMuted};--foot-line:${c.footLine};` +
+    `${accentTokens(DEFAULT_ACCENT, scheme)};--on-panel:#ffffff;` +
     `--accent-ink:${scheme === 'light' ? '#ffffff' : c.bg};--map-shelf:${scheme === 'light' ? '#94a3b8' : '#475569'}`
   );
 }
 
 /**
- * The base stylesheet (the 1b OPAC_CSS). The `:root` tokens come first and the `[data-accent]` blocks after them: both
- * match `<html>` with the same specificity, so the later one wins.
+ * The base stylesheet. The `:root` tokens come first and the `[data-accent]` blocks after them: both match `<html>`
+ * with the same specificity, so the later one wins (and the library colour's style element, after the stylesheet,
+ * wins over both).
  */
 export const BASE_CSS: string = [
   // Tokens.
   `:root{color-scheme:light dark;${schemeTokens('light')};` +
-    '--font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;' +
-    '--gutter:1rem;--measure:42rem;--wide:73.75rem;--radius:.5rem;--radius-sm:.375rem;' +
-    // Phase 2 Task 21: the catalogue's shared tokens.
-    '--focus:var(--accent);--accent-soft:color-mix(in srgb,var(--accent) 12%,var(--bg));--card-bg:var(--surface);' +
+    `--font:${OPAC_FONT_STACK};--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;` +
+    '--gutter:1.5rem;--measure:42.5rem;--wide:75rem;--radius:6px;--radius-sm:4px;' +
+    '--focus:var(--accent);--accent-soft:color-mix(in srgb,var(--accent) 9%,var(--bg));--card-bg:var(--surface);' +
     '--card-border:var(--border);--card-shadow:none;--facet-bg:var(--surface);' +
-    '--map-bg:var(--surface);--map-highlight:var(--accent);--shadow-pop:0 10px 30px rgb(15 23 42/.12),0 1px 3px rgb(15 23 42/.08)}',
+    '--map-bg:var(--surface);--map-highlight:var(--accent);--shadow-pop:0 8px 24px rgb(0 0 0/.14)}',
   accentBlocks('light'),
-  `@media (prefers-color-scheme:dark){:root{${schemeTokens('dark')};--shadow-pop:0 10px 30px rgb(0 0 0/.45),0 1px 3px rgb(0 0 0/.3)}` +
-    accentBlocks('dark') +
-    '}',
+  `@media (prefers-color-scheme:dark){:root{${schemeTokens('dark')};--shadow-pop:0 8px 24px rgb(0 0 0/.5)}` + accentBlocks('dark') + '}',
 
   // Layout.
   '*,*::before,*::after{box-sizing:border-box}',
   'html{-webkit-text-size-adjust:100%;text-size-adjust:100%}',
-  'body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--text);font:1rem/1.55 var(--font);' +
-    '-webkit-font-smoothing:antialiased}',
-  'a{color:var(--accent);text-underline-offset:.2em}',
+  'body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--text);font:400 1rem/1.5 var(--font);' +
+    'letter-spacing:0;-webkit-font-smoothing:antialiased}',
+  'img{max-width:100%}',
+  'a{color:var(--accent);text-decoration:none;text-underline-offset:.2em}',
+  'a:hover{text-decoration:underline}',
   'a:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:2px}',
+  '[hidden]{display:none!important}',
 
-  // The header: a bar in the library's colour (the deep shade of its accent by default), white text.
-  '.site-header{background:var(--hero-bg);color:#fff;--focus:#fff}',
-  '.bar{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem 1.25rem;max-width:var(--wide);margin:0 auto;padding:.625rem var(--gutter)}',
-  '.brand{display:inline-flex;align-items:center;min-height:2.75rem;min-width:0;margin-right:auto;font-size:1.0625rem;font-weight:700;' +
-    'line-height:1.3;color:#fff;text-decoration:none;overflow-wrap:anywhere}',
-  '.brand:hover{text-decoration:underline}',
-
-  // The language switch: the other language's name (the page's own is marked current and not drawn).
-  '.lang{display:flex;gap:.25rem}',
-  '.lang a{display:inline-flex;align-items:center;min-height:2.75rem;padding:0 .625rem;border-radius:var(--radius-sm);color:#fff;' +
-    'font-weight:600;font-size:.9375rem;text-decoration:none}',
-  '.lang a:hover{text-decoration:underline}',
-  '.lang a[aria-current]{display:none}',
-
-  'main{flex:1;width:100%;max-width:var(--wide);margin:0 auto;padding:2rem var(--gutter) 3.5rem}',
-  'h1{margin:0 0 1rem;font-size:clamp(1.5rem,1.25rem + 1.2vw,1.875rem);line-height:1.2;letter-spacing:-.01em;overflow-wrap:anywhere;text-wrap:balance}',
-  'h2{margin:2rem 0 .5rem;font-size:1.25rem;line-height:1.3;text-wrap:balance}',
+  // The page: `<main>` spans the window, so that a band (the hero, a page head, a section in the second layer) can
+  // too; `.wrap` is the content's width with its gutters, `.page` the room above and below a plain page.
+  'main{flex:1;width:100%;min-width:0}',
+  '.wrap{width:100%;max-width:calc(var(--wide) + 2*var(--gutter));margin:0 auto;padding-left:var(--gutter);padding-right:var(--gutter)}',
+  '.page{padding-top:2rem;padding-bottom:4rem}',
+  'h1,h2,h3,h4{font-weight:700;line-height:1.25;text-wrap:balance}',
+  'h1{margin:0 0 1rem;font-size:1.875rem;line-height:1.2;letter-spacing:-.01em;overflow-wrap:anywhere}',
+  'h2{margin:2rem 0 .5rem;font-size:1.25rem}',
+  'h3{margin:1.5rem 0 .5rem;font-size:1.0625rem}',
   'p{margin:0 0 1rem;overflow-wrap:anywhere}',
+  '.mono{font-family:var(--mono);font-size:.92em}',
+  '.muted{color:var(--muted)}',
   '.welcome{white-space:pre-line;font-size:1.125rem}',
   '.notice{padding:.75rem 1rem;background:var(--layer);border:1px solid var(--border);border-radius:var(--radius)}',
   '.notice h2{margin:0 0 .5rem}',
   '.notice p:last-child{margin-bottom:0}',
 
-  // The footer: dark in both schemes, the library's contact, links, hours and a search field above a bottom line.
-  '.site-footer{margin-top:auto;background:var(--foot-bg);color:var(--foot-muted);font-size:.875rem;--focus:#fff}',
-  '.site-footer a{display:inline-flex;align-items:center;min-height:2.75rem;color:var(--foot-text);text-decoration:none}',
-  '.site-footer a:hover{text-decoration:underline}',
-  '.site-footer .bar{justify-content:flex-start}',
+  // Buttons: 40 px high, flat; the primary one in the accent, the outline one a thin line.
+  '.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;min-height:2.5rem;padding:0 1rem;border:1px solid transparent;' +
+    'border-radius:var(--radius-sm);font:600 .9375rem/1.2 var(--font);cursor:pointer;text-decoration:none;text-align:center}',
+  '.btn:hover{text-decoration:none}',
+  '.btn-primary{background:var(--accent);color:var(--accent-ink)}',
+  '.btn-primary:hover{background:var(--accent-hover)}',
+  '.btn-outline{background:var(--bg);border-color:var(--border-strong);color:var(--text)}',
+  '.btn-outline:hover{border-color:var(--text)}',
+  '.btn-inv{background:#fff;color:var(--panel)}',
+  '.btn-inv-outline{border-color:rgb(255 255 255/.6);color:#fff}',
+  '.btn-inv-outline:hover{border-color:#fff}',
+  '.btn-sm{min-height:2.125rem;padding:0 .75rem;font-size:.875rem}',
+  '.more-link{font-weight:600;font-size:.9375rem;white-space:nowrap}',
 
   // Motion: state changes only, and none when the visitor asks for less.
   'a,button,input,select{transition:background-color .15s ease-out,border-color .15s ease-out,color .15s ease-out}',
   '@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}',
-  '@media (min-width:40rem){:root{--gutter:1.25rem}}',
+  '@media (max-width:53.74rem){body{font-size:.96875rem}}',
 ].join('\n');

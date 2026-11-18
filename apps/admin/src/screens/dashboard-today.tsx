@@ -1,4 +1,5 @@
 import type { DeskDashboard, LibraryDashboard } from '@altis/shared/api/dashboard-home';
+import type { VisitSummary } from '@altis/shared/api/visits';
 import { Link } from '@tanstack/react-router';
 import { useCallback } from 'react';
 import { useLocale, useT } from '@/i18n';
@@ -14,8 +15,12 @@ import { useDeskBranch } from '@/screens/circulation/common';
  * - At the desk's branch (the branch the desk keeps in this browser), for a holder of `circulation.desk.use` there:
  *   lent today, returned today (each with the same weekday a week before), and overdue loans (with the members who hold
  *   them), from `GET branches/:branchId/dashboard`.
- * - For a holder of `members.records.read`: the members whose membership is valid today, with those who joined this
- *   month, from `GET dashboard/library`.
+ * - For a holder of `visits.records.read`: today's visits in the whole library, counted by the guestbook, from
+ *   `GET visits/summary`.
+ * - For a holder of `members.records.read`, while the strip has fewer than four figures: the members whose membership
+ *   is valid today, with those who joined this month, from `GET dashboard/library`.
+ *
+ * The label stands above its figure and a factual note under it; no trend, no percentage.
  *
  * A user who holds neither sees no strip. Both reads are shared with the blocks below (the same query keys), read in
  * the background every minute while the page is open, like the system dashboard.
@@ -43,6 +48,17 @@ export function useLibraryToday() {
   return useApiQuery<LibraryDashboard>({
     queryKey: ['dashboard', 'home', 'library'],
     path: 'dashboard/library',
+    request: { background: true },
+    refetchInterval: HOME_REFRESH_MS,
+  });
+}
+
+/** Today's visits in the whole library, from the guestbook (shared with the visits card: the same query key). */
+export function useVisitsToday(enabled: boolean) {
+  return useApiQuery<VisitSummary>({
+    queryKey: ['dashboard', 'library', 'visits-today'],
+    path: 'visits/summary',
+    enabled,
     request: { background: true },
     refetchInterval: HOME_REFRESH_MS,
   });
@@ -92,8 +108,8 @@ function FigureCell({ figure }: { figure: Figure }) {
   const count = useCount();
   const body = (
     <>
-      <dt className="order-2 text-meta text-muted-foreground">{figure.label}</dt>
-      <dd className="order-1 text-2xl leading-tight font-bold tabular-nums">
+      <dt className="text-meta text-muted-foreground">{figure.label}</dt>
+      <dd className="text-2xl leading-tight font-bold tabular-nums">
         {figure.value === undefined ? (
           <span className="inline-block h-6 w-12 animate-pulse rounded bg-layer-2 align-middle motion-reduce:animate-none" aria-hidden="true" />
         ) : figure.value === null ? (
@@ -102,10 +118,10 @@ function FigureCell({ figure }: { figure: Figure }) {
           count(figure.value)
         )}
       </dd>
-      {figure.note !== null && <dd className="order-3 text-xs text-faint">{figure.note}</dd>}
+      {figure.note !== null && <dd className="text-meta text-muted-foreground">{figure.note}</dd>}
     </>
   );
-  const cell = 'flex h-full flex-col gap-0.5 px-4 py-3.5';
+  const cell = 'flex h-full flex-col gap-0.5 px-4 py-3.5 text-foreground no-underline';
   return figure.to === null ? (
     <div className={cell} data-figure={figure.key}>
       {body}
@@ -129,6 +145,8 @@ export function TodayStrip() {
   const { desk, query } = useDeskToday();
   const readsMembers = holds(me, 'members.records.read');
   const library = useLibraryToday();
+  const readsVisits = holds(me, 'visits.records.read');
+  const visits = useVisitsToday(readsVisits);
 
   const figures: Figure[] = [];
   if (desk.branchId !== null) {
@@ -158,7 +176,18 @@ export function TodayStrip() {
       },
     );
   }
-  if (readsMembers) {
+  if (readsVisits) {
+    const v = visits.data;
+    figures.push({
+      key: 'visits',
+      label: t('dashboard.today.visits'),
+      value: v === undefined ? (visits.isError ? null : undefined) : v.total,
+      note: t('dashboard.home.visits_source'),
+      to: '/admin/layanan/kunjungan',
+    });
+  }
+  // Four figures at most: the active members give their place to today's visits beside the desk's three.
+  if (readsMembers && figures.length < 4) {
     const m = library.data?.members;
     figures.push({
       key: 'active_members',
@@ -173,7 +202,7 @@ export function TodayStrip() {
   // A labelled region, not a heading: the blocks below are the page's sections.
   return (
     <section aria-label={t('dashboard.home.figures')} data-dashboard-today="">
-      <dl className={cn('grid overflow-hidden rounded-lg border bg-card', n === 1 ? 'grid-cols-1' : 'grid-cols-2', MD_COLS[n])}>
+      <dl className={cn('grid overflow-hidden rounded-lg border bg-background', n === 1 ? 'grid-cols-1' : 'grid-cols-2', MD_COLS[n])}>
         {figures.map((f, k) => (
           <div key={f.key} className={cn('min-w-0', cellRules(k, n))}>
             <FigureCell figure={f} />

@@ -14,6 +14,7 @@ import { linkableUrl, attachmentMedia } from './attachment-viewer.js';
 import { AvailabilitySection, type Availability } from './availability.js';
 import { CitationsSection } from './citations-view.js';
 import { BookCover } from './cover.js';
+import { PageHead } from '../layout.js';
 import { opacText } from './messages.js';
 import type { OpacContext, OpacPageOptions } from './page.js';
 import { ShelfStatusLine, yearOf } from './shelf-status.js';
@@ -382,9 +383,10 @@ function RecordView(props: { d: RecordData; extras: DetailExtras; locale: Locale
   const { d, extras, locale, lang } = props;
   const keep: Keep = (path) => (lang === null ? path : withLang(path, lang));
   const subtitle = d.subtitle?.trim() ?? '';
+  const callNumber = d.callNumber?.trim() ?? '';
   return (
     <article class="record">
-      <header class="record-header">
+      <div class="record-cover-col">
         <BookCover
           book={{
             title: d.title,
@@ -399,31 +401,46 @@ function RecordView(props: { d: RecordData; extras: DetailExtras; locale: Locale
           height={300}
           lazy={false}
         />
-        <div class="record-heading">
-          <h1>
-            {d.title}
-            {subtitle === '' ? null : <span class="record-subtitle">: {subtitle}</span>}
-          </h1>
-          <p class="record-type">{typeName(d, locale)}</p>
-          {d.responsibility === undefined || d.responsibility.trim() === '' ? null : <p class="record-responsibility">{d.responsibility}</p>}
-          <Agents d={d} locale={locale} keep={keep} />
+      </div>
+      <div class="record-main">
+        <header class="record-header">
+          <div class="record-heading">
+            <h1>
+              {d.title}
+              {subtitle === '' ? null : <span class="record-subtitle">: {subtitle}</span>}
+            </h1>
+            <p class="record-type">{typeName(d, locale)}</p>
+            {d.responsibility === undefined || d.responsibility.trim() === '' ? null : <p class="record-responsibility">{d.responsibility}</p>}
+            <Agents d={d} locale={locale} keep={keep} />
+          </div>
+        </header>
+        <TextSection id="ringkasan" title={opacText(locale, 'detail.summary')} text={d.summary} />
+        <TextSection id="catatan" title={opacText(locale, 'detail.notes')} text={d.notes} />
+        <AvailabilitySection availability={extras.availability} locale={locale} />
+        <Description d={d} locale={locale} />
+        <Subjects d={d} locale={locale} keep={keep} />
+        <Relations d={d} locale={locale} keep={keep} />
+        <CustomFields d={d} defs={extras.customDefs} locale={locale} />
+        <Attachments d={d} locale={locale} keep={keep} {...(extras.member === undefined ? {} : { members: extras.member })} />
+        <CitationsSection data={d} locale={locale} lang={lang} />
+      </div>
+      {/* Beside the record: where it stands on the shelf, what its copies allow now, and the member's actions. */}
+      {callNumber === '' && extras.availability.status === null && extras.member === undefined ? null : (
+        <aside class="record-side box" aria-label={opacText(locale, 'detail.side')}>
+          {callNumber === '' ? null : (
+            <p class="shelf-mark">
+              <small>{opacText(locale, 'search.card.call_number')}</small>
+              <b class="mono">{callNumber}</b>
+            </p>
+          )}
           {extras.availability.status === null ? null : (
             <p class="record-shelf">
               <ShelfStatusLine status={extras.availability.status} locale={locale} year={extras.year ?? yearOf(Date.now())} />
             </p>
           )}
           <MemberActions id={d.id} member={extras.member} locale={locale} keep={keep} />
-        </div>
-      </header>
-      <TextSection id="ringkasan" title={opacText(locale, 'detail.summary')} text={d.summary} />
-      <TextSection id="catatan" title={opacText(locale, 'detail.notes')} text={d.notes} />
-      <AvailabilitySection availability={extras.availability} locale={locale} />
-      <Description d={d} locale={locale} />
-      <Subjects d={d} locale={locale} keep={keep} />
-      <Relations d={d} locale={locale} keep={keep} />
-      <CustomFields d={d} defs={extras.customDefs} locale={locale} />
-      <Attachments d={d} locale={locale} keep={keep} {...(extras.member === undefined ? {} : { members: extras.member })} />
-      <CitationsSection data={d} locale={locale} lang={lang} />
+        </aside>
+      )}
     </article>
   );
 }
@@ -441,6 +458,16 @@ export function recordPageOptions(ctx: OpacContext, loaded: RecordData, extras: 
     openGraph: { type: ogType, image: extras.coverFileId === null ? null : `/files/${encodeURIComponent(extras.coverFileId)}` },
     head: () => <DetailHead d={d} o={o} />,
     jsonLd: [recordJsonLd(d, o)],
+    pageHead: () => (
+      <PageHead
+        locale={ctx.locale}
+        crumbs={[
+          { label: opacText(ctx.locale, 'shell.menu.home'), href: lang === null ? '/' : withLang('/', lang) },
+          { label: opacText(ctx.locale, 'shell.menu.catalog'), href: lang === null ? '/cari' : withLang('/cari', lang) },
+          { label: displayTitle(d) },
+        ]}
+      />
+    ),
     body: () => <RecordView d={d} extras={extras} locale={ctx.locale} lang={lang} />,
   };
 }

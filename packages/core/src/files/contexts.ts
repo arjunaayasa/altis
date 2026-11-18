@@ -1,6 +1,7 @@
 import type { Permission } from '@altis/shared';
 import type { UploadContextName } from '@altis/shared/api/files';
 import { OPAC_HOME_PHOTO_MAX_BYTES, OPAC_HOME_PHOTO_SIDES } from '@altis/shared/api/opac-home';
+import { SITE_IMAGE_MAX_BYTES } from '@altis/shared/api/site-identity';
 import type { SettingKey } from '../settings/registry.js';
 import type { MagicKind } from './magic.js';
 
@@ -39,6 +40,13 @@ export interface UploadContext {
    * context.
    */
   imageSides?: { min: number; max: number };
+  // ---- Site identity ----
+  /**
+   * The image is decoded and stored again at completion (site-images.ts), as the site's logo or its icon: what is
+   * stored is a PNG the server made, never the bytes that were sent. An image it cannot decode, or whose sides are out
+   * of bounds, is refused like a wrong type.
+   */
+  reencode?: 'logo' | 'icon';
 }
 
 /** The chunk size the server fixes when nothing smaller is asked for or known to pass (P10: "default 5 MB"). */
@@ -155,6 +163,14 @@ export const UPLOAD_CONTEXTS: Readonly<Partial<Record<UploadContextName, UploadC
     kind: 'file',
     imageSides: { min: OPAC_HOME_PHOTO_SIDES.min, max: OPAC_HOME_PHOTO_SIDES.max },
   }),
+
+  // ---- Site identity ----
+  // The library's logo (also the one for dark backgrounds) and its site icon: PNG only, at most 1 MiB and 4000 px a
+  // side; the server decodes the image and stores its own PNG of it (the logo fitted in 960 x 240, the icon's centre
+  // square). A browser converts a JPEG or WebP to PNG before it uploads; an SVG is refused, as everywhere. Claimed as
+  // a public file when the identity is saved.
+  'site.logo': context({ name: 'site.logo', permission: 'opac.pages.manage', maxBytes: SITE_IMAGE_MAX_BYTES, magic: ['png'], kind: 'file', reencode: 'logo' }),
+  'site.icon': context({ name: 'site.icon', permission: 'opac.pages.manage', maxBytes: SITE_IMAGE_MAX_BYTES, magic: ['png'], kind: 'file', reencode: 'icon' }),
 });
 
 /** The context `name` of this build, or null (an unknown name, or `test` outside the test profile). */

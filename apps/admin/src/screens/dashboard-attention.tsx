@@ -1,6 +1,8 @@
 import type { Alert as SystemAlert, AlertSeverity } from '@altis/shared/api/dashboard';
 import { DASHBOARD_DUE_SOON_DAYS, DASHBOARD_EXPIRING_DAYS, DASHBOARD_LONG_OVERDUE_DAYS } from '@altis/shared/api/dashboard-home';
 import { useId } from 'react';
+import { CircleAlertIcon, TriangleAlertIcon } from 'lucide-react';
+import { CARD, CARD_HEAD, CARD_TITLE } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/i18n';
 import { holds } from '@/lib/access';
@@ -128,17 +130,19 @@ export function Attention({ items, sources }: { items: readonly Item[]; sources:
   const headingId = useId();
   if (items.length === 0 && !sources.reads) return null;
   return (
-    <section aria-labelledby={headingId} className="flex min-w-0 flex-col gap-3" data-attention="">
-      <h2 id={headingId} className="text-base font-bold">
-        {t('dashboard.home.attention.title')}
-      </h2>
+    <section aria-labelledby={headingId} className={cn(CARD, 'flex flex-col self-start')} data-attention="">
+      <div className={CARD_HEAD}>
+        <h2 id={headingId} className={CARD_TITLE}>
+          {t('dashboard.home.attention.title')}
+        </h2>
+      </div>
       {items.length === 0 && sources.retry === null && (
-        <p className="border-t pt-2.5 text-sm text-muted-foreground">
+        <p className="px-4 py-3 text-muted-foreground">
           {sources.pending ? <span className="block h-4 w-2/3 animate-pulse rounded bg-layer-2 motion-reduce:animate-none" aria-hidden="true" /> : t('dashboard.home.attention.empty')}
         </p>
       )}
       {sources.retry !== null && (
-        <div role="alert" className="flex flex-col items-start gap-2 rounded-md border border-bad-line bg-bad-bg px-3.5 py-3 text-sm">
+        <div role="alert" className="m-4 flex flex-col items-start gap-2 rounded-md border border-bad-line bg-bad-bg px-3.5 py-3 text-sm">
           <span className="font-bold text-bad">{t('dashboard.home.load_failed')}</span>
           <Button variant="outline" size="sm" onClick={sources.retry}>
             {t('table.retry')}
@@ -146,22 +150,24 @@ export function Attention({ items, sources }: { items: readonly Item[]; sources:
         </div>
       )}
       {items.length > 0 && (
-        <ul className="border-t">
+        <ul>
           {items.map((item) => {
+            const Icon = item.tone === 'bad' ? CircleAlertIcon : item.tone === 'warn' ? TriangleAlertIcon : null;
             const body = (
               <>
-                <span className={cn('font-semibold', item.to !== null && 'group-hover:text-accent-text group-hover:underline')}>{item.label}</span>
+                {Icon !== null && <Icon className={cn('size-4 shrink-0 self-center', item.tone === 'bad' ? 'text-bad' : 'text-warn')} aria-hidden="true" />}
+                <span className={cn('min-w-0 flex-1 font-semibold', item.to !== null && 'group-hover:text-accent-text group-hover:underline')}>{item.label}</span>
                 {/* A space between the two, for the accessible name of the link. */}{' '}
                 {item.value !== '' && <span className={cn('shrink-0 tabular-nums', TONE_CLASS[item.tone])}>{item.value}</span>}
               </>
             );
-            const row = 'flex items-baseline justify-between gap-3 py-2.5';
+            const row = 'flex items-baseline gap-2.5 px-4 py-2.5';
             return (
-              <li key={item.key} className="border-b" data-attention-item={item.key}>
+              <li key={item.key} className="border-b last:border-b-0" data-attention-item={item.key}>
                 {item.to === null ? (
                   <div className={row}>{body}</div>
                 ) : (
-                  <PageLink to={item.to} search={item.search} className={cn(row, 'group rounded-sm text-foreground no-underline outline-none focus-visible:ring-2 focus-visible:ring-ring')}>
+                  <PageLink to={item.to} search={item.search} className={cn(row, 'group text-foreground no-underline outline-none hover:bg-layer focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset')}>
                     {body}
                   </PageLink>
                 )}

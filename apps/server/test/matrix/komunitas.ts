@@ -23,6 +23,8 @@ import { MATRIX as Stocktake } from './komunitas-stocktake.js';
 // ---- Komunitas (OPAC home page) ----
 import { MATRIX as OpacHome } from './komunitas-opac-home.js';
 import { MATRIX as Usage } from './komunitas-usage.js';
+// ---- Site identity ----
+import { MATRIX as SiteIdentity } from './site-identity.js';
 // ---- Komunitas K5 (reports) ----
 import { MATRIX as LibraryStatistics } from './komunitas-library-statistics.js';
 // ---- Komunitas (Beranda's library figures) ----
@@ -74,6 +76,8 @@ const AREAS: Readonly<Record<string, AreaMatrix>> = Object.freeze({
   'library-statistics': LibraryStatistics,
   // ---- Komunitas (OPAC home page) ----
   'opac-home': OpacHome,
+  // ---- Site identity ----
+  'site-identity': SiteIdentity,
   // ---- Komunitas (Beranda's library figures) ----
   'dashboard-home': DashboardHome,
   // ---- Komunitas (staff screens' data) ----

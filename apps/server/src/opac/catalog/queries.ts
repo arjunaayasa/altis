@@ -550,3 +550,64 @@ export async function legacyRecordPath(db: Db, source: string, legacyKey: string
   if (Number(record.opac_visible) !== 1 || record.archived_at !== null) return null;
   return recordUrlPath(record.id, record.title);
 }
+
+// ---- The home page's figures ----
+/** The library's figures on the home page: counts only, never a row of a member or a visit. */
+export interface HomeFigures {
+  /** The records the OPAC shows. */
+  titles: number;
+  /** The members active on the day the figures were read. */
+  members: number;
+  /** The visits recorded since the first day of the year (the library's), voided ones left out. */
+  visits: number;
+}
+
+/**
+ * The first instant (epoch ms) of the calendar year of `today` (`YYYY-MM-DD`) where the local date is given by
+ * `dateAt`: found by stepping a quarter of an hour at a time across the two days around the UTC new year, which covers
+ * every time zone's offset.
+ */
+export function yearStart(today: string, dateAt: (ms: number) => string): number {
+  const year = Number(today.slice(0, 4));
+  const first = `${today.slice(0, 4)}-01-01`;
+  const step = 15 * 60_000;
+  const from = Date.UTC(year, 0, 1) - 15 * 3_600_000;
+  for (let ms = from; ms <= from + 30 * 3_600_000; ms += step) if (dateAt(ms) >= first) return ms;
+  return Date.UTC(year, 0, 1);
+}
+
+/** The figures of the home page as counted now: `today` is the library's day, `since` the first instant of its year. */
+export async function homeFigures(db: Db, today: string, since: number): Promise<HomeFigures> {
+  const [titles, members, visits] = await Promise.all([
+    publicRecordCount(db),
+    activeMemberCount(db, today),
+    db
+      .selectFrom('visits')
+      .select((eb) => eb.fn.countAll<number>().as('n'))
+      .where('visited_at', '>=', since)
+      .where('voided_at', 'is', null)
+      .executeTakeFirst(),
+  ]);
+  return { titles, members, visits: Number(visits?.n ?? 0) };
+}
+
+/** How long the home page keeps its figures before it counts them again. */
+export const HOME_FIGURES_TTL_MS = 60_000;
+
+const figuresCache = new WeakMap<object, { at: number; today: string; value: Promise<HomeFigures> }>();
+
+/**
+ * {@link homeFigures}, kept for {@link HOME_FIGURES_TTL_MS} per database and day: every visitor of the home page reads
+ * them, and a minute late is fine for a count. A failed read is not kept.
+ */
+export function cachedHomeFigures(db: Db, today: string, since: number, clock: () => number = () => performance.now()): Promise<HomeFigures> {
+  const now = clock();
+  const hit = figuresCache.get(db);
+  if (hit !== undefined && hit.today === today && now - hit.at < HOME_FIGURES_TTL_MS) return hit.value;
+  const value = homeFigures(db, today, since);
+  figuresCache.set(db, { at: now, today, value });
+  value.catch(() => {
+    if (figuresCache.get(db)?.value === value) figuresCache.delete(db);
+  });
+  return value;
+}
