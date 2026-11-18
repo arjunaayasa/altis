@@ -42,11 +42,13 @@ import { FIXTURE_TABLES, SLIMS_FIXTURE_SEED } from '../support/slims-fixture/ind
 //   from its own dump into a fresh database `slims_src_<random>` (as root; the migration reads it as the test user,
 //   granted SELECT only), every table with the fixture's row count and no warning from the server;
 // - the real job migrates it twice into a fresh ALTIS database each time, from the dump (staged upload) and from the
-//   database, with the same SLiMS folder (`--files-dir`: the fixture's files and `images/persons/`). The dump it
-//   migrates holds the same rows with each table's rows in the server's primary-key order, the order the database
-//   source reads in (as mysqldump writes an InnoDB table): some stages depend on the order rows come in (the first
-//   level-1 author of a record is its main entry, links are numbered as they come, the first of two duplicate
-//   authorities is kept), and the fixture's own dump lists a few tables out of key order, as a MyISAM table may be;
+//   database, with the same SLiMS folder (`--files-dir`: the fixture's files and `images/persons/`). Some stages
+//   depend on the order rows come in (the first level-1 author of a record is its main entry, links are numbered as
+//   they come, the first of two duplicate authorities is kept). The author and subject links (`biblio_author`,
+//   `biblio_topic`) keep the fixture's own order, the order they were entered in and out of key order, on both paths:
+//   the fixture's tables are MyISAM, which gives its rows in that order, and the database source reads those two
+//   tables in the table's own order, as mysqldump does. Every other table the dump path migrates has its rows in the
+//   server's primary-key order, the order the database source reads it in (the fixture lists a few out of key order);
 // - both runs end with the same rows in every ALTIS table the migration writes (ids replaced by stable names), the same
 //   legacy map, counts, report rows and summary, the same members, copies, titles and photos; the member photos are
 //   stored (two), or reported (not a JPEG, missing, too large) alike.
@@ -57,8 +59,8 @@ import { FIXTURE_TABLES, SLIMS_FIXTURE_SEED } from '../support/slims-fixture/ind
 //   Windows-1252 bytes the dump holds; the dump path decodes them itself and counts the repair (`fixes`, `samples`,
 //   the charset sample, and a sample row of the report, so the report is longer). The text that lands in ALTIS is the
 //   same.
-// - A derived table (`search_biblio`): the database source does not count its rows (db-source.ts: `rows: null`), so
-//   the summary lists it with 0 rows where the dump path has the fixture's count.
+// - A table a stage reads that has no primary key on the server: the database source pages it by offset and the report
+//   says so (`no_pk`); the dump path reads its staged rows and has no such row.
 
 const ctx = testDbContext();
 const MYSQL = ctx.engine === 'mysql80' || ctx.engine === 'mysql84';
@@ -74,6 +76,9 @@ const STAFF_ID = newId(NOW);
  * a fixture change that adds one must be looked at.
  */
 const ADJUSTMENTS = ['cut biblio.isbn_issn', 'trailing_spaces mst_content_type.code2'];
+
+/** The SLiMS tables both paths read in the order their rows were entered (see the top of this file). */
+const ENTERED_ORDER = ['biblio_author', 'biblio_topic'];
 
 /** ALTIS tables a migration does not write, or whose rows are bookkeeping of the run itself (ids, clocks, chains). */
 const NOT_COMPARED = new Set([
@@ -122,6 +127,15 @@ const cellText = (v: unknown): string => (Buffer.isBuffer(v) ? v.toString('utf8'
 const rawJson = (row: Row): string =>
   JSON.stringify(row, (_k, v: unknown) => (v instanceof Uint8Array ? Buffer.from(v).toString('hex') : typeof v === 'bigint' ? Number(v) : v));
 
+/** Two numeric primary keys compared column by column. */
+function compareKeys(a: readonly unknown[], b: readonly unknown[]): number {
+  for (let i = 0; i < a.length; i += 1) {
+    const d = Number(a[i]) - Number(b[i]);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
 /** The rows only `a`, and only `b`, hold (as multisets), at most `limit` of each. */
 function differences(a: readonly string[], b: readonly string[], limit = 5): { onlyDump: string[]; onlyDb: string[] } | null {
   const count = new Map<string, number>();
@@ -149,6 +163,8 @@ describe.skipIf(!ctx.available || !MYSQL)(`SLiMS migration from a MySQL database
   let orderedDumpGz: Buffer;
   /** The tables whose rows that order moved. */
   let reordered: string[];
+  /** The tables a stage reads that have no primary key on the server (sorted). */
+  let keyless: string[];
   const sourceDb = `slims_src_${randomBytes(4).toString('hex')}`;
   const port = ENGINE_SPECS[ctx.engine].port ?? 0;
   const staff: Actor = { type: 'staff', id: STAFF_ID, ip: null };
@@ -187,14 +203,21 @@ describe.skipIf(!ctx.available || !MYSQL)(`SLiMS migration from a MySQL database
       await loader.close();
     }
     await admin.query(`GRANT SELECT ON ??.* TO ?@'%'`, [sourceDb, TEST_DB_USER]);
-    // The rows of each table with a key in the order the database source reads them.
+    // The rows of each table with a key in the order the database source reads them (the links in their own order).
     const order = new Map<string, string[]>();
     for (const t of FIXTURE_TABLES) {
-      if (t.primaryKey.length === 0 || (fixture.data.rows.get(t.name)?.length ?? 0) === 0) continue;
+      if (t.primaryKey.length === 0 || (fixture.data.rows.get(t.name)?.length ?? 0) === 0 || ENTERED_ORDER.includes(t.name)) continue;
       const list = t.primaryKey.map(() => '??').join(', ');
       const keys = await admin.query(`SELECT ${list} FROM ??.?? ORDER BY ${list}`, [...t.primaryKey, sourceDb, t.name, ...t.primaryKey]);
       order.set(t.name, keys.map((r) => t.primaryKey.map((c) => cellText(r[c])).join('\u0000')));
     }
+    // The tables a stage reads that the server holds without a primary key.
+    const keyed = new Set(
+      (await admin.query("SELECT DISTINCT TABLE_NAME AS t FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? AND INDEX_NAME = 'PRIMARY'", [sourceDb])).map((r) => cellText(r['t'])),
+    );
+    keyless = FIXTURE_TABLES.map((t) => t.name)
+      .filter((t) => !keyed.has(t) && fixture.expected.roles.read.includes(t))
+      .sort();
     const ordered = renderDumpInOrder(fixture.data, order);
     orderedDumpGz = gzipSync(ordered.dump);
     reordered = ordered.reordered;
@@ -484,21 +507,14 @@ describe.skipIf(!ctx.available || !MYSQL)(`SLiMS migration from a MySQL database
     return { ...s, fixes, samples: s.samples.filter((x) => x.fix !== 'cp1252'), charset };
   }
 
-  /** The summary with the derived tables' source counts unknown (see the top of this file). */
-  function withDerivedUncounted(s: MigrationSummary, derived: readonly string[]): MigrationSummary {
-    const tables = Object.fromEntries(Object.entries(s.tables).map(([t, c]) => [t, derived.includes(t) ? { ...c, source: -1 } : c]));
-    const reconciliation = s.reconciliation === null ? null : { ...s.reconciliation, tables: s.reconciliation.tables.map((r) => (derived.includes(r.table) ? { ...r, source: -1 } : r)) };
-    return { ...s, tables, reconciliation };
-  }
-
   /**
    * What two runs must have the same of: the random check sample apart (each of its 20 pairs must match; the titles it
    * drew, `checkSource`, differ per run), and the report's size, which the dump path's Windows-1252 sample row changes.
    */
-  function comparable(s: MigrationSummary, derived: readonly string[]): Record<string, unknown> {
+  function comparable(s: MigrationSummary): Record<string, unknown> {
     // The stored summary carries the pipeline's own fields beside the API's: the drawn titles and where to resume.
     type Stored = MigrationSummary & { checkSource: Record<string, string>; resume: Record<string, unknown> & { reportBytes: number } };
-    const { checks, checkSource, resume, ...rest } = withDerivedUncounted(withoutLatin1Repairs(s), derived) as Stored;
+    const { checks, checkSource, resume, ...rest } = withoutLatin1Repairs(s) as Stored;
     expect(Object.keys(checkSource), 'the check sample names a record per pair').toHaveLength(checks.length);
     const { reportBytes, ...place } = resume;
     expect(reportBytes, 'the report was written').toBeGreaterThan(0);
@@ -521,6 +537,15 @@ describe.skipIf(!ctx.available || !MYSQL)(`SLiMS migration from a MySQL database
     expect(counts, 'rows per SLiMS table in MySQL').toEqual(want);
     // The tables the fixture lists out of key order (the dump path migrates them in key order, see the top).
     expect(reordered.every((t) => fixture.expected.tables[t] !== undefined)).toBe(true);
+    // The links: MyISAM tables, as the fixture creates them, whose rows the fixture lists out of key order.
+    for (const t of ENTERED_ORDER) {
+      const [info] = await admin!.query('SELECT ENGINE AS engine FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?', [sourceDb, t]);
+      expect([t, cellText(info?.['engine'])]).toEqual([t, 'MyISAM']);
+      const key = FIXTURE_TABLES.find((x) => x.name === t)!.primaryKey;
+      const rows = fixture.data.rows.get(t)!;
+      const outOfOrder = rows.filter((r, i) => i > 0 && compareKeys(key.map((c) => r[c]), key.map((c) => rows[i - 1]![c])) < 0).length;
+      expect(outOfOrder, `${t}: rows the fixture lists out of key order`).toBeGreaterThan(0);
+    }
     // The latin1 table's Windows-1252 text arrived as the same characters.
     for (const t of fixture.expected.traps.cp1252) {
       const key = FIXTURE_TABLES.find((x) => x.name === t.table)!.primaryKey;
@@ -561,10 +586,15 @@ describe.skipIf(!ctx.available || !MYSQL)(`SLiMS migration from a MySQL database
     expect(cp1252Fixes(viaDb.summary), 'database path: no Windows-1252 repair (the server converts latin1)').toEqual([]);
     expect(viaDb.summary.samples.filter((x) => x.fix === 'cp1252')).toEqual([]);
     expect(viaDb.summary.charset.filter((c) => c.cp1252 > 0)).toEqual([]);
+    // The derived tables are listed with the rows they hold on both paths.
+    expect(derived.length).toBeGreaterThan(0);
     for (const t of derived) {
-      expect([t, viaDump.summary.tables[t]?.source]).toEqual([t, fixture.expected.tables[t]!.source]);
-      expect([0, fixture.expected.tables[t]!.source], `database path: ${t}'s source count`).toContain(viaDb.summary.tables[t]?.source);
+      expect([t, viaDump.summary.tables[t]?.source, viaDb.summary.tables[t]?.source]).toEqual([t, fixture.expected.tables[t]!.source, fixture.expected.tables[t]!.source]);
     }
+    // `no_pk`: on the database path only, for each table a stage reads that has no primary key on the server.
+    const noPk = (o: Outcome): string[] => o.rows.filter((r) => r[2] === 'no_pk').map((r) => r[0]!);
+    expect(noPk(viaDump), 'dump path: no_pk rows').toEqual([]);
+    expect(noPk(viaDb), 'database path: no_pk rows').toEqual(keyless);
 
     // Every comparison is reported, not only the first that fails: counts (the clearest), the fingerprint, the
     // report, the summary, every row.
@@ -575,9 +605,9 @@ describe.skipIf(!ctx.available || !MYSQL)(`SLiMS migration from a MySQL database
     expect(viaDump.rows.filter(cp1252Sample).map((r) => r[0]), 'dump path: Windows-1252 samples, of the latin1 table only').toEqual(
       [...new Set(fixture.expected.traps.cp1252.map((t) => t.table))].sort(),
     );
-    const reportRows = (o: Outcome): string[] => o.rows.filter((r) => !cp1252Sample(r)).map((r) => JSON.stringify(r));
+    const reportRows = (o: Outcome): string[] => o.rows.filter((r) => !cp1252Sample(r) && r[2] !== 'no_pk').map((r) => JSON.stringify(r));
     expect.soft(differences(reportRows(viaDump), reportRows(viaDb), 20), 'report rows').toBeNull();
-    expect.soft(comparable(viaDb.summary, derived), 'summary').toEqual(comparable(viaDump.summary, derived));
+    expect.soft(comparable(viaDb.summary), 'summary').toEqual(comparable(viaDump.summary));
     const tables = [...new Set([...Object.keys(viaDump.snapshot), ...Object.keys(viaDb.snapshot)])].sort();
     const diff: Record<string, unknown> = {};
     for (const t of tables) {

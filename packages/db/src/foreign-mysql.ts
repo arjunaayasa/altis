@@ -1,9 +1,12 @@
 import { createPool, type Pool, type PoolConnection, type PoolOptions } from 'mysql2';
 
 // A read-only client for a FOREIGN MySQL/MariaDB server (Phase 2 preflight B5): the SLiMS database the catalog
-// migration reads (spec §11.1). It is not an ALTIS connection: it never applies ALTIS's session setup (sql_mode,
-// time zone, the driver guard) nor its server checks (SLiMS often runs on MySQL 5.x or MariaDB 10.x), and no core file
-// imports `mysql2` (only this module does).
+// migration reads (spec §11.1). It is not an ALTIS connection: it never applies ALTIS's session setup (sql_mode, the
+// driver guard) nor its server checks (SLiMS often runs on MySQL 5.x or MariaDB 10.x), and no core file imports
+// `mysql2` (only this module does).
+//
+// - Every connection's session time zone is UTC (`SET time_zone = '+00:00'`, sent before any statement of the caller),
+//   so a TIMESTAMP column reads as mysqldump writes it (its `--tz-utc` default), whatever zone the server runs in.
 //
 // - One pooled connection; `LOCAL INFILE` off (`-LOCAL_FILES`, no `infileStreamFactory`), so a hostile server cannot
 //   ask this process for a local file; no multiple statements.
@@ -31,6 +34,9 @@ export interface ForeignMysql {
   /** Closes the session; idempotent. */
   close(): Promise<void>;
 }
+
+/** The session time zone of every connection (see the module comment). */
+const SET_UTC = "SET time_zone = '+00:00'";
 
 /** How long one statement may run before mysql2 gives up on it. */
 const QUERY_TIMEOUT_MS = 60_000;
@@ -115,8 +121,13 @@ export async function openForeignMysql(cfg: ForeignMysqlConfig, o: { connectTime
   const pool = poolFactory(options);
   // An idle connection the server drops (wait_timeout, a restart) reports an error event: without a listener Node
   // would throw it. The next statement then gets a fresh connection, or its own error.
+  // The pool emits it before it hands the new connection over, so the time zone is set before the caller's statement
+  // runs on it; a connection that cannot set it is dropped, and that statement fails.
   pool.on('connection', (conn: PoolConnection) => {
     conn.on('error', () => undefined);
+    conn.query(SET_UTC, (error) => {
+      if (error) conn.destroy();
+    });
   });
   let closed: Promise<void> | null = null;
   const close = (): Promise<void> => (closed ??= endPool(pool).catch(() => undefined));

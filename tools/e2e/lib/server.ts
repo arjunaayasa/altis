@@ -129,7 +129,8 @@ export async function waitHealthy(baseUrl: string, o: { timeoutMs: number; pollM
       if (reply.status === 200 && status === 'ok') return { version: typeof version === 'string' ? version : undefined };
       last = `${reply.status} ${reply.body.slice(0, 200)}`;
     } catch (error) {
-      last = messageOf(error);
+      // A request the deadline cut short says nothing new: what the server answered before is kept.
+      if (last === 'no answer' || Date.now() < deadline) last = messageOf(error);
     }
     if (o.alive !== undefined && !o.alive()) throw new Error(`the server exited before /_health answered 200 (last: ${last})`);
     await sleep(pollMs);

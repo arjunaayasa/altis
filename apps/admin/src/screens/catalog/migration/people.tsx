@@ -326,7 +326,8 @@ export function DryListsReport({ lists }: { lists: readonly MigrationDryList[] |
   );
 }
 
-const CUTOVER_KEY = ['catalog', 'migrations', 'slims', 'cutover'] as const;
+/** The cut-over checklist's query (a run's end makes it stale: index.tsx `useRunEnded`). */
+export const CUTOVER_KEY = ['catalog', 'migrations', 'slims', 'cutover'] as const;
 
 function Item({ done, required, children }: { done: boolean; required: boolean; children: ReactNode }) {
   const t = useT();

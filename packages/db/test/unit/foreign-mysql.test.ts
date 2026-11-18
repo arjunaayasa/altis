@@ -22,15 +22,19 @@ interface Fake {
   options: PoolOptions;
   queries: { sql: string; values: unknown[] }[];
   ended: number;
+  /** The pool's event listeners, by event. */
+  listeners: Map<string, ((...args: unknown[]) => void)[]>;
 }
 
 /** A pool that records what it was built with and answers every query with `rows`. */
 function fakePool(rows: Record<string, unknown>[] = [], fail?: Error): { fake: Fake } {
-  const fake: Fake = { options: {}, queries: [], ended: 0 };
+  const fake: Fake = { options: {}, queries: [], ended: 0, listeners: new Map() };
   __setForeignMysqlPoolFactory((options) => {
     fake.options = options;
     return {
-      on: () => undefined,
+      on: (event: string, listener: (...args: unknown[]) => void) => {
+        fake.listeners.set(event, [...(fake.listeners.get(event) ?? []), listener]);
+      },
       getConnection: (cb: (error: Error | null, conn?: { release(): void }) => void) => (fail ? cb(fail) : cb(null, { release: () => undefined })),
       query: (o: { sql: string; values: unknown[] }, cb: (error: Error | null, rows?: unknown) => void) => {
         fake.queries.push({ sql: o.sql, values: o.values });
@@ -110,6 +114,29 @@ describe('openForeignMysql', () => {
     await db.close();
   });
 
+  it('sets the session time zone of each new connection to UTC, and drops a connection that cannot', async () => {
+    const { fake } = fakePool();
+    const db = await openForeignMysql(CFG, { connectTimeoutMs: 10_000 });
+    const connection = (fail: Error | null): { sent: string[]; destroyed: number } => {
+      const conn = { sent: [] as string[], destroyed: 0 };
+      const handle = {
+        on: () => undefined,
+        query: (sql: string, cb: (error: Error | null) => void) => {
+          conn.sent.push(sql);
+          cb(fail);
+        },
+        destroy: () => {
+          conn.destroyed += 1;
+        },
+      };
+      for (const listener of fake.listeners.get('connection') ?? []) listener(handle);
+      return conn;
+    };
+    expect(connection(null)).toEqual({ sent: ["SET time_zone = '+00:00'"], destroyed: 0 });
+    expect(connection(new Error('denied'))).toEqual({ sent: ["SET time_zone = '+00:00'"], destroyed: 1 });
+    await db.close();
+  });
+
   it('closes the pool and throws the error when the first connection fails', async () => {
     const refused = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
     const { fake } = fakePool([], refused);
@@ -117,7 +144,7 @@ describe('openForeignMysql', () => {
     expect(fake.ended).toBe(1);
   });
 
-  it('reaches a real socket that refuses, without a server check or session setup', async () => {
+  it('reaches a real socket that refuses, without a server check', async () => {
     __setForeignMysqlPoolFactory(null);
     await expect(openForeignMysql({ ...CFG, host: '127.0.0.1', port: 1 }, { connectTimeoutMs: 2_000 })).rejects.toMatchObject({ code: 'ECONNREFUSED' });
   });
