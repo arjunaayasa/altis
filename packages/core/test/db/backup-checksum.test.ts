@@ -1,39 +1,22 @@
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { PHASE1_MIGRATIONS, TABLE_CLASSES, connect, countRows, runMigrations, tableLoadOrder, type DB, type DbHandle } from '@altis/db';
+import { PHASE1_MIGRATIONS, connect, countRows, runMigrations, type DB, type DbHandle } from '@altis/db';
 import type { Kysely } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
-import { catalogSampleRows, type CatalogTable } from '../../../db/test/fixtures/catalog-tables.js';
-// ---- Komunitas K1 (tables) ----
-import { k1SampleRows, type K1Table } from '../../../db/test/fixtures/komunitas-k1-tables.js';
-// ---- Komunitas (members and circulation) ----
-import { circulationSampleRows, type CirculationTable } from '../../../db/test/fixtures/komunitas-members-circulation-tables.js';
-// ---- Komunitas (holds) ----
-import { holdsSampleRows } from '../../../db/test/fixtures/komunitas-holds-tables.js';
-// ---- Komunitas (circulation core) ----
-import { circCoreSampleRows, type CircCoreTable } from '../../../db/test/fixtures/komunitas-circ-core-tables.js';
-// ---- Komunitas K2 (visits) ----
-import { visitsSampleRows, type VisitsTableName } from '../../../db/test/fixtures/komunitas-visits-tables.js';
-// ---- Komunitas (charges and payments) ----
-import { chargesSampleRows } from '../../../db/test/fixtures/komunitas-charges-tables.js';
-// ---- Komunitas (notices) ----
-import { noticesSampleRows } from '../../../db/test/fixtures/komunitas-notices-tables.js';
-// ---- Komunitas K4 (stocktake) ----
-import { stocktakeSampleRows } from '../../../db/test/fixtures/komunitas-stocktake-tables.js';
 import { backupTables, tableChecksumFromDb } from '../../src/backup/canonical.js';
 import { createExporter, type ExportCheckpoint } from '../../src/backup/exporter.js';
 import { readManifest, type BackupManifest } from '../../src/backup/manifest.js';
+import { seedCommunityRows } from '../support/community-sample-rows.js';
 
 // Cross-dialect checksums (spec §9.9, acceptance A6): the same rows (fixed ids and timestamps) in a SQLite database
 // and in the engine picked by ALTIS_TEST_DB give every backed-up table the same checksum, so a restore into another
 // dialect can be checked table by table. The expected values come from the SQLite copy, computed inside the test.
 // The rows cover every column kind, NULLs, non-ASCII text (byte order of keys: 'A' < 'a' < 'é'), composite keys,
-// a secret settings row and an instance settings row (left out of the backup). Phase 2 (catalog): the catalog tables
-// hold the full sample rows of packages/db's table test, with fixed ids; the seed rows of 0027 (new ids on each
-// database) are removed first. Komunitas K1: its data tables hold the K1 sample rows the same way; members and
-// circulation (0040) too, its seeds removed first.
+// a secret settings row and an instance settings row (left out of the backup). Every later table (the catalogue and
+// the community tables) holds the full sample rows of packages/db's table tests, with fixed ids, the migrations' seed
+// rows (new ids on each database) removed first: support/community-sample-rows.ts.
 
 const ctx = testDbContext();
 const T = 1_800_000_000_000;
@@ -65,36 +48,6 @@ const ID = {
 } as const;
 
 const HASH = (c: string): string => c.repeat(64);
-
-/** The catalog's sample rows with ids numbered from a fixed prefix, so both databases hold the very same keys. */
-function catalogRows(): ReturnType<typeof catalogSampleRows> {
-  let n = 0;
-  return catalogSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JQ${String((n += 1)).padStart(22, '0')}` });
-}
-
-/** The K1 sample rows with ids numbered from another fixed prefix. */
-function k1Rows(): ReturnType<typeof k1SampleRows> {
-  let n = 0;
-  return k1SampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JR${String((n += 1)).padStart(22, '0')}` });
-}
-
-/** The members and circulation sample rows with ids numbered from another fixed prefix. */
-function circulationRows(): ReturnType<typeof circulationSampleRows> {
-  let n = 0;
-  return circulationSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JS${String((n += 1)).padStart(22, '0')}` });
-}
-
-/** The holds sample rows with ids numbered from another fixed prefix. */
-function holdRows(): ReturnType<typeof holdsSampleRows> {
-  let n = 0;
-  return holdsSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JT${String((n += 1)).padStart(22, '0')}` });
-}
-
-/** The visits sample rows with ids numbered from another fixed prefix. */
-function visitsRows(): ReturnType<typeof visitsSampleRows> {
-  let n = 0;
-  return visitsSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JV${String((n += 1)).padStart(22, '0')}` });
-}
 
 /** The same rows, written through Kysely, on any dialect. */
 async function seed(db: Kysely<DB>): Promise<void> {
@@ -214,64 +167,8 @@ async function seed(db: Kysely<DB>): Promise<void> {
       { id: ID.backupB, kind: 'scheduled', size: null, sha256: null, schema_version: '0009', app_version: '0.1.0', dialect: 'mariadb', consistency: 'frozen', status: 'failed', created_at: T + 1 },
     ])
     .execute();
-  // Phase 2 (catalog): the seeds of 0027 carry new ids on each database; the backed-up catalog tables get the sample
-  // rows instead, parents first.
-  for (const t of ['material_types', 'languages', 'collection_types'] as const) await db.deleteFrom(t).execute();
-  // Komunitas (members and circulation): the seeds of 0040 (member types, the general loan rule) likewise.
-  for (const t of ['member_types', 'policies'] as const) await db.deleteFrom(t).execute();
-  const rows = catalogRows();
-  const backedUp = (Object.keys(rows) as CatalogTable[]).filter((t) => TABLE_CLASSES[t] === 'data');
-  for (const t of tableLoadOrder(backedUp).order as CatalogTable[]) {
-    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(rows[t]).execute();
-  }
-  // ---- Komunitas K1 (tables): the backed-up K1 tables, parents first ----
-  const k1 = k1Rows();
-  const k1BackedUp = (Object.keys(k1) as K1Table[]).filter((t) => TABLE_CLASSES[t] === 'data');
-  for (const t of tableLoadOrder(k1BackedUp).order as K1Table[]) {
-    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(k1[t]).execute();
-  }
-  // ---- Komunitas (members and circulation): its tables, parents first ----
-  const circulation = circulationRows();
-  const circulationTables = Object.keys(circulation) as CirculationTable[];
-  for (const t of tableLoadOrder(circulationTables).order as CirculationTable[]) {
-    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(circulation[t]).execute();
-  }
-  // ---- Komunitas (holds) ----
-  await db.insertInto('holds').values(holdRows().holds).execute();
-  // ---- Komunitas (circulation core): the calendar, items read in place, clearance letters ----
-  const circCore = circCoreRows();
-  for (const t of Object.keys(circCore) as CircCoreTable[]) {
-    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(circCore[t]).execute();
-  }
-  // ---- Komunitas K2 (visits) ----
-  const visits = visitsRows();
-  for (const t of Object.keys(visits) as VisitsTableName[]) {
-    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(visits[t]).execute();
-  }
-  // ---- Komunitas (member area): a bookmark of a sample member, a type list of a sample attachment ----
-  await db.insertInto('member_bookmarks').values({ member_id: circulation.members[0]!.id, record_id: '01JU0000000000000000000001', created_at: 1767225600000 }).execute();
-  await db.insertInto('attachment_member_types').values({ attachment_id: rows.attachments[0]!.id, member_type_id: '01JU0000000000000000000002' }).execute();
-  // ---- Komunitas (charges and payments): parents first ----
-  let c = 0;
-  const charges = chargesSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JW${String((c += 1)).padStart(22, '0')}` });
-  for (const t of ['charges', 'charge_adjustments', 'payments', 'payment_allocations'] as const) {
-    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(charges[t]).execute();
-  }
-  // ---- Komunitas (notices): no foreign key, fixed ids ----
-  let nn = 0;
-  await db.insertInto('notices').values(noticesSampleRows({ newId: () => `01JX${String((nn += 1)).padStart(22, '0')}` }).notices).execute();
-  // ---- Komunitas K4 (stocktake): sessions first ----
-  let st = 0;
-  const stocktake = stocktakeSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JY${String((st += 1)).padStart(22, '0')}` });
-  for (const t of ['stocktakes', 'stocktake_items', 'stocktake_unknown_codes'] as const) {
-    await (db as unknown as Kysely<Record<string, Record<string, unknown>>>).insertInto(t).values(stocktake[t]).execute();
-  }
-}
-
-/** The circulation core sample rows with ids numbered from another fixed prefix. */
-function circCoreRows(): ReturnType<typeof circCoreSampleRows> {
-  let n = 0;
-  return circCoreSampleRows({ branchId: ID.branchA, staffId: ID.userA, newId: () => `01JU${String((n += 1)).padStart(22, '0')}` });
+  // Every table past the Phase 1 core: the sample rows of packages/db's table tests (support/community-sample-rows.ts).
+  await seedCommunityRows(db, { branchId: ID.branchA, staffId: ID.userA });
 }
 
 /** Runs a whole export of `h` into `dataDir` and returns its manifest. */

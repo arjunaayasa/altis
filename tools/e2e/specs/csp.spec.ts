@@ -8,13 +8,13 @@ import { assignRole, createStaff, enableTwoFactor } from '../lib/api.js';
 import { CspRecorder, guardContext, pageViolations } from '../lib/csp.js';
 import { moduleBar, openNavPage } from '../lib/nav.js';
 import { tr, type TextKey } from '../lib/text.js';
-import { T, expect, expectHome, passReauth, signIn, test } from '../fixtures.js';
+import { T, chooseFromMenu, expect, expectHome, passReauth, signIn, submitFilter, test } from '../fixtures.js';
 
 // No CSP violation anywhere a user goes (spec §7.4; exit check A11 of 1b): the sign-in pages, every entry of the admin
 // navigation and the pages under it, the command palette, every dialog of the screens, in Indonesian and in English,
-// and the OPAC home in both languages. The guard of fixtures.ts checks the whole test; each step here is also checked on
-// its own, so that a violation names the step it happened in. A canary proves first that the guard sees a violation at
-// all, in this browser.
+// and the OPAC home, the member sign-in and the guestbook activation in both languages. The guard of fixtures.ts checks
+// the whole test; each step here is also checked on its own, so that a violation names the step it happened in. A
+// canary proves first that the guard sees a violation at all, in this browser.
 
 /**
  * Every entry of the admin navigation, from the table the SPA's shell renders (apps/admin/src/lib/nav.ts): an entry
@@ -127,6 +127,26 @@ test('OPAC home in both languages', async ({ page, csp }) => {
   });
 });
 
+// The member area's sign-in page and the guestbook station's activation page are server-rendered pages of their own
+// (a browser without a session or a paired station sees them); their flows are opac-account.spec.ts and
+// visits.spec.ts.
+test('OPAC member sign-in and guestbook activation in both languages', async ({ page, csp }) => {
+  for (const locale of LOCALES) {
+    await clean(csp, `member sign-in (${locale})`, async () => {
+      const res = await page.goto(`/akun/masuk?lang=${locale}`);
+      expect(res?.status()).toBe(200);
+      await expect(page.locator('html')).toHaveAttribute('lang', locale);
+      await expect(page.locator('form[action^="/akun/masuk"] input[name="memberNo"]')).toBeVisible();
+    });
+    await clean(csp, `guestbook activation (${locale})`, async () => {
+      const res = await page.goto(`/kunjungan/aktifkan?lang=${locale}`);
+      expect(res?.status()).toBe(200);
+      await expect(page.locator('html')).toHaveAttribute('lang', locale);
+      await expect(page.locator('form[action^="/kunjungan/aktifkan"] input[name="code"]')).toBeVisible();
+    });
+  }
+});
+
 for (const locale of LOCALES) {
   test(`admin in ${LANGUAGE_NAME[locale]}: every nav entry, the command palette, every dialog`, async ({ page, csp, staff, admin, playwright, baseURL }) => {
     const t = (key: TextKey, params?: Readonly<Record<string, string | number>>): string => tr(locale, key, params);
@@ -204,20 +224,21 @@ for (const locale of LOCALES) {
 
     await clean(csp, 'users: the confirmations, the reauth dialog and the temporary password', async () => {
       await openNavPage(page, '/admin/users', t);
-      await page.getByLabel(t('users.search'), { exact: true }).fill(target.username);
-      await page.getByRole('button', { name: t('users.search_submit'), exact: true }).click();
+      const search = page.getByLabel(t('users.search'), { exact: true });
+      await search.fill(target.username);
+      await submitFilter(search);
       const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: target.username, exact: true }) });
       await expect(row).toHaveCount(1);
 
       for (const action of ['disable', 'reset_2fa'] as const) {
-        await row.getByRole('button', { name: t(`users.action.${action}`), exact: true }).click();
+        await chooseFromMenu(page, row, t('users.more_named', { name: target.name }), t(`users.action.${action}`));
         const confirm = page.getByRole('alertdialog', { name: t(`users.confirm.${action}.title`, { name: target.name }) });
         await expect(confirm).toBeVisible();
         await confirm.getByRole('button', { name: t('form.cancel'), exact: true }).click();
         await expect(confirm).toBeHidden();
       }
 
-      await row.getByRole('button', { name: t('users.action.reset_password'), exact: true }).click();
+      await chooseFromMenu(page, row, t('users.more_named', { name: target.name }), t('users.action.reset_password'));
       const confirm = page.getByRole('alertdialog', { name: t('users.confirm.reset_password.title', { name: target.name }) });
       await confirm.getByRole('button', { name: t('users.action.reset_password'), exact: true }).click();
       // A fresh session has no re-authentication: the dialog asks for the password.
@@ -240,7 +261,7 @@ for (const locale of LOCALES) {
     await clean(csp, 'branches: the archive confirmation', async () => {
       await openNavPage(page, '/admin/branches', t);
       const row = page.getByRole('row').filter({ hasText: branch.name });
-      await row.getByRole('button', { name: t('branches.action.archive'), exact: true }).click();
+      await chooseFromMenu(page, row, t('branches.more_named', { name: branch.name }), t('branches.action.archive'));
       const confirm = page.getByRole('alertdialog', { name: t('branches.confirm.archive.title', { name: branch.name }) });
       await expect(confirm).toBeVisible();
       await confirm.getByRole('button', { name: t('form.cancel'), exact: true }).click();

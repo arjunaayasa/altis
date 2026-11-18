@@ -1,4 +1,4 @@
-import { test as base, expect, type BrowserContext, type BrowserContextOptions, type Page } from '@playwright/test';
+import { test as base, expect, type BrowserContext, type BrowserContextOptions, type Locator, type Page } from '@playwright/test';
 import type { Locale } from '@altis/shared';
 import { StaffApi } from './lib/api.js';
 import { Authenticator } from './lib/authenticator.js';
@@ -188,4 +188,18 @@ export async function passReauth(page: Page, password: string, o: { expectDialog
   await dialog.getByLabel(tr(locale, 'reauth.password'), { exact: true }).fill(password);
   await dialog.getByRole('button', { name: tr(locale, 'reauth.submit'), exact: true }).click();
   await expect(dialog).toBeHidden();
+}
+
+/**
+ * Chooses `item` in the "⋯" menu named `menu` inside `scope` (a table row, a page head): the screens put a row's or a
+ * page's less frequent actions there (components/layout/more-menu.tsx).
+ */
+export async function chooseFromMenu(page: Page, scope: Locator, menu: string | RegExp, item: string | RegExp): Promise<void> {
+  await scope.getByRole('button', { name: menu, ...(typeof menu === 'string' ? { exact: true } : {}) }).click();
+  await page.getByRole('menuitem', { name: item, ...(typeof item === 'string' ? { exact: true } : {}) }).click();
+}
+
+/** Submits the filter row of a list (its submit button is for screen readers only): Enter in `field`. */
+export async function submitFilter(field: Locator): Promise<void> {
+  await field.press('Enter');
 }
