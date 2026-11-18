@@ -99,7 +99,7 @@ describe('the list of pages and news', () => {
       routes: {
         'GET opac/pages': (req) =>
           req.query.get('kind') === 'news'
-            ? { items: [item({ id: NEWS, kind: 'news', slug: 'lomba', title: 'Lomba menulis', publishedAt: later, showInNav: false, hasEnglish: false })], nextCursor: null }
+            ? { items: [item({ id: NEWS, kind: 'news', slug: 'lomba', title: 'Lomba menulis', publishedAt: later, showInNav: false, hasEnglish: false, category: 'agenda', eventStartsAt: later + HOUR })], nextCursor: null }
             : { items: [item({})], nextCursor: null },
         'DELETE opac/pages/:id': (req) => ({ id: req.params['id'], version: 4 }),
       },
@@ -110,6 +110,7 @@ describe('the list of pages and news', () => {
     expect(within(row).getByText('/halaman/jam-buka')).toBeTruthy();
     expect(within(row).getByText('Terbit')).toBeTruthy();
     expect(requests.find((r) => r.path === 'opac/pages')?.query.get('kind')).toBe('page');
+    expect(screen.queryByRole('columnheader', { name: t('pages.col.category') })).toBeNull();
     expect(screen.getByRole('link', { name: t('pages.add.page') }).getAttribute('href')).toBe('/admin/opac/pages/new');
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Berita' }), { button: 0 });
@@ -117,6 +118,9 @@ describe('the list of pages and news', () => {
     expect(router.state.location.search).toEqual({ kind: 'news' });
     expect(within(news.closest('tr')!).getByText(t('pages.scheduled'))).toBeTruthy();
     expect(within(news.closest('tr')!).getByText('/berita/lomba')).toBeTruthy();
+    // A news row shows its category and the start of its event; the list of pages has neither column.
+    expect(within(news.closest('tr')!).getByText('Agenda')).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: t('pages.col.event') })).toBeTruthy();
     expect(screen.getByRole('link', { name: t('pages.add.news') }).getAttribute('href')).toBe('/admin/opac/pages/new?kind=news');
 
     // The row's actions are in its ⋯ menu.
@@ -263,6 +267,99 @@ describe('the page editor', () => {
     fireEvent.click(await screen.findByRole('button', { name: ADMIN_MESSAGES.id['form.save'] }));
     await waitFor(() => expect(sent(requests, 'PATCH', `opac/pages/${PAGE}`)).toHaveLength(2));
     expect(sent(requests, 'PATCH', `opac/pages/${PAGE}`)[1]).toEqual({ version: 4, sortOrder: 5 });
+  });
+
+  it('the agenda of a news post: its fields load, an end before the start is said at the field, and the edit sends what changed', async () => {
+    let version = 2;
+    const start = fromLocalInput('2026-12-05T09:00') as number;
+    const { requests } = startApp({
+      me: adminMe(),
+      path: `/admin/opac/pages/${NEWS}`,
+      routes: {
+        'GET opac/pages/:id': () =>
+          view({ id: NEWS, kind: 'news', slug: 'bedah-buku', version, category: 'agenda', eventStartsAt: start, eventEndsAt: start + 2 * HOUR, eventPlace: 'Ruang baca lantai 2' }),
+        'PATCH opac/pages/:id': (req) => {
+          version += 1;
+          return { id: req.params['id'], version };
+        },
+      },
+    });
+    expect(await screen.findByRole('heading', { name: 'Jam buka' }, FIRST)).toBeTruthy();
+    const group = screen.getByRole('group', { name: t('pages.agenda') });
+    const category = within(group).getByLabelText(t('pages.field.category')) as HTMLSelectElement;
+    const starts = within(group).getByLabelText(t('pages.field.event_starts_at')) as HTMLInputElement;
+    const ends = within(group).getByLabelText(t('pages.field.event_ends_at')) as HTMLInputElement;
+    const place = within(group).getByLabelText(t('pages.field.event_place')) as HTMLInputElement;
+    expect([category.value, starts.value, ends.value, place.value]).toEqual(['agenda', '2026-12-05T09:00', '2026-12-05T11:00', 'Ruang baca lantai 2']);
+    expect([...category.options].map((o) => o.textContent)).toEqual(['Tanpa kategori', 'Agenda', 'Koleksi', 'Pengumuman', 'Kegiatan']);
+    expect([starts.type, ends.type, place.maxLength]).toEqual(['datetime-local', 'datetime-local', 160]);
+
+    // An end before the start: said at the field, nothing sent.
+    fireEvent.change(ends, { target: { value: '2026-12-05T08:00' } });
+    fireEvent.click(screen.getByRole('button', { name: ADMIN_MESSAGES.id['form.save'] }));
+    expect(await screen.findByText(t('pages.event.end_before_start'))).toBeTruthy();
+    // A place without a start: the start is asked for.
+    fireEvent.change(ends, { target: { value: '' } });
+    fireEvent.change(starts, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: ADMIN_MESSAGES.id['form.save'] }));
+    expect(await screen.findByText(t('pages.event.start_required'))).toBeTruthy();
+    expect(sent(requests, 'PATCH', `opac/pages/${NEWS}`)).toEqual([]);
+
+    // A new start, no end, another category, the place kept.
+    fireEvent.change(starts, { target: { value: '2026-12-06T13:30' } });
+    fireEvent.change(category, { target: { value: 'activity' } });
+    fireEvent.click(screen.getByRole('button', { name: ADMIN_MESSAGES.id['form.save'] }));
+    await screen.findByText(t('pages.saved'));
+    expect(sent(requests, 'PATCH', `opac/pages/${NEWS}`)).toEqual([{ version: 2, category: 'activity', eventStartsAt: fromLocalInput('2026-12-06T13:30'), eventEndsAt: null }]);
+
+    // Emptied: the category and the event are sent as null, with the version just answered.
+    fireEvent.change(category, { target: { value: '' } });
+    fireEvent.change(starts, { target: { value: '' } });
+    fireEvent.change(place, { target: { value: '  ' } });
+    fireEvent.click(await screen.findByRole('button', { name: ADMIN_MESSAGES.id['form.save'] }));
+    await waitFor(() => expect(sent(requests, 'PATCH', `opac/pages/${NEWS}`)).toHaveLength(2));
+    expect(sent(requests, 'PATCH', `opac/pages/${NEWS}`)[1]).toEqual({ version: 3, category: null, eventStartsAt: null, eventPlace: null });
+  });
+
+  it('a new news post with an event posts its agenda; a page has no agenda fields', async () => {
+    const { requests, router } = startApp({
+      me: adminMe(),
+      path: '/admin/opac/pages/new?kind=news',
+      routes: {
+        'POST opac/pages': () => json({ id: CREATED, version: 0 }, 201),
+        'GET opac/pages/:id': () => view({ id: CREATED, kind: 'news', slug: 'bedah-buku', version: 0 }),
+      },
+    });
+    expect(await screen.findByRole('heading', { name: t('pages.new.news') }, FIRST)).toBeTruthy();
+    fireEvent.change(within(panel('Bahasa Indonesia')).getByLabelText(t('pages.field.title')), { target: { value: 'Bedah buku' } });
+    fireEvent.change(within(panel('Bahasa Indonesia')).getByLabelText(t('pages.field.body')), { target: { value: 'Bersama penulisnya.' } });
+    fireEvent.change(screen.getByLabelText(t('pages.field.category')), { target: { value: 'agenda' } });
+    fireEvent.change(screen.getByLabelText(t('pages.field.event_starts_at')), { target: { value: '2026-12-05T09:00' } });
+    fireEvent.change(screen.getByLabelText(t('pages.field.event_ends_at')), { target: { value: '2026-12-05T11:00' } });
+    fireEvent.change(screen.getByLabelText(t('pages.field.event_place')), { target: { value: ' Aula ' } });
+    fireEvent.click(screen.getByRole('button', { name: ADMIN_MESSAGES.id['form.save'] }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/admin/opac/pages/${CREATED}`));
+    expect(sent(requests, 'POST', 'opac/pages')).toEqual([
+      {
+        kind: 'news',
+        slug: 'bedah-buku',
+        status: 'draft',
+        showInNav: false,
+        sortOrder: 0,
+        category: 'agenda',
+        eventStartsAt: fromLocalInput('2026-12-05T09:00'),
+        eventEndsAt: fromLocalInput('2026-12-05T11:00'),
+        eventPlace: 'Aula',
+        translations: { id: { title: 'Bedah buku', bodyFormat: 'markdown', body: 'Bersama penulisnya.' } },
+      },
+    ]);
+  });
+
+  it('the editor of a page shows no agenda', async () => {
+    startApp({ me: adminMe(), path: `/admin/opac/pages/${PAGE}`, routes: { 'GET opac/pages/:id': () => view() } });
+    expect(await screen.findByRole('heading', { name: 'Jam buka' }, FIRST)).toBeTruthy();
+    expect(screen.queryByRole('group', { name: t('pages.agenda') })).toBeNull();
+    expect(screen.queryByLabelText(t('pages.field.category'))).toBeNull();
   });
 
   it('the server’s field errors land on their fields: a taken address, an English body too big (its tab opens)', async () => {

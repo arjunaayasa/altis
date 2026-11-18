@@ -87,6 +87,25 @@ function PagesTable({ kind, status }: { kind: PageKind; status: StatusFilter }) 
           return at === null ? <span className="text-muted-foreground">—</span> : <span className="whitespace-nowrap">{dateTime(at)}</span>;
         },
       }),
+      // A news post's category and the start of its event; a page has neither.
+      ...(kind === 'news'
+        ? [
+            column.accessor('category', {
+              header: t('pages.col.category'),
+              cell: (info) => {
+                const category = info.getValue();
+                return category === null ? <span className="text-muted-foreground">—</span> : <span className="whitespace-nowrap">{t(`pages.category.${category}`)}</span>;
+              },
+            }),
+            column.accessor('eventStartsAt', {
+              header: t('pages.col.event'),
+              cell: (info) => {
+                const at = info.getValue();
+                return at === null ? <span className="text-muted-foreground">—</span> : <span className="whitespace-nowrap">{dateTime(at)}</span>;
+              },
+            }),
+          ]
+        : []),
       column.accessor('showInNav', { header: t('pages.col.menu'), cell: (info) => yesNo(info.getValue()) }),
       column.accessor('hasEnglish', { header: t('pages.col.english'), cell: (info) => yesNo(info.getValue()) }),
       column.display({
@@ -114,7 +133,7 @@ function PagesTable({ kind, status }: { kind: PageKind; status: StatusFilter }) 
         },
       }),
     ]);
-  }, [t, dateTime, navigate]);
+  }, [t, dateTime, navigate, kind]);
 
   const table = useTable({ features, columns, data: list.data?.items ?? NO_PAGES, getRowId: (page) => page.id });
   const sheet = cursors.length;
