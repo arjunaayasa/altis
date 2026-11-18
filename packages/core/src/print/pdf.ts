@@ -12,9 +12,12 @@ import type { PdfFont } from './afm.js';
 import { jpegInfo } from './jpeg.js';
 import { toWinAnsi } from './winansi.js';
 
-/** A JPEG picture added to one document (`PdfDocument.addJpeg`), drawn on its pages with `PdfPage.image`. */
+/**
+ * A picture added to one document (`PdfDocument.addJpeg`, or `addPixels` for decoded pixels), drawn on its pages with
+ * `PdfPage.image`.
+ */
 export interface PdfImage {
-  /** The size in pixels, from the JPEG frame header. */
+  /** The size in pixels (a JPEG's from its frame header). */
   readonly width: number;
   readonly height: number;
   /** 1 = grey (DeviceGray), 3 = colour (DeviceRGB). */
@@ -98,6 +101,10 @@ class JpegImage implements PdfImage {
     readonly width: number,
     readonly height: number,
     readonly components: 1 | 3,
+    /** How `data` is packed: a JPEG as it is, or deflated RGB samples. */
+    readonly filter: 'DCTDecode' | 'FlateDecode' = 'DCTDecode',
+    /** The deflated alpha samples of a picture that is not opaque (its soft mask), or null. */
+    readonly mask: Uint8Array | null = null,
   ) {}
 }
 
@@ -211,8 +218,33 @@ export class PdfDocument {
   }
 
   /**
+   * Adds decoded pixels (8-bit RGBA, row by row from the top left, alpha not premultiplied: what the PNG decoder
+   * gives) as a picture of this document. Its transparency is kept, as a soft mask, so the picture can stand on a
+   * coloured band.
+   */
+  addPixels(image: { width: number; height: number; data: Uint8Array }): PdfImage {
+    const { width, height, data } = image;
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || data.byteLength !== width * height * 4) {
+      throw new TypeError('pdf: the pixels are not width x height RGBA');
+    }
+    const rgb = new Uint8Array(width * height * 3);
+    const alpha = new Uint8Array(width * height);
+    let opaque = true;
+    for (let i = 0, p = 0; i < data.byteLength; i += 4, p += 1) {
+      rgb[p * 3] = data[i]!;
+      rgb[p * 3 + 1] = data[i + 1]!;
+      rgb[p * 3 + 2] = data[i + 2]!;
+      alpha[p] = data[i + 3]!;
+      if (alpha[p] !== 255) opaque = false;
+    }
+    const img = new JpegImage(this.#owner, this.#images.length, deflateSync(rgb), width, height, 3, 'FlateDecode', opaque ? null : deflateSync(alpha));
+    this.#images.push(img);
+    return img;
+  }
+
+  /**
    * The file. Objects: 1 catalog, 2 page tree, 3 information, 4-6 the fonts, then each page and its content stream,
-   * then the pictures. Writing does not change the document, so pages may be added and the file written again.
+   * then the pictures, then the soft masks of the pictures that have one. Writing does not change the document, so pages may be added and the file written again.
    */
   toBytes(): Uint8Array {
     if (this.#pages.length === 0) throw new Error('pdf: a document needs at least one page (no page was added)');
@@ -240,12 +272,20 @@ export class PdfDocument {
       const data = deflateSync(ascii(page.content()));
       bodies.push({ dict: `<< /Length ${data.length} /Filter /FlateDecode >>`, data });
     });
+    const masked = this.#images.filter((img) => img.mask !== null);
+    const maskObject = (img: JpegImage): number => imageObject(this.#images.length) + masked.indexOf(img);
     for (const img of this.#images) {
       const colorSpace = img.components === 1 ? 'DeviceGray' : 'DeviceRGB';
       const dict =
         `<< /Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace /${colorSpace}` +
-        ` /BitsPerComponent 8 /Length ${img.data.length} /Filter /DCTDecode >>`;
+        ` /BitsPerComponent 8${img.mask === null ? '' : ` /SMask ${maskObject(img)} 0 R`} /Length ${img.data.length} /Filter /${img.filter} >>`;
       bodies.push({ dict, data: img.data });
+    }
+    for (const img of masked) {
+      const dict =
+        `<< /Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace /DeviceGray` +
+        ` /BitsPerComponent 8 /Length ${img.mask!.length} /Filter /FlateDecode >>`;
+      bodies.push({ dict, data: img.mask! });
     }
 
     const chunks: Uint8Array[] = [];

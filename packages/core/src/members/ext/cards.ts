@@ -1,12 +1,14 @@
 import type { DB } from '@altis/db';
 import { DomainError, qrMatrix, t, type CardField, type Locale } from '@altis/shared';
 import { MEMBER_CARDS_MAX, type CardProfile } from '@altis/shared/api/member-ops';
+import { SITE_IMAGE_MAX_SIDE } from '@altis/shared/api/site-identity';
 import type { Kysely, Transaction } from 'kysely';
 import { textWidth } from '../../print/afm.js';
 import { code128Modules } from '../../print/code128.js';
 import { code39Modules } from '../../print/code39.js';
 import { JpegError } from '../../print/jpeg.js';
 import { PdfDocument, type PdfColor, type PdfImage, type PdfPage } from '../../print/pdf.js';
+import { PngError, decodePng } from '../../files/png.js';
 import type { StorageDriver } from '../../files/serve.js';
 
 // Member cards: ISO ID-1 cards (85.6 × 54 mm), ten per page (2 × 5), on A4, F4 or Letter, centred, with thin cut
@@ -158,6 +160,16 @@ export interface CardSheetInput {
   today: string;
   /** Reads a stored picture (photo, logo, signature, stamp); null when it cannot. */
   picture(fileId: string): Promise<Uint8Array | null>;
+  /**
+   * The file of the site's logo (the site identity's), printed on the band when the profile names no logo of its own;
+   * null or absent: none.
+   */
+  siteLogoFileId?: string | null;
+}
+
+/** Whether `bytes` begin with the PNG signature. */
+function isPng(bytes: Uint8Array): boolean {
+  return bytes.byteLength >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
 }
 
 /** The label of a card field in `locale`. */
@@ -190,15 +202,16 @@ export async function buildMemberCardsPdf(i: CardSheetInput): Promise<Uint8Array
     const bytes = await i.picture(fileId);
     if (bytes !== null) {
       try {
-        img = doc.addJpeg(bytes);
+        // A card picture is a JPEG; the site's logo is a PNG the server stored (its transparency kept on the band).
+        img = isPng(bytes) ? doc.addPixels(decodePng(bytes, { maxSide: SITE_IMAGE_MAX_SIDE })) : doc.addJpeg(bytes);
       } catch (error) {
-        if (!(error instanceof JpegError)) throw error;
+        if (!(error instanceof JpegError) && !(error instanceof PngError)) throw error;
       }
     }
     cache.set(fileId, img);
     return img;
   };
-  const logo = await image(profile.logoFileId);
+  const logo = await image(profile.logoFileId ?? i.siteLogoFileId ?? null);
   const signature = profile.back.enabled ? await image(profile.back.signatureFileId) : null;
   const stamp = profile.back.enabled ? await image(profile.back.stampFileId) : null;
 
