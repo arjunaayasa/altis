@@ -24,7 +24,8 @@ import { T, chooseFromMenu, expect, expectHome, passReauth, signIn, submitFilter
 const NAV: readonly { to: string; key: TextKey; path: RegExp }[] = ADMIN_NAV.map((item) => ({
   to: item.to,
   key: item.labelKey,
-  path: new RegExp(`${item.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?$`),
+  // Halaman awal opens on its first tab.
+  path: new RegExp(`${item.to.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}${item.to === '/admin/opac/beranda' ? '/slider' : '/?'}$`),
 }));
 
 const SETTINGS_TABS: readonly { key: TextKey; path: RegExp }[] = [
