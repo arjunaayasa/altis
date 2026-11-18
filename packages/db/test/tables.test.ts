@@ -137,6 +137,7 @@ import {
   noticesSampleRows,
 } from './fixtures/komunitas-notices-tables.js';
 // ---- Komunitas (SLiMS members and circulation) ----
+import { NEWS_AGENDA_INDEXES, NEWS_AGENDA_TABLES_BY_MIGRATION } from './fixtures/komunitas-news-agenda-tables.js';
 import { SLIMS_PEOPLE_INDEXES, SLIMS_PEOPLE_TABLES_BY_MIGRATION } from './fixtures/komunitas-slims-people-tables.js';
 // ---- Komunitas K4 (stocktake) ----
 import {
@@ -288,6 +289,7 @@ const TABLES_BY_MIGRATION: Record<string, TableName[]> = {
   ...STOCKTAKE_TABLES_BY_MIGRATION,
   // ---- Komunitas (OPAC home page) ----
   ...OPAC_HOME_TABLES_BY_MIGRATION,
+  ...(NEWS_AGENDA_TABLES_BY_MIGRATION as Record<string, TableName[]>),
 };
 
 /** The created_by of the tables the runner makes itself (ensureBootstrap, ruling R27). */
@@ -452,6 +454,7 @@ const EXPECTED_INDEXES: IndexFacts[] = [
   ...STOCKTAKE_INDEXES,
   // ---- Komunitas (OPAC home page) ----
   ...OPAC_HOME_INDEXES,
+  ...NEWS_AGENDA_INDEXES,
 ].sort((a, b) => a.table.localeCompare(b.table) || a.name.localeCompare(b.name));
 
 /** The full-text indexes, which {@link indexes} leaves out (an expression index has no column list on PostgreSQL). */
@@ -886,8 +889,9 @@ describe('the table-class registry and the Phase 1 migration list (spec §6.5)',
     expect(circulation.at(-1)).toBe('0049_opac_popular');
     // Komunitas, OPAC home page: the loans per class open the range 0050–0059.
     const fifties = MIGRATION_NAMES.filter((name) => name >= '0050' && name < '0060');
-    expect(fifties).toEqual(Object.keys(OPAC_HOME_TABLES_BY_MIGRATION).filter((name) => name >= '0050'));
-    expect(fifties.at(-1)).toBe('0050_opac_class_activity');
+    // The agenda of the news: 0051 after it (columns and indexes only).
+    expect(fifties).toEqual([...Object.keys(OPAC_HOME_TABLES_BY_MIGRATION).filter((name) => name >= '0050'), ...Object.keys(NEWS_AGENDA_TABLES_BY_MIGRATION)]);
+    expect(fifties.at(-1)).toBe('0051_news_agenda');
     for (const [name, m] of Object.entries(PHASE1_MIGRATIONS)) {
       expect(name).toMatch(MIGRATION_NAME);
       expect(typeof m.up).toBe('function');

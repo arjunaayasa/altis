@@ -464,6 +464,10 @@ export const CATALOG_COLUMNS: Record<CatalogTable, Record<string, string>> = {
     cover_file_id: 'char(26) null',
     sort_order: 'integer default',
     ...ARCHIVED_TRAIL,
+    category: 'varchar(32) null',
+    event_starts_at: 'bigint null',
+    event_ends_at: 'bigint null',
+    event_place: 'varchar(160) null',
   },
   page_translations: {
     page_id: 'char(26)',
@@ -994,6 +998,10 @@ export function catalogSampleRows(o: { branchId: string; staffId: string; newId?
         cover_file_id: fileId,
         sort_order: 3,
         ...trail,
+        category: 'agenda',
+        event_starts_at: LATER_MS,
+        event_ends_at: LATER_MS,
+        event_place: 'Ruang baca lantai 2',
       },
       {
         // The same slug as a page: another key.
@@ -1006,6 +1014,10 @@ export function catalogSampleRows(o: { branchId: string; staffId: string; newId?
         cover_file_id: null,
         sort_order: 0,
         ...bare,
+        category: null,
+        event_starts_at: null,
+        event_ends_at: null,
+        event_place: null,
       },
     ],
     page_translations: [

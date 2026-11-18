@@ -45,7 +45,7 @@ import {
 // on a database a later release N+1 migrated, after a pointer-only rollback or the compatible revert of §9.7, "skema
 // dibiarkan") stays restorable (phase-end review C12). The registry exporter of N writes N's tables and columns only,
 // so the backup records the newest migration of N whose number is at most the database's (N+1's number → N's last
-// migration, `0050_opac_class_activity` since the loans per class), never N+1's bare number, which no release of N can resolve
+// migration, `0051_news_agenda` since the agenda of the news), never N+1's bare number, which no release of N can resolve
 // (migrationsUpTo: BACKUP_SCHEMA_TOO_NEW):
 //
 // - restored by N (`targetSchema` `latest`, and `backup` without a pre_restore as the revert restores): the later
@@ -58,7 +58,7 @@ import {
 // The test builds name every fixture migration (9001, 9002: decision D1d-26), so the later release here is a migration
 // numbered right after N's last (AHEAD_SCHEMA: 0010 in 1d, 0030 in Phase 2, 0034 once Komunitas K1 added 0030–0033, 0041 after members and
 // circulation's 0040, 0042 after holds' 0041, 0043 after the circulation core's 0042, 0044 after visits' 0043, 0045 after the
-// member area's 0044, 0046 after charges' 0045, 0047 after notices' 0046, 0048 after the migration subject's 0047, 0049 after stocktake's 0048, 0050 after the popular titles' 0049, 0051 after the loans per class's 0050), which no build of this
+// member area's 0044, 0046 after charges' 0045, 0047 after notices' 0046, 0048 after the migration subject's 0047, 0049 after stocktake's 0048, 0050 after the popular titles' 0049, 0051 after the loans per class's 0050, 0052 after the news agenda's 0051), which no build of this
 // code knows, as in production.
 
 vi.mock('@altis/platform', async (importOriginal) => {
