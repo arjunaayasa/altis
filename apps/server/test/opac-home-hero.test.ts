@@ -1,11 +1,13 @@
 import { HOME_CSS, OPAC_CSS } from '@altis/opac-theme';
-import { OPAC_HOME_OVERLAY } from '@altis/shared/api/opac-home';
+import { OPAC_HOME_DEFAULT, OpacHomeContent, contrastWithWhite } from '@altis/shared/api/opac-home';
 import { jsx } from 'hono/jsx';
 import { describe, expect, it } from 'vitest';
-import { Layout, toDocument, type HeroBand } from '../src/opac/layout.js';
+import { heroSlideAt } from '../src/opac/catalog/home.js';
+import { HERO_OVERLAY, Layout, toDocument, type HeroBand } from '../src/opac/layout.js';
 
-// The OPAC home page's hero band as the frame draws it: the overlay over the photo as one class of the theme's steps
-// (never lighter than the floor, whatever value reaches it), the library colour (of the header bar) as a style element that carries the
+// The OPAC home page's hero band as the frame draws it: the photo of the slide that shows now (the first that is on and
+// within its days, by the library's calendar) under the one overlay that keeps white text readable over any photo, the
+// library colour (of the header bar) as a style element that carries the
 // response's nonce and holds a colour rebuilt from six hex digits (anything else writes none), and the heading and lead
 // marked with their language when they are the other language's. The theme styles every class the band can carry.
 
@@ -19,25 +21,24 @@ function render(hero: HeroBand): string {
 const PHOTO = { src: '/files/01JZFILE000000000000000007', alt: 'Gedung', position: 40, width: 1600, height: 900 };
 
 describe('the hero band', () => {
-  it('writes the overlay as a step class, clamped to the floor and the top, rounded to a step', () => {
-    for (const [overlay, cls] of [
-      [60, 'hero-ov-60'],
-      [75, 'hero-ov-75'],
-      [40, 'hero-ov-60'],
-      [99, 'hero-ov-80'],
-      [67, 'hero-ov-65'],
-      [Number.NaN, 'hero-ov-60'],
-    ] as const) {
-      expect(render({ title: 'Judul', lead: null, photo: { ...PHOTO, overlay } }), String(overlay)).toContain(`<header class="site-header hero-band hero-photo ${cls}">`);
-    }
+  it('a photo sits under the one overlay, at its position; without a photo the band is the library colour', () => {
+    const html = render({ title: 'Judul', lead: null, photo: PHOTO });
+    expect(html).toContain(`<header class="site-header hero-band hero-photo hero-ov-${HERO_OVERLAY}">`);
+    expect(html).toContain('<img class="hero-img hero-pos-40" src="/files/01JZFILE000000000000000007" alt="Gedung" width="1600" height="900" decoding="async"/>');
+    expect(html.match(/hero-ov-/g)).toHaveLength(1);
+    expect(render({ title: 'Judul', lead: null, photo: null })).toContain('<header class="site-header hero-band">');
   });
 
-  it('the theme has a class for every step, the floor as the plain band, and none lighter', () => {
+  it('the overlay keeps white text at 4.5:1 or more over a pure white photo, and the theme paints it so', () => {
+    expect(HERO_OVERLAY).toBe(60);
+    // A white pixel under the theme's overlay colour (8 12 20) at that darkness.
+    const a = HERO_OVERLAY / 100;
+    const under = [8, 12, 20].map((c) => 255 * (1 - a) + c * a) as [number, number, number];
+    expect(contrastWithWhite(under)).toBeGreaterThanOrEqual(4.5);
     expect(HOME_CSS).toContain('.hero-photo::before{content:"";position:absolute;inset:0;z-index:-1;background:rgb(8 12 20/.6)}');
-    for (let p = OPAC_HOME_OVERLAY.min; p <= OPAC_HOME_OVERLAY.max; p += OPAC_HOME_OVERLAY.step) {
-      expect(HOME_CSS).toContain(`.hero-ov-${p}::before{background:rgb(8 12 20/.${p})}`);
-    }
-    expect([...HOME_CSS.matchAll(/\.hero-ov-(\d+)/g)].map((m) => Number(m[1]))).toEqual([60, 65, 70, 75, 80]);
+    expect(HOME_CSS).toContain(`.hero-ov-${HERO_OVERLAY}::before{background:rgb(8 12 20/.${HERO_OVERLAY})}`);
+    // The theme has no step lighter than it.
+    expect(Math.min(...[...HOME_CSS.matchAll(/\.hero-ov-(\d+)/g)].map((m) => Number(m[1])))).toBe(HERO_OVERLAY);
     expect(OPAC_CSS).toContain(HOME_CSS);
     for (const cls of ['subject-pills', 'pill-count', 'card-status', 'status-muted', 'class-ranking', 'class-place', 'class-label', 'class-counts']) {
       expect(HOME_CSS, cls).toContain(`.${cls}`);
@@ -61,5 +62,49 @@ describe('the hero band', () => {
     const own = render({ title: 'Ruang baca', lead: 'Cari buku.', photo: null });
     expect(own).toContain('<h1>Ruang baca</h1>');
     expect(own).toContain('<p class="hero-lead">Cari buku.</p>');
+  });
+});
+
+describe('the slide the band shows', () => {
+  const NONE = { id: null, en: null };
+  const slide = (id: string, n: number, over: Record<string, unknown> = {}) => ({
+    id,
+    fileId: `01JZFXQ00000000000000000A${n}`,
+    alt: id,
+    position: 50,
+    note: NONE,
+    title: NONE,
+    subtitle: NONE,
+    cta: null,
+    active: true,
+    from: null,
+    until: null,
+    ...over,
+  });
+  const home = OpacHomeContent.parse({
+    ...OPAC_HOME_DEFAULT,
+    hero: { slides: [slide('off', 1, { active: false }), slide('november', 2, { from: '2026-11-01', until: '2026-11-18' }), slide('later', 3, { from: '2026-11-19' }), slide('always', 4)] },
+  });
+  const at = (timeZone: string, iso: string) => heroSlideAt(home, timeZone, Date.parse(iso))?.id ?? null;
+
+  it('is the first slide that is on and within its days, by the calendar of the library time zone', () => {
+    expect(at('Asia/Jakarta', '2026-11-10T03:00:00Z')).toBe('november');
+    // 23:59 on the 18th in Jakarta, then midnight: the slide ends with the library's day, seven hours before UTC's.
+    expect(at('Asia/Jakarta', '2026-11-18T16:59:59Z')).toBe('november');
+    expect(at('Asia/Jakarta', '2026-11-18T17:00:00Z')).toBe('later');
+    expect(at('UTC', '2026-11-18T17:00:00Z')).toBe('november');
+    expect(at('Asia/Jakarta', '2026-10-31T16:59:59Z')).toBe('always');
+  });
+
+  it('none when no slide shows; a time zone the setting got wrong is read as UTC, never an error page', () => {
+    expect(heroSlideAt(OPAC_HOME_DEFAULT, 'Asia/Jakarta', 0)).toBeNull();
+    const off = OpacHomeContent.parse({ ...OPAC_HOME_DEFAULT, hero: { slides: [slide('off', 1, { active: false }), slide('past', 2, { until: '2020-01-01' })] } });
+    expect(heroSlideAt(off, 'Asia/Jakarta', Date.parse('2026-11-18T00:00:00Z'))).toBeNull();
+    expect(at('Bukan/Zona', '2026-11-18T17:00:00Z')).toBe('november');
+  });
+
+  it('a hero saved as one photo is the slide shown, whenever', () => {
+    const old = OpacHomeContent.parse({ ...OPAC_HOME_DEFAULT, hero: { fileId: '01JZFXQ00000000000000000A9', alt: 'Gedung', position: 40, overlay: 75 } });
+    expect(heroSlideAt(old, 'Asia/Jakarta', 0)).toMatchObject({ fileId: '01JZFXQ00000000000000000A9', alt: 'Gedung', position: 40 });
   });
 });

@@ -5,8 +5,6 @@ import {
   OPAC_HOME_LANGS,
   OPAC_HOME_LIMITS,
   OPAC_HOME_MIN_CONTRAST,
-  OPAC_HOME_OVERLAY,
-  OPAC_HOME_OVERLAY_RGB,
   OPAC_HOME_PHOTO_SIZE,
   OPAC_HOME_POSITION_STEP,
   OPAC_HOME_WEEKDAYS,
@@ -39,10 +37,9 @@ import { bodyOf, comparable, draftOf, newRowKey, type HomeDraft, type PhotoDraft
 /**
  * OPAC › Halaman awal (`/admin/opac/beranda`, permission `opac.pages.manage`): the home page of the public site as the
  * library's profile. `GET opac/home` loads the content, both welcome texts and their revision; the form edits them in
- * one draft, one form section per part: the hero photo (uploaded as `opac.home_photo` after a 16:9 crop in a panel
- * under its control), its alternative text, position and the darkness of its overlay (never lighter than the floor
- * that keeps white text readable), the library colour of a hero without a photo (with the contrast white text keeps on
- * it), the heading and the lead sentence in each language, the library's logo (fitted whole onto a white tile, with its
+ * one draft, one form section per part: the photo of the hero's first slide (uploaded as `opac.home_photo` after a 16:9
+ * crop in a panel under its control), its alternative text and position, the library colour (with the contrast white
+ * text keeps on it), the heading and the lead sentence in each language, the library's logo (fitted whole onto a white tile, with its
  * alternative text) and the telephone number and e-mail address the site publishes, "about" (photo, paragraph in each
  * language, year founded, librarians), up to eight services, up to four facility photos (4:3), the opening hours with
  * the weekdays each row covers, and the blocks shown. A preview of the hero beside the form follows the unsaved draft,
@@ -81,8 +78,8 @@ function bandColor(draft: HomeDraft, view: OpacHomeView): string {
   return brandRgb(typed) === null ? HERO_COLORS[view.accent] : typed;
 }
 
-/** The overlay's colour at `percent` darkness, as CSS. */
-const overlayColor = (percent: number): string => `rgb(${OPAC_HOME_OVERLAY_RGB.join(' ')} / ${percent / 100})`;
+/** The even dark layer the site's hero band lays over its photo, as CSS. */
+const HERO_OVERLAY_COLOR = 'rgb(8 12 20 / 0.6)';
 
 /** The screen: its head, then the editor once the content is loaded. */
 export function OpacHomeScreen() {
@@ -311,7 +308,7 @@ function HeroFrame({ draft, view, ratio, label, className, children }: { draft: 
         {draft.hero !== null && (
           <>
             <img src={fileSrc(draft.hero.fileId)} alt="" className="absolute inset-0 size-full object-cover" style={{ objectPosition: `50% ${draft.hero.position}%` }} />
-            <div aria-hidden="true" data-overlay={draft.hero.overlay} className="absolute inset-0" style={{ backgroundColor: overlayColor(draft.hero.overlay) }} />
+            <div aria-hidden="true" className="absolute inset-0" style={{ backgroundColor: HERO_OVERLAY_COLOR }} />
           </>
         )}
         {children}
@@ -536,7 +533,7 @@ function HomeEditor({
                 <PhotoUpload
                   label={t(draft.hero === null ? 'opacHome.photo.upload' : 'opacHome.photo.replace')}
                   size={OPAC_HOME_HERO_SIZE}
-                  onUploaded={(fileId) => edit((d) => ({ ...d, hero: { fileId, alt: '', position: d.hero?.position ?? 50, overlay: d.hero?.overlay ?? OPAC_HOME_OVERLAY.default } }))}
+                  onUploaded={(fileId) => edit((d) => ({ ...d, hero: { fileId, alt: '', position: d.hero?.position ?? 50 } }))}
                 />
                 {draft.hero !== null && (
                   <Button type="button" variant="outline" size="sm" onClick={() => edit((d) => ({ ...d, hero: null }))}>
@@ -569,20 +566,6 @@ function HomeEditor({
                       step={OPAC_HOME_POSITION_STEP}
                       value={draft.hero?.position ?? 50}
                       onChange={(e) => edit((d) => (d.hero === null ? d : { ...d, hero: { ...d.hero, position: Number(e.target.value) } }))}
-                    />
-                  )}
-                </Field>
-                <Field label={t('opacHome.hero.overlay')} hint={t('opacHome.hero.overlay_hint', { value: draft.hero.overlay, min: OPAC_HOME_OVERLAY.min })} error={errorAt('home.hero.overlay')}>
-                  {(c) => (
-                    <input
-                      {...c}
-                      type="range"
-                      min={OPAC_HOME_OVERLAY.min}
-                      max={OPAC_HOME_OVERLAY.max}
-                      step={OPAC_HOME_OVERLAY.step}
-                      value={draft.hero?.overlay ?? OPAC_HOME_OVERLAY.default}
-                      aria-valuetext={`${draft.hero?.overlay ?? OPAC_HOME_OVERLAY.default}%`}
-                      onChange={(e) => edit((d) => (d.hero === null ? d : { ...d, hero: { ...d.hero, overlay: Number(e.target.value) } }))}
                     />
                   )}
                 </Field>

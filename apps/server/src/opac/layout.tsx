@@ -1,7 +1,7 @@
 import { sha256hex } from '@altis/core';
 import { DEFAULT_ACCENT, OPAC_CSS, isAccent } from '@altis/opac-theme';
 import { COMMUNITY_SOURCE_URL, LOCALES, t, type Locale } from '@altis/shared';
-import { OPAC_HOME_OVERLAY, brandRgb, phoneHref } from '@altis/shared/api/opac-home';
+import { brandRgb, phoneHref } from '@altis/shared/api/opac-home';
 import type { Child, PropsWithChildren } from 'hono/jsx';
 import { opacText } from './catalog/messages.js';
 import { OPAC_SEARCH_SCOPES, type OpacSearchScope } from './catalog/search-params.js';
@@ -101,10 +101,10 @@ export interface PageFrame {
 
 // ---- Komunitas (OPAC home page) ----
 /**
- * The home page's hero: the header becomes a band of the library's photo under an even dark overlay (or of the library
- * colour without one), with the site menu over it and the page's heading and lead sentence below the menu. Its text
- * is white on at least 4.5:1 whatever the photo (the overlay's floor), and the photo sits absolutely in the band, so
- * its arrival moves nothing.
+ * The home page's hero: the header becomes a band of a photo under an even dark overlay (or of the library colour
+ * without one), with the site menu over it and the heading and lead sentence below the menu. Its text is white on at
+ * least 4.5:1 whatever the photo (HERO_OVERLAY), and the photo sits absolutely in the band, so its arrival moves
+ * nothing.
  */
 export interface HeroBand {
   title: string;
@@ -114,11 +114,8 @@ export interface HeroBand {
   lead: string | null;
   /** The lead's language when it is not the page's. */
   leadLang?: Locale | undefined;
-  /**
-   * A local path (`/files/<id>`), its alternative text, its vertical position (0-100, steps of 10) and the darkness of
-   * its overlay (percent, 60-80 in steps of 5); null: none.
-   */
-  photo: { src: string; alt: string; position: number; overlay: number; width: number; height: number } | null;
+  /** A local path (`/files/<id>`), its alternative text and its vertical position (0-100, steps of 10); null: none. */
+  photo: { src: string; alt: string; position: number; width: number; height: number } | null;
   /** The band's colour without a photo (`#rrggbb`); null: the accent's. */
   brand?: string | null | undefined;
 }
@@ -129,12 +126,11 @@ function heroPosition(position: number): number {
   return Math.min(100, Math.max(0, p));
 }
 
-/** The overlay class of a photo: its darkness rounded to a step within the setting's range (never under its floor). */
-function heroOverlay(overlay: number): number {
-  const { min, max, step } = OPAC_HOME_OVERLAY;
-  const o = Number.isFinite(overlay) ? Math.round(overlay / step) * step : OPAC_HOME_OVERLAY.default;
-  return Math.min(max, Math.max(min, o));
-}
+/**
+ * The darkness (percent) of the even overlay over the band's photo: the one that keeps the band's white text at 4.5:1
+ * or more over any photo, a pure white one included. The theme has the class `hero-ov-<n>` for it.
+ */
+export const HERO_OVERLAY = 60;
 
 /** The library colour as the style element writes it: rebuilt from its channels; null when it is not a `#rrggbb`. */
 function brandColor(value: string | null | undefined): string | null {
@@ -346,7 +342,7 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
   // ---- Komunitas (OPAC home page) ----
   const hero = props.hero;
   const headerClass =
-    hero === undefined ? 'site-header' : hero.photo === null ? 'site-header hero-band' : `site-header hero-band hero-photo hero-ov-${heroOverlay(hero.photo.overlay)}`;
+    hero === undefined ? 'site-header' : hero.photo === null ? 'site-header hero-band' : `site-header hero-band hero-photo hero-ov-${HERO_OVERLAY}`;
   const brand = brandColor(hero?.brand ?? frame?.brand);
   const logo = frame?.logo ?? null;
   // The home link is `/` or `/?lang=xx`: the catalogue's is the same with `/cari`.

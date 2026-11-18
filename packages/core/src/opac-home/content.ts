@@ -1,21 +1,22 @@
 import { createHash } from 'node:crypto';
 import { upsert, type DB } from '@altis/db';
 import { DomainError, normalizeKey } from '@altis/shared';
-import type { OpacHomeContent, OpacHomePutBody } from '@altis/shared/api/opac-home';
+import { opacHomeFilePaths, type OpacHomeContent, type OpacHomePutBody } from '@altis/shared/api/opac-home';
 import type { Kysely, Transaction } from 'kysely';
 import type { TxCtx } from '../context.js';
 import type { KeyringEntry } from '../crypto/secret-box.js';
 import { SETTINGS, type SettingKey } from '../settings/registry.js';
 import { readSettings, writeSettings } from '../settings/service.js';
 
-// The content of the OPAC home page (the setting `opac.home`) and the hero's lead sentence (the welcome text of each
-// language), read and saved as one thing by the admin screen OPAC › Halaman awal.
+// The content of the OPAC home page (the setting `opac.home`) and the welcome text of each language (the subtitle of a
+// hero slide without one of its own), read and saved as one thing by the admin screen OPAC › Halaman awal.
 //
 // - A revision (the first 16 hex digits of the SHA-256 of the three values as JSON) names what the screen loaded; a
 //   save that names another revision is refused with CONFLICT_STALE, so a second admin never overwrites the first
 //   one's save unseen. The save locks the `opac.home` row first (inserting it as its default when absent, which two
 //   first saves meet on), then reads, so the comparison sees the latest committed content.
-// - The photos are uploads of `opac.home_photo`. Saving claims the ones the content names as public files of the
+// - The photos (every slide's, the logo, the "about" photo, the facility and the gallery photos) are uploads of
+//   `opac.home_photo`. Saving claims the ones the content names as public files of the
 //   setting (`owner_type 'settings'`, `owner_id 'opac.home'`, served by `/files/<id>` like a cover) and releases the
 //   ones it no longer names: they lose their owner and turn `staff`, so the reports housekeeping removes them a day
 //   later as orphan uploads, and nobody fetches them meanwhile. A file id that is not such an upload (or is held by
@@ -63,12 +64,7 @@ const welcomeValue = (text: string | null): string | null => (text === null || t
 
 /** The place of each photo of `home` in a PUT body, by file id. */
 function photoPaths(home: OpacHomeContent): Map<string, string> {
-  const paths = new Map<string, string>();
-  if (home.hero !== null) paths.set(home.hero.fileId, 'home.hero.fileId');
-  if (home.logo !== null) paths.set(home.logo.fileId, 'home.logo.fileId');
-  if (home.about.photo !== null) paths.set(home.about.photo.fileId, 'home.about.photo.fileId');
-  home.facilities.forEach((f, i) => paths.set(f.fileId, `home.facilities.${i}.fileId`));
-  return paths;
+  return new Map(opacHomeFilePaths(home).map(({ fileId, path }) => [fileId, ['home', ...path].join('.')]));
 }
 
 /**
