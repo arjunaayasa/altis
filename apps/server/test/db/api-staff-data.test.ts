@@ -4,7 +4,7 @@ import path from 'node:path';
 import { PHASE1_MIGRATIONS, runMigrations } from '@altis/db';
 import { newId, type Permission } from '@altis/shared';
 import type { DeskItemGlance, LoanClassesResponse, LoanListResponse } from '@altis/shared/api/circulation';
-import type { MemberClassesResponse, MemberSearchResponse } from '@altis/shared/api/members';
+import type { MemberClassesResponse, MemberDuplicatesResponse, MemberSearchResponse } from '@altis/shared/api/members';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
 import { masterId, seedCopy, seedLoan, seedMember } from '../../../../packages/core/test/support/circulation-seed.js';
@@ -15,7 +15,8 @@ import { seedStaff, sessionCookieFor, sessionCsrfFor } from '../support-auth.js'
 
 // The data the staff screens show beside their lists, through the HTTP API on the engine picked by ALTIS_TEST_DB: the
 // overdue search carries a member's phone only for a caller who also reads member records, its class list, the member
-// list's loan counts and class list, and the desk's look at a scanned item (no member in it; the desk branch only).
+// list's loan counts and class list, the possible duplicates of a member being entered (a number and a name only, for a
+// reader of member records), and the desk's look at a scanned item (no member in it; the desk branch only).
 
 const ctx = testDbContext();
 
@@ -91,6 +92,45 @@ describe.skipIf(!ctx.available)(`the staff screens' data through the API [${engi
     expect(((await reader.get('/api/v1/members/classes')).json as MemberClassesResponse).items).toEqual(['X-1']);
     const loansOnly = await signedIn('sirkulasi_2', [{ permissions: ['circulation.records.read'] }]);
     expect((await loansOnly.get('/api/v1/members/classes')).status).toBe(403);
+  });
+
+  it('the possible duplicates of a member being entered: same name and birth date, or the same phone; a number and a name only', async () => {
+    const dup = (r: AgentReply) => (r.json as MemberDuplicatesResponse).items;
+    const ana = (await h.db.selectFrom('members').select('id').where('member_no_display', '=', 'S-001').executeTakeFirstOrThrow()).id;
+    await h.db.updateTable('members').set({ birth_date: '2010-03-14' }).where('id', '=', ana).execute();
+    const twin = await seedMember(h.db, { no: 'S-002', name: 'Ana  LESTARI', phone: '0822-222' });
+    await h.db.updateTable('members').set({ birth_date: '2011-01-01' }).where('id', '=', twin).execute();
+    const gone = await seedMember(h.db, { no: 'S-003', name: 'Ana Lestari', phone: '0811-111', archived: true });
+    await h.db.updateTable('members').set({ birth_date: '2010-03-14' }).where('id', '=', gone).execute();
+    const reader = await signedIn('pembaca_dup', [{ permissions: ['members.records.read'] }]);
+    const url = '/api/v1/members/duplicates';
+
+    // The name as the search compares it (case, accents, spacing aside) with the same birth date: the live one only.
+    const byName = await reader.post(url, { name: '  ána   lestari ', birthDate: '2010-03-14' });
+    expect(byName.status).toBe(200);
+    expect(byName.json).toEqual({ items: [{ id: ana, memberNo: 'S-001', name: 'Ana Lestari', match: ['name_birth'] }] } satisfies MemberDuplicatesResponse);
+    // A name alone, or with another birth date, matches nobody; neither does a phone that only looks alike.
+    expect(dup(await reader.post(url, { name: 'Ana Lestari' }))).toEqual([]);
+    expect(dup(await reader.post(url, { name: 'Ana Lestari', birthDate: '2010-03-15' }))).toEqual([]);
+    expect(dup(await reader.post(url, { phone: '0811111' }))).toEqual([]);
+    expect(dup(await reader.post(url, {}))).toEqual([]);
+    // The phone, exactly; both reasons when both hold; by name.
+    expect(dup(await reader.post(url, { phone: '0822-222' })).map((m) => [m.memberNo, m.match])).toEqual([['S-002', ['phone']]]);
+    expect(dup(await reader.post(url, { name: 'Ana Lestari', birthDate: '2010-03-14', phone: '0811-111' })).map((m) => [m.memberNo, m.match])).toEqual([['S-001', ['name_birth', 'phone']]]);
+    expect(dup(await reader.post(url, { name: 'Ana Lestari', birthDate: '2011-01-01', phone: '0811-111' })).map((m) => [m.memberNo, m.match])).toEqual([
+      ['S-001', ['phone']],
+      ['S-002', ['name_birth']],
+    ]);
+    // The member being edited is left out.
+    expect(dup(await reader.post(url, { phone: '0811-111', excludeId: ana }))).toEqual([]);
+    // Nothing but the number and the name leaves the server.
+    expect(Object.keys(dup(await reader.post(url, { phone: '0811-111' }))[0]!).sort()).toEqual(['id', 'match', 'memberNo', 'name']);
+    // Only for a reader of member records; unknown fields are refused.
+    const loansOnly = await signedIn('sirkulasi_dup', [{ permissions: ['circulation.records.read'] }]);
+    expect((await loansOnly.post(url, { phone: '0811-111' })).status).toBe(403);
+    const deskOnly = await signedIn('meja_dup', [{ permissions: ['circulation.desk.use'], branchId }]);
+    expect((await deskOnly.post(url, { phone: '0811-111' })).status).toBe(403);
+    expect((await reader.post(url, { email: 'a@b.id' })).status).toBe(422);
   });
 
   it("the desk's look at a scanned item: no member in it, at the desk's own branch only", async () => {
