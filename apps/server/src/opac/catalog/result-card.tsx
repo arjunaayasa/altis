@@ -127,10 +127,10 @@ export function ResultCard(props: { card: ResultCardData; materialType: string |
     <li class="card">
       <BookCover
         book={{ title: card.title, author: card.mainAgent, callNumber: card.callNumber, classification: card.classification, coverFileId: card.coverFileId }}
-        size="list"
+        size="card"
         imgClass="card-cover"
-        width={120}
-        height={180}
+        width={64}
+        height={96}
       />
       <span class="card-body">
         <a class="card-title" href={lang === null ? href : withLang(href, lang)}>
@@ -138,23 +138,23 @@ export function ResultCard(props: { card: ResultCardData; materialType: string |
           {card.subtitle === null || card.subtitle.trim() === '' ? null : <span class="card-subtitle">: {card.subtitle}</span>}
         </a>
         {line === '' ? null : <span class="result-line">{line}</span>}
-        {card.callNumber === null && kind.length === 0 ? null : (
-          <span class="card-meta">
-            {card.callNumber === null ? null : (
-              <>
-                {opacText(locale, 'search.card.call_number')} <span class="call-number">{card.callNumber}</span>
-                {kind.length === 0 ? null : ' · '}
-              </>
-            )}
-            {kind.join(' · ')}
-          </span>
-        )}
-        {card.shelf === null ? null : (
-          <span class="card-badges">
-            <ShelfStatusLine status={card.shelf} locale={locale} year={props.year} />
-          </span>
-        )}
+        {kind.length === 0 ? null : <span class="card-meta">{kind.join(' · ')}</span>}
       </span>
+      {card.shelf === null && card.callNumber === null ? null : (
+        <span class="result-side">
+          {card.shelf === null ? null : (
+            <span class="card-badges">
+              <ShelfStatusLine status={card.shelf} locale={locale} year={props.year} />
+            </span>
+          )}
+          {card.callNumber === null ? null : (
+            <span class="result-call">
+              <span class="visually-hidden">{opacText(locale, 'search.card.call_number')} </span>
+              <span class="call-number mono">{card.callNumber}</span>
+            </span>
+          )}
+        </span>
+      )}
     </li>
   );
 }

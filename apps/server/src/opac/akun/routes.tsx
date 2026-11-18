@@ -47,6 +47,7 @@ import { route, type RouteContext, type RouteDecl } from '../../http/route.js';
 import { linkableUrl } from '../catalog/attachment-viewer.js';
 import { OPAC_CATALOG_ROUTES } from '../catalog/index.js';
 import { opacText } from '../catalog/messages.js';
+import { PageHead } from '../layout.js';
 import { opacContext, opacPage, requestLang, type OpacContext } from '../catalog/page.js';
 import { withLang } from '../catalog/urls.js';
 import { OPAC_ROUTES } from '../routes.js';
@@ -137,6 +138,9 @@ function page(
     canonicalPath: null,
     openGraph: false,
     cacheControl: PRIVATE,
+    pageHead: () => (
+      <PageHead locale={a.locale} crumbs={[{ label: opacText(a.locale, 'shell.menu.home'), href: a.keep('/') }, { label: opacText(a.locale, 'akun.header.link') }]} />
+    ),
     body: () =>
       o.tab === undefined ? (
         <>{o.body()}</>

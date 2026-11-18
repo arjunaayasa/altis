@@ -214,7 +214,6 @@ const advanced = route({
       description: opacText(ctx.locale, 'search.advanced.description', { library: ctx.libraryName }),
       canonicalPath: OPAC_ADVANCED_PATH,
       robots: 'noindex-follow',
-      headerSearch: false,
       body: () => (
         <div class="advanced-page">
           <h1>{opacText(ctx.locale, 'search.advanced.title')}</h1>

@@ -2,6 +2,7 @@ import type { CatalogSearchResult } from '@altis/core';
 import type { Locale } from '@altis/shared';
 import type { JSX } from 'hono/jsx/jsx-runtime';
 import { FILTER_PARAMS, FacetsAside, HiddenParams, formatCount, type FacetNames } from './facets-view.js';
+import { Icon } from '../icons.js';
 import { opacText, type OpacKey } from './messages.js';
 import { ResultCard, type ResultCardData } from './result-card.js';
 import {
@@ -76,29 +77,36 @@ export function SearchBox(props: { locale: Locale; lang: Locale | null; echo: Op
   const scope = echo.ruas ?? 'semua';
   return (
     <>
-    <form class="search-box search-main" role="search" method="get" action="/cari">
-      <label for="cari-q" class="visually-hidden">
-        {opacText(locale, 'shell.search.label')}
-      </label>
-      <span class="search-row">
-        <label for="cari-ruas" class="visually-hidden">
-          {opacText(locale, 'search.scope.label')}
+      <form class="search-box search-main" role="search" method="get" action="/cari">
+        <label for="cari-q" class="visually-hidden">
+          {opacText(locale, 'shell.search.label')}
         </label>
-        <select id="cari-ruas" name="ruas">
-          {OPAC_SEARCH_SCOPES.map((s) => (
-            <option value={s} selected={s === scope}>
-              {opacText(locale, `search.scope.${s}`)}
-            </option>
-          ))}
-        </select>
-        <input id="cari-q" type="search" name="q" value={text} maxlength={OPAC_SEARCH_TEXT_MAX} placeholder={opacText(locale, 'shell.search.placeholder')} />
-        <button type="submit">{opacText(locale, 'shell.search.submit')}</button>
-      </span>
-      <HiddenParams echo={echo} omit={['q', 'persis', 'ruas']} lang={lang} />
-    </form>
-    <a class="advanced-link" href={searchPath(echo, { urut: null, persis: null }, lang, OPAC_ADVANCED_PATH)}>
-      {opacText(locale, 'search.advanced.link')}
-    </a>
+        <span class="search-row">
+          <span class="search-join">
+            <label for="cari-ruas" class="visually-hidden">
+              {opacText(locale, 'search.scope.label')}
+            </label>
+            <select id="cari-ruas" name="ruas">
+              {OPAC_SEARCH_SCOPES.map((s) => (
+                <option value={s} selected={s === scope}>
+                  {opacText(locale, `search.scope.${s}`)}
+                </option>
+              ))}
+            </select>
+            <input id="cari-q" type="search" name="q" value={text} maxlength={OPAC_SEARCH_TEXT_MAX} placeholder={opacText(locale, 'shell.search.placeholder')} />
+          </span>
+          <button type="submit" class="btn btn-primary">
+            <Icon name="search" />
+            {opacText(locale, 'shell.search.submit')}
+          </button>
+        </span>
+        <HiddenParams echo={echo} omit={['q', 'persis', 'ruas']} lang={lang} />
+      </form>
+      <p class="search-meta">
+        <a class="advanced-link" href={searchPath(echo, { urut: null, persis: null }, lang, OPAC_ADVANCED_PATH)}>
+          {opacText(locale, 'search.advanced.link')}
+        </a>
+      </p>
     </>
   );
 }
@@ -118,7 +126,9 @@ function SortForm(props: { locale: Locale; lang: Locale | null; echo: OpacSearch
         ))}
       </select>
       <HiddenParams echo={echo} omit={['urut']} lang={lang} />
-      <button type="submit">{opacText(locale, 'search.sort.submit')}</button>
+      <button type="submit" class="btn btn-outline btn-sm">
+        {opacText(locale, 'search.sort.submit')}
+      </button>
     </form>
   );
 }
@@ -276,7 +286,7 @@ export function SearchView(props: SearchViewProps) {
               </p>
               <p>{opacText(locale, 'search.empty.hint')}</p>
               {hasFilters ? (
-                <a class="empty-clear" href={noFilters}>
+                <a class="empty-clear btn btn-outline" href={noFilters}>
                   {opacText(locale, 'search.filters.clear')}
                 </a>
               ) : null}

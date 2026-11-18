@@ -15,6 +15,7 @@ import { navPages, type OpacNavLink } from './catalog/queries.js';
 import { FONT_TYPE, OPAC_FONT_CSS, OPAC_FONT_CSS_FILE, opacFontFile, opacFontsServed } from './fonts.js';
 import { OPAC_CSS_FILE } from './layout.js';
 import { renderError, renderNotFound } from './pages.js';
+import { OPAC_SLIDER_FILE, OPAC_SLIDER_JS } from './slider.js';
 
 // The OPAC's own routes (spec §4.9, §9.1; decisions D2, D30), after the catalogue's (opac/catalog, Phase 2):
 //
@@ -22,7 +23,8 @@ import { renderError, renderNotFound } from './pages.js';
 //                                   and promoted titles, news, DDC classes, JSON-LD Library + WebSite
 //   GET /assets/:file  opac.assets  OPAC_CSS from memory under its content hash (`immutable`); while the release's
 //                                   font files are served (fonts.ts), also each of them (`font/woff2`) and the
-//                                   stylesheet that names them, under their content hashes; any other name is 404
+//                                   stylesheet that names them, under their content hashes; the hero slider's
+//                                   script under its own (slider.ts); any other name is 404
 //
 // Both are `session: 'none'` (S29): no cookie is read and no session is looked up. The home page reads its settings
 // through the settings cache and the catalogue through the database, never a session; the stylesheet needs neither.
@@ -40,6 +42,7 @@ import { renderError, renderNotFound } from './pages.js';
 export { OPAC_CSS_HASH } from './layout.js';
 
 const CSS_TYPE = 'text/css; charset=utf-8';
+const JS_TYPE = 'text/javascript; charset=utf-8';
 
 /** The `Cache-Control` of a page: it is built from settings, with a nonce of its own in it. */
 const PAGE_CACHE = 'no-store';
@@ -101,6 +104,8 @@ const assets = route<unknown, unknown, Record<string, string>>({
     if (file === OPAC_FONT_CSS_FILE && opacFontsServed()) {
       return rc.c.body(OPAC_FONT_CSS, 200, { 'Content-Type': CSS_TYPE, 'Cache-Control': IMMUTABLE_CACHE });
     }
+    // The hero slider's script: the OPAC's one script file.
+    if (file === OPAC_SLIDER_FILE) return rc.c.body(OPAC_SLIDER_JS, 200, { 'Content-Type': JS_TYPE, 'Cache-Control': IMMUTABLE_CACHE });
     const font = opacFontFile(file);
     if (font === null) throw new DomainError('NOT_FOUND');
     return rc.c.body(font, 200, { 'Content-Type': FONT_TYPE, 'Cache-Control': IMMUTABLE_CACHE });
