@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { InCardScope } from './card';
 
 /** The classes of a field that takes the whole width of a {@link FormSection} (a name, an address, a note). */
 export const FORM_FULL = 'sm:col-span-full';
@@ -55,7 +56,7 @@ export function FormSection({
 }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className={cn('grid gap-x-8 gap-y-3 border-t py-5 first:border-t-0 first:pt-1 [[data-slot=card]>&]:px-4 [[data-slot=card]>&]:first:pt-5', SIDE_COLUMNS, className)}>
+    <section data-slot="form-section" aria-labelledby={id} className={cn('grid gap-x-8 gap-y-3 px-4 py-5', SIDE_COLUMNS, className)}>
       <SideHead id={id} title={title} intro={intro} introId={introId} />
       {list ? (
         <div className="grid min-w-0 content-start gap-4">{children}</div>
@@ -78,9 +79,11 @@ export function FormSection({
 export function SideSection({ title, intro, className, children }: { title: string; intro?: ReactNode; className?: string; children: ReactNode }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className={cn('grid min-w-0 gap-x-8 gap-y-3 [*+&]:border-t [*+&]:pt-6', SIDE_COLUMNS, className)}>
+    <section data-slot="side-section" aria-labelledby={id} className={cn('grid min-w-0 gap-x-8 gap-y-3 px-4 py-5', SIDE_COLUMNS, className)}>
       <SideHead id={id} title={title} intro={intro} />
-      <div className="grid min-w-0 content-start gap-4">{children}</div>
+      <div className="grid min-w-0 content-start gap-4">
+        <InCardScope>{children}</InCardScope>
+      </div>
     </section>
   );
 }
@@ -91,5 +94,9 @@ export function SideSection({ title, intro, className, children }: { title: stri
  * `SaveBar` instead.
  */
 export function FormBar({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn('flex flex-wrap items-center gap-2 border-t pt-4', className)}>{children}</div>;
+  return (
+    <div data-slot="form-bar" className={cn('flex flex-wrap items-center gap-2 border-t pt-4', className)}>
+      {children}
+    </div>
+  );
 }

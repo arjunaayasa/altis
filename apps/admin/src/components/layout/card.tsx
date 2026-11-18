@@ -1,8 +1,25 @@
-import { useId, type ReactNode } from 'react';
+import { createContext, useContext, useId, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+
+/** Whether what is drawn stands inside a card already: a part that would draw its own box then draws none. */
+const InCard = createContext(false);
+
+/** True inside a {@link Card} (or a part that is a card itself). */
+export function useInCard(): boolean {
+  return useContext(InCard);
+}
+
+/** Marks its children as standing inside a card. */
+export function InCardScope({ children }: { children: ReactNode }) {
+  return <InCard.Provider value={true}>{children}</InCard.Provider>;
+}
 
 /** The box of a card: the background of the page's content, a thin border, 6 px corners. No shadow. */
 export const CARD = 'min-w-0 rounded-lg border bg-background';
+
+/** The classes of a card's head and of its title, for a card drawn by hand (a region with its own heading id). */
+export const CARD_HEAD = 'flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b px-4 py-3';
+export const CARD_TITLE = 'text-heading font-semibold';
 
 /**
  * The head of a {@link Card}: its title (an `h2` of 15 px) with a short line under it, and something small on the
@@ -56,7 +73,7 @@ export function Card({
   return (
     <Box data-slot="card" aria-labelledby={titled ? id : undefined} aria-label={titled ? undefined : label} className={cn(CARD, className)}>
       {titled && <CardHead id={id} title={title} description={description} aside={aside} />}
-      {children}
+      <InCardScope>{children}</InCardScope>
     </Box>
   );
 }

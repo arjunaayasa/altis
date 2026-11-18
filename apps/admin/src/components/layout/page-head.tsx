@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router';
 import { ArrowLeftIcon } from 'lucide-react';
 import { useId, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { CARD, CARD_HEAD, CARD_TITLE, InCardScope, useInCard } from './card';
 
 interface PageHeaderProps {
   title: ReactNode;
@@ -68,6 +69,20 @@ export function SectionHead({ title, id, aside, className }: { title: ReactNode;
 /** A part of a page: a region named by its {@link SectionHead}, its content 12 px below. */
 export function Section({ title, aside, children, className }: { title: ReactNode; aside?: ReactNode; children: ReactNode; className?: string }) {
   const id = useId();
+  const inCard = useInCard();
+  if (!inCard) {
+    return (
+      <section data-slot="card" data-section="" aria-labelledby={id} className={cn(CARD, 'grid content-start', className)}>
+        <div data-slot="card-head" className={CARD_HEAD}>
+          <h2 id={id} className={CARD_TITLE}>
+            {title}
+          </h2>
+          {aside !== undefined && <div className="flex flex-wrap items-center gap-2 text-meta text-muted-foreground">{aside}</div>}
+        </div>
+        <InCardScope>{children}</InCardScope>
+      </section>
+    );
+  }
   return (
     <section aria-labelledby={id} className={cn('grid min-w-0 content-start gap-3', className)}>
       <SectionHead id={id} title={title} aside={aside} />

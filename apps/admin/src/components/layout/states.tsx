@@ -18,7 +18,7 @@ import { SKELETON_BAR } from './table';
 export function EmptyState({ title, children, actions, className }: { title: ReactNode; children?: ReactNode; actions?: ReactNode; className?: string }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className={cn('grid max-w-[62ch] gap-3 py-6 [[data-slot=card]>&]:px-4', className)}>
+    <section data-slot="empty-state" aria-labelledby={id} className={cn('grid gap-3 px-4 py-6 *:max-w-[62ch]', className)}>
       <h2 id={id} className="text-heading font-semibold">
         {title}
       </h2>

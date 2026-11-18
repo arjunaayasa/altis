@@ -1,10 +1,10 @@
 import type { CollectionStatistics, LoanStatistics, MemberStatistics, VisitStatistics } from '@altis/shared/api/library-statistics';
-import type { VisitSummary } from '@altis/shared/api/visits';
 import { Link } from '@tanstack/react-router';
 import { useId, type ReactNode } from 'react';
 import { BarChart } from '@/components/bar-chart';
 import { useLocale, useT } from '@/i18n';
 import { holds } from '@/lib/access';
+import { useVisitsToday } from '@/screens/dashboard-today';
 import { useApiQuery, useMe } from '@/lib/me';
 
 /**
@@ -45,8 +45,8 @@ function Figure({ label, value, tone }: { label: string; value: number | undefin
 function StatCard({ title, to, linkLabel, children, chart }: { title: string; to: string; linkLabel: string; children: ReactNode; chart?: ReactNode }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-3 rounded-lg border bg-card p-4" data-library-card="">
-      <h3 id={id} className="text-sm font-bold">
+    <section aria-labelledby={id} className="flex flex-col gap-3 rounded-lg border bg-background p-4" data-library-card="">
+      <h3 id={id} className="text-heading font-semibold">
         {title}
       </h3>
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">{children}</dl>
@@ -93,24 +93,18 @@ export function LibraryStatistics() {
   const members = useApiQuery<MemberStatistics>(options('members', 'members/statistics', reads.members));
   const visits = useApiQuery<VisitStatistics>(options('visits', 'visits/statistics', reads.visits));
   const loans = useApiQuery<LoanStatistics>(options('loans', 'circulation/statistics', reads.loans));
-  const visitsToday = useApiQuery<VisitSummary>({
-    queryKey: ['dashboard', 'library', 'visits-today'],
-    path: 'visits/summary',
-    enabled: reads.visits,
-    request: { background: true },
-    refetchInterval: 60_000,
-  });
+  const visitsToday = useVisitsToday(reads.visits);
   const headingId = useId();
   if (!reads.catalog && !reads.members && !reads.visits && !reads.loans) return null;
   const year = collection.data?.year ?? members.data?.year ?? visits.data?.year ?? loans.data?.year;
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3" data-library-statistics="">
+    <section aria-labelledby={headingId} className="mt-2 flex flex-col gap-3" data-library-statistics="">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id={headingId} className="text-base font-bold">
+        <h2 id={headingId} className="text-heading font-semibold">
           {t('dashboard.library.title')}
         </h2>
         {holds(me, 'reports.statistics.read') && (
-          <Link to="/admin/reports" className="text-sm font-semibold text-accent-text underline-offset-4 hover:underline">
+          <Link to="/admin/reports" className="text-meta font-semibold text-accent-text underline-offset-4 hover:underline">
             {t('dashboard.library.reports')}
           </Link>
         )}

@@ -1,5 +1,6 @@
 import type { DeskHour } from '@altis/shared/api/dashboard-home';
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
+import { CARD, CARD_HEAD, CARD_TITLE } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useLocale, useT } from '@/i18n';
 import { useBoxWidth } from '@/lib/box-width';
@@ -235,13 +236,14 @@ export function DeskActivity() {
   const data = query.data;
   const empty = data !== undefined && data.hours.every((h) => h.loans + h.returns === 0);
   return (
-    <section aria-labelledby={headingId} className="flex min-w-0 flex-col gap-3" data-desk-activity="">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id={headingId} className="text-base font-bold">
+    <section aria-labelledby={headingId} className={cn(CARD, 'flex flex-col')} data-desk-activity="">
+      <div className={CARD_HEAD}>
+        <h2 id={headingId} className={CARD_TITLE}>
           {t('dashboard.home.activity.title')}
         </h2>
         {data !== undefined && !empty && <Legend />}
       </div>
+      <div className="flex min-w-0 flex-col gap-3 p-4">
       {data === undefined ? (
         query.isError ? (
           <div role="alert" className="flex flex-col items-start gap-2 rounded-md border border-bad-line bg-bad-bg px-3.5 py-3 text-sm">
@@ -254,13 +256,14 @@ export function DeskActivity() {
           <div className="h-[220px] animate-pulse rounded-lg bg-layer-2 motion-reduce:animate-none" aria-hidden="true" />
         )
       ) : empty ? (
-        <p className="text-sm text-muted-foreground">{t('dashboard.home.activity.empty')}</p>
+        <p className="text-muted-foreground">{t('dashboard.home.activity.empty')}</p>
       ) : (
         <>
           <ActivityChart hours={shownHours(data.hours)} />
           <ActivityTable hours={shownHours(data.hours)} />
         </>
       )}
+      </div>
     </section>
   );
 }

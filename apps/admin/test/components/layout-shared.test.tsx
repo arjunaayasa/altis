@@ -59,7 +59,8 @@ describe('SideSection and the FormSection options', () => {
     expect(within(region).getByRole('heading', { level: 2 }).textContent).toBe('Data pribadi');
     expect(region.textContent).toContain('Unduh atau anonimkan.');
     expect(within(region).queryByRole('group')).toBeNull();
-    expect(region.className).toContain('[*+&]:border-t');
+    // It draws its own card when it does not stand in one (the rule of src/index.css on this slot).
+    expect(region.getAttribute('data-slot')).toBe('side-section');
   });
 
   it('columns={2} keeps two columns of fields on a wide screen', () => {
