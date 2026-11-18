@@ -298,6 +298,71 @@
   }
 }
 
+/*
+ * Parts of a page that draw their own card when they do not already stand in one (`[data-slot='card']`), so that a
+ * screen's content never lies bare on the grey page:
+ * - a run of form sections is one card, with a thin rule between its sections;
+ * - a side section, a filter row and an empty state are each a card, and so is a `Section` (it asks its context).
+ */
+@layer components {
+  [data-slot='form-section'] {
+    border-top: 1px solid var(--border);
+  }
+  [data-slot='card'] > [data-slot='form-section']:first-child,
+  [data-slot='card'] > form > [data-slot='form-section']:first-child,
+  [data-slot='card-head'] + [data-slot='form-section'] {
+    border-top-width: 0;
+  }
+  [data-slot='form-section']:not([data-slot='card'] *) {
+    border-inline: 1px solid var(--border);
+    background: var(--background);
+  }
+  [data-slot='form-section']:not([data-slot='card'] *):not([data-slot='form-section'] + *) {
+    border-top-left-radius: var(--radius);
+    border-top-right-radius: var(--radius);
+  }
+  [data-slot='form-section']:not([data-slot='card'] *):not(:has(+ [data-slot='form-section'])) {
+    border-bottom: 1px solid var(--border);
+    border-bottom-left-radius: var(--radius);
+    border-bottom-right-radius: var(--radius);
+  }
+  [data-slot='form-section'] + [data-slot='form-bar'] {
+    border-top-width: 0;
+  }
+  [data-slot='card'] > [data-slot='form-bar'],
+  [data-slot='card'] > form > [data-slot='form-bar'] {
+    padding: 0.75rem 1rem;
+  }
+  [data-slot='side-section']:not([data-slot='card'] *),
+  [data-slot='empty-state']:not([data-slot='card'] *) {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--background);
+  }
+  [data-slot='card'] [data-slot='side-section'] + [data-slot='side-section'] {
+    border-top: 1px solid var(--border);
+  }
+  /* A section that is its own card: its plain content keeps a margin, a table runs edge to edge. */
+  [data-slot='card'][data-section] > :not([data-slot='card-head'], .table-wrap) {
+    margin: 0.75rem 1rem 0;
+  }
+  [data-slot='card'][data-section] > :not([data-slot='card-head'], .table-wrap):last-child {
+    margin-bottom: 1rem;
+  }
+  [data-slot='card'][data-section] > :not([data-slot='card-head']) + .table-wrap {
+    margin-top: 0.75rem;
+  }
+  [data-slot='filter-row']:not([data-slot='card'] *) {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--background);
+    padding: 0.75rem 1rem;
+  }
+  [data-slot='card'] > [data-slot='filter-row'] {
+    padding: 0.75rem 1rem;
+  }
+}
+
 /* Motion: 150 to 250 ms for state changes only, and none for a user who asks for less. */
 @media (prefers-reduced-motion: reduce) {
   *,

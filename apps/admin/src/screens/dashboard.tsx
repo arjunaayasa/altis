@@ -114,8 +114,8 @@ export function useSystemDashboard() {
 function Card({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className={cn('flex flex-col gap-3 rounded-lg border bg-card p-4', className)}>
-      <h3 id={id} className="text-sm font-bold">
+    <section aria-labelledby={id} className={cn('flex flex-col gap-3 rounded-lg border bg-background p-4', className)}>
+      <h3 id={id} className="text-heading font-semibold">
         {title}
       </h3>
       {children}
@@ -308,8 +308,8 @@ export function Dashboard() {
     );
   }
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3" data-system-dashboard="">
-      <h2 id={headingId} className="text-base font-bold">
+    <section aria-labelledby={headingId} className="mt-2 flex flex-col gap-3" data-system-dashboard="">
+      <h2 id={headingId} className="text-heading font-semibold">
         {t('dashboard.home.system.title')}
       </h2>
       {body}

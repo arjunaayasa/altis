@@ -12,7 +12,7 @@ import { LAYER } from './status';
 /** The classes of a dense table drawn by hand (the same look as {@link DenseTable}). */
 export const TABLE = Object.freeze({
   // Positioned, so a screen-reader-only label in a column scrolled out of view stays inside (it would widen the page).
-  wrap: 'relative overflow-x-auto rounded-lg border bg-background [[data-slot=card]>&]:rounded-none [[data-slot=card]>&]:border-0 [[data-slot=card]>*+&]:border-t [[data-slot=card]>&:last-child]:rounded-b-lg',
+  wrap: 'table-wrap relative overflow-x-auto rounded-lg border bg-background [[data-slot=card]>&]:rounded-none [[data-slot=card]>&]:border-0 [[data-slot=card]>*+&]:border-t [[data-slot=card]>&:last-child]:rounded-b-lg',
   table: 'w-full border-collapse text-sm tabular-nums',
   th: 'h-8.5 border-b bg-layer-2 px-3 py-0 text-left text-fine font-semibold whitespace-nowrap text-muted-foreground first:pl-4 last:pr-4',
   td: 'h-10 border-b px-3 py-2.25 align-top first:pl-4 last:pr-4 [tr:last-child>&]:border-b-0',
