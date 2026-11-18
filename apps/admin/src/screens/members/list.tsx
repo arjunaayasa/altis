@@ -255,7 +255,7 @@ export function MembersListScreen() {
           </>
         }
       />
-      <form noValidate onSubmit={apply} aria-label={t('members.filters')} className={FILTER_ROW}>
+      <form noValidate onSubmit={apply} aria-label={t('members.filters')} data-slot="filter-row" className={FILTER_ROW}>
         <Field label={t('members.filter.search')} className="sm:col-span-2 lg:col-span-1">
           {(c) => (
             <Input

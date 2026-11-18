@@ -9,7 +9,7 @@ export function Kbd({ children, className, hidden = false }: { children: ReactNo
   return (
     <kbd
       aria-hidden={hidden ? true : undefined}
-      className={cn('rounded border border-current/30 px-1.5 font-sans text-[11px] leading-normal font-semibold whitespace-nowrap opacity-80', className)}>
+      className={cn('rounded border border-current/30 px-1.5 font-sans text-[11px] leading-normal font-semibold whitespace-nowrap', className)}>
       {children}
     </kbd>
   );

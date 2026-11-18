@@ -49,7 +49,7 @@ export function FilterTabs({ label, items, value, onChange, className }: { label
     </>
   );
   return (
-    <nav data-slot="filter-tabs" aria-label={label} className={className}>
+    <nav data-slot="filter-tabs" aria-label={label} className={cn('min-w-0', className)}>
       <ul className="flex gap-6 overflow-x-auto border-b">
         {items.map((item) => {
           const current = item.id === value;
