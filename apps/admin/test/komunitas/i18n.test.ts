@@ -37,6 +37,7 @@ const PREFIXES: Readonly<Record<keyof typeof KOMUNITAS_AREAS_ID, readonly string
   reportsK5: ['reports.module.', 'reports.chart.', 'accreditation.workspace.evidence.draft', 'dashboard.library.'],
   // ---- Komunitas (OPAC home page) ----
   opacHome: ['opacHome.', 'nav.opac.home'],
+  siteIdentity: ['siteIdentity.'],
   // ---- Komunitas (Beranda's library blocks) ----
   dashboardHome: ['dashboard.home.'],
   placeholder: ['komunitas.placeholder.'],
@@ -54,7 +55,7 @@ describe('the reports and accreditation admin copy', () => {
   const areas = Object.keys(KOMUNITAS_AREAS_ID) as (keyof typeof KOMUNITAS_AREAS_ID)[];
 
   it('is one file per area, in a fixed order, plus the placeholder texts', () => {
-    expect(areas).toEqual(['reports', 'accreditation', 'workspace', 'registers', 'usage', 'print', 'settings', 'members', 'circulation', 'holds', 'circCore', 'membersTools', 'member-area', 'charges', 'circReports', 'notices', 'stocktake', 'reportsK5', 'opacHome', 'dashboardHome', 'placeholder', 'deskMembersUi', 'staffDataUi', 'servicesUi', 'reportsUi']);
+    expect(areas).toEqual(['reports', 'accreditation', 'workspace', 'registers', 'usage', 'print', 'settings', 'members', 'circulation', 'holds', 'circCore', 'membersTools', 'member-area', 'charges', 'circReports', 'notices', 'stocktake', 'reportsK5', 'opacHome', 'siteIdentity', 'dashboardHome', 'placeholder', 'deskMembersUi', 'staffDataUi', 'servicesUi', 'reportsUi']);
     expect(Object.keys(KOMUNITAS_AREAS_EN)).toEqual(areas);
   });
 

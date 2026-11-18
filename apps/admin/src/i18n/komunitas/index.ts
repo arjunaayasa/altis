@@ -22,6 +22,8 @@ import { STOCKTAKE_ADMIN_EN, STOCKTAKE_ADMIN_ID } from './stocktake';
 import { REPORTS_K5_ADMIN_EN, REPORTS_K5_ADMIN_ID } from './reports-k5';
 // ---- Komunitas (OPAC home page) ----
 import { OPAC_HOME_ADMIN_EN, OPAC_HOME_ADMIN_ID } from './opac-home';
+// ---- Komunitas (site identity) ----
+import { SITE_IDENTITY_ADMIN_EN, SITE_IDENTITY_ADMIN_ID } from './site-identity';
 // ---- Komunitas (Beranda's library blocks) ----
 import { DASHBOARD_HOME_ADMIN_EN, DASHBOARD_HOME_ADMIN_ID } from './dashboard-home';
 import { MEMBERS_EN, MEMBERS_ID } from './members';
@@ -113,6 +115,7 @@ export const KOMUNITAS_AREAS_ID = Object.freeze({
   reportsK5: REPORTS_K5_ADMIN_ID,
   // ---- Komunitas (OPAC home page) ----
   opacHome: OPAC_HOME_ADMIN_ID,
+  siteIdentity: SITE_IDENTITY_ADMIN_ID,
   // ---- Komunitas (Beranda's library blocks) ----
   dashboardHome: DASHBOARD_HOME_ADMIN_ID,
   placeholder: PLACEHOLDER_ID,
@@ -155,6 +158,7 @@ export const KOMUNITAS_AREAS_EN: { readonly [A in keyof typeof KOMUNITAS_AREAS_I
   reportsK5: REPORTS_K5_ADMIN_EN,
   // ---- Komunitas (OPAC home page) ----
   opacHome: OPAC_HOME_ADMIN_EN,
+  siteIdentity: SITE_IDENTITY_ADMIN_EN,
   // ---- Komunitas (Beranda's library blocks) ----
   dashboardHome: DASHBOARD_HOME_ADMIN_EN,
   placeholder: PLACEHOLDER_EN,
@@ -189,6 +193,7 @@ export const KOMUNITAS_ID = {
   ...STOCKTAKE_ADMIN_ID,
   ...REPORTS_K5_ADMIN_ID,
   ...OPAC_HOME_ADMIN_ID,
+  ...SITE_IDENTITY_ADMIN_ID,
   ...DASHBOARD_HOME_ADMIN_ID,
   ...PLACEHOLDER_ID,
   ...DESK_MEMBERS_UI_ID,
@@ -218,6 +223,7 @@ export const KOMUNITAS_EN: Record<keyof typeof KOMUNITAS_ID, string> = {
   ...STOCKTAKE_ADMIN_EN,
   ...REPORTS_K5_ADMIN_EN,
   ...OPAC_HOME_ADMIN_EN,
+  ...SITE_IDENTITY_ADMIN_EN,
   ...DASHBOARD_HOME_ADMIN_EN,
   ...PLACEHOLDER_EN,
   ...DESK_MEMBERS_UI_EN,
