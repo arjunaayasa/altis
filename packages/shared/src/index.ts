@@ -237,6 +237,7 @@ export {
   VISIT_SOURCES,
 } from './visits-vocab.js';
 export type { CardField, CardSheet, MemberBulkAction, MemberBulkRefusal, VisitPurpose, VisitSource } from './visits-vocab.js';
+export { code128Modules } from './code128.js';
 export { QR_MAX_VERSION, qrMatrix } from './qr.js';
 export type { QrMatrix } from './qr.js';
 // ---- Komunitas (charges and payments) ----

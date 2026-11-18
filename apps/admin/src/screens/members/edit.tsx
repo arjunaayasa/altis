@@ -1,12 +1,12 @@
-import { GENDERS, type Gender } from '@altis/shared';
+import { GENDERS, code128Modules, type Gender } from '@altis/shared';
 import type { BranchListResponse } from '@altis/shared/api/branches';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import type { LoanListResponse } from '@altis/shared/api/circulation';
-import { MemberBody, MemberPatchBody, type MemberEventsResponse, type MemberView } from '@altis/shared/api/members';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { MemberBody, MemberPatchBody, type MemberDuplicatesBody, type MemberDuplicatesResponse, type MemberEventsResponse, type MemberTypeView, type MemberView } from '@altis/shared/api/members';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-router';
 import { UploadIcon } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useDateTime } from '@/components/data-table';
@@ -16,7 +16,7 @@ import { PageBrand, useBrand } from '@/components/shell/brand';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
-import { useT, type TKey } from '@/i18n';
+import { useT, type TKey, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
 import { ApiError, api } from '@/lib/api';
 import { useDirtyGuard } from '@/lib/dirty-forms';
@@ -34,12 +34,19 @@ import { MemberChargesTab } from '@/screens/circulation/charges';
 /**
  * A member: Anggota baru (`/admin/anggota/baru`) and the member's page (`/admin/anggota/$memberId`).
  *
- * - **The form** (membership, personal data, contact, internal note) is checked with the shared contract before it is
+ * - **The form** (personal data, contact, membership, internal note) is checked with the shared contract before it is
  *   sent; the server's field errors land on their fields (a taken member number: "Sudah dipakai"). An edit sends the
  *   member's `version` and only the fields the user changed; someone else's change in between is CONFLICT_STALE, said
  *   above the form, which keeps what was typed ("Muat ulang data" reads the member again). Whenever the member is read
  *   at a new version (after Perpanjang, Tangguhkan, Aktifkan or "Muat ulang data"), the fields the user has not touched
- *   take the new values, so a later save never sends an old value back. Gender has no default.
+ *   take the new values, so a later save never sends an old value back. Gender has no default. The member type is a
+ *   list of radio buttons, each with what the type allows, while there are at most {@link TYPE_RADIOS_MAX} types;
+ *   with more it is a select.
+ * - **A new member** has two cards beside the form: what the card will carry (the library's logo, the name, the number
+ *   and the type as typed, and the number as a Code 128 barcode once it can be one), and the possible duplicates
+ *   (`POST members/duplicates`, for a reader of member records): the live members with the same name and birth date
+ *   or the same phone number as typed so far, each a link to its page. It informs; it never keeps the form from
+ *   being saved.
  * - **The page** opens with the member's head (the photo at 3:4 or the initials, the name, number, type and class, the
  *   status) and its actions, then a strip of figures (on loan, valid until, joined, valid from, source), then the tabs:
  *   Data anggota (the form, one section per part), Pinjaman aktif, Riwayat pinjaman (both need
@@ -163,6 +170,17 @@ const message = (path: string, code: string): TKey | undefined => {
   return undefined;
 };
 
+/** Up to this many member types are offered as radio buttons; more are a select. */
+export const TYPE_RADIOS_MAX = 6;
+
+/** What a member type allows, in a few words: how many items, for how long, and how long the membership lasts. */
+function typeSummary(t: Translate, type: MemberTypeView): string {
+  const limit = type.loanLimit === null || type.loanLimit === 0 ? limitText(t, type.loanLimit) : t('members.type_option.items', { count: type.loanLimit });
+  const days = type.loanRule === undefined || type.loanRule === null || !type.loanRule.loanable ? [] : [t('members.types.days', { count: type.loanRule.loanDays })];
+  const period = type.membershipDays === null ? t('members.never_expires') : t('members.type_option.valid', { period: t('members.types.days', { count: type.membershipDays }) });
+  return [limit, ...days, period].join(' · ');
+}
+
 function MemberFormView({ member, canManage, onSaved }: { member: MemberView | null; canManage: boolean; onSaved(id: string): Promise<void> }) {
   const t = useT();
   const typeName = useTypeName();
@@ -192,7 +210,10 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
     if (branches.data !== undefined) form.setValue('homeBranchId', form.getValues('homeBranchId'));
   }, [branches.data, form]);
   const typeId = form.watch('memberTypeId');
-  const type = types.data?.items.find((x) => x.id === typeId);
+  const typeItems = types.data?.items ?? [];
+  const type = typeItems.find((x) => x.id === typeId);
+  // A short list is chosen from at a glance; a long one, or a member whose type is no longer offered, keeps the select.
+  const asRadios = typeItems.length > 0 && typeItems.length <= TYPE_RADIOS_MAX && (typeId === '' || type !== undefined);
 
   const submit = form.handleSubmit(async (values) => {
     setProblem(null);
@@ -266,54 +287,6 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
       )}
       <div className={member === null ? 'grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]' : undefined}>
       <div className="min-w-0">
-      <FormSection title={t('members.form.membership')} intro={t('members.form.membership_intro')} disabled={!canManage}>
-        {text('memberNo', 'members.field.member_no', { max: 200, hint: t('members.field.member_no_hint'), mono: true })}
-        <Field
-          id={`${ids}-type`}
-          label={t('members.field.type')}
-          error={errors.memberTypeId}
-          {...(type === undefined
-            ? {}
-            : {
-                hint: t('members.field.type_summary', {
-                  limit: limitText(t, type.loanLimit),
-                  period: type.membershipDays === null ? t('members.never_expires') : t('members.types.days', { count: type.membershipDays }),
-                }),
-              })}>
-          <select id={`${ids}-type`} className={SELECT_CLASS} aria-invalid={errors.memberTypeId === undefined ? undefined : true} {...form.register('memberTypeId')}>
-            <option value="">{t('members.field.type_choose')}</option>
-            {(types.data?.items ?? []).map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.code} — {typeName(x)}
-              </option>
-            ))}
-          </select>
-        </Field>
-        {member === null
-          ? text('joinedOn', 'members.field.joined_on', { max: 10, type: 'date', hint: t('members.field.joined_on_hint') })
-          : null}
-        {text('expiresOn', 'members.field.expires_on', {
-          max: 10,
-          type: 'date',
-          hint: t(member === null ? 'members.field.expires_on_hint_new' : 'members.field.expires_on_hint'),
-        })}
-        <Field id={`${ids}-branch`} label={t('members.field.home_branch')} error={errors.homeBranchId}>
-          <select id={`${ids}-branch`} className={SELECT_CLASS} {...form.register('homeBranchId')}>
-            <option value="">{t('members.field.no_branch')}</option>
-            {(branches.data?.items ?? []).map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field id={`${ids}-locale`} label={t('members.field.locale')} error={errors.locale}>
-          <select id={`${ids}-locale`} className={SELECT_CLASS} {...form.register('locale')}>
-            <option value="id">{t('members.field.locale_id')}</option>
-            <option value="en">{t('members.field.locale_en')}</option>
-          </select>
-        </Field>
-      </FormSection>
       <FormSection title={t('members.form.personal')} intro={t('members.form.personal_intro')} disabled={!canManage}>
         {text('name', 'members.field.name', { max: 191, className: 'sm:col-span-2 xl:col-span-3' })}
         <fieldset className="grid content-start gap-2 sm:col-span-2 xl:col-span-3">
@@ -343,6 +316,74 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
           {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={1000} {...form.register('mailingAddress')} />}
         </Field>
       </FormSection>
+      <FormSection title={t('members.form.membership')} intro={t('members.form.membership_intro')} disabled={!canManage}>
+        {text('memberNo', 'members.field.member_no', { max: 200, hint: t('members.field.member_no_hint'), mono: true })}
+        {asRadios ? (
+          <fieldset className="grid content-start gap-1.5 sm:col-span-2 xl:col-span-3" aria-describedby={errors.memberTypeId === undefined ? undefined : `${ids}-type-error`}>
+            <legend className="mb-1.5 text-sm font-medium">{t('members.field.type')}</legend>
+            <div className="grid rounded-md border border-input" data-type-radios="">
+              {typeItems.map((x) => (
+                <label key={x.id} className="flex cursor-pointer flex-wrap items-baseline gap-x-2.5 gap-y-0.5 border-t px-3 py-2 first:border-t-0 has-checked:bg-primary-soft has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-ring">
+                  <input type="radio" value={x.id} className="size-4 translate-y-0.5 accent-primary" {...form.register('memberTypeId')} />
+                  <span className="font-semibold">{typeName(x)}</span>
+                  <span className="ml-auto text-meta text-muted-foreground">{typeSummary(t, x)}</span>
+                </label>
+              ))}
+            </div>
+            {errors.memberTypeId?.message !== undefined && (
+              <p id={`${ids}-type-error`} className="text-sm font-medium text-bad">
+                {errors.memberTypeId.message}
+              </p>
+            )}
+          </fieldset>
+        ) : (
+          <Field
+            id={`${ids}-type`}
+            label={t('members.field.type')}
+            error={errors.memberTypeId}
+            {...(type === undefined
+              ? {}
+              : {
+                  hint: t('members.field.type_summary', {
+                    limit: limitText(t, type.loanLimit),
+                    period: type.membershipDays === null ? t('members.never_expires') : t('members.types.days', { count: type.membershipDays }),
+                  }),
+                })}>
+            <select id={`${ids}-type`} className={SELECT_CLASS} aria-invalid={errors.memberTypeId === undefined ? undefined : true} {...form.register('memberTypeId')}>
+              <option value="">{t('members.field.type_choose')}</option>
+              {typeItems.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.code} — {typeName(x)}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+        {member === null
+          ? text('joinedOn', 'members.field.joined_on', { max: 10, type: 'date', hint: t('members.field.joined_on_hint') })
+          : null}
+        {text('expiresOn', 'members.field.expires_on', {
+          max: 10,
+          type: 'date',
+          hint: t(member === null ? 'members.field.expires_on_hint_new' : 'members.field.expires_on_hint'),
+        })}
+        <Field id={`${ids}-branch`} label={t('members.field.home_branch')} error={errors.homeBranchId}>
+          <select id={`${ids}-branch`} className={SELECT_CLASS} {...form.register('homeBranchId')}>
+            <option value="">{t('members.field.no_branch')}</option>
+            {(branches.data?.items ?? []).map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field id={`${ids}-locale`} label={t('members.field.locale')} error={errors.locale}>
+          <select id={`${ids}-locale`} className={SELECT_CLASS} {...form.register('locale')}>
+            <option value="id">{t('members.field.locale_id')}</option>
+            <option value="en">{t('members.field.locale_en')}</option>
+          </select>
+        </Field>
+      </FormSection>
       <FormSection title={t('members.form.notes')} intro={t('members.field.notes_hint')} disabled={!canManage}>
         <Field label={t('members.field.notes')} error={errors.notes} className="sm:col-span-2 xl:col-span-3">
           {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={5000} {...form.register('notes')} />}
@@ -350,7 +391,12 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
       </FormSection>
       <RootError message={errors.root?.server?.message} />
       </div>
-      {member === null && <CardPreview name={form.watch('name')} memberNo={form.watch('memberNo')} type={type === undefined ? '' : typeName(type)} />}
+      {member === null && (
+        <aside className="grid min-w-0 gap-4">
+          <CardPreview name={form.watch('name')} memberNo={form.watch('memberNo')} type={type === undefined ? '' : typeName(type)} />
+          <DuplicateCheck name={form.watch('name')} birthDate={form.watch('birthDate')} phone={form.watch('phone')} />
+        </aside>
+      )}
       </div>
       {canManage && member === null && (
         <SaveBar message={isDirty ? t('members.form.unsaved') : undefined}>
@@ -379,7 +425,8 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
 
 /**
  * What the new member's card will carry, beside the form while it is filled: the library's logo (or its name), then
- * the name, the number and the type as typed so far. The card itself is printed from Cetak Kartu once saved.
+ * the name, the number and the type as typed so far, and the number as a barcode. The card itself is printed from
+ * Cetak Kartu once saved, laid out by its card profile.
  */
 function CardPreview({ name, memberNo, type }: { name: string; memberNo: string; type: string }) {
   const t = useT();
@@ -395,6 +442,123 @@ function CardPreview({ name, memberNo, type }: { name: string; memberNo: string;
             <p className="text-heading font-bold break-words">{name.trim() === '' ? t('members.field.name') : name}</p>
             <p className="font-mono text-meta text-muted-foreground">{line === '' ? t('members.field.member_no') : line}</p>
           </div>
+          <CardBarcode value={memberNo.trim()} />
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+/**
+ * `value` as a Code 128 barcode (the bars the printed card carries by default), black on white whatever the theme so
+ * that it reads as a barcode; nothing while the value is empty or holds a character Code 128 cannot (the form says so
+ * on the field).
+ */
+function CardBarcode({ value }: { value: string }) {
+  const t = useT();
+  const runs = useMemo(() => {
+    if (value === '') return null;
+    let modules: boolean[];
+    try {
+      modules = code128Modules(value);
+    } catch {
+      return null;
+    }
+    const out: { x: number; width: number }[] = [];
+    let start = -1;
+    for (let k = 0; k <= modules.length; k += 1) {
+      const dark = k < modules.length && modules[k] === true;
+      if (dark && start < 0) start = k;
+      if (!dark && start >= 0) {
+        out.push({ x: start, width: k - start });
+        start = -1;
+      }
+    }
+    return { width: modules.length, bars: out };
+  }, [value]);
+  if (runs === null) return null;
+  const QUIET = 10;
+  return (
+    <svg
+      role="img"
+      aria-label={t('members.new.card_barcode', { no: value })}
+      viewBox={`0 0 ${runs.width + 2 * QUIET} 24`}
+      preserveAspectRatio="none"
+      shapeRendering="crispEdges"
+      className="h-9 w-full max-w-60 rounded-sm bg-white"
+      data-card-barcode="">
+      {runs.bars.map((b) => (
+        <rect key={b.x} x={b.x + QUIET} y={2} width={b.width} height={20} fill="#000" />
+      ))}
+    </svg>
+  );
+}
+
+/** How long the form rests before the possible duplicates are asked for again. */
+const DUPLICATES_DELAY_MS = 400;
+
+/**
+ * "Kemungkinan duplikat" beside the new member's form (see the top of this file): asked a moment after the name with
+ * the birth date, or the phone number, last changed. Each member found is a link that opens in a new tab, so the form
+ * keeps what was typed.
+ */
+function DuplicateCheck({ name, birthDate, phone }: { name: string; birthDate: string; phone: string }) {
+  const t = useT();
+  const me = useMe();
+  const reads = holds(me, 'members.records.read');
+  const wanted = useMemo<MemberDuplicatesBody | null>(() => {
+    const byName = name.trim() !== '' && /^\d{4}-\d{2}-\d{2}$/.test(birthDate);
+    const byPhone = phone.trim() !== '';
+    if (!byName && !byPhone) return null;
+    return { ...(byName ? { name: name.trim().slice(0, 191), birthDate } : {}), ...(byPhone ? { phone: phone.trim().slice(0, 64) } : {}) };
+  }, [name, birthDate, phone]);
+  const [asked, setAsked] = useState<MemberDuplicatesBody | null>(null);
+  useEffect(() => {
+    const timer = setTimeout(() => setAsked(wanted), DUPLICATES_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [wanted]);
+  const query = useQuery({
+    queryKey: ['members', 'duplicates', asked],
+    queryFn: () => api<MemberDuplicatesResponse>('POST', 'members/duplicates', asked),
+    enabled: reads && asked !== null,
+    staleTime: 30_000,
+  });
+  if (!reads) return null;
+  const found = asked === null ? [] : (query.data?.items ?? []);
+  return (
+    <Card title={t('members.duplicates.title')}>
+      <CardBody className="grid gap-2">
+        {/* Always there, so a result that arrives later is announced. */}
+        <div role="status" className="grid gap-2">
+          {asked === null || wanted === null ? (
+            <p className="text-meta text-muted-foreground">{t('members.duplicates.idle')}</p>
+          ) : query.isError ? (
+            <p className="text-meta text-muted-foreground">{t('members.duplicates.failed')}</p>
+          ) : query.data === undefined ? (
+            <p className="text-meta text-muted-foreground">{t('members.duplicates.checking')}</p>
+          ) : found.length === 0 ? (
+            <p className="text-meta text-muted-foreground">{t('members.duplicates.none')}</p>
+          ) : (
+            <>
+              <p className="font-semibold text-warn">{t('members.duplicates.found', { count: found.length })}</p>
+              <ul className="grid gap-1.5">
+                {found.map((m) => (
+                  <li key={m.id} className="grid gap-0.5" data-duplicate={m.id}>
+                    <a
+                      href={`/admin/anggota/${encodeURIComponent(m.id)}`}
+                      target="_blank"
+                      rel="noopener"
+                      className="w-fit font-semibold text-accent-text underline-offset-4 hover:underline">
+                      <span className="font-mono">{m.memberNo}</span> · {m.name}
+                      <span className="sr-only"> {t('members.duplicates.new_tab')}</span>
+                    </a>
+                    <span className="text-meta text-muted-foreground">{m.match.map((k) => t(`members.duplicates.match.${k}`)).join(' · ')}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-meta text-muted-foreground">{t('members.duplicates.hint')}</p>
+            </>
+          )}
         </div>
       </CardBody>
     </Card>
