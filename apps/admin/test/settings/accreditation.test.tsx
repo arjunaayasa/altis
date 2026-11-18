@@ -36,7 +36,7 @@ const VIEW: AccreditationSettingsView = {
 };
 
 function page(id: string, title: string, slug: string, status: 'draft' | 'published' = 'published'): PageListItem {
-  return { id, kind: 'page', slug, status, publishedAt: status === 'published' ? 1_760_000_000_000 : null, showInNav: true, title, hasEnglish: false, updatedAt: null, version: 1 };
+  return { id, kind: 'page', slug, status, publishedAt: status === 'published' ? 1_760_000_000_000 : null, showInNav: true, category: null, eventStartsAt: null, title, hasEnglish: false, updatedAt: null, version: 1 };
 }
 
 const PAGES = [page(PAGE_PROFILE, 'Profil Perpustakaan', 'profil'), page(PAGE_CONTACT, 'Hubungi Kami', 'kontak'), page(PAGE_DRAFT, 'Layanan Baru', 'layanan', 'draft')];

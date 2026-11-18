@@ -14,6 +14,7 @@ import {
   newsPage,
   previewBody,
   publishedPage,
+  upcomingEvents,
   updatePage,
 } from '../../src/opac-pages/index.js';
 import { ACTOR, NOW, audits, failure, fieldErrors, openRecordsDb, seedFile, type RecordsDb } from './catalog-records-support.js';
@@ -27,6 +28,8 @@ import { ACTOR, NOW, audits, failure, fieldErrors, openRecordsDb, seedFile, type
 //   leave out until the clock passes it (K14);
 // - a cover and the images of a body (`/files/<id>`) claim their `opac.page_image` upload only while it has no owner
 //   at all (owner_type and owner_id both null): an upload the orphan cleanup marked is never taken back;
+// - a news post may have a category and an event (start, end, place); a page has none, and a post turned into a page
+//   loses its own; the coming events are the published posts whose event has not ended, the soonest first;
 // - every write is audited once (`opac.page.*`, entity `pages`), with field names only.
 
 const ctx = testDbContext();
@@ -203,6 +206,54 @@ describe.skipIf(!ctx.available)(`Halaman & Berita service and OPAC reads [${engi
       ]);
     });
 
+    it('the agenda of a news post: created, read, changed field by field, audited by field name; refused on a page', async () => {
+      const start = NOW + 72 * HOUR;
+      const post = await db.run((tx) =>
+        createPage(tx, pageBody('bedah-buku', { kind: 'news', category: 'agenda', eventStartsAt: start, eventEndsAt: start + 2 * HOUR, eventPlace: '  Ruang baca lantai 2 ' })),
+      );
+      expect(post).toMatchObject({ category: 'agenda', eventStartsAt: start, eventEndsAt: start + 2 * HOUR, eventPlace: 'Ruang baca lantai 2' });
+      expect(await getPage(db.h.db, post.id)).toMatchObject({ category: 'agenda', eventStartsAt: start, eventEndsAt: start + 2 * HOUR, eventPlace: 'Ruang baca lantai 2' });
+      // Without them: all null.
+      const plain = await db.run((tx) => createPage(tx, pageBody('kabar-biasa', { kind: 'news' })));
+      expect(plain).toMatchObject({ category: null, eventStartsAt: null, eventEndsAt: null, eventPlace: null });
+
+      // Refused when created: an end before the start, an end or a place without a start, an agenda on a page.
+      expect(await fieldErrors(db.run((tx) => createPage(tx, pageBody('agenda-salah-1', { kind: 'news', eventStartsAt: start, eventEndsAt: start - 1 }))))).toEqual([{ path: 'eventEndsAt', code: 'invalid' }]);
+      expect(await fieldErrors(db.run((tx) => createPage(tx, pageBody('agenda-salah-2', { kind: 'news', eventEndsAt: start, eventPlace: 'Aula' }))))).toEqual([
+        { path: 'eventEndsAt', code: 'invalid' },
+        { path: 'eventPlace', code: 'invalid' },
+      ]);
+      expect(await fieldErrors(db.run((tx) => createPage(tx, pageBody('agenda-salah-3', { category: 'agenda', eventStartsAt: start }))))).toEqual([
+        { path: 'category', code: 'invalid' },
+        { path: 'eventStartsAt', code: 'invalid' },
+      ]);
+      expect(await db.h.db.selectFrom('pages').select('id').where('slug_key', 'like', 'agenda-salah-%').execute()).toEqual([]);
+
+      // A patch is checked against the page as it leaves it: the end sent alone is compared with the start it holds.
+      expect(await fieldErrors(db.run((tx) => updatePage(tx, post.id, { version: 0, eventEndsAt: start - 1 })))).toEqual([{ path: 'eventEndsAt', code: 'invalid' }]);
+      expect(await fieldErrors(db.run((tx) => updatePage(tx, post.id, { version: 0, eventStartsAt: null })))).toEqual([
+        { path: 'eventEndsAt', code: 'invalid' },
+        { path: 'eventPlace', code: 'invalid' },
+      ]);
+      expect(await fieldErrors(db.run((tx) => updatePage(tx, plain.id, { version: 0, eventEndsAt: start })))).toEqual([{ path: 'eventEndsAt', code: 'invalid' }]);
+      const moved = await db.run((tx) => updatePage(tx, post.id, { version: 0, category: 'activity', eventEndsAt: null, eventPlace: '' }));
+      expect(moved).toMatchObject({ category: 'activity', eventStartsAt: start, eventEndsAt: null, eventPlace: null, version: 1 });
+      // The same values sent again change no field.
+      await db.run((tx) => updatePage(tx, post.id, { version: 1, category: 'activity', eventStartsAt: start }));
+      expect(await audits(db, 'opac.page.update', post.id)).toEqual([
+        { entity: 'pages', meta: { fields: ['category', 'eventEndsAt', 'eventPlace'] } },
+        { entity: 'pages', meta: { fields: [] } },
+      ]);
+
+      // A page takes no agenda; a post turned into a page loses its own.
+      const page = await db.run((tx) => createPage(tx, pageBody('bukan-berita')));
+      expect(await fieldErrors(db.run((tx) => updatePage(tx, page.id, { version: 0, category: 'agenda' })))).toEqual([{ path: 'category', code: 'invalid' }]);
+      expect(await fieldErrors(db.run((tx) => updatePage(tx, post.id, { version: 2, kind: 'page', eventStartsAt: start })))).toEqual([{ path: 'eventStartsAt', code: 'invalid' }]);
+      const turned = await db.run((tx) => updatePage(tx, post.id, { version: 2, kind: 'page' }));
+      expect(turned).toMatchObject({ kind: 'page', category: null, eventStartsAt: null, eventEndsAt: null, eventPlace: null });
+      expect((await audits(db, 'opac.page.update', post.id)).at(-1)).toEqual({ entity: 'pages', meta: { fields: ['kind', 'category', 'eventStartsAt'] } });
+    });
+
     it('unknown ids are NOT_FOUND', async () => {
       const id = newId();
       expect(await failure(getPage(db.h.db, id))).toEqual({ code: 'NOT_FOUND' });
@@ -366,6 +417,56 @@ describe.skipIf(!ctx.available)(`Halaman & Berita service and OPAC reads [${engi
       expect(p2.items.slice(0, 2).map((n) => n.slug)).toEqual(['kabar-01', 'kabar-00']);
       expect((await latestNews(db.h.db, 3, at)).map((n) => n.slug)).toEqual(['kabar-11', 'kabar-10', 'kabar-09']);
       expect(await newsPage(db.h.db, p1.pages + 1, at)).toMatchObject({ items: [], pages: p1.pages });
+    });
+
+    it('the news of one category: newsPage and latestNews narrowed, listPages too; a post carries its agenda', async () => {
+      const t = T0 + 96 * HOUR;
+      const before = await newsPage(db.h.db, 1, t + HOUR, 'collection');
+      await db.run((tx) => createPage(tx, pageBody('koleksi-baru-a', { kind: 'news', category: 'collection', publishedAt: t })), t);
+      await db.run((tx) => createPage(tx, pageBody('pengumuman-libur', { kind: 'news', category: 'announcement', publishedAt: t + MINUTE })), t);
+      await db.run((tx) => createPage(tx, pageBody('koleksi-baru-b', { kind: 'news', category: 'collection', publishedAt: t + 2 * MINUTE })), t);
+      await db.run((tx) => createPage(tx, pageBody('tanpa-kategori', { kind: 'news', publishedAt: t + 3 * MINUTE })), t);
+      const at = t + HOUR;
+      const collection = await newsPage(db.h.db, 1, at, 'collection');
+      expect(collection.total).toBe(before.total + 2);
+      expect(collection.items.slice(0, 2).map((n) => [n.slug, n.category])).toEqual([
+        ['koleksi-baru-b', 'collection'],
+        ['koleksi-baru-a', 'collection'],
+      ]);
+      expect((await latestNews(db.h.db, 1, at, 'announcement')).map((n) => n.slug)).toEqual(['pengumuman-libur']);
+      expect((await latestNews(db.h.db, 4, at)).map((n) => n.slug)).toEqual(['tanpa-kategori', 'koleksi-baru-b', 'pengumuman-libur', 'koleksi-baru-a']);
+      expect((await latestNews(db.h.db, 1, at))[0]).toMatchObject({ category: null, eventStartsAt: null, eventEndsAt: null, eventPlace: null });
+      const listed = await listPages(db.h.db, { kind: 'news', category: 'announcement' });
+      expect(listed.items.map((p) => [p.slug, p.category, p.eventStartsAt])).toEqual([['pengumuman-libur', 'announcement', null]]);
+    });
+
+    it('upcomingEvents: published posts whose event is ahead or still running, the soonest first, at most n', async () => {
+      const t = T0 + 120 * HOUR;
+      const DAY = 24 * HOUR;
+      const event = (slug: string, o: Partial<PageBody>) => db.run((tx) => createPage(tx, pageBody(slug, { kind: 'news', category: 'agenda', publishedAt: t - DAY, ...o })), t - DAY);
+      await event('acara-lusa', { eventStartsAt: t + 2 * DAY, eventPlace: 'Aula' });
+      await event('acara-besok', { eventStartsAt: t + DAY, eventEndsAt: t + DAY + HOUR });
+      await event('acara-berjalan', { eventStartsAt: t - HOUR, eventEndsAt: t + HOUR, category: 'activity' });
+      await event('acara-tepat-sekarang', { eventStartsAt: t });
+      // Left out: over (with and without an end), no event, a draft, one published later, an archived one.
+      await event('acara-lewat', { eventStartsAt: t - 3 * HOUR, eventEndsAt: t - 1 });
+      await event('acara-lewat-tanpa-akhir', { eventStartsAt: t - 1 });
+      await event('bukan-acara', {});
+      await event('acara-draf', { status: 'draft', eventStartsAt: t + DAY });
+      await event('acara-terjadwal', { publishedAt: t + HOUR, eventStartsAt: t + DAY + 1 });
+      const gone = await event('acara-diarsipkan', { eventStartsAt: t + DAY });
+      await db.run((tx) => archivePage(tx, gone.id, gone.version), t - DAY);
+
+      const events = await upcomingEvents(db.h.db, 10, t);
+      expect(events.map((e) => e.slug)).toEqual(['acara-berjalan', 'acara-tepat-sekarang', 'acara-besok', 'acara-lusa']);
+      expect(events[0]).toMatchObject({ category: 'activity', eventStartsAt: t - HOUR, eventEndsAt: t + HOUR, eventPlace: null, translations: { id: { title: 'Halaman acara-berjalan' }, en: null } });
+      expect(events[3]).toMatchObject({ category: 'agenda', eventStartsAt: t + 2 * DAY, eventEndsAt: null, eventPlace: 'Aula' });
+      expect((await upcomingEvents(db.h.db, 2, t)).map((e) => e.slug)).toEqual(['acara-berjalan', 'acara-tepat-sekarang']);
+      expect(await upcomingEvents(db.h.db, 0, t)).toEqual([]);
+      // Once the running one ended and the scheduled post is out.
+      expect((await upcomingEvents(db.h.db, 10, t + HOUR + 1)).map((e) => e.slug)).toEqual(['acara-besok', 'acara-terjadwal', 'acara-lusa']);
+      const page = await publishedPage(db.h.db, 'news', 'acara-lusa', t);
+      expect(page).toMatchObject({ category: 'agenda', eventStartsAt: t + 2 * DAY, eventEndsAt: null, eventPlace: 'Aula' });
     });
   });
 });
