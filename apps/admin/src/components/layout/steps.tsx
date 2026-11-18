@@ -10,7 +10,7 @@ export function Steps({ steps, current, label, doneLabel }: { steps: readonly st
           <li key={text} aria-current={state === 'current' ? 'step' : undefined} className={cn('flex items-center gap-2', state === 'current' ? 'font-bold text-foreground' : state === 'done' ? 'text-muted-foreground' : 'text-muted-foreground/80')}>
             <span
               className={cn(
-                'inline-grid size-5.5 place-items-center rounded-full border text-xs font-bold tabular-nums',
+                'inline-grid size-5.5 place-items-center rounded-md border text-xs font-bold tabular-nums',
                 state === 'current' && 'border-primary bg-primary text-primary-foreground',
                 state === 'done' && 'border-ok-line text-ok',
               )}>

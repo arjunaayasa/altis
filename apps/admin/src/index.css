@@ -1,9 +1,10 @@
 /* The admin stylesheet: Tailwind (utilities from the classes under src/ only) and the ALTIS design tokens. Served as a
    hashed file from /admin/assets (CSP style-src 'self'); nothing here is inlined into index.html.
 
-   The visual system: calm, dense, easy to scan. Neutrals carry almost everything; the one accent (`--primary`) is for
-   the main action, the selected item, the selected row and focus; green / amber / red only for states, always with a
-   word next to them. Dark is composed on its own (not an inversion). The theme follows the system unless the user
+   The visual system: calm, dense, easy to scan. Flat colours (no gradients), thin borders instead of shadows, small
+   radii, letter spacing 0. Neutrals carry almost everything; the one accent (`--primary`) is for the main action,
+   the selected item, the selected row and focus; green / amber / red only for states, always with a word next to
+   them. The font (`--font-ui`) is loaded by src/fonts.css. Dark is composed on its own (not an inversion). The theme follows the system unless the user
    chose one in the user menu: `data-theme="light|dark"` on <html> (src/lib/theme.ts; index.html sets it before the
    first paint). */
 @import 'tailwindcss' source('.');
@@ -23,11 +24,26 @@
 
 @theme inline {
   --font-sans: var(--font-ui);
-  /* The admin's type scale is 12 / 13 / 14 (the base) / 16 / 20 / 24 px: Tailwind's xs, meta, sm, base, xl, 2xl. */
+  /* The admin's type scale, in px: 12 (xs), 12.5 (fine), 13 (meta), 13.5 (ui), 14 (sm, the base), 15 (heading),
+     16 (base), 21 (title), 24 (2xl). The base line height is 1.45. */
+  --text-fine: 0.78125rem;
+  --text-fine--line-height: 1.45;
   --text-meta: 0.8125rem;
   --text-meta--line-height: calc(1.25 / 0.8125);
+  --text-ui: 0.84375rem;
+  --text-ui--line-height: 1.45;
+  --text-sm--line-height: 1.45;
+  --text-heading: 0.9375rem;
+  --text-heading--line-height: 1.3;
+  --text-title: 1.3125rem;
+  --text-title--line-height: 1.25;
+  /* Letter spacing is 0 everywhere: the wide steps are switched off, so a `tracking-wide` left in a screen does nothing. */
+  --tracking-wide: 0em;
+  --tracking-wider: 0em;
+  --tracking-widest: 0em;
   --shadow-pop: var(--pop);
 
+  --color-page: var(--page);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
@@ -39,6 +55,7 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-accent: var(--accent);
@@ -70,61 +87,75 @@
   --color-bad-line: var(--bad-line);
   --color-series-1: var(--series-1);
   --color-series-2: var(--series-2);
-  --radius-sm: calc(var(--radius) - 4px);
+  --color-side: var(--side);
+  --color-side-fg: var(--side-fg);
+  --color-side-strong: var(--side-strong);
+  --color-side-muted: var(--side-muted);
+  --color-side-hover: var(--side-hover);
+  --color-side-active: var(--side-active);
+  --color-side-line: var(--side-line);
+  --color-side-count: var(--side-count);
+  /* 3 px (keys, counts), 4 px (controls: rounded-md), 6 px (cards: rounded-lg), 8 px (dialogs: rounded-xl). */
+  --radius-sm: calc(var(--radius) - 3px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 2px);
 }
 
 /*
- * The tokens. The design's own names are the neutral layers (`--layer`: sidebar, panels, table heads; `--layer-2`:
- * hover and neutral tags), the text steps (`--foreground`, `--muted-foreground`, `--faint`), the borders
- * (`--border`, `--border-strong`), the accent (`--primary`, `--primary-hover`, `--accent-soft` for selected and
- * active items, `--accent-text` for links), the states with their background and line (`--ok`, `--warn`, `--bad`,
- * each with `-bg` and `-line`), the chart series (`--series-1`, `--series-2`) and the one shadow, for menus and
- * dialogs (`--pop`). The shadcn names the primitives use are mapped onto them; `--accent` keeps its shadcn meaning
- * (the hover layer), so the design's accent is `--primary`.
+ * The tokens. The page lies on `--page` (a light grey); cards, the top bar, tables and controls are `--background`.
+ * The neutral layers: `--layer-2` for table heads, hover and neutral tags, `--layer` for a quiet panel between the
+ * two. The text steps (`--foreground`, `--muted-foreground`, `--faint`), the borders (`--border`, `--border-strong`
+ * for controls), the accent (`--primary`, `--primary-hover`, `--primary-soft` for the selected row and the active
+ * filter, `--accent-text` for links), the states with their background and line (`--ok`, `--warn`, `--bad`, each
+ * with `-bg` and `-line`), the two chart series (`--series-1`, `--series-2`), the sidebar (`--side*`: a solid
+ * charcoal in both themes, darker in the dark one) and the one shadow, for menus, drawers and dialogs (`--pop`).
+ * The shadcn names the primitives use are mapped onto them; `--accent` keeps its shadcn meaning (the hover layer),
+ * so the design's accent is `--primary`, and `--accent-soft` is the older name of `--primary-soft`.
  *
- * Shape: radius 6 px for controls (rounded-md), 8 px for containers (rounded-lg); controls 34 px high (h-8.5).
+ * Shape: radius 4 px for controls (rounded-md), 6 px for cards (rounded-lg); a switch and the round user initials
+ * are the only round things. Controls are 34 px high (h-8.5), small ones 28 px (h-7). No gradients anywhere.
  */
 :root {
-  --font-ui: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
-  --radius: 0.5rem;
+  --font-ui: 'Plus Jakarta Sans Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
+  --radius: 0.375rem;
 
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.23 0.015 255);
-  --layer: oklch(0.976 0.004 255);
-  --layer-2: oklch(0.952 0.006 255);
+  --page: #f5f6f7;
+  --background: #fff;
+  --foreground: #1c1f23;
+  --layer: #f8f9fa;
+  --layer-2: #f3f4f6;
   --muted: var(--layer-2);
-  --muted-foreground: oklch(0.44 0.014 255);
-  --faint: oklch(0.54 0.012 255);
+  --muted-foreground: #5b636d;
+  --faint: #666e78;
   --card: var(--background);
   --card-foreground: var(--foreground);
   --popover: var(--background);
   --popover-foreground: var(--foreground);
   --primary: oklch(0.48 0.14 255);
   --primary-hover: oklch(0.42 0.14 255);
-  --primary-foreground: oklch(0.99 0 0);
+  --primary-foreground: #fff;
+  --primary-soft: #e9eff9;
   --secondary: var(--layer-2);
   --secondary-foreground: var(--foreground);
   --accent: var(--layer-2);
   --accent-foreground: var(--foreground);
-  --accent-soft: oklch(0.955 0.022 255);
+  --accent-soft: var(--primary-soft);
   --accent-text: oklch(0.44 0.14 255);
-  --border: oklch(0.91 0.006 255);
-  --border-strong: oklch(0.82 0.01 255);
+  --border: #e1e4e8;
+  --border-strong: #c4cad1;
   --input: var(--border-strong);
   --ring: var(--primary);
 
-  --ok: oklch(0.46 0.11 150);
-  --ok-bg: oklch(0.965 0.025 150);
-  --ok-line: oklch(0.84 0.06 150);
-  --warn: oklch(0.47 0.1 65);
-  --warn-bg: oklch(0.972 0.035 85);
-  --warn-line: oklch(0.85 0.08 80);
-  --bad: oklch(0.5 0.17 25);
-  --bad-bg: oklch(0.97 0.018 25);
-  --bad-line: oklch(0.85 0.06 25);
+  --ok: #1b6e45;
+  --ok-bg: #e8f3ec;
+  --ok-line: #b5d8c3;
+  --warn: #7d5200;
+  --warn-bg: #faf0d9;
+  --warn-line: #e6cf96;
+  --bad: #a8271f;
+  --bad-bg: #faeae8;
+  --bad-line: #ecc0bb;
   /* The older state names, on the new values. */
   --destructive: var(--bad);
   --destructive-foreground: var(--background);
@@ -134,39 +165,55 @@
   --success-soft: var(--ok-bg);
   --success-foreground: var(--ok);
 
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
+  --series-1: #2f5fc4;
+  --series-2: #c2691c;
+
+  --side: #202327;
+  --side-fg: #c7ccd2;
+  --side-strong: #fff;
+  --side-muted: #8e959d;
+  --side-hover: #2a2e33;
+  --side-active: #353a40;
+  --side-line: #32363b;
+  --side-count: #454b52;
+
   --pop: 0 10px 30px oklch(0.2 0.02 255 / 0.12), 0 1px 3px oklch(0.2 0.02 255 / 0.08);
-  --scrim: oklch(0.2 0.01 255 / 0.45);
+  --scrim: oklch(0 0 0 / 0.45);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --background: oklch(0.205 0.008 255);
-    --foreground: oklch(0.94 0.005 255);
-    --layer: oklch(0.18 0.008 255);
-    --layer-2: oklch(0.255 0.01 255);
-    --muted-foreground: oklch(0.78 0.01 255);
-    --faint: oklch(0.68 0.01 255);
+    --page: #15171a;
+    --background: #1c1f23;
+    --foreground: #e6e8eb;
+    --layer: #202327;
+    --layer-2: #24282d;
+    --muted-foreground: #a3abb4;
+    --faint: #939ba4;
     --primary: oklch(0.72 0.12 255);
     --primary-hover: oklch(0.79 0.1 255);
-    --primary-foreground: oklch(0.17 0.02 255);
-    --accent-soft: oklch(0.29 0.045 255);
+    --primary-foreground: #0f1a2e;
+    --primary-soft: #1e2a40;
     --accent-text: oklch(0.8 0.1 255);
-    --border: oklch(0.3 0.01 255);
-    --border-strong: oklch(0.41 0.012 255);
-    --ok: oklch(0.8 0.11 150);
-    --ok-bg: oklch(0.26 0.035 150);
-    --ok-line: oklch(0.42 0.07 150);
-    --warn: oklch(0.84 0.1 82);
-    --warn-bg: oklch(0.27 0.035 80);
-    --warn-line: oklch(0.46 0.07 80);
-    --bad: oklch(0.78 0.12 25);
-    --bad-bg: oklch(0.27 0.045 25);
-    --bad-line: oklch(0.46 0.09 25);
-    --series-1: #3987e5;
-    --series-2: #d95926;
+    --border: #2e3338;
+    --border-strong: #464c53;
+    --ok: #74c79a;
+    --ok-bg: #16291f;
+    --ok-line: #2c5540;
+    --warn: #e2b75e;
+    --warn-bg: #2c2513;
+    --warn-line: #5c4b22;
+    --bad: #f0938b;
+    --bad-bg: #321a18;
+    --bad-line: #6b332e;
+    --series-1: #4f82dc;
+    --series-2: #cf7a3a;
+    --side: #111315;
+    --side-hover: #1c1f23;
+    --side-active: #272b30;
+    --side-line: #24282c;
+    --side-count: #3a4047;
     --pop: 0 10px 30px oklch(0 0 0 / 0.45), 0 1px 3px oklch(0 0 0 / 0.3);
     --scrim: oklch(0 0 0 / 0.55);
     color-scheme: dark;
@@ -174,30 +221,36 @@
 }
 
 :root[data-theme='dark'] {
-  --background: oklch(0.205 0.008 255);
-  --foreground: oklch(0.94 0.005 255);
-  --layer: oklch(0.18 0.008 255);
-  --layer-2: oklch(0.255 0.01 255);
-  --muted-foreground: oklch(0.78 0.01 255);
-  --faint: oklch(0.68 0.01 255);
+  --page: #15171a;
+  --background: #1c1f23;
+  --foreground: #e6e8eb;
+  --layer: #202327;
+  --layer-2: #24282d;
+  --muted-foreground: #a3abb4;
+  --faint: #939ba4;
   --primary: oklch(0.72 0.12 255);
   --primary-hover: oklch(0.79 0.1 255);
-  --primary-foreground: oklch(0.17 0.02 255);
-  --accent-soft: oklch(0.29 0.045 255);
+  --primary-foreground: #0f1a2e;
+  --primary-soft: #1e2a40;
   --accent-text: oklch(0.8 0.1 255);
-  --border: oklch(0.3 0.01 255);
-  --border-strong: oklch(0.41 0.012 255);
-  --ok: oklch(0.8 0.11 150);
-  --ok-bg: oklch(0.26 0.035 150);
-  --ok-line: oklch(0.42 0.07 150);
-  --warn: oklch(0.84 0.1 82);
-  --warn-bg: oklch(0.27 0.035 80);
-  --warn-line: oklch(0.46 0.07 80);
-  --bad: oklch(0.78 0.12 25);
-  --bad-bg: oklch(0.27 0.045 25);
-  --bad-line: oklch(0.46 0.09 25);
-  --series-1: #3987e5;
-  --series-2: #d95926;
+  --border: #2e3338;
+  --border-strong: #464c53;
+  --ok: #74c79a;
+  --ok-bg: #16291f;
+  --ok-line: #2c5540;
+  --warn: #e2b75e;
+  --warn-bg: #2c2513;
+  --warn-line: #5c4b22;
+  --bad: #f0938b;
+  --bad-bg: #321a18;
+  --bad-line: #6b332e;
+  --series-1: #4f82dc;
+  --series-2: #cf7a3a;
+  --side: #111315;
+  --side-hover: #1c1f23;
+  --side-active: #272b30;
+  --side-line: #24282c;
+  --side-count: #3a4047;
   --pop: 0 10px 30px oklch(0 0 0 / 0.45), 0 1px 3px oklch(0 0 0 / 0.3);
   --scrim: oklch(0 0 0 / 0.55);
   color-scheme: dark;
@@ -208,19 +261,24 @@
     @apply border-border outline-ring;
   }
   body {
-    @apply bg-background text-sm text-foreground antialiased;
-    line-height: 1.5;
+    @apply bg-page text-sm text-foreground antialiased;
+    line-height: 1.45;
+    letter-spacing: 0;
     caret-color: var(--primary);
     accent-color: var(--primary);
   }
   ::selection {
-    background: var(--accent-soft);
+    background: var(--primary-soft);
     color: var(--foreground);
   }
   :focus-visible {
     outline-width: 2px;
     outline-style: solid;
     outline-offset: 2px;
+  }
+  /* On the charcoal sidebar the focus outline is white. */
+  [data-slot='sidebar'] :focus-visible {
+    outline-color: #fff;
   }
   h1,
   h2,
@@ -235,7 +293,7 @@
     font-variant-numeric: tabular-nums;
   }
   kbd {
-    @apply rounded-sm border border-border-strong bg-background px-1 text-xs leading-normal font-semibold whitespace-nowrap text-muted-foreground;
+    @apply rounded-sm border border-border-strong bg-background px-1.25 text-[0.71875rem] leading-[18px] font-medium whitespace-nowrap text-muted-foreground;
     font-family: inherit;
   }
 }
