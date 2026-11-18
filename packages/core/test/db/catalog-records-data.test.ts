@@ -1,7 +1,17 @@
 import { newId } from '@altis/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDbContext } from '../../../../tools/test/test-db.js';
-import { createRecord, listRecords, loadRecordData, recordDetail, updateRecord } from '../../src/catalog/records/index.js';
+import {
+  RECORD_VIEW_COUNTS_TTL_MS,
+  cachedRecordViewCounts,
+  countRecords,
+  createRecord,
+  listRecords,
+  loadRecordData,
+  recordDetail,
+  recordViewCounts,
+  updateRecord,
+} from '../../src/catalog/records/index.js';
 import {
   NOW,
   failure,
@@ -191,5 +201,50 @@ describe.skipIf(!ctx.available)(`records: data loader, detail and list [${engine
     await db.h.db.updateTable('records').set({ archived_at: NOW }).where('id', '=', ids[0]!).execute();
     expect((await listRecords(db.h.db, { archived: true, limit: 50 })).items.map((r) => r.id)).toEqual([ids[0]]);
     expect((await listRecords(db.h.db, { limit: 50 })).items.map((r) => r.id)).not.toContain(ids[0]);
+  });
+
+  it('countRecords and recordViewCounts: each count is the number of rows the list holds for the same filters', async () => {
+    const listed = async (q: Parameters<typeof countRecords>[1]): Promise<number> => (await listRecords(db.h.db, { ...q, limit: 200 })).items.length;
+    // Six live records so far: one of them hidden (Tersembunyi), one with live items (Bumi Manusia). One is archived.
+    const views = await recordViewCounts(db.h.db);
+    expect(views).toEqual({ all: 6, no_items: 5, hidden: 1, archived: 1 });
+    expect(views).toEqual({ all: await listed({}), no_items: await listed({ hasItems: false }), hidden: await listed({ hidden: 'only' }), archived: await listed({ archived: true }) });
+
+    const base = NOW + 1000;
+    for (const q of [
+      {},
+      { hasItems: true },
+      { hasItems: false, hidden: 'exclude' },
+      { hidden: 'only', hasItems: false },
+      { archived: true, hasItems: false },
+      { materialTypeId: buku },
+      { materialTypeId: newId() },
+      { changedFrom: base, changedTo: base + 1 },
+      { changedFrom: base + 2 },
+    ] as Parameters<typeof countRecords>[1][]) {
+      expect(await countRecords(db.h.db, q), JSON.stringify(q)).toBe(await listed(q));
+    }
+    expect(await countRecords(db.h.db, { hasItems: true })).toBe(1);
+    expect(await countRecords(db.h.db, { hasItems: false, hidden: 'exclude' })).toBe(4);
+    expect(await countRecords(db.h.db, { materialTypeId: newId() })).toBe(0);
+    // A record whose only item is archived has no item, as in the list.
+    const lone = (await db.run((tx) => createRecord(tx, { materialTypeId: buku, title: 'Eksemplar Diarsipkan' }))).id;
+    await seedItem(db, lone, { barcode: 'B0000090', archived: true });
+    expect(await countRecords(db.h.db, { hasItems: false })).toBe(6);
+    expect(await countRecords(db.h.db, { hasItems: true })).toBe(1);
+  });
+
+  it('cachedRecordViewCounts keeps the view counts for its time, then reads them again', async () => {
+    let at = 1000;
+    const clock = (): number => at;
+    const first = await cachedRecordViewCounts(db.h.db, clock);
+    expect(first).toEqual(await recordViewCounts(db.h.db));
+    await db.run((tx) => createRecord(tx, { materialTypeId: buku, title: 'Sesudah Hitungan' }));
+    at += RECORD_VIEW_COUNTS_TTL_MS - 1;
+    expect(await cachedRecordViewCounts(db.h.db, clock)).toEqual(first);
+    at += 1;
+    const later = await cachedRecordViewCounts(db.h.db, clock);
+    expect(later).toEqual({ ...first, all: first.all + 1, no_items: first.no_items + 1 });
+    expect(RECORD_VIEW_COUNTS_TTL_MS).toBeLessThanOrEqual(60_000);
   });
 });
