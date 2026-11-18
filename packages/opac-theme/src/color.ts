@@ -59,3 +59,19 @@ export function contrastRatio(a: string, b: string): number {
   const y = luminance(hexRgb(b));
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
+
+/** The OKLCH lightness (0-1), chroma and hue (degrees, 0-360) of an sRGB colour. */
+export function rgbToOklch(rgb: Rgb): [l: number, c: number, h: number] {
+  const [r, g, b] = rgb.map((x) => {
+    const c = x / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  const l1 = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m1 = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s1 = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  const l = 0.2104542553 * l1 + 0.793617785 * m1 - 0.0040720468 * s1;
+  const a = 1.9779984951 * l1 - 2.428592205 * m1 + 0.4505937099 * s1;
+  const bb = 0.0259040371 * l1 + 0.7827717662 * m1 - 0.808675766 * s1;
+  const h = (Math.atan2(bb, a) * 180) / Math.PI;
+  return [l, Math.hypot(a, bb), h < 0 ? h + 360 : h];
+}

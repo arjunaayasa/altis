@@ -32,9 +32,11 @@ import { AKUN_CSS } from './akun.js';
 // ---- Komunitas (OPAC home page) ----
 import { HOME_CSS } from './home.js';
 
-export { ACCENTS, ACCENT_COLORS, BAR_COLORS, DEFAULT_ACCENT, FRESH_INSTALL_ACCENT, SCHEME_COLORS, isAccent } from './base.js';
+export { ACCENTS, ACCENT_COLORS, PANEL_COLORS, DEFAULT_ACCENT, FRESH_INSTALL_ACCENT, SCHEME_COLORS, isAccent } from './base.js';
 export type { AccentName } from './base.js';
-export { contrastRatio, hexRgb, oklchHex, oklchToRgb, rgbHex } from './color.js';
+export { BRAND_BACKDROPS, brandCss, brandTokens } from './brand.js';
+export type { BrandScheme, BrandTokens } from './brand.js';
+export { contrastRatio, hexRgb, oklchHex, oklchToRgb, rgbHex, rgbToOklch } from './color.js';
 export type { Rgb } from './color.js';
 export { OPAC_FONTS, OPAC_FONT_FACE_CSS, OPAC_FONT_FAMILY, OPAC_FONT_FILE_NAME, OPAC_FONT_PACKAGE, OPAC_FONT_STACK } from './fonts.js';
 export type { OpacFont } from './fonts.js';
