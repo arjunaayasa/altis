@@ -21,6 +21,7 @@ In the examples, `things.*` keys stand for the screen's own i18n keys (every tex
 | `figures.tsx` | `StatRow`, `StatStrip`, `FactList` |
 | `filter-tabs.tsx` | `FilterTabs` |
 | `table-toolbar.tsx` | `TableToolbar` |
+| `filter-chip.tsx` | `ChipSelect`, `ChipToggle`, `ChipButton`, `CHIP`, `CHIP_ON` (the classes) |
 | `filter-row.tsx` | `FilterRow`, `FilterField`, `FILTER_ROW` (the class, for a row drawn by hand) |
 | `table.tsx` | `DenseTable`, `DenseColumn`, `TABLE` (the classes, for a table drawn by hand), `SkeletonTable`, `SKELETON_BAR` |
 | `selection-bar.tsx` | `BulkBar` (`SelectionBar` is its older name), `SelectionAction` |
@@ -165,7 +166,10 @@ sideways on a narrow screen.
 **`TableToolbar`** is the row of controls inside the card, above the table: the search field, then filter buttons;
 `actions` are pushed to the right. A filter button that is in use takes the accent (`border-primary bg-primary-soft
 text-accent-text`). Every control has an accessible name: a search field whose placeholder is only an example takes
-an `aria-label`.
+an `aria-label`. The filter buttons are chips (`filter-chip.tsx`): `ChipSelect` chooses one of several values (a
+native `<select>` under the chip's text, named by the chip), `ChipToggle` is a checkbox, `ChipButton` opens a popover
+for a filter with more than one control (a date range). A chip at rest shows the filter's name; in use it shows
+"name: value".
 
 **`FilterRow`** is for a list with several labelled filters: every filter has a **visible label above it**; a
 placeholder is an example, never the label. It is a named form: the search field (`wide`) first, then the selects.

@@ -3,6 +3,7 @@ export { CARD, CARD_HEAD, CARD_TITLE, PANEL, Card, CardBody, CardHead } from './
 export { Callout, PageError } from './callout';
 export { EditorDrawer } from './editor-drawer';
 export { FactList, StatRow, StatStrip, type StatRowItem } from './figures';
+export { CHIP, CHIP_ON, ChipButton, ChipSelect, ChipToggle, type ChipOption } from './filter-chip';
 export { FILTER_ROW, FilterField, FilterRow } from './filter-row';
 export { FilterTabs, type FilterTab } from './filter-tabs';
 export { FORM_FULL, FormBar, FormSection, SideSection } from './form-section';

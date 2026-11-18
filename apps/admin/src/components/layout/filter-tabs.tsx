@@ -45,6 +45,8 @@ export function FilterTabs({ label, items, value, onChange, className }: { label
   const content = (item: FilterTab): ReactNode => (
     <>
       {item.label}
+      {/* A space between the two, for the accessible name ("Semua 28"). */}
+      {item.count !== undefined && ' '}
       {item.count !== undefined && <span className="font-normal text-muted-foreground tabular-nums">{item.count}</span>}
     </>
   );
