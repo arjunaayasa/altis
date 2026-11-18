@@ -9,8 +9,9 @@ import type { SlimsDbConfig, SlimsRow, SlimsSource, SlimsTableInfo } from './typ
 // table and column name a `??` value (the `cf_*` columns of the custom tables come from the source), every value a `?`.
 //
 // - tables(): the base tables of the connection's database (information_schema), their columns in order, their primary
-//   keys, and exact row counts (COUNT(*)) for the tables the migration reads or reports as "Fase 3"; derived tables
-//   and tables it does not know have `rows: null`. Read once per source.
+//   keys, and exact row counts (COUNT(*)) for the tables the migration reads, reports as "Fase 3", or reports as
+//   derived (the report lists them with their rows, as the dump path does); tables it does not know have
+//   `rows: null`. Read once per source.
 // - rows(): keyset pages of at most 500 rows ordered by the primary key, the next page after the last key as a row
 //   comparison `(a, b) > (?, ?)`; the cursor is `k:` and the JSON of that key. A table without a primary key is paged
 //   by LIMIT/OFFSET (cursor `o:<offset>`) and flagged `no_pk`. A text key value travels back as text, so the server
@@ -192,7 +193,7 @@ export async function openDbSource(cfg: SlimsDbConfig, o: OpenDbSourceOptions = 
     for (const name of [...names].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
       if (projection !== undefined && !Object.hasOwn(projection, name)) continue;
       const role = slimsTableRole(name);
-      const counted = projection !== undefined || role === 'read' || role === 'phase3';
+      const counted = projection !== undefined || role !== 'other';
       const rows = counted ? Number((await query('SELECT COUNT(*) AS n FROM ??', [name]))[0]?.['n'] ?? 0) : null;
       const primaryKey = ordered(keys.get(name));
       const present = ordered(columns.get(name));

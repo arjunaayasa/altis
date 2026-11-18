@@ -13,8 +13,9 @@ import { keyOf, oneLine } from './stages/stage-b-kit.js';
 //
 // 1. once, at its start: the version the tables look like (`detectSlimsVersion`, B1: `unknown` ends the run as
 //    `source_unsupported`, `8` is best effort and warned), a report row per missing core table, per table with
-//    columns this release does not know, and per table no stage reads that is not listed in §11.4 either
-//    (`table_not_mapped`); and the rows of the target tables before the run (M13);
+//    columns this release does not know, per table a stage reads that the database source pages by offset for want of
+//    a primary key (`no_pk`), and per table no stage reads that is not listed in §11.4 either (`table_not_mapped`); and
+//    the rows of the target tables before the run (M13);
 // 2. the rows of every table a stage reads (`source`), and of the "Fase 3" and derived tables (`unread`): the count the
 //    source reports when it knows it, otherwise the rows read in keyset batches of 500 (an unread table is never read);
 // 3. the character set of the text columns of `biblio`, `item`, `mst_author` and `mst_topic` in their first 1 000 rows
@@ -31,6 +32,8 @@ const CHARSET_ROWS = 1000;
 /** Columns sampled per table at most (a table of a crafted dump may have thousands; SLiMS's widest has about 30). */
 const CHARSET_COLUMNS_PER_TABLE = 48;
 const DETAIL_NAMES_MAX = 40;
+const NO_PK_DETAIL =
+  'Tanpa kunci primer: dibaca per offset, baris yang berubah selama migrasi bisa terlewat atau terbaca dua kali / No primary key: read by offset, rows changed during the migration may be skipped or read twice';
 
 const analyzeCursor = z.strictObject({
   p: z.enum(['count', 'charset']),
@@ -139,6 +142,7 @@ async function begin(c: SlimsStageContext, tables: readonly SlimsTableInfo[]): P
   }
   if (info.version === '8') p.warn('slims8_best_effort');
   for (const t of tables) {
+    if (p.readTables().has(t.name) && t.flags?.includes('no_pk') === true) c.report({ table: t.name, legacyKey: null, code: 'no_pk', detail: NO_PK_DETAIL });
     if (p.readTables().has(t.name) || slimsUnreadKind(t.name) !== null) continue;
     c.report({ table: t.name, legacyKey: null, code: 'table_not_mapped', detail: `rows=${t.rows ?? '?'}` });
   }
