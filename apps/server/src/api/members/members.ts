@@ -1,14 +1,16 @@
-import { archiveMember, createMember, extendMember, getMember, listMemberEvents, lookupMember, memberClassNames, searchMembers, updateMember } from '@altis/core';
+import { archiveMember, createMember, extendMember, findMemberDuplicates, getMember, listMemberEvents, lookupMember, memberClassNames, searchMembers, updateMember } from '@altis/core';
 import type { StoreResponse } from '@altis/shared/api/catalog/common';
 import {
   ArchiveBody,
   MemberBody,
+  MemberDuplicatesBody,
   MemberEventsQuery,
   MemberExtendBody,
   MemberLookupBody,
   MemberPatchBody,
   MemberSearchBody,
   type MemberClassesResponse,
+  type MemberDuplicatesResponse,
   type MemberEventsResponse,
   type MemberSearchResponse,
   type MemberView,
@@ -28,8 +30,10 @@ import { route, type RouteDecl } from '../../http/route.js';
 //   POST   members/:id/extend   members.records.manage   MemberExtendBody → StoreResponse         members.member.extend
 //   GET    members/:id/events   members.records.read     MemberEventsQuery → MemberEventsResponse
 //   GET    members/classes      members.records.read     → MemberClassesResponse (before members/:id)
+//   POST   members/duplicates   members.records.read     MemberDuplicatesBody → MemberDuplicatesResponse  read, tx self
 //
-// Search and lookup are POST reads: a name or a member number never goes in a URL. Suspending and reactivating are a
+// Search, lookup and the duplicate check are POST reads: a name, a phone or a member number never goes in a URL. The
+// duplicate check answers with a number and a name only, to a reader of member records, as the search does. Suspending and reactivating are a
 // PATCH of `status` (audited as an update; the history says `suspended` or `reactivated`). Archive, suspend and every
 // status change lock the member's row with their first statement; archiving a member with open loans is 409
 // MEMBER_IN_USE `{openLoans, balanceMinor}`.
@@ -171,8 +175,26 @@ const membersClasses = route({
   },
 });
 
+/** The members who may be the person being entered (same name and birth date, or the same phone): never a refusal. */
+const membersDuplicates = route({
+  id: 'members.duplicates',
+  method: 'POST',
+  path: `${API}/duplicates`,
+  permission: 'members.records.read',
+  mode: 'read',
+  idempotency: 'none',
+  audit: null,
+  tx: 'self',
+  body: MemberDuplicatesBody,
+  handler: async (rc) => {
+    const body: MemberDuplicatesResponse = { items: await findMemberDuplicates(rc.db.db, rc.body) };
+    return { body };
+  },
+});
+
 export const MEMBER_ROUTES: RouteDecl[] = [
   membersSearch,
+  membersDuplicates,
   membersLookup,
   membersCreate,
   // ---- Komunitas (staff screens' data): before members/:id, which would take `classes` for an id ----
