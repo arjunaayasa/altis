@@ -16,6 +16,7 @@ import {
 } from '@altis/shared/api/opac-home';
 import type { OpacAccent } from '@altis/shared/api/settings';
 import { useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { CheckField, Field, Notice, TEXTAREA_CLASS } from '@/components/form-field';
 import { Callout, ErrorState, FORM_FULL, FormBar, FormSection, LoadingState, PageError, PageHead, SectionHead, StatusText } from '@/components/layout';
@@ -31,7 +32,7 @@ import { fieldErrorKey } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { uploadFile } from '@/lib/upload';
 import { cn } from '@/lib/utils';
-import { PHOTO_SOURCE_MAX_BYTES, PHOTO_SOURCE_TYPES, PhotoCropPanel, fitLogo, jpegOf, photoSourceOf, type PhotoSource } from './crop';
+import { PHOTO_SOURCE_MAX_BYTES, PHOTO_SOURCE_TYPES, PhotoCropPanel, photoSourceOf, type PhotoSource } from './crop';
 import { bodyOf, comparable, draftOf, newRowKey, type HomeDraft, type PhotoDraft, type TextDraft } from './draft';
 
 /**
@@ -39,9 +40,8 @@ import { bodyOf, comparable, draftOf, newRowKey, type HomeDraft, type PhotoDraft
  * library's profile. `GET opac/home` loads the content, both welcome texts and their revision; the form edits them in
  * one draft, one form section per part: the photo of the hero's first slide (uploaded as `opac.home_photo` after a 16:9
  * crop in a panel under its control), its alternative text and position, the library colour (with the contrast white
- * text keeps on it), the heading and the lead sentence in each language, the library's logo (fitted whole onto a white tile, with its
- * alternative text) and the telephone number and e-mail address the site publishes, "about" (photo, paragraph in each
- * language, year founded, librarians), up to eight services, up to four facility photos (4:3), the opening hours with
+ * text keeps on it), the heading and the lead sentence in each language, the telephone number and e-mail address the site publishes (the logo is set
+ * under Identitas situs; the one loaded is sent back unchanged), "about" (photo, paragraph in each language, year founded, librarians), up to eight services, up to four facility photos (4:3), the opening hours with
  * the weekdays each row covers, and the blocks shown. A preview of the hero beside the form follows the unsaved draft,
  * in either language. The form's bar sticks to the bottom with a mark while something is unsaved, "Batalkan perubahan"
  * goes back to what was loaded, and `PUT opac/home` saves it all. The outcome of a save is said under the page head:
@@ -226,73 +226,6 @@ function PhotoUpload({ label, size, onUploaded }: { label: string; size: { width
 }
 
 /**
- * The logo's file input: the chosen image is decoded, fitted whole onto a white tile (crop.tsx `fitLogo`), encoded as a
- * JPEG of at most 500 KB and uploaded as `opac.home_photo`; the upload's id goes to `onUploaded`.
- */
-function LogoUpload({ label, onUploaded }: { label: string; onUploaded(fileId: string): void }) {
-  const t = useT();
-  const id = useId();
-  const input = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const choose = async (e: ChangeEvent<HTMLInputElement>): Promise<void> => {
-    const file = e.target.files?.[0];
-    if (input.current !== null) input.current.value = '';
-    if (file === undefined) return;
-    setError(null);
-    const refused = sourceProblem(file, t);
-    if (refused !== null) {
-      setError(refused);
-      return;
-    }
-    let source: PhotoSource;
-    try {
-      source = await photoSourceOf(file);
-    } catch {
-      setError(t('opacHome.photo.unreadable'));
-      return;
-    }
-    setBusy(true);
-    try {
-      const jpeg = await jpegOf(fitLogo(source));
-      if (jpeg === null) {
-        setError(t('opacHome.logo.too_large'));
-        return;
-      }
-      const { uploadId } = await uploadFile(jpeg, { context: 'opac.home_photo' });
-      onUploaded(uploadId);
-    } catch {
-      setError(t('opacHome.photo.upload_failed'));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="grid gap-1.5">
-      <Label htmlFor={id} className="text-meta">
-        {label}
-      </Label>
-      <FileInput
-        ref={input}
-        id={id}
-        accept={PHOTO_SOURCE_TYPES.join(',')}
-        disabled={busy}
-        aria-describedby={error === null ? undefined : `${id}-error`}
-        onChange={(e) => void choose(e)}
-      />
-      {busy && (
-        <p role="status" className="text-meta text-muted-foreground">
-          {t('opacHome.logo.uploading')}
-        </p>
-      )}
-      {error !== null && <ControlError id={`${id}-error`}>{error}</ControlError>}
-    </div>
-  );
-}
-
-/**
  * The proportions of the site's hero band, which are not the photo's 16:9: on a wide screen the band is 30 rem high
  * under a laptop's width (about 3:1, so the photo's top and bottom are cut and its position picks the part shown), on a
  * phone 24 rem or more under a phone's width (about 4:5, so its sides are cut).
@@ -321,7 +254,7 @@ function HeroFrame({ draft, view, ratio, label, className, children }: { draft: 
 }
 
 /**
- * The hero preview in the band's proportions (see {@link HERO_FRAMES}): on a wide screen with the logo and name, the
+ * The hero preview in the band's proportions (see {@link HERO_FRAMES}): on a wide screen with the library's name, the
  * heading, the lead and the search box, on a phone the photo alone.
  */
 function HeroPreview({ draft, view }: { draft: HomeDraft; view: OpacHomeView }) {
@@ -341,7 +274,6 @@ function HeroPreview({ draft, view }: { draft: HomeDraft; view: OpacHomeView }) 
       <HeroFrame draft={draft} view={view} ratio={HERO_FRAMES.wide} label={t('opacHome.preview.wide')}>
         <div className="relative grid w-full gap-1 self-stretch p-3" lang={lang}>
           <p className="flex items-center gap-1.5 self-start text-[10px] font-bold">
-            {draft.logo !== null && <img src={fileSrc(draft.logo.fileId)} alt="" className="h-4 w-auto rounded-sm bg-white" />}
             <span>{view.libraryName}</span>
           </p>
           <div className="grid gap-1 self-end">
@@ -634,42 +566,13 @@ function HomeEditor({
           </FormSection>
 
           <FormSection title={t('opacHome.identity.title')} intro={t('opacHome.identity.description')}>
-            <div className={cn('grid gap-3', FORM_FULL)}>
-              <p className="text-meta font-semibold">{t('opacHome.logo.label')}</p>
-              {draft.logo === null ? (
-                <p className="text-sm text-muted-foreground">{t('opacHome.logo.none')}</p>
-              ) : (
-                <div className="flex w-fit max-w-full items-center gap-3 rounded-lg px-4 py-3 text-white" style={{ backgroundColor: bandColor(draft, view) }}>
-                  <img src={fileSrc(draft.logo.fileId)} alt={draft.logo.alt === '' ? t('opacHome.logo.preview_alt') : draft.logo.alt} className="h-10 w-auto max-w-40 rounded-sm bg-white" />
-                  <span className="text-sm font-bold">{view.libraryName}</span>
-                </div>
-              )}
-              <div className="flex flex-wrap items-end gap-3">
-                <LogoUpload
-                  label={t(draft.logo === null ? 'opacHome.logo.upload' : 'opacHome.logo.replace')}
-                  onUploaded={(fileId) => edit((d) => ({ ...d, logo: { fileId, alt: '' } }))}
-                />
-                {draft.logo !== null && (
-                  <Button type="button" variant="outline" size="sm" onClick={() => edit((d) => ({ ...d, logo: null }))}>
-                    {t('opacHome.logo.remove')}
-                  </Button>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">{t('opacHome.logo.hint')}</p>
-            </div>
-            {draft.logo !== null && (
-              <Field label={t('opacHome.logo.alt')} hint={t('opacHome.logo.alt_hint')} error={errorAt('home.logo.alt')} className={FORM_FULL}>
-                {(c) => (
-                  <Input
-                    {...c}
-                    required
-                    value={draft.logo?.alt ?? ''}
-                    maxLength={OPAC_HOME_LIMITS.alt}
-                    onChange={(e) => edit((d) => (d.logo === null ? d : { ...d, logo: { ...d.logo, alt: e.target.value } }))}
-                  />
-                )}
-              </Field>
-            )}
+            {/* The logo moved to the site's identity; the one loaded here is sent back as it was. */}
+            <p className={cn('text-meta text-muted-foreground', FORM_FULL)}>
+              {t('siteIdentity.moved.note')}{' '}
+              <Link to="/admin/opac/identitas" className="font-semibold text-accent-text underline-offset-4 hover:underline">
+                {t('siteIdentity.moved.link')}
+              </Link>
+            </p>
             <div className={cn('grid gap-x-5 gap-y-4 sm:grid-cols-2', FORM_FULL)}>
               <Field label={t('opacHome.contact.phone')} hint={t('opacHome.contact.phone_hint')} error={errorAt('home.contact.phone')}>
                 {(c) => (
