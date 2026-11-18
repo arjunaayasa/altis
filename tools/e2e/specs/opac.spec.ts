@@ -445,7 +445,8 @@ test('home: the new and featured titles with their covers, the news, the classes
 
       const news = page.locator('section[aria-labelledby="berita-terbaru"]');
       await expect(news.getByRole('link', { name: d.news.title, exact: true })).toHaveAttribute('href', `/berita/${d.news.slug}?lang=${locale}`);
-      await expect(page.locator('section[aria-labelledby="jelajah-kelas"] a[href^="/cari?kelas="]')).toHaveCount(10);
+      await expect(news.locator('.newsrow img')).toHaveAttribute('src', `/files/${d.news.coverFileId}`);
+      await expect(page.locator('ul[aria-labelledby="jelajah-kelas"] a[href^="/cari?kelas="]')).toHaveCount(10);
 
       const menu = page.getByRole('navigation').filter({ has: page.locator(`a[href^="/halaman/${d.page.slug}"]`) });
       await expect(menu.getByRole('link', { name: d.page.title[locale], exact: true })).toHaveAttribute('href', `/halaman/${d.page.slug}?lang=${locale}`);
@@ -544,7 +545,7 @@ test('detail: cover, agents, subjects, availability on the shelf map, citations 
     await expect(main.getByRole('heading', { level: 1 })).toContainText(d.record.title);
     await expect(main.getByRole('heading', { level: 1 })).toContainText(d.record.subtitle);
     await expect(main.locator('img.record-cover')).toHaveAttribute('src', `/files/${d.record.coverFileId}`);
-    await expectImagesLoaded(main.locator('header.record-header'), 'the cover');
+    await expectImagesLoaded(main.locator('.record-cover-col'), 'the cover');
     await expect(main.locator('section[aria-labelledby="deskripsi"]')).toContainText(d.record.isbn);
     await expect(page.locator('head link[rel="canonical"]')).toHaveAttribute('href', new RegExp(`^${escapeRegExp(baseURL!)}/katalog/${d.record.id}/[a-z0-9-]+$`));
   });
@@ -733,7 +734,9 @@ test('page and news: the menu page with its image, the news list, the post with 
 
   await clean(csp, 'the news list, then the post with its cover', async () => {
     await page.goto('/berita');
-    await page.locator('main ol.news-index').getByRole('link', { name: d.news.title, exact: true }).click();
+    const row = page.locator('main ul.news-rows article').filter({ has: page.getByRole('link', { name: d.news.title, exact: true }) });
+    await expectImagesLoaded(row, 'the news row photo');
+    await row.getByRole('link', { name: d.news.title, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/berita/${d.news.slug}$`));
     const article = page.locator('main article.page-article');
     await expect(article.getByRole('heading', { level: 1 })).toHaveText(d.news.title);
@@ -773,4 +776,199 @@ test('crawlers: robots.txt names the sitemap, and the sitemaps list the record a
   const pages = await (await page.request.get('/sitemap/halaman')).text();
   expect(pages).toContain(`<loc>${baseURL!}/halaman/${d.page.slug}</loc>`);
   expect(pages).toContain(`<loc>${baseURL!}/berita/${d.news.slug}</loc>`);
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// The hero's slides (the home page as the library's profile site).
+//
+// Three slides are saved through the API, the last one with the longest texts the setting takes. The hero must have
+// nothing to scroll, with or without the script: a horizontal wheel, Shift + wheel and a drag leave every element of
+// it where it was. With the script the next button changes the slide; without it the second indicator brings the
+// second slide to the top. And on every slide the controls stay clear of the text, at 390, 768, 1000 and 1440 px, in
+// the light and the dark scheme.
+
+/** A grey baseline JPEG of `width` × `height`: one component, every block a DC difference of zero and nothing else. */
+function greyJpeg(width: number, height: number): Buffer {
+  const u16 = (n: number): number[] => [(n >> 8) & 0xff, n & 0xff];
+  const table = (id: number): number[] => [0xff, 0xc4, 0x00, 0x14, id, 1, ...new Array<number>(15).fill(0), 0x00];
+  const blocks = Math.ceil(width / 8) * Math.ceil(height / 8);
+  // Each block is two zero bits (the one DC code, then the one AC code, end of block); the last byte is padded with ones.
+  const bits = blocks * 2;
+  const scan = Buffer.alloc(Math.ceil(bits / 8));
+  if (bits % 8 !== 0) scan[scan.length - 1] = 0xff >> (bits % 8);
+  return Buffer.concat([
+    Buffer.from([0xff, 0xd8]),
+    Buffer.from([0xff, 0xdb, 0x00, 0x43, 0x00, ...new Array<number>(64).fill(1)]),
+    Buffer.from([0xff, 0xc0, 0x00, 0x0b, 0x08, ...u16(height), ...u16(width), 0x01, 0x01, 0x11, 0x00]),
+    Buffer.from(table(0x00)),
+    Buffer.from(table(0x10)),
+    Buffer.from([0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00]),
+    scan,
+    Buffer.from([0xff, 0xd9]),
+  ]);
+}
+
+const HERO_WIDTHS = [390, 768, 1000, 1440] as const;
+const HERO_SCHEMES = ['light', 'dark'] as const;
+/** The least room between the last line of a slide's text and the controls, in CSS pixels. */
+const HERO_GAP_MIN = 16;
+
+test.describe('the hero slides', () => {
+  test.beforeAll(async () => {
+    const api = await CatalogApi.signIn(baseUrlOfRun());
+    try {
+      const view = await api.json<{ revision: string; home: Record<string, unknown>; welcome: unknown }>('GET', 'opac/home');
+      const none = { id: null, en: null };
+      const slides = [];
+      for (const [i, texts] of [
+        { title: 'Ruang baca untuk semua', subtitle: 'Cari buku di katalog, lalu pinjam dengan kartu anggota.', cta: 'Jelajahi katalog' },
+        { title: 'Judul baru bulan ini', subtitle: 'Lihat judul yang baru masuk ke rak.', cta: null },
+        {
+          title: 'Kegiatan membaca bersama untuk anak, remaja, dan keluarga setiap akhir pekan',
+          subtitle:
+            'Setiap Sabtu dan Minggu pagi perpustakaan mengadakan sesi membaca bersama, mendongeng, dan diskusi buku. Semua warga boleh ikut tanpa mendaftar lebih dulu, cukup datang pada jam buka.',
+          cta: 'Lihat semua berita dan agenda',
+        },
+      ].entries()) {
+        // A different size per slide: a photo is used once, and each upload is another file.
+        const fileId = await api.upload('opac.home_photo', greyJpeg(480 + i * 16, 270 + i * 9), `slide-${i + 1}.jpg`);
+        slides.push({
+          id: `e2e-${i + 1}`,
+          fileId,
+          alt: `Foto slide ${i + 1}`,
+          position: 50,
+          note: i === 2 ? { id: 'Agenda · Sabtu dan Minggu', en: null } : none,
+          title: { id: texts.title, en: null },
+          subtitle: { id: texts.subtitle, en: null },
+          cta: texts.cta === null ? null : { label: { id: texts.cta, en: null }, target: { kind: i === 0 ? 'catalog' : 'news' } },
+          active: true,
+          from: null,
+          until: null,
+        });
+      }
+      await api.json('PUT', 'opac/home', { revision: view.revision, home: { ...view.home, hero: { slides, autoplay: true, intervalSec: 5 } }, welcome: view.welcome });
+    } finally {
+      await api.dispose();
+    }
+  });
+
+  /** Every element of the hero that is scrolled or could be: none is the pass. The clipped labels for screen readers are 1 px boxes by design. */
+  const scrollable = (page: Page): Promise<string[]> =>
+    page.evaluate(() =>
+      [document.querySelector('.hero')!, ...document.querySelectorAll('.hero *')]
+        .filter((el): el is HTMLElement => el instanceof HTMLElement && !el.classList.contains('visually-hidden'))
+        .filter((el) => el.scrollLeft !== 0 || el.scrollWidth !== el.clientWidth)
+        .map((el) => `${el.tagName.toLowerCase()}.${el.className} scrollLeft=${el.scrollLeft} scrollWidth=${el.scrollWidth} clientWidth=${el.clientWidth}`),
+    );
+
+  /** The room between the last element of each slide's text and the controls, in CSS pixels. */
+  const gaps = (page: Page): Promise<number[]> =>
+    page.evaluate(() => {
+      const top = document.querySelector('.hero-ui')!.getBoundingClientRect().top;
+      return [...document.querySelectorAll('.hero .slide-body')].map((body) => Math.round(top - body.lastElementChild!.getBoundingClientRect().bottom));
+    });
+
+  /** The slide whose text is on top at the middle of the hero's text panel. */
+  const slideOnTop = (page: Page): Promise<string | null> =>
+    page.evaluate(() => {
+      window.scrollTo(0, 0);
+      const box = document.querySelector('.hero .slide-text')!.getBoundingClientRect();
+      const el = document.elementFromPoint(box.left + box.width / 2, box.top + Math.min(box.height / 2, 120));
+      return el?.closest('.slide')?.id ?? null;
+    });
+
+  /**
+   * A horizontal wheel, Shift + wheel and a drag across the hero. The pointer starts on the panel's own padding (its
+   * lower left corner), not on a photo or a link, which a browser would pick up and drag as an object.
+   */
+  async function tryToScroll(page: Page): Promise<void> {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const box = (await page.locator('.hero').boundingBox())!;
+    const x = box.x + 10;
+    const y = box.y + box.height - 10;
+    await page.mouse.move(x, y);
+    await page.mouse.wheel(400, 0);
+    await page.keyboard.down('Shift');
+    await page.mouse.wheel(0, 400);
+    await page.keyboard.up('Shift');
+    // The drag is sent as raw mouse events: Playwright's own drag needs the page's JavaScript, which one run has off.
+    const cdp = await page.context().newCDPSession(page);
+    const mouse = (type: 'mousePressed' | 'mouseMoved' | 'mouseReleased', at: number): Promise<unknown> =>
+      cdp.send('Input.dispatchMouseEvent', { type, x: at, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: type === 'mouseMoved' ? 0 : 1 });
+    await mouse('mousePressed', x);
+    for (const step of [40, 80, 120, 160]) await mouse('mouseMoved', x + step);
+    await mouse('mouseReleased', x + 160);
+    await cdp.detach();
+  }
+
+  for (const script of [true, false]) {
+    test(`nothing in the hero scrolls and the controls stay clear of the text, ${script ? 'with' : 'without'} the script`, async ({ newContext, csp, baseURL }) => {
+      for (const colorScheme of HERO_SCHEMES) {
+        for (const width of HERO_WIDTHS) {
+          const what = `${colorScheme} ${width}px`;
+          const context = await newContext({ viewport: { width, height: 900 }, colorScheme, javaScriptEnabled: script, reducedMotion: 'reduce' });
+          const page = await context.newPage();
+          await page.goto(`${baseURL!}/`);
+          const hero = page.locator('.hero');
+          await expect(hero.locator('.slide'), what).toHaveCount(3);
+          if (script) await expect(hero.locator('.hero-track'), what).toHaveClass(/\bjs\b/);
+          await expectImagesLoaded(hero.locator('#slide-1'), `${what}: slide 1`);
+          expect(await scrollable(page), `${what}: before`).toEqual([]);
+          await tryToScroll(page);
+          expect(await scrollable(page), `${what}: after a horizontal wheel, Shift + wheel and a drag`).toEqual([]);
+          expect(await page.evaluate(() => window.scrollX), `${what}: the page did not move sideways`).toBe(0);
+          for (const [i, gap] of (await gaps(page)).entries()) expect(gap, `${what}: slide ${i + 1}, text to controls`).toBeGreaterThanOrEqual(HERO_GAP_MIN);
+          // The indicators are thin lines without a number: a hidden label names each, and the target is 24 px high or more.
+          const dot = hero.locator('.hero-dots a').nth(1);
+          await expect(dot, what).toHaveText('Slide 2 dari 3');
+          expect((await dot.boundingBox())!.height, `${what}: indicator target`).toBeGreaterThanOrEqual(24);
+          expect(await slideOnTop(page), `${what}: first`).toBe('slide-1');
+          if (script) {
+            await hero.locator('[data-next]').click();
+            await expect(hero.locator('#slide-2'), what).toHaveClass(/\bis-on\b/);
+            await expect(hero.locator('#slide-1'), what).toHaveAttribute('aria-hidden', 'true');
+            await expect(dot, what).toHaveAttribute('aria-current', 'true');
+            // Under reduced motion the slides never start by themselves: the button offers to play them.
+            await expect(hero.locator('[data-pause]'), what).toHaveAttribute('aria-label', 'Putar pergantian slide');
+          } else {
+            await expect(hero.locator('[data-next]'), what).toBeHidden();
+            await dot.click();
+            await expect(page, what).toHaveURL(/#slide-2$/);
+          }
+          expect(await slideOnTop(page), `${what}: after choosing the second slide`).toBe('slide-2');
+          expect(await scrollable(page), `${what}: on the second slide`).toEqual([]);
+          await context.close();
+        }
+      }
+      expect(csp.problems(), 'CSP problems on the home page with slides').toEqual([]);
+    });
+  }
+
+  test('the slides advance by themselves, hold under the pointer, and the pause button stops them', async ({ newContext, baseURL }) => {
+    const context = await newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'no-preference' });
+    const page = await context.newPage();
+    await page.clock.install();
+    await page.goto(`${baseURL!}/`);
+    const hero = page.locator('.hero');
+    await expect(hero.locator('.hero-track')).toHaveClass(/\bjs\b/);
+    await page.mouse.move(5, 880);
+    await expect(hero.locator('#slide-1')).toHaveClass(/\bis-on\b/);
+    await page.clock.runFor(5100);
+    await expect(hero.locator('#slide-2')).toHaveClass(/\bis-on\b/);
+    await expect(hero.locator('.hero-track')).toHaveAttribute('aria-live', 'off');
+    // The pointer over the hero holds the slide.
+    await hero.locator('#slide-2 .slide-text').hover();
+    await page.clock.runFor(11_000);
+    await expect(hero.locator('#slide-2')).toHaveClass(/\bis-on\b/);
+    // Paused: it stays, whatever the pointer does; the button then says "play".
+    const pause = hero.locator('[data-pause]');
+    await expect(pause).toHaveAttribute('aria-label', 'Jeda pergantian slide');
+    await pause.click();
+    await expect(pause).toHaveAttribute('aria-label', 'Putar pergantian slide');
+    await page.mouse.move(5, 880);
+    await page.clock.runFor(11_000);
+    await expect(hero.locator('#slide-2')).toHaveClass(/\bis-on\b/);
+    await expect(hero.locator('.hero-track')).toHaveAttribute('aria-live', 'polite');
+    await context.close();
+  });
 });
