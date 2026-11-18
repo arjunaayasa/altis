@@ -52,7 +52,7 @@ export function fakeSlimsTables(): Record<string, FakeSlimsTable> {
   };
 }
 
-/** An in-memory SlimsSource over `tables`: the cursor is the index of the next row. */
+/** An in-memory SlimsSource over `tables`: the cursor is the index of the next row; a database table without a key is flagged `no_pk`. */
 export function fakeSlimsSource(tables: Readonly<Record<string, FakeSlimsTable>>, kind: 'db' | 'dump' = 'db'): SlimsSource & { closed: number } {
   const source = {
     kind,
@@ -63,6 +63,7 @@ export function fakeSlimsSource(tables: Readonly<Record<string, FakeSlimsTable>>
         columns: [...t.columns],
         primaryKey: [...t.primaryKey],
         rows: t.knownCount === false ? null : t.rows.length,
+        ...(kind === 'db' && t.primaryKey.length === 0 ? { flags: ['no_pk' as const] } : {}),
       }));
     },
     async rows(table: string, after: string | null, limit: number): Promise<{ rows: SlimsRow[]; next: string | null }> {

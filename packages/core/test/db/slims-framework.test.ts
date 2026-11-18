@@ -742,6 +742,28 @@ describe.skipIf(!ctx.available)(`SLiMS migration framework [${engineLabel()}]`, 
     expect(report.find((r) => r[2] === 'charset' && r[3]!.startsWith('biblio.title'))![3]).toContain('cp1252=1');
   });
 
+  it('a database table a stage reads that has no primary key gets a no_pk report row; a dump table without one does not', async () => {
+    const tables = fakeSlimsTables();
+    tables['mst_author'] = { ...tables['mst_author']!, primaryKey: [] };
+    for (const sourceKind of ['db', 'dump'] as const) {
+      factory = fakeSlimsFactory({ tables });
+      __setSlimsSourceFactory(factory);
+      __setSlimsStages([fakeCountingStage('masters', 'mst_author')]);
+      let dump: Partial<SlimsStartInput> = {};
+      if (sourceKind === 'dump') {
+        const staging = newId(NOW);
+        await fsp.mkdir(path.join(dataDir, 'tmp', staging), { recursive: true });
+        await fsp.writeFile(path.join(dataDir, 'tmp', staging, 'upload.bin'), '-- MySQL dump\n');
+        dump = { sourceKind: 'dump', db: null, password: null, dumpStagingId: staging };
+      }
+      const { runId, jobId } = await start({ dryRun: true, ...dump });
+      expect(await runToEnd(jobId)).toMatchObject({ outcome: 'succeeded' });
+      const rows = (await reportRows(runId)).filter((r) => r[2] === 'no_pk');
+      expect([sourceKind, rows.map((r) => [r[0], r[1]])]).toEqual([sourceKind, sourceKind === 'db' ? [['mst_author', '']] : []]);
+      if (sourceKind === 'db') expect(rows[0]![3]).toContain('No primary key');
+    }
+  });
+
   it('the check sample: up to 20 migrated biblio rows with their record URL and a title comparison', async () => {
     const buku = (await h.db.selectFrom('material_types').select('id').where('code_key', '=', 'BUKU').executeTakeFirstOrThrow()).id;
     // A stage that maps two biblio rows to records whose titles agree (one split on its colon) and one that does not.

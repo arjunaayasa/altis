@@ -36,7 +36,7 @@ import {
   type OptionsDraft,
   type OptionsErrors,
 } from './options-step';
-import { CutoverChecklist, PeopleFields, peopleBody, peopleDraftOf } from './people';
+import { CUTOVER_KEY, CutoverChecklist, PeopleFields, peopleBody, peopleDraftOf } from './people';
 import { ReportView, readReport, stageText } from './report-view';
 import { EMPTY_SOURCE, SourceStep, checkDb, checkSource, hasSourceErrors, type SourceDraft, type SourceErrors } from './source-step';
 
@@ -545,6 +545,20 @@ function notUsable(run: RunView, options: DryRunOptions | null, userId: string |
 
 // ---- a run ---------------------------------------------------------------------------------------------------------
 
+/**
+ * What the end of run `runId` makes stale: the run, the runs list, and the cut-over checklist (whose reconciliation and
+ * readiness come from the latest real run), so the checklist shown next is read again rather than the one cached
+ * while the run was going.
+ */
+export function useRunEnded(runId: string): () => void {
+  const queryClient = useQueryClient();
+  return useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: runKey(runId) });
+    void queryClient.invalidateQueries({ queryKey: RUNS_KEY });
+    void queryClient.invalidateQueries({ queryKey: CUTOVER_KEY });
+  }, [queryClient, runId]);
+}
+
 function RunSection({
   runId,
   joined,
@@ -563,7 +577,6 @@ function RunSection({
   const t = useT();
   const me = useMe();
   const dateTime = useDateTime();
-  const queryClient = useQueryClient();
   const titleId = useId();
   const query = useApiQuery<RunView>({
     queryKey: runKey(runId),
@@ -573,10 +586,7 @@ function RunSection({
     retry: (count, e) => !(e instanceof ApiError) && count < 2,
     refetchInterval: (q) => (q.state.data !== undefined && isLive(q.state.data) ? RUN_POLL_MS : false),
   });
-  const ended = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: runKey(runId) });
-    void queryClient.invalidateQueries({ queryKey: RUNS_KEY });
-  }, [queryClient, runId]);
+  const ended = useRunEnded(runId);
   const run = query.data;
   // Read once per run shown: a dry run turns too old while the page stays open only after a reload.
   const [now] = useState(() => Date.now());
