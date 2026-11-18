@@ -1,5 +1,6 @@
 import { ITEM_STATUSES, MEMBER_BLOCK_REASONS, RENEW_REFUSALS, VOID_REFUSALS, type ForceableReason, type ItemStatus, type MemberBlockReason, type RenewRefusal, type VoidRefusal } from '@altis/shared';
 import type { PaymentView } from '@altis/shared/api/charges';
+import type { DeskDashboard } from '@altis/shared/api/dashboard-home';
 import type {
   CirculationWarningView,
   DeskItemGlance,
@@ -68,11 +69,13 @@ import { MemberChargesPanel, printSlip, receiptHref, useMoney } from './charges'
  * - **One scan, one transaction.** Each loan, return and renewal is its own request with its own `Idempotency-Key`; a
  *   request that met no server at all keeps its key, so scanning the same barcode again cannot lend twice. Scans that
  *   come faster than the server answers wait in line, in order; none is dropped.
- * - **Two columns.** The left one holds the mode switch, the scan box, the result of the last scan (the status as a
- *   colour, an icon and a sentence, with its main fact on the right: the due date or the days late) and the member's
- *   tabs; the right one is the member panel (photo or initials, the facts, the warnings, "Perpanjang masa
- *   keanggotaan" opened in place, Selesai and the profile), or in Kembali the tally of the returns. Under 1120 px the
- *   columns stack.
+ * - **Two columns.** The left one is a stack of cards: the mode switch with the scan box and the result of the last
+ *   scan (the status as a colour, an icon and a sentence, with its main fact on the right: the due date or the days
+ *   late); the member (photo or initials, the facts, the warnings, "Perpanjang masa keanggotaan" opened in place,
+ *   Selesai and the profile); and the member's tabs. The right one holds what is looked up at a glance: the member's
+ *   holds ready for pickup ("Pinjamkan sekarang" lends the kept copy as a scan of its barcode would), what the
+ *   member's type allows, and today's loans and returns at the desk's branch; in Kembali, the tally of the returns
+ *   above today's figures. Under 1120 px the columns stack.
  * - **Feedback in three layers.** A colour (the scan box's edge and a short flash of it), a sentence big
  *   enough to read from across the desk, and an optional beep. Screen readers hear the same sentence from two fixed
  *   live regions outside the area that re-renders: `status` for done and "look at this", `alert` for refused.
@@ -452,6 +455,22 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
     setFlash(tone);
     if (sound && (tone === 'success' || tone === 'warning' || tone === 'error')) beep(tone);
   };
+
+  // Today's loans and returns at the desk's branch (the side card): read again whenever the desk's own lists grow.
+  const today = useQuery({
+    queryKey: ['circulation', 'desk-today', branchId],
+    queryFn: () => api<DeskDashboard>('GET', `branches/${encodeURIComponent(branchId ?? '')}/dashboard`, undefined, { background: true }),
+    enabled: branchId !== null,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const tallied = visit.length + returns.length;
+  const counted = useRef(tallied);
+  useEffect(() => {
+    if (counted.current === tallied) return;
+    counted.current = tallied;
+    void queryClient.invalidateQueries({ queryKey: ['circulation', 'desk-today'] });
+  }, [tallied, queryClient]);
 
   const addVisit = (row: Omit<VisitRow, 'seq' | 'time'>): void => {
     seq.current += 1;
@@ -1151,7 +1170,8 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
 
       {branchId !== null && (
         <div className="grid items-start gap-4 min-[1120px]:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="grid min-w-0 gap-4 rounded-lg border bg-background p-4">
+          <div className="grid min-w-0 gap-4">
+          <div className="grid min-w-0 gap-4 rounded-lg border bg-background p-4" data-desk-scan="">
             {!quickReturn && !inLibrary && <ModeSwitch mode={mode} onSwitch={switchMode} />}
             <form noValidate autoComplete="off" onSubmit={submit} className="grid gap-1.5">
               <label htmlFor={`${ids}-scan`} className="text-base font-bold">
@@ -1337,13 +1357,38 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
               )}
             </div>
 
+          </div>
+
+            {!showReturns && !showReads && (
+              <MemberPanel
+                member={member}
+                loading={memberId !== null && memberQuery.isPending}
+                error={memberId !== null && memberQuery.isError ? memberQuery.error : null}
+                canExtend={canExtend}
+                canOpen={canReadMembers}
+                typeName={member === null ? '' : typeName(member.type)}
+                extending={extendOpen}
+                onExtend={() => setExtendOpen(true)}
+                onExtendClose={() => {
+                  setExtendOpen(false);
+                  focusBox();
+                }}
+                onExtended={() => say('success', t('circulation.feedback.extended'), t('circulation.feedback.scan_items'))}
+                onDone={done}
+              />
+            )}
+
             {showReturns ? (
-              <ReturnsTable rows={returns} />
+              <div className={DESK_CARD}>
+                <ReturnsTable rows={returns} />
+              </div>
             ) : showReads ? (
-              <ReadsTable rows={reads} />
+              <div className={DESK_CARD}>
+                <ReadsTable rows={reads} />
+              </div>
             ) : (
               member !== null && (
-                <Tabs value={tab} onValueChange={(v) => setTab(v as PanelTab)} className="min-w-0">
+                <Tabs value={tab} onValueChange={(v) => setTab(v as PanelTab)} className={DESK_CARD}>
                   <div className="flex items-end gap-2 border-b">
                     <TabsList className={cn(WRAPPING_TABS.list, 'w-auto min-w-0 flex-1 border-b-0')} aria-label={t('circulation.tabs.label')}>
                       <TabsTrigger value="visit" className={WRAPPING_TABS.trigger}>
@@ -1513,28 +1558,32 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
             )}
           </div>
 
-          {showReturns ? (
-            <ReturnSide rows={returns} back={quickReturn ? null : (member?.name ?? '')} />
-          ) : showReads ? (
-            <ReadSide rows={reads} back={inLibrary ? null : (member?.name ?? '')} />
-          ) : (
-            <MemberPanel
-              member={member}
-              loading={memberId !== null && memberQuery.isPending}
-              error={memberId !== null && memberQuery.isError ? memberQuery.error : null}
-              canExtend={canExtend}
-              canOpen={canReadMembers}
-              typeName={member === null ? '' : typeName(member.type)}
-              extending={extendOpen}
-              onExtend={() => setExtendOpen(true)}
-              onExtendClose={() => {
-                setExtendOpen(false);
-                focusBox();
-              }}
-              onExtended={() => say('success', t('circulation.feedback.extended'), t('circulation.feedback.scan_items'))}
-              onDone={done}
-            />
-          )}
+          <div className="grid min-w-0 content-start gap-4">
+            {showReturns ? (
+              <ReturnSide rows={returns} back={quickReturn ? null : (member?.name ?? '')} />
+            ) : showReads ? (
+              <ReadSide rows={reads} back={inLibrary ? null : (member?.name ?? '')} />
+            ) : (
+              member !== null && (
+                <>
+                  <ReadyHolds
+                    member={member}
+                    branchId={branchId}
+                    busy={busy}
+                    onLend={(barcode) => {
+                      setBusy(true);
+                      void lend(member, barcode).finally(() => {
+                        setBusy(false);
+                        focusBox();
+                      });
+                    }}
+                  />
+                  <TypeRules member={member} typeName={typeName(member.type)} />
+                </>
+              )
+            )}
+            <DeskToday today={today.data} />
+          </div>
         </div>
       )}
 
@@ -1672,7 +1721,7 @@ function MemberPanel({
   const day = useCalendarDate();
   const money = useMoney();
   const nameId = useId();
-  const box = 'grid content-start gap-3.5 rounded-lg border bg-background p-4';
+  const box = cn(DESK_CARD, 'content-start gap-3.5');
   if (error !== null) {
     return (
       <aside aria-label={t('circulation.member.panel')} className={box}>
@@ -1761,7 +1810,8 @@ function MemberPanel({
   }
   return (
     <aside aria-labelledby={nameId} className={box}>
-      <div className="flex items-start gap-3">
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
+      <div className="flex min-w-0 flex-[1_1_16rem] items-start gap-3">
         <MemberPhoto name={member.name} fileId={member.photoFileId} />
         <div className="grid min-w-0 gap-0.5">
           <h2 id={nameId} className="text-lg leading-tight font-bold break-words">
@@ -1779,7 +1829,19 @@ function MemberPanel({
           </span>
         </div>
       </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {canOpen && (
+          <Link to={`/admin/anggota/${encodeURIComponent(member.id)}`} className="text-sm font-semibold text-accent-text underline-offset-4 hover:underline">
+            {t('circulation.member.open')}
+          </Link>
+        )}
+        <Button type="button" size="sm" variant="outline" className="bg-background" aria-keyshortcuts="Escape" onClick={onDone}>
+          {t('circulation.member.done')}
+        </Button>
+      </div>
+      </div>
       <FactList
+        className="gap-x-8 sm:grid-cols-2"
         items={[
           {
             key: 'loans',
@@ -1809,17 +1871,111 @@ function MemberPanel({
           <ExtendPanel memberId={member.id} onClose={onExtendClose} onDone={onExtended} />
         </div>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Button type="button" size="sm" variant="outline" className="bg-background" aria-keyshortcuts="Escape" onClick={onDone}>
-          {t('circulation.member.done')}
-        </Button>
-        {canOpen && (
-          <Link to={`/admin/anggota/${encodeURIComponent(member.id)}`} className="text-sm font-semibold text-accent-text underline-offset-4 hover:underline">
-            {t('circulation.member.open')}
-          </Link>
-        )}
-      </div>
     </aside>
+  );
+}
+
+/** The box of a card of the desk (16 px inside). */
+const DESK_CARD = 'grid min-w-0 gap-4 rounded-lg border bg-background p-4';
+
+/** A titled card of the desk's side column. */
+function SideCard({ title, children, data }: { title: string; children: ReactNode; data: string }) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} className={cn(DESK_CARD, 'content-start gap-3')} data-desk-side={data}>
+      <h2 id={id} className="text-heading font-semibold">
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * "Reservasi siap diambil": the member's holds whose copy waits on a hold shelf, each with where and until when, and
+ * "Pinjamkan sekarang", which lends that copy as a scan of its barcode would (the desk's branch only: a copy kept at
+ * another branch is lent there).
+ */
+function ReadyHolds({ member, branchId, busy, onLend }: { member: DeskMemberView; branchId: string; busy: boolean; onLend(barcode: string): void }) {
+  const t = useT();
+  const day = useCalendarDate();
+  const ready = member.holds.filter((h) => h.status === 'ready');
+  return (
+    <SideCard title={t('dashboard.today.holds_ready')} data="holds">
+      {ready.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t('circulation.side.holds_none')}</p>
+      ) : (
+        <ul className="grid gap-3">
+          {ready.map((h) => {
+            const here = h.pickupBranch.id === branchId;
+            const where = here ? t('circulation.side.holds_shelf') : t('circulation.side.holds_at', { branch: h.pickupBranch.name });
+            return (
+              <li key={h.id} className="grid gap-1 border-t pt-3 first:border-t-0 first:pt-0" data-ready-hold={h.id}>
+                <span className="font-semibold break-words">{h.record.title}</span>
+                <span className="text-meta text-muted-foreground">
+                  {h.item !== null && <span className="font-semibold tracking-wide tabular-nums">{h.item.barcode} · </span>}
+                  {h.pickupUntil === null ? where : t('circulation.side.holds_until', { where, date: day(h.pickupUntil) })}
+                </span>
+                {h.item !== null && here && (
+                  <Button type="button" size="sm" className="mt-1 justify-self-start" disabled={busy} onClick={() => onLend(h.item?.barcode ?? '')}>
+                    {t('circulation.side.holds_lend')}
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </SideCard>
+  );
+}
+
+/** "Aturan tipe …": what the member's type allows (the limit, and the period and renewals of its general loan rule). */
+function TypeRules({ member, typeName }: { member: DeskMemberView; typeName: string }) {
+  const t = useT();
+  const limit = member.type.loanLimit;
+  const rule = member.loanRule === undefined || member.loanRule === null || !member.loanRule.loanable ? null : member.loanRule;
+  return (
+    <SideCard title={t('circulation.side.rules', { type: typeName })} data="rules">
+      <FactList
+        className="[&>div:first-child]:border-t-0 [&>div:first-child]:pt-0"
+        items={[
+          {
+            key: 'limit',
+            label: t('circulation.side.rules_limit'),
+            value: limit === null ? t('members.types.limit.none') : limit === 0 ? t('members.types.limit.zero') : t('members.type_option.items', { count: limit }),
+          },
+          ...(rule === null
+            ? []
+            : [
+                { key: 'days', label: t('circulation.member.loan_period'), value: rule.loanDays === 0 ? t('members.types.rule.same_day') : t('members.types.days', { count: rule.loanDays }) },
+                { key: 'renewals', label: t('circulation.side.rules_renewals'), value: rule.renewLimit === 0 ? t('circulation.side.rules_no_renewal') : t('circulation.side.rules_times', { count: rule.renewLimit }) },
+              ]),
+        ]}
+      />
+      {rule === null && <p className="text-meta text-muted-foreground">{t('circulation.side.rules_none')}</p>}
+      {rule !== null && rule.others > 0 && <p className="text-meta text-muted-foreground">{t('circulation.side.rules_others')}</p>}
+    </SideCard>
+  );
+}
+
+/** "Hari ini di meja": the loans and returns of today at the desk's branch, and the holds waiting on its shelf. */
+function DeskToday({ today }: { today: DeskDashboard | undefined }) {
+  const t = useT();
+  const locale = useLocale();
+  const number = new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'id-ID');
+  const value = (n: number | undefined): string => (n === undefined ? '—' : number.format(n));
+  return (
+    <SideCard title={t('circulation.side.today')} data="today">
+      <FactList
+        className="[&>div:first-child]:border-t-0 [&>div:first-child]:pt-0"
+        items={[
+          { key: 'loaned', label: t('circulation.side.today_loaned'), value: value(today?.loaned) },
+          { key: 'returned', label: t('circulation.side.today_returned'), value: value(today?.returned) },
+          { key: 'holds', label: t('dashboard.today.holds_ready'), value: value(today?.holdsReady) },
+        ]}
+      />
+    </SideCard>
   );
 }
 
