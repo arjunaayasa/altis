@@ -176,7 +176,7 @@ describe('the annual report page', { timeout: 20_000 }, () => {
   });
 });
 
-describe('the library statistics of Beranda', { timeout: 20_000 }, () => {
+describe('the library statistics of the reports page', { timeout: 20_000 }, () => {
   const months = Array.from({ length: 12 }, (_, k) => (k === 2 ? 32 : 0));
   const routes = {
     'GET dashboard': () => problem(500, 'INTERNAL'),
@@ -187,9 +187,9 @@ describe('the library statistics of Beranda', { timeout: 20_000 }, () => {
   };
 
   it('one card per module the user reads, each read from its own endpoint only', async () => {
-    const { requests } = startApp({ me: signedIn({ permissions: ['visits.records.read', 'circulation.records.read'] }), path: '/admin', routes });
+    const { requests } = startApp({ me: signedIn({ permissions: ['visits.records.read', 'circulation.records.read'] }), path: '/admin/reports', routes });
     const section = await screen.findByRole('region', { name: 'Statistik perpustakaan' }, FIRST);
-    const cards = within(section).getAllByRole('region').map((r) => r.getAttribute('aria-labelledby') && document.getElementById(r.getAttribute('aria-labelledby')!)?.textContent);
+    const cards = within(section).getAllByRole('group').map((r) => r.getAttribute('aria-labelledby') && document.getElementById(r.getAttribute('aria-labelledby')!)?.textContent);
     expect(cards).toEqual(['Kunjungan', 'Peminjaman']);
     await within(section).findByText('25');
     expect(within(section).getByRole('img', { name: /^Peminjaman per bulan, 2026/ })).toBeTruthy();
@@ -198,8 +198,8 @@ describe('the library statistics of Beranda', { timeout: 20_000 }, () => {
   });
 
   it('nothing for a user who reads none of the four modules', async () => {
-    const { requests } = startApp({ me: signedIn({ permissions: ['reports.statistics.read'] }), path: '/admin', routes });
-    await screen.findByRole('heading', { level: 1, name: 'Beranda' }, FIRST);
+    const { requests } = startApp({ me: signedIn({ permissions: ['reports.statistics.read'] }), path: '/admin/reports', routes });
+    await screen.findByRole('heading', { level: 1, name: 'Laporan' }, FIRST);
     expect(screen.queryByRole('region', { name: 'Statistik perpustakaan' })).toBeNull();
     expect(requests.filter((r) => r.path.endsWith('/statistics'))).toEqual([]);
   });

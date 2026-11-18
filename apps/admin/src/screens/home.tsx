@@ -8,11 +8,9 @@ import { useLocale, useT } from '@/i18n';
 import { holds } from '@/lib/access';
 import { useMe } from '@/lib/me';
 import { cn } from '@/lib/utils';
-import { Dashboard } from '@/screens/dashboard';
+import { SystemHealth } from '@/screens/dashboard';
 import { Attention, useAttentionItems, useAttentionSources } from '@/screens/dashboard-attention';
 import { DeskActivity } from '@/screens/dashboard-activity';
-// ---- Komunitas K5 (reports) ----
-import { LibraryStatistics } from '@/screens/dashboard-library';
 // ---- Komunitas (member, visit and circulation reports) ----
 import { TodayStrip, useDeskToday, useLibraryToday } from '@/screens/dashboard-today';
 import { UsageBlocks } from '@/screens/dashboard-usage';
@@ -24,10 +22,14 @@ import { UsageBlocks } from '@/screens/dashboard-usage';
  *
  * 1. the strip of today's figures (screens/dashboard-today.tsx);
  * 2. the desk's activity per hour today beside "Perlu perhatian" (dashboard-activity.tsx, dashboard-attention.tsx);
- * 3. the loans by subject beside the most borrowed titles (dashboard-usage.tsx);
- * 4. the library's statistics (dashboard-library.tsx) and the system section (dashboard.tsx).
+ * 3. the loans by subject, the most borrowed titles (dashboard-usage.tsx) and "Kesehatan sistem" (dashboard.tsx), in
+ *    one row of equal columns.
  *
- * A two-column row falls back to one column when one of its blocks is not there, and below 1060 px. A user who sees
+ * The library's yearly figures are on the reports page (dashboard-library.tsx, shown by screens/reports/catalog.tsx);
+ * a reader of one of them gets a line under the last row that says so, with the link. Every figure of the system is
+ * on Tentang (the health card's "Detail").
+ *
+ * A row falls back to fewer columns when one of its blocks is not there, and to one column below 1060 px. A user who sees
  * none of the library blocks gets the hint that the command palette finds pages and commands.
  */
 
@@ -68,6 +70,7 @@ export function HomeScreen() {
   const hours = open === null ? [] : open.closed ? [t('dashboard.home.closed_today')] : open.times.length > 0 ? [t('dashboard.home.open_today', { hours: open.times.join(', ') })] : [];
   const lead = [longDate(today), ...hours, ...(deskBranch !== undefined && (desk.branches?.length ?? 0) > 1 ? [t('dashboard.today.branch', { name: deskBranch.name })] : [])];
   const addsMembers = holds(me, 'members.records.manage');
+  const readsFigures = holds(me, 'catalog.records.read') || holds(me, 'members.records.read') || holds(me, 'visits.records.read') || holds(me, 'circulation.records.read');
   const hasActivity = desk.branchId !== null;
   const hasAttention = attention.length > 0 || attentionSources.reads;
   const seesLibrary =
@@ -113,9 +116,18 @@ export function HomeScreen() {
           <Attention items={attention} sources={attentionSources} />
         </div>
       )}
-      <UsageBlocks />
-      <LibraryStatistics />
-      <Dashboard />
+      <div className="grid gap-4 min-[1060px]:auto-cols-fr min-[1060px]:grid-flow-col">
+        <UsageBlocks />
+        <SystemHealth />
+      </div>
+      {readsFigures && (
+        <p className="text-meta text-muted-foreground" data-figures-moved="">
+          {t('dashboard.home.figures_moved')}{' '}
+          <Link to="/admin/reports" className="font-semibold text-accent-text underline-offset-4 hover:underline">
+            {t('dashboard.library.reports')}
+          </Link>
+        </p>
+      )}
     </div>
   );
 }
