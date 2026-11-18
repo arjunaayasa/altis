@@ -1,6 +1,7 @@
 import { DEFAULT_CARD_PROFILE, type CardProfile } from '@altis/shared/api/member-ops';
 import { describe, expect, it } from 'vitest';
 import { buildMemberCardsPdf, cardBarcodeModules, type CardMember } from '../../src/members/ext/cards.js';
+import { gradientPng } from '../fixtures/png.js';
 import { TINY_JPEG_BASELINE } from '../fixtures/tiny.jpg.js';
 import { decodeCode128, decodeCode39 } from '../support/barcode-decode.js';
 
@@ -71,5 +72,32 @@ describe('member cards', () => {
       (e: unknown) => e,
     );
     expect(failure).toMatchObject({ code: 'MEMBER_CARD_LIMIT', meta: { max: 200 } });
+  });
+
+  // ---- Site identity ----
+  it('a profile without a logo of its own prints the site\'s logo: a PNG, drawn with its transparency; a profile\'s own logo wins', async () => {
+    const png = gradientPng(40, 10); // half of it at alpha 128
+    const input = {
+      members: members(1),
+      startAt: 1,
+      locale: 'id' as const,
+      libraryName: 'Perpustakaan Contoh',
+      today: '2026-11-18',
+      picture: async (id: string) => (id === 'site-logo' ? png : id === 'broken' ? png.subarray(0, 40) : TINY_JPEG_BASELINE),
+    };
+    const none = text(await buildMemberCardsPdf({ ...input, profile: DEFAULT_CARD_PROFILE }));
+    const withSite = text(await buildMemberCardsPdf({ ...input, profile: DEFAULT_CARD_PROFILE, siteLogoFileId: 'site-logo' }));
+    // One picture more than without (the member's photo is there either way), with a soft mask of the same size.
+    const images = (pdf: string): number => pdf.split('/Subtype /Image').length - 1;
+    expect(images(withSite)).toBe(images(none) + 2);
+    expect(withSite).toMatch(/\/Width 40 \/Height 10 \/ColorSpace \/DeviceRGB \/BitsPerComponent 8 \/SMask \d+ 0 R \/Length \d+ \/Filter \/FlateDecode/);
+    expect(withSite).toMatch(/\/Width 40 \/Height 10 \/ColorSpace \/DeviceGray \/BitsPerComponent 8 \/Length \d+ \/Filter \/FlateDecode/);
+    // The profile's own logo (a JPEG) is printed instead of the site's.
+    const own = text(await buildMemberCardsPdf({ ...input, profile: { ...DEFAULT_CARD_PROFILE, logoFileId: 'logo' }, siteLogoFileId: 'site-logo' }));
+    expect(own).not.toContain('/SMask');
+    expect(images(own)).toBe(images(none) + 1);
+    // A logo that cannot be decoded is left out; the sheet is still made.
+    const broken = text(await buildMemberCardsPdf({ ...input, profile: DEFAULT_CARD_PROFILE, siteLogoFileId: 'broken' }));
+    expect(images(broken)).toBe(images(none));
   });
 });
