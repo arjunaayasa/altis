@@ -496,7 +496,9 @@ describe.skipIf(!ctx.available || !MYSQL)(`SLiMS migration from a MySQL database
    * drew, `checkSource`, differ per run), and the report's size, which the dump path's Windows-1252 sample row changes.
    */
   function comparable(s: MigrationSummary, derived: readonly string[]): Record<string, unknown> {
-    const { checks, checkSource, resume, ...rest } = withDerivedUncounted(withoutLatin1Repairs(s), derived);
+    // The stored summary carries the pipeline's own fields beside the API's: the drawn titles and where to resume.
+    type Stored = MigrationSummary & { checkSource: Record<string, string>; resume: Record<string, unknown> & { reportBytes: number } };
+    const { checks, checkSource, resume, ...rest } = withDerivedUncounted(withoutLatin1Repairs(s), derived) as Stored;
     expect(Object.keys(checkSource), 'the check sample names a record per pair').toHaveLength(checks.length);
     const { reportBytes, ...place } = resume;
     expect(reportBytes, 'the report was written').toBeGreaterThan(0);
