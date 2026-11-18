@@ -13,7 +13,7 @@ export function ScoreBars({ score }: { score: ScoreView }): JSX.Element {
   const titleId = useId();
   return (
     <section aria-labelledby={titleId} className="grid gap-3">
-      <h3 id={titleId} className="text-base font-bold">
+      <h3 id={titleId} className="text-heading font-semibold">
         {t('accreditation.workspace.bars.title')}
       </h3>
       <ul className="grid gap-3">

@@ -79,7 +79,7 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
   const titleId = useId();
   return (
     <section aria-labelledby={titleId} className="grid min-w-0 gap-3 border-t pt-5 first:border-t-0 first:pt-0">
-      <h3 id={titleId} className="text-base font-bold">
+      <h3 id={titleId} className="text-heading font-semibold">
         {title}
       </h3>
       {children}
@@ -272,7 +272,7 @@ export function PrintTab({ periodId }: { periodId: string }): JSX.Element {
   return (
     <section aria-labelledby={titleId} data-period-id={periodId} className="grid min-w-0 gap-5">
       <div className="grid max-w-[75ch] gap-1">
-        <h2 id={titleId} className="text-base font-bold">
+        <h2 id={titleId} className="text-heading font-semibold">
           {t('accreditation.print.title')}
         </h2>
         <p className="text-sm text-muted-foreground">{t('accreditation.print.intro')}</p>

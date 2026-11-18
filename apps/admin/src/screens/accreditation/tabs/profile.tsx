@@ -420,7 +420,7 @@ function ProfilePhotos({ ctx, saving }: { ctx: TabContext; saving: PeriodSaving 
 
   return (
     <section aria-label={t('accreditation.workspace.profile.section.photos')} className="grid gap-3 border-t pt-5">
-      <h3 className="text-base font-bold">{t('accreditation.workspace.profile.section.photos')}</h3>
+      <h3 className="text-heading font-semibold">{t('accreditation.workspace.profile.section.photos')}</h3>
       <p className="max-w-[75ch] text-sm text-muted-foreground">{t('accreditation.workspace.profile.photo_hint')}</p>
       <ul className="grid gap-x-8 border-t sm:grid-cols-2">
         {PHOTOS.map(({ slot, code, label }) => {

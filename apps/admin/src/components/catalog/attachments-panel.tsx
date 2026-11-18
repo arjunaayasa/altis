@@ -438,7 +438,7 @@ export function AttachmentsPanel({ recordId }: AttachmentsPanelProps) {
   return (
     <section aria-labelledby={titleId} className="grid gap-4">
       <div className="grid max-w-[75ch] gap-1">
-        <h2 id={titleId} className="text-base font-bold">
+        <h2 id={titleId} className="text-heading font-semibold">
           {t('catalog.attachments.title')}
         </h2>
         <p className="text-sm text-muted-foreground">{t('catalog.attachments.description')}</p>

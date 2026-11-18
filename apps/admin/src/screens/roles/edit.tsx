@@ -44,7 +44,7 @@ function sameSet(a: readonly string[], b: readonly string[]): boolean {
 function PermissionsPart({ hint, children, ruled = true }: { hint?: string; children: ReactNode; ruled?: boolean }) {
   const t = useT();
   return (
-    <section aria-label={t('roles.permissions')} className={ruled ? 'grid gap-3 border-t py-5' : 'grid gap-3'}>
+    <section aria-label={t('roles.permissions')} className={ruled ? 'mt-4 grid gap-3 rounded-lg border bg-background p-4' : 'grid gap-3'}>
       <div className="grid max-w-[75ch] gap-1">
         <SectionHead title={t('roles.permissions')} />
         {hint !== undefined && <p className="text-sm text-muted-foreground">{hint}</p>}

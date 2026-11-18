@@ -59,7 +59,7 @@ export function SignInFrame({ title, description, wide = false, children }: { ti
         <section className="rounded-lg border bg-background px-7 pt-7 pb-6">
           {brand !== undefined && <PageBrand {...brand} className="mb-5" />}
           <header className="mb-5">
-            <h1 className="text-xl leading-tight font-bold">{title}</h1>
+            <h1 className="text-title font-bold">{title}</h1>
             {description !== undefined && <p className="mt-0.5 text-muted-foreground">{description}</p>}
           </header>
           <div className="grid gap-5">{children}</div>

@@ -462,7 +462,7 @@ function RealRunPanel({
 
   return (
     <section aria-labelledby={titleId} className="grid max-w-4xl gap-4 border-t pt-6">
-      <h2 id={titleId} className="text-base font-bold">
+      <h2 id={titleId} className="text-heading font-semibold">
         {t('catalog.migration.real.title')}
       </h2>
       <p className="max-w-[75ch] text-sm text-muted-foreground">{t('catalog.migration.real.description')}</p>
@@ -621,7 +621,7 @@ function RunSection({
       {joined && <NoticeAlert>{t('catalog.migration.joined')}</NoticeAlert>}
       <section aria-labelledby={titleId} className="grid gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 id={titleId} className="text-base font-bold">
+          <h2 id={titleId} className="text-heading font-semibold">
             {t(run.dryRun ? 'catalog.migration.kind.dry' : 'catalog.migration.kind.real')}
           </h2>
           <Tag tone={statusTone(status)}>{t(`vocab.run_status.${status}`)}</Tag>

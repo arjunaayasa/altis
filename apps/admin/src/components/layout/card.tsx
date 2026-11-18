@@ -17,6 +17,9 @@ export function InCardScope({ children }: { children: ReactNode }) {
 /** The box of a card: the background of the page's content, a thin border, 6 px corners. No shadow. */
 export const CARD = 'min-w-0 rounded-lg border bg-background';
 
+/** A card with its own padding, for a small form or a note drawn by hand (16 px inside). */
+export const PANEL = 'min-w-0 rounded-lg border bg-background p-4';
+
 /** The classes of a card's head and of its title, for a card drawn by hand (a region with its own heading id). */
 export const CARD_HEAD = 'flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b px-4 py-3';
 export const CARD_TITLE = 'text-heading font-semibold';
