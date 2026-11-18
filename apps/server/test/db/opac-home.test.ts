@@ -3,23 +3,25 @@ import os from 'node:os';
 import path from 'node:path';
 import { createSettingsCache, indexRecords, refreshClassActivity, refreshPopularTitles, writeSettings } from '@altis/core';
 import { PHASE1_MIGRATIONS, runMigrations, withTx } from '@altis/db';
+import { brandCss } from '@altis/opac-theme';
 import { newId, normalizeKey } from '@altis/shared';
-import { OPAC_HOME_DEFAULT, type OpacHomeContent } from '@altis/shared/api/opac-home';
+import { OPAC_HOME_DEFAULT, OPAC_HOME_HERO_SIZE, type OpacHomeContent } from '@altis/shared/api/opac-home';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { engineLabel, testDb, testDbContext, type TestDbHandle } from '../../../../tools/test/test-db.js';
 import { createApp } from '../../src/app.js';
 import { opacText } from '../../src/opac/catalog/messages.js';
+import { CLOSED_DAYS_TTL_MS, cachedClosedDays } from '../../src/opac/catalog/page.js';
 import { CATALOGUE_FACTS_TTL_MS, cachedCatalogueFacts, catalogueFacts, publicLoanRules } from '../../src/opac/catalog/queries.js';
 import { createAgent, type AgentReply } from '../agent.js';
 import { recordingLogger, sampleConfig } from '../support.js';
 
 // The OPAC home page as the library's profile site, through the app on the engine picked by ALTIS_TEST_DB: the hero
-// band (the photo under its overlay of the chosen darkness, or the library colour), the floating search card with
-// today's hours, the profile blocks shown only with content and while switched on, the texts per language with the
-// other language as fallback, escaped and marked with their language, the subject pills and availability of the title
-// lists, today's row of the opening hours, the popular titles from their aggregate, and the loans per class (off by
-// default, a class only with five borrowers). No borrower datum reaches the page or the "most borrowed" search: not a
-// member's name, number or id, and no loan count of a title.
+// (a slide's photo beside its panel, or the panel of the library colour alone), the search band with the collection's
+// facts, today's hours in the strip above the header, the profile blocks shown only with content and while switched
+// on, the texts per language with the other language as fallback, escaped and marked with their language, the
+// availability of the new titles, today's row of the opening hours, the popular titles from their aggregate, and the
+// loans per class (off by default, a class only with five borrowers). No borrower datum reaches the page or the "most
+// borrowed" search: not a member's name, number or id, and no loan count of a title.
 
 const ctx = testDbContext();
 const NOW = Date.UTC(2026, 10, 15, 5, 0, 0);
@@ -28,10 +30,16 @@ const NO_TEXT = { id: null, en: null };
 const CONFIG = sampleConfig();
 const HTML = { Accept: 'text/html' };
 
-/** `template` escaped, its `{name}` the bold `value` (the search card's facts). */
-const bold = (template: string, name: string, value: string): string => esc(template).replace(`{${name}}`, `<strong>${esc(value)}</strong>`);
-
 const esc = (s: string): string => s.replace(/[&<>'"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[ch]!);
+
+/** `text` as a regular expression matches it. */
+const literal = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** What a title's copies allow as a card writes it: the state's classes, its small drawing (hidden from a screen reader), then the words. */
+const statusLine = (cls: string, words: string): RegExp => new RegExp(`<span class="${cls}"><svg class="ico"[^>]*aria-hidden="true"[^>]*>[\\s\\S]*?</svg>${literal(esc(words))}</span>`, 'g');
+
+/** What the strip above the header says of today. */
+const topToday = (html: string): string | undefined => /<span class="top-today">([\s\S]*?)<\/span>\s*(?:<span class="hide-s">|<nav class="lang")/.exec(html)?.[1];
 
 /** The markup of the `<section>` whose heading has the id `id`. */
 function section(html: string, id: string): string | undefined {
@@ -185,15 +193,27 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     if (root !== undefined) await fsp.rm(root, { recursive: true, force: true });
   });
 
-  it('without a profile: the hero in the library colour (no photo), the library name as heading, the welcome as lead, the search card; no profile block', async () => {
+  it('without a profile: the hero is the panel alone (no photo, no controls, no script), the library name as heading, the welcome as lead, the search band; no profile text', async () => {
     const html = (await get('/')).text;
-    expect(html).toContain('<header class="site-header hero-band">');
-    expect(html).not.toContain('hero-img');
-    expect(html).toContain('<h1>Perpustakaan SMA 1</h1>');
-    expect(html).toContain('<p class="hero-lead">Cari buku &lt;di&gt; katalog.</p>');
-    expect(html).toContain('<div class="home-search">');
-    expect(html).toContain(`<span>${bold(opacText('id', 'home.search.titles'), 'count', '2')}</span>`);
-    for (const id of ['tentang-judul', 'layanan-judul']) expect(section(html, id), id).toBeUndefined();
+    const hero = /<section class="hero"[^>]*>([\s\S]*?)<\/section>/.exec(html)![0];
+    expect(hero).toContain('<div class="slide slide-nophoto">');
+    expect(hero).not.toContain('<img');
+    expect(hero).not.toContain('data-hero');
+    expect(hero).not.toContain('<button');
+    expect(html).not.toContain('opac-slider-');
+    expect(hero).toContain('<h1>Perpustakaan SMA 1</h1>');
+    expect(hero).toContain('<p class="slide-lead">Cari buku &lt;di&gt; katalog.</p>');
+    expect(html).toContain('<div class="search-band home-search">');
+    expect(html).toContain(`<span>${esc(opacText('id', 'home.search.summary', { count: '2', available: '2' }))}</span>`);
+    // Nothing of the profile is filled in: "about" is its figures alone (counts, never a person), without a paragraph
+    // or a link to a profile page; no services, news, gallery; no hours, so the strip says nothing of today.
+    const about = section(html, 'tentang-judul')!;
+    expect(about).toContain(`<dt>${esc(opacText('id', 'home.figure.titles'))}</dt><dd>2</dd>`);
+    expect(about).toContain(`<dt>${esc(opacText('id', 'home.figure.members'))}</dt><dd>3</dd>`);
+    expect(about).not.toContain('<p');
+    expect(html).not.toContain('href="/profil');
+    for (const id of ['layanan-judul', 'berita-terbaru', 'galeri-judul']) expect(section(html, id), id).toBeUndefined();
+    expect(html).not.toContain('class="top-today"');
     // The visit block shows the library's address alone.
     expect(section(html, 'kunjungi-judul')).toContain('<p class="visit-address">Jl. Pendidikan 1\nKota Contoh</p>');
     expect(html).not.toContain('style=');
@@ -223,16 +243,16 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
       expect((await cachedCatalogueFacts(own, () => at)).classes).toEqual({ ...zero, '5': 1, '8': 1 });
 
       // The page: ten links to /cari?kelas=N, each with its number of titles in words.
-      const block = section((await get('/')).text, 'jelajah-kelas')!;
+      const block = /<ul class="ddc" aria-labelledby="jelajah-kelas">([\s\S]*?)<\/ul>/.exec((await get('/')).text)![1]!;
       expect([...block.matchAll(/href="([^"]*)"/g)].map((m) => m[1])).toEqual(Array.from({ length: 10 }, (_, n) => `/cari?kelas=${n}`));
-      expect([...block.matchAll(/<span class="class-count">([^<]*)<\/span>/g)]).toHaveLength(10);
-      expect(block).toContain(esc(opacText('id', 'home.subjects.scheme')));
+      // The number is read out with its word; the bare digits are hidden from a screen reader.
+      expect([...block.matchAll(/<span class="ddc-count"><span aria-hidden="true">\d+<\/span><span class="visually-hidden">\d+ judul<\/span><\/span>/g)]).toHaveLength(10);
     } finally {
       await classify([null, null]);
     }
   });
 
-  it('the loan rules per member type of the visit block: each type that may borrow, its limit and the period of its rule; no member', async () => {
+  it('the loan rules per member type on the profile page (no longer in the visit block): each type that may borrow, its limit and the period of its rule; no member', async () => {
     expect(await publicLoanRules(h.db, 'id')).toEqual([
       { name: 'Siswa', limit: 3, days: 7 },
       { name: 'Guru', limit: 10, days: 7 },
@@ -279,30 +299,45 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
         ['Teacher', 10, 7],
         ['Education staff', 5, 7],
       ]);
+      // The profile page exists once something of the profile is filled in.
+      await setHome({ ...OPAC_HOME_DEFAULT, about: { ...OPAC_HOME_DEFAULT.about, text: { id: 'Perpustakaan sekolah.', en: null } } });
+      const profile = await get('/profil?lang=en');
+      expect(profile.status).toBe(200);
+      const join = section(profile.text, 'anggota-judul')!;
+      expect(join).toContain(`<table class="rules" aria-label="${esc(opacText('en', 'pages.profile.rules'))}">`);
+      expect(join).toContain(`<th scope="col">${esc(opacText('en', 'home.rules.type'))}</th><th scope="col">${esc(opacText('en', 'home.rules.terms'))}</th>`);
+      expect(join).toContain(`<tr><th scope="row">Pupil</th><td>${esc(opacText('en', 'home.rules.no_limit'))}, ${esc(opacText('en', 'home.rules.days', { count: '14' }))}</td></tr>`);
+      expect(join).toContain(`<tr><th scope="row">Teacher</th><td>${esc(opacText('en', 'home.rules.items', { count: '10' }))}, ${esc(opacText('en', 'home.rules.days', { count: '7' }))}</td></tr>`);
+      expect(join).not.toContain('General public');
+      for (const b of borrowers) for (const secret of [b.name, b.no, b.id]) expect(profile.text).not.toContain(secret);
+      // The home page's visit block: the address and a link that opens it in a map app (nothing of a third party on
+      // the page), the way to the rules, and no table of them.
       const visit = section((await get('/?lang=en')).text, 'kunjungi-judul')!;
-      expect(visit).toContain(`<h3 id="aturan-pinjam">${esc(opacText('en', 'home.rules.title'))}</h3>`);
-      expect(visit).toContain(`<tr><th scope="row">Pupil</th><td>${esc(opacText('en', 'home.rules.no_limit'))}, ${esc(opacText('en', 'home.rules.days', { count: '14' }))}</td></tr>`);
-      expect(visit).toContain(`<tr><th scope="row">Teacher</th><td>${esc(opacText('en', 'home.rules.items', { count: '10' }))}, ${esc(opacText('en', 'home.rules.days', { count: '7' }))}</td></tr>`);
-      expect(visit).not.toContain('General public');
-      // The location: the address and a link that opens it in a map app; nothing of a third party on the page.
-      expect(visit).toContain(`<a class="map-link" href="https://www.openstreetmap.org/search?query=Jl.%20Pendidikan%201%20Kota%20Contoh" rel="noopener noreferrer">`);
+      expect(visit).toContain(`<a class="more-link map-link" href="https://www.openstreetmap.org/search?query=Jl.%20Pendidikan%201%20Kota%20Contoh" rel="noopener noreferrer">`);
+      expect(visit).toContain(`<a class="btn btn-primary" href="/profil?lang=en#anggota">${esc(opacText('en', 'home.join.how'))}</a>`);
+      expect(visit).not.toContain('<table class="rules"');
       for (const b of borrowers) expect(visit).not.toContain(b.name);
     } finally {
+      await setHome(OPAC_HOME_DEFAULT);
       await h.db.deleteFrom('policies').where('id', '=', policy).execute();
       await h.db.updateTable('member_types').set({ loan_limit: 2 }).where('id', '=', umum).execute();
       await h.db.updateTable('member_types').set({ loan_limit: 3 }).where('id', '=', siswa).execute();
     }
   });
 
-  it('the dark footer of every public page: the library and its address, the links with content, the search field, the source', async () => {
+  it('the dark footer of every public page: the library and its address, the links with content, the member links, the source; no search field', async () => {
     // An address no route serves too: its 404 page has the same frame.
     for (const path of ['/', '/cari', `/katalog/${records[0]!}/laskar-pelangi`, '/katalogg']) {
       const html = (await get(path)).text;
       const footer = /<footer class="site-footer">([\s\S]*?)<\/footer>/.exec(html)?.[1];
       expect(footer, path).toBeDefined();
-      expect(footer, path).toContain('<h2>Perpustakaan SMA 1</h2><p class="foot-address">Jl. Pendidikan 1\nKota Contoh</p>');
+      expect(footer, path).toContain('<a class="sitelogo" href="/"><span class="sitename">Perpustakaan SMA 1</span></a><p class="foot-address">Jl. Pendidikan 1\nKota Contoh</p>');
+      expect(footer, path).toContain(`<h2>${esc(opacText('id', 'shell.footer.links'))}</h2><ul class="foot-links"><li><a href="/cari">`);
+      expect(footer, path).toContain(`<h2>${esc(opacText('id', 'shell.footer.member'))}</h2><ul class="foot-links"><li><a href="/akun">`);
       expect(footer, path).toContain('href="/#kunjungi"');
-      expect(footer, path).toContain('id="cari-kaki"');
+      // The search is the page's own (the home page's band, the results page's, the 404 page's), never the footer's.
+      expect(footer, path).not.toContain('<form');
+      expect(footer, path).not.toContain('<input');
       expect(footer, path).toContain('href="https://github.com/arjunaayasa/altis" rel="noopener"');
       expect(footer, path).toContain('href="/admin/login"');
       // No hours set up yet: no hours block and no placeholder.
@@ -312,7 +347,7 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     expect((await get('/?lang=en')).text).toContain('<p class="foot-address" lang="id">Jl. Pendidikan 1\nKota Contoh</p>');
   });
 
-  it('with a profile: the photo under the overlay with its alt text and position, the heading, about with its facts, the services and photos, the hours; texts escaped', async () => {
+  it('with a profile: the one slide (its photo with its alt text and position, no controls), the heading, about with its figures, the services, the hours; texts escaped', async () => {
     await setHome({
       ...OPAC_HOME_DEFAULT,
       title: { id: 'Ruang baca <untuk> semua', en: null },
@@ -336,23 +371,34 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
       ],
     });
     const html = (await get('/')).text;
-    expect(html).toContain('<header class="site-header hero-band hero-photo hero-ov-60">');
-    expect(html).toContain(`<img class="hero-img hero-pos-40" src="/files/${photoId}" alt="Gedung &quot;B&quot; perpustakaan" width="1600" height="900" decoding="async"/>`);
-    expect(html).toContain('<h1>Ruang baca &lt;untuk&gt; semua</h1>');
-    expect(html).toContain('<meta property="og:image" content="');
+    const hero = /<section class="hero"[^>]*>([\s\S]*?)<\/section>/.exec(html)![0];
+    // One slide: nothing to turn, so no carousel role, no controls and no script.
+    expect(hero).toMatch(/^<section class="hero" aria-label="[^"]+"><div class="hero-track"><div class="slide" id="slide-1">/);
+    expect(hero).not.toContain('<button');
+    expect(hero).not.toContain('hero-dots');
+    expect(html).not.toContain('opac-slider-');
+    expect(hero).toContain(`<img class="hero-pos-40" src="/files/${photoId}" alt="Gedung &quot;B&quot; perpustakaan" width="${OPAC_HOME_HERO_SIZE.width}" height="${OPAC_HOME_HERO_SIZE.height}" decoding="async"/>`);
+    expect(hero).toContain('<h1>Ruang baca &lt;untuk&gt; semua</h1>');
+    expect(html).toContain(`<meta property="og:image" content="${CONFIG.baseUrl}/files/${photoId}"`);
     const about = section(html, 'tentang-judul')!;
-    expect(about).toContain('<p class="about-text">Berdiri sejak 1987.\nMelayani siswa &amp; guru.</p>');
+    expect(about).toContain('<p>Berdiri sejak 1987.\nMelayani siswa &amp; guru.</p>');
     expect(about).toContain('<figcaption>Lantai 1</figcaption>');
-    expect(about).toContain(`<dt>${opacText('id', 'home.fact.founded')}</dt><dd>1987</dd>`);
-    expect(about).toContain(`<dd>${opacText('id', 'home.fact.titles_value', { count: '2' })}</dd>`);
-    expect(about).toContain(`<dt>${opacText('id', 'home.fact.members')}</dt><dd>3</dd>`);
-    expect(about).toContain(`<dd>${opacText('id', 'home.fact.librarians_value', { count: '3' })}</dd>`);
-    expect(section(html, 'layanan-judul')).toContain('<h3>Peminjaman &lt;buku&gt;</h3>');
+    expect(about).toContain(`<a class="more-link" href="/profil">`);
+    // The figures: counts and the year, each under its word.
+    expect(about).toContain(`<dt>${opacText('id', 'home.figure.titles')}</dt><dd>2</dd>`);
+    expect(about).toContain(`<dt>${opacText('id', 'home.figure.members')}</dt><dd>3</dd>`);
+    expect(about).toContain(`<dt>${opacText('id', 'home.figure.founded')}</dt><dd>1987</dd>`);
+    const services = section(html, 'layanan-judul')!;
+    expect(services).toContain(`<h2 id="layanan-judul">${opacText('id', 'home.services.title')}</h2>`);
+    expect(services).toContain('<ul class="svc-grid"><li><h3>Peminjaman &lt;buku&gt;</h3><p>Bawa kartu anggota.</p></li></ul>');
     const visit = section(html, 'kunjungi-judul')!;
     expect(visit).toContain('<tr><th scope="row">Senin–Jumat</th><td>07.00–15.00</td></tr>');
     // Today's row in bold (its class) and named so in words.
     expect(visit).toContain(`<tr class="today"><th scope="row">Minggu <span lang="id">(${opacText('id', 'home.visit.today')})</span></th><td>Tutup</td></tr>`);
-    expect(html).toContain(`<span>${bold(opacText('id', 'home.search.today'), 'time', 'Tutup')}</span>`);
+    // A row that only says "closed" is not an opening: the strip above the header says the library is closed today.
+    expect(topToday(html)).toBe(`<span class="open-dot open-dot-off" aria-hidden="true"></span>${esc(opacText('id', 'shell.top.closed'))}`);
+    // The profile has its page now, and the menu its entry.
+    expect(/<nav class="mainnav"[^>]*>([\s\S]*?)<\/nav>/.exec(html)![1]).toContain(`<a href="/profil">${esc(opacText('id', 'shell.menu.profile'))}</a>`);
     expect(html).not.toContain('<untuk>');
     expect(html).not.toContain('<buku>');
     expect(html).not.toContain('style=');
@@ -362,9 +408,9 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     // library's own texts carry their language.
     const en = (await get('/?lang=en')).text;
     expect(en).toContain('<h1 lang="id">Ruang baca &lt;untuk&gt; semua</h1>');
-    expect(en).toContain('<p class="hero-lead" lang="id">Cari buku &lt;di&gt; katalog.</p>');
-    expect(en).toContain('<p class="about-text">Founded in 1987.</p>');
-    expect(en).toContain('<ul class="service-list" lang="id">');
+    expect(en).toContain('<p class="slide-lead" lang="id">Cari buku &lt;di&gt; katalog.</p>');
+    expect(en).toContain('<p>Founded in 1987.</p>');
+    expect(en).toContain('<ul class="svc-grid" lang="id">');
     expect(en).toContain(`<span lang="en">(${opacText('en', 'home.visit.today')})</span>`);
   });
 
@@ -378,8 +424,8 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
       ],
     });
     const open = (await get('/')).text;
-    expect(open).toContain(bold(opacText('id', 'home.search.today'), 'time', '08.00–12.00'));
-    expect(open).not.toContain(esc(opacText('id', 'home.search.closed_today')));
+    expect(topToday(open)).toBe(`<span class="open-dot" aria-hidden="true"></span>${esc(opacText('id', 'shell.top.open', { time: '08.00–12.00' }))}`);
+    expect(open).not.toContain(esc(opacText('id', 'shell.top.closed')));
     // A holiday covering NOW (Sunday 15 November 2026 in the library's time zone).
     const holiday = newId(NOW);
     await h.db
@@ -387,10 +433,30 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
       .values({ id: holiday, branch_id: null, kind: 'dates', weekday: null, date_from: '2026-11-14', date_to: '2026-11-16', month_day_from: null, month_day_to: null, name: 'Libur semester', archived_at: null, created_at: NOW, created_by: null, updated_at: NOW, updated_by: null })
       .execute();
     try {
+      // The closed days are kept a minute per database handle (every page reads them): the running site says so a
+      // minute later at most. Read here through a handle of its own, with the clock in hand.
+      let at = 1_000;
+      const own = h.db.withoutPlugins();
+      expect((await cachedClosedDays(own, () => at)).map((r) => r.date_to)).toEqual(['2026-11-16']);
+      await h.db.updateTable('calendars').set({ date_to: '2026-11-17' }).where('id', '=', holiday).execute();
+      at += CLOSED_DAYS_TTL_MS - 1;
+      expect((await cachedClosedDays(own, () => at)).map((r) => r.date_to)).toEqual(['2026-11-16']);
+      at += 1;
+      expect((await cachedClosedDays(own, () => at)).map((r) => r.date_to)).toEqual(['2026-11-17']);
+      // The pages, from an app on a handle that has not read the calendar yet.
+      const later = createApp({
+        state: { phase: 'ready', db: { ...h, db: h.db.withoutPlugins() }, config: CONFIG },
+        version: '0.1.0',
+        buildId: 'opac-home',
+        log: recordingLogger(),
+        clock: () => NOW,
+        env: {},
+        services: { settings: createSettingsCache({ ttlMs: 0 }) },
+      });
       for (const locale of ['id', 'en'] as const) {
-        const html = (await get(locale === 'id' ? '/' : '/?lang=en')).text;
-        expect(html, locale).not.toContain(bold(opacText(locale, 'home.search.today'), 'time', '08.00–12.00'));
-        expect(html, locale).toContain(`<span>${esc(opacText(locale, 'home.search.closed_today'))}</span>`);
+        const html = (await createAgent(later, { peer: '198.18.40.254' }).get(locale === 'id' ? '/' : '/?lang=en', undefined, HTML)).text;
+        expect(html, locale).not.toContain(esc(opacText(locale, 'shell.top.open', { time: '08.00–12.00' })));
+        expect(topToday(html), locale).toBe(`<span class="open-dot open-dot-off" aria-hidden="true"></span>${esc(opacText(locale, 'shell.top.closed'))}`);
         const visit = section(html, 'kunjungi-judul')!;
         expect(visit, locale).not.toContain('class="today"');
         expect(visit, locale).toContain(esc(opacText(locale, 'home.visit.closed_today')));
@@ -402,28 +468,34 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     }
   });
 
-  it('a hero that advances at a pace the setting does not know is refused as a whole; the library colour without a photo as a nonce style of six hex digits, nothing else', async () => {
+  it('a hero that advances at a pace the setting does not know is refused as a whole; the library colour as a nonce style of colours rebuilt from its six hex digits, nothing else', async () => {
     const stored = (await h.db.selectFrom('settings').select('value').where('key', '=', 'opac.home').executeTakeFirstOrThrow()).value!;
     const home = JSON.parse(stored) as OpacHomeContent;
     try {
       // A row edited by hand to an unknown pace is refused as a whole (the page falls back to the default content).
       await h.db.updateTable('settings').set({ value: JSON.stringify({ ...home, hero: { ...home.hero, intervalSec: 3 } }) }).where('key', '=', 'opac.home').execute();
       let html = (await get('/')).text;
-      expect(html).toContain('<header class="site-header hero-band">');
+      expect(html).toContain('<div class="slide slide-nophoto">');
+      expect(html).not.toContain('<img');
 
       await setHome({ ...home, hero: OPAC_HOME_DEFAULT.hero, brand: '#1E3A8A' });
       const reply = await get('/');
       html = reply.text;
       const nonce = /<meta name="csp-nonce" content="([^"]+)"/.exec(html)?.[1];
       expect(nonce).toBeDefined();
-      expect(html).toContain(`<style nonce="${nonce}">.site-header{--hero-bg:#1e3a8a}</style>`);
+      const style = /<style nonce="([^"]+)">([^<]*)<\/style>/.exec(html);
+      expect(style?.[1]).toBe(nonce);
+      expect(style?.[2]).toBe(brandCss('#1e3a8a'));
+      // Custom properties with hex colours for both schemes, and nothing a colour could smuggle in.
+      expect(style?.[2]).toMatch(/^:root\{(?:--[a-z-]+:#[0-9a-f]{6};?)+\}@media \(prefers-color-scheme:dark\)\{:root\{(?:--[a-z-]+:#[0-9a-f]{6};?)+\}\}$/);
+      expect(html.match(/<style/g)).toHaveLength(1);
       expect(reply.headers.get('content-security-policy')).toContain(`style-src 'self' 'nonce-${nonce}'`);
       expect(html).not.toContain('style=');
       // The 404 page of an address no route serves has the library colour too.
       const missing = await get('/katalogg');
       expect(missing.status).toBe(404);
       const missingNonce = /<meta name="csp-nonce" content="([^"]+)"/.exec(missing.text)?.[1];
-      expect(missing.text).toContain(`<style nonce="${missingNonce}">.site-header{--hero-bg:#1e3a8a}</style>`);
+      expect(missing.text).toContain(`<style nonce="${missingNonce}">${brandCss('#1e3a8a')}</style>`);
 
       // Anything else in the row is no colour: the whole content falls back, and no style element is written.
       await h.db
@@ -439,25 +511,20 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     }
   });
 
-  it('the subject pills above the new titles with their number of titles, and each card says its availability in words', async () => {
+  it('each card of the new titles says its availability in words, after a small drawing; the most borrowed list says none', async () => {
     const html = (await get('/')).text;
-    const fresh = section(html, 'judul-baru')!;
-    const available = (locale: 'id' | 'en') => `<span class="status status-ok card-status">${esc(opacText(locale, 'search.card.available'))}</span>`;
-    expect(fresh).toContain(`<ul class="subject-pills" aria-label="${esc(opacText('id', 'home.pills.label'))}">`);
-    expect(fresh).toContain(`<a href="/cari?subjek=${subjectId}">Novel &lt;Indonesia&gt;<span class="pill-count" aria-hidden="true">2</span>`);
-    expect(fresh.split(available('id')).length - 1).toBe(2);
-    // The popular titles carry the same pills and words.
-    const popular = section(html, 'judul-populer')!;
-    expect(popular).toContain('class="subject-pills"');
-    expect(popular).toContain(available('id'));
+    const fresh = /<ul class="card-grid home-titles">([\s\S]*?)<\/ul>/.exec(section(html, 'judul-baru')!)![1]!;
+    const available = (locale: 'id' | 'en') => statusLine('status status-ok card-status', opacText(locale, 'search.card.available'));
+    expect([...fresh.matchAll(available('id'))]).toHaveLength(2);
+    expect(/<ol class="rank"[^>]*>([\s\S]*?)<\/ol>/.exec(html)![1]).not.toContain('class="status');
 
     // A copy under repair: the title has a copy, but none on the shelf.
     await h.db.updateTable('items').set({ status: 'repair' }).where('id', '=', itemIds[0]!).execute();
     await withTx(h, (trx) => indexRecords(trx, records, NOW));
     try {
       const after = section((await get('/?lang=en')).text, 'judul-baru')!;
-      expect(after).toContain(`<span class="status status-muted card-status">${esc(opacText('en', 'search.card.off_shelf'))}</span>`);
-      expect(after).toContain(available('en'));
+      expect([...after.matchAll(statusLine('status status-muted card-status', opacText('en', 'search.card.off_shelf')))]).toHaveLength(1);
+      expect([...after.matchAll(available('en'))]).toHaveLength(1);
     } finally {
       await h.db.updateTable('items').set({ status: 'available' }).where('id', '=', itemIds[0]!).execute();
       await withTx(h, (trx) => indexRecords(trx, records, NOW));
@@ -469,21 +536,24 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     const home = JSON.parse(stored) as OpacHomeContent;
     await setHome({ ...home, blocks: { ...home.blocks, about: false, services: false, visit: false, popular: false, classes: false } });
     const html = (await get('/')).text;
-    for (const id of ['tentang-judul', 'layanan-judul', 'kunjungi-judul', 'judul-populer', 'jelajah-kelas', 'kelas-rajin']) expect(section(html, id), id).toBeUndefined();
+    for (const id of ['tentang-judul', 'layanan-judul', 'kunjungi-judul', 'judul-populer', 'jelajah-kelas', 'kelas-rajin']) expect(html, id).not.toContain(`id="${id}"`);
+    // The new titles stay; without "about" the profile has no page and no menu entry; without "visit" nothing says today's hours.
+    expect(section(html, 'judul-baru')).toBeDefined();
+    expect(html).not.toContain('href="/profil');
+    expect(html).not.toContain('href="/#kunjungi"');
+    expect(html).not.toContain('class="top-today"');
+    expect((await get('/profil')).status).toBe(404);
     await setHome(home);
   });
 
-  it('the popular titles: cards with covers like the new titles, linking the most borrowed search; no borrower and no count on the page or in that search', async () => {
+  it('the popular titles: a numbered list of titles beside the classes; no borrower and no count on the page or in the most borrowed search', async () => {
     const html = (await get('/')).text;
-    const popular = section(html, 'judul-populer')!;
-    expect(popular).toContain('<ul class="card-grid">');
-    expect(popular).toContain('class="book-cover cover-');
-    expect(popular).toContain(`<p class="section-sub">${esc(opacText('id', 'home.popular.note'))}</p>`);
-    expect(popular).not.toContain('popular-list');
-    expect(popular).toContain('Bumi Manusia');
-    expect(popular).toMatch(/href="\/katalog\/[0-9A-Z]{26}\/bumi-manusia"/);
+    expect(html).toContain(`<h3 class="h3" id="judul-populer">${esc(opacText('id', 'home.popular.title'))} <small>· ${esc(opacText('id', 'home.popular.window'))}</small></h3>`);
+    const popular = /<ol class="rank" aria-labelledby="judul-populer">([\s\S]*?)<\/ol>/.exec(html)![1]!;
+    // The place is the list's own numbering; the digit drawn beside it is hidden from a screen reader.
+    expect(popular).toMatch(/^<li><span class="rank-n" aria-hidden="true">1<\/span><span><a href="\/katalog\/[0-9A-Z]{26}\/bumi-manusia">Bumi Manusia<\/a><\/span><\/li>$/);
     expect(popular).not.toContain('Laskar Pelangi');
-    expect(popular).toContain('href="/cari?urut=populer"');
+    expect(html).toContain(`</ol><p class="section-note">${esc(opacText('id', 'home.popular.note'))}</p>`);
     const search = (await get('/cari?urut=populer')).text;
     expect(search.indexOf('Bumi Manusia')).toBeGreaterThan(-1);
     expect(search.indexOf('Bumi Manusia')).toBeLessThan(search.indexOf('Laskar Pelangi'));

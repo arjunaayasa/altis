@@ -69,7 +69,7 @@ describe('the theme', () => {
   it('all OPAC text is set in Plus Jakarta Sans, then the system sans-serif', () => {
     expect(OPAC_FONT_STACK).toBe('"Plus Jakarta Sans Variable",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif');
     expect(OPAC_CSS).toContain(`--font:${OPAC_FONT_STACK};`);
-    expect(OPAC_CSS).toMatch(/body\{[^}]*font:1rem\/1\.55 var\(--font\)/);
+    expect(OPAC_CSS).toMatch(/body\{[^}]*font:400 1rem\/1\.5 var\(--font\)/);
   });
 
   it('two font files, upright latin and latin-ext, each named by its digest; only latin is preloaded', () => {
