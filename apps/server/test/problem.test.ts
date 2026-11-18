@@ -115,6 +115,7 @@ describe('reason (PROBLEM_REASONS, S30)', () => {
       BACKUP_INVALID: ['format', 'checksum', 'signature', 'path', 'bomb', 'schema', 'entry'],
       UPLOAD_CHUNK_INVALID: ['order', 'size'],
       UPLOAD_MISMATCH: ['size', 'sha256'],
+      UPLOAD_TYPE_REFUSED: ['damaged', 'interlaced', 'dimensions', 'too_small'],
       JOB_NOT_RETRYABLE: ['origin_only', 'state'],
       TX_CONFLICT: ['upload_busy'],
       // 1d (Task 1; preflight M6)
@@ -220,6 +221,7 @@ describe('reason (PROBLEM_REASONS, S30)', () => {
     ['BACKUP_INVALID', 'bomb'],
     ['UPLOAD_CHUNK_INVALID', 'order'],
     ['UPLOAD_MISMATCH', 'sha256'],
+    ['UPLOAD_TYPE_REFUSED', 'too_small'],
     ['JOB_NOT_RETRYABLE', 'origin_only'],
     ['JOB_NOT_RETRYABLE', 'state'],
     ['TX_CONFLICT', 'upload_busy'],
