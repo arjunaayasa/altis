@@ -1,10 +1,11 @@
 import type { ShelfStatus } from '@altis/core';
 import type { Locale } from '@altis/shared';
+import { Icon, type IconName } from '../icons.js';
 import { opacText } from './messages.js';
 
 // A title's copies in words, as a card, a result row and the record page say it (core opac-home/shelf-status.ts
 // decides the state): "Tersedia" or "Tersedia 1 dari 3", "Dipinjam, kembali 21 Nov", "Hanya baca di tempat", or "Tidak
-// di rak". The colour of the words only repeats them (green, amber, muted). Nothing about who holds a copy.
+// di rak". The colour of the words and the icon before them only repeat them (green, amber, muted). Nothing about who holds a copy.
 
 /** The class of each state's words. */
 const STATUS_CLASS: Readonly<Record<ShelfStatus['kind'], string>> = {
@@ -13,6 +14,9 @@ const STATUS_CLASS: Readonly<Record<ShelfStatus['kind'], string>> = {
   library_use: 'status status-muted',
   unavailable: 'status status-muted',
 };
+
+/** The icon beside each state's words. */
+const STATUS_ICON: Readonly<Record<ShelfStatus['kind'], IconName>> = { available: 'check', on_loan: 'clock', library_use: 'info', unavailable: 'info' };
 
 /**
  * A due date (`YYYY-MM-DD`) as short words in `locale` ("21 Nov"), with its year when that is not `year` (a loan due
@@ -51,7 +55,12 @@ export function ShelfStatusLine(props: { status: ShelfStatus | null; locale: Loc
   const { status } = props;
   if (status === null) return null;
   const cls = props.extraClass === undefined ? STATUS_CLASS[status.kind] : `${STATUS_CLASS[status.kind]} ${props.extraClass}`;
-  return <span class={cls}>{shelfStatusText(status, props.locale, props.year)}</span>;
+  return (
+    <span class={cls}>
+      <Icon name={STATUS_ICON[status.kind]} />
+      {shelfStatusText(status, props.locale, props.year)}
+    </span>
+  );
 }
 
 /** The calendar year of `now` (epoch ms), the one a due date of the same year leaves out. */

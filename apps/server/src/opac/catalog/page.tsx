@@ -1,4 +1,4 @@
-import { jsonForHtmlScript, publicSiteIdentity, resolveSiteIdentity, type SafeHtml } from '@altis/core';
+import { closedBy, jsonForHtmlScript, loadClosedDayRules, publicSiteIdentity, resolveSiteIdentity, type ClosedDayRule, type SafeHtml } from '@altis/core';
 import type { DbHandle } from '@altis/db';
 import { DEFAULT_ACCENT, isAccent } from '@altis/opac-theme';
 import { LOCALES, isLocale, localDate, resolveLocale, type Locale } from '@altis/shared';
@@ -13,9 +13,10 @@ import type { Config } from '../../config.js';
 import { cspHeader, cspNonce } from '../../http/csp.js';
 import type { AppEnv } from '../../http/request-id.js';
 import type { AppServices } from '../../services.js';
-import { Layout, toDocument, type FrameLink, type HeroBand, type PageFrame, type SiteFooter, type SiteLogo } from '../layout.js';
+import { Layout, toDocument, type FrameLink, type PageFrame, type SiteFooter, type SiteLogo, type TodayHours } from '../layout.js';
 import { opacText } from './messages.js';
 import { hasPublishedNews, navPages, type OpacNavLink } from './queries.js';
+import { OPAC_ADVANCED_PATH } from './search-params.js';
 import { absoluteUrl, isLocalPath, withLang } from './urls.js';
 
 // The page frame of the catalogue's OPAC pages (Phase 2 Tasks 3 and 21; spec §9.1, §9.2). Every catalogue page handler
@@ -54,47 +55,96 @@ export interface OpacContext {
   year?: number;
 }
 
-/** The library's site as the menu and the footer of every page show it (from the settings and the published news). */
+/** The library's site as the menu, the strip above the header and the footer of every page show it. */
 export interface SiteInfo {
   /** `library.address` (line breaks kept), or null. */
   address: string | null;
   /** The opening hours of the home page's visit block (none while that block is switched off). */
   hours: readonly { days: string; time: string }[];
-  /** The library's colour of the header bar (`#rrggbb`), or null: the accent's. */
+  /** The library's colour (`#rrggbb`), or null: the accent's. */
   brand: string | null;
-  /** The home page shows its "about" block (switched on, with content): the menu's "Profil". */
+  /** The library has a profile to show (the "about" block is on and something of the profile is filled in): `/profil`. */
   profile: boolean;
-  /** The home page shows its services block: the menu's "Layanan". */
+  /** The home page shows its services block. */
   services: boolean;
-  /** The home page shows its visit block (switched on, with an address or hours): the menu's "Kontak". */
+  /** The home page shows its visit block (switched on, with an address, hours or a contact): the menu's "Jam & lokasi". */
   contact: boolean;
-  /** A news post is published: the menu's "Berita". */
+  /** A news post is published: the menu's "Berita & agenda". */
   news: boolean;
-  // ---- Komunitas (OPAC look) ----
+  /** The gallery has a photo: `/galeri`. */
+  gallery: boolean;
   /** The library's logo (header and footer), or null. */
   logo: SiteLogo | null;
+  /** The site's name when the identity gives one; null: the library's. */
+  name: string | null;
+  /** The site's tagline in each language. */
+  tagline: { id: string | null; en: string | null };
   /** The published telephone number and e-mail address, each null when there is none. */
   phone: string | null;
   email: string | null;
+  /** Today's opening hours (the library's day); null: not said (no hours, or the visit block is off). */
+  today: TodayHours | null;
   /** The language of the library's own texts (the address, the hours) when it is not the page's. */
   contentLang?: Locale | undefined;
 }
 
 /** The logo of the site identity in force (the saved one, else the home page's old logo), as the pages show it. */
 export function siteLogo(stored: SiteIdentity | null, home: Pick<OpacHomeContent, 'logo'>, libraryName: string): SiteLogo | null {
-  const logo = publicSiteIdentity(resolveSiteIdentity(stored, home).identity, libraryName).logo;
-  return logo === null ? null : { src: logo.url, alt: logo.alt };
+  const identity = publicSiteIdentity(resolveSiteIdentity(stored, home).identity, libraryName);
+  const logo = identity.logo;
+  return logo === null ? null : { src: logo.url, alt: logo.alt, dark: identity.logoDark?.url ?? null, showName: identity.showNameBesideLogo };
+}
+
+/** Whether something of the library's profile is filled in (what `/profil` shows). */
+export function hasProfile(home: OpacHomeContent): boolean {
+  const about = home.about;
+  const text = (value: OpacHomeContent['vision'] | undefined): boolean => value !== undefined && (opacHomeTextIn(value, 'id') ?? opacHomeTextIn(value, 'en')) !== null;
+  return (
+    text(about.text) ||
+    text(about.history) ||
+    text(home.vision) ||
+    about.photo !== null ||
+    about.founded !== null ||
+    about.librarians !== null ||
+    (home.timeline ?? []).length > 0 ||
+    (home.mission ?? []).length > 0 ||
+    (home.staff ?? []).length > 0 ||
+    home.facilities.length > 0
+  );
+}
+
+/** The ISO weekday (1 Monday to 7 Sunday) of a calendar date `YYYY-MM-DD`. */
+export function isoWeekday(date: string): number {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return day === 0 ? 7 : day;
+}
+
+/**
+ * What the strip above the header says of the day `today` (`YYYY-MM-DD`): the hours of the rows that cover its weekday,
+ * or closed (a day the library calendar closes, `closed`, or a weekday no row covers); null without any hours.
+ */
+export function todayHours(hours: OpacHomeContent['hours'], today: string, closed: boolean): TodayHours | null {
+  if (hours.length === 0) return null;
+  const weekday = isoWeekday(today);
+  // A row without a digit in its time ("Tutup") says the library is closed that day.
+  const rows = closed ? [] : hours.filter((h) => h.weekdays.includes(weekday) && /\d/.test(h.time));
+  return rows.length === 0 ? { open: false, time: '' } : { open: true, time: rows.map((h) => h.time).join(', ') };
 }
 
 /**
  * The site of `home` with `address` and whether news is published (see SiteInfo). `logo` is the site identity's
  * ({@link siteLogo}); left out, it is the one `home` still holds.
  */
-export function siteInfo(home: OpacHomeContent, address: string | null, news: boolean, logo?: SiteLogo | null): SiteInfo {
+export function siteInfo(
+  home: OpacHomeContent,
+  address: string | null,
+  news: boolean,
+  logo?: SiteLogo | null,
+  more: { name?: string | null; tagline?: SiteInfo['tagline']; today?: TodayHours | null } = {},
+): SiteInfo {
   const b = home.blocks;
-  const about = home.about;
   const hasAddress = address !== null && address.trim() !== '';
-  const aboutText = opacHomeTextIn(about.text, 'id') ?? opacHomeTextIn(about.text, 'en');
   // A content saved before the contact and the logo existed reads them as none.
   const contact: OpacHomeContent['contact'] | undefined = home.contact;
   const old: OpacHomeContent['logo'] | undefined = home.logo;
@@ -104,30 +154,71 @@ export function siteInfo(home: OpacHomeContent, address: string | null, news: bo
     address: hasAddress ? address : null,
     hours: b.visit ? home.hours.map((h) => ({ days: h.days, time: h.time })) : [],
     brand: home.brand ?? null,
-    profile: b.about && (aboutText !== null || about.photo !== null || about.founded !== null || about.librarians !== null),
-    services: b.services && (home.services.length > 0 || home.facilities.length > 0),
+    profile: b.about && hasProfile(home),
+    services: b.services && home.services.length > 0,
     contact: b.visit && (hasAddress || home.hours.length > 0 || phone !== null || email !== null),
     news,
+    gallery: (home.gallery ?? []).length > 0,
     logo: logo !== undefined ? logo : old === undefined || old === null ? null : { src: `/files/${encodeURIComponent(old.fileId)}`, alt: old.alt },
+    name: more.name ?? null,
+    tagline: more.tagline ?? { id: null, en: null },
     phone,
     email,
+    today: b.visit ? (more.today ?? null) : null,
   };
+}
+
+/** How long the closed days of the library calendar are kept before they are read again. */
+export const CLOSED_DAYS_TTL_MS = 60_000;
+
+const closedDaysCache = new WeakMap<object, { at: number; value: Promise<ClosedDayRule[]> }>();
+
+/** The closed days of the library calendar, kept for {@link CLOSED_DAYS_TTL_MS} per database (every page reads them). */
+export function cachedClosedDays(db: DbHandle['db'], clock: () => number = () => performance.now()): Promise<ClosedDayRule[]> {
+  const now = clock();
+  const hit = closedDaysCache.get(db);
+  if (hit !== undefined && now - hit.at < CLOSED_DAYS_TTL_MS) return hit.value;
+  const value = loadClosedDayRules(db, null);
+  closedDaysCache.set(db, { at: now, value });
+  value.catch(() => {
+    if (closedDaysCache.get(db)?.value === value) closedDaysCache.delete(db);
+  });
+  return value;
+}
+
+/** The calendar day of `now` in `timeZone` (UTC when `Intl` does not know it). */
+export function libraryToday(timeZone: string, now: number): string {
+  try {
+    return localDate(timeZone, now);
+  } catch {
+    return localDate('UTC', now);
+  }
 }
 
 /**
  * The library's site as the menu and the footer show it (SiteInfo, without its content language): `library.address`,
- * `opac.home` and the site identity through the settings cache, and whether a news post is published at `now`.
+ * `opac.home` and the site identity through the settings cache, whether a news post is published at `now`, and what
+ * the library calendar says of today.
  */
 export async function readSiteInfo(settings: AppServices['settings'], handle: DbHandle['db'], now: number): Promise<SiteInfo> {
-  const [address, home, news, identity, libraryName] = await Promise.all([
+  const [address, home, news, identity, libraryName, timeZone] = await Promise.all([
     settings.get<string | null>(handle, 'library.address'),
     settings.get<OpacHomeContent>(handle, 'opac.home'),
     hasPublishedNews(handle, now),
     settings.get<SiteIdentity | null>(handle, 'site.identity'),
     settings.get<string>(handle, 'library.name'),
+    settings.get<string>(handle, 'library.timezone'),
   ]);
   const content = home ?? OPAC_HOME_DEFAULT;
-  return siteInfo(content, address ?? null, news, siteLogo(identity ?? null, content, libraryName));
+  const today = libraryToday(timeZone, now);
+  let hours: TodayHours | null = null;
+  if (content.blocks.visit && content.hours.length > 0) hours = todayHours(content.hours, today, closedBy(await cachedClosedDays(handle))(today));
+  const shown = publicSiteIdentity(resolveSiteIdentity(identity ?? null, content).identity, libraryName);
+  return siteInfo(content, address ?? null, news, siteLogo(identity ?? null, content, libraryName), {
+    name: shown.name === libraryName ? null : shown.name,
+    tagline: shown.tagline,
+    today: hours,
+  });
 }
 
 /** The language of the library's own texts (`library.locale`) on a page in `locale`, when it is another one. */
@@ -163,13 +254,14 @@ export interface OpacPageOptions {
    * = the canonical link): `type` default `website`, `image` a local path (a cover's `/files/<id>`). False: none.
    */
   openGraph?: { type?: string; image?: string | null } | false;
-  /** The search form in the header; default true (the home page shows its own). */
+  /** The search band under the header; default: only on a 404 page (the results page shows its own). */
   headerSearch?: boolean;
   /** The page's own search form in the header's search band, in place of the plain one (the results page's). */
   searchBand?: () => JSX.Element;
-  // ---- Komunitas (OPAC home page) ----
-  /** The home page's hero band around the header (layout.tsx HeroBand). */
-  hero?: HeroBand;
+  /** A band across the window above the content (layout.tsx PageHead): the breadcrumb, the heading. */
+  pageHead?: () => JSX.Element;
+  /** The content spans the window (a page made of bands); default: one column of the page's width. */
+  bleed?: boolean;
 }
 
 /** What `opacContext` reads from a route's context (a RouteContext has all of it). */
@@ -208,15 +300,11 @@ export async function opacContext(rc: OpacContextSource): Promise<OpacContext> {
     settings.get<string>(handle, 'library.timezone'),
   ]);
   const locale = resolveLocale(rc.c.req.query('lang'), libraryLocale);
-  let today: string;
-  try {
-    today = localDate(timeZone, now);
-  } catch {
-    today = localDate('UTC', now);
-  }
+  const today = libraryToday(timeZone, now);
   return {
     locale,
-    libraryName,
+    // The site's name where the identity gives one: what every title, the header and the footer call the site.
+    libraryName: site.name ?? libraryName,
     accent: isAccent(accent) ? accent : DEFAULT_ACCENT,
     baseUrl: rc.config.baseUrl,
     indexable: indexable !== false,
@@ -327,49 +415,57 @@ function sectionOf(path: string): string {
   if (path === '/') return '/';
   if (path === '/cari' || path.startsWith('/cari/') || path.startsWith('/katalog/')) return '/cari';
   if (path === '/berita' || path.startsWith('/berita/')) return '/berita';
+  if (path === '/profil' || path === '/galeri') return '/profil';
   return path;
 }
 
 /**
- * The site menu: Beranda and Katalog always, then Profil, Layanan, Berita and Kontak when their target has content
- * (the home page's blocks, a published news post), then the menu pages; each in the page's language when the request
- * named it, the one of the current path marked.
+ * The site menu: Beranda and Katalog always, then Profil, Berita & agenda and Jam & lokasi when their target has
+ * content (the library's profile, a published news post, the home page's visit block), then the menu pages; each in
+ * the page's language when the request named it, the one of the current path marked.
  */
 export function siteMenu(locale: Locale, site: SiteInfo | undefined, pages: readonly OpacNavLink[], lang: Locale | null, path: string): FrameLink[] {
   const keep = (href: string): string => (lang === null ? href : withLang(href, lang));
-  const anchor = (id: string): string => `${keep('/')}#${id}`;
   const current = sectionOf(path);
   const entries: [href: string, key: Parameters<typeof opacText>[1], section: string | null][] = [
     [keep('/'), 'shell.menu.home', '/'],
     [keep('/cari'), 'shell.menu.catalog', '/cari'],
   ];
-  if (site?.profile === true) entries.push([anchor('tentang'), 'shell.menu.profile', null]);
-  if (site?.services === true) entries.push([anchor('layanan'), 'shell.menu.services', null]);
+  if (site?.profile === true) entries.push([keep('/profil'), 'shell.menu.profile', '/profil']);
   if (site?.news === true) entries.push([keep('/berita'), 'shell.menu.news', '/berita']);
-  if (site?.contact === true) entries.push([anchor('kunjungi'), 'shell.menu.contact', null]);
+  if (site?.contact === true) entries.push([`${keep('/')}#kunjungi`, 'shell.menu.contact', null]);
   return [
     ...entries.map(([href, key, section]): FrameLink => ({ href, label: opacText(locale, key), current: section !== null && section === current })),
     ...pages.map((link): FrameLink => ({ href: keep(link.href), label: link.label, lang: link.lang, current: link.href === path })),
   ];
 }
 
-/** The footer of a page with `site`: the library's address and hours, its links, and the search field. */
+/** The footer of a page with `site`: the library's address, contact and hours, its links and the member links. */
 export function siteFooter(locale: Locale, site: SiteInfo | undefined, pages: readonly OpacNavLink[], lang: Locale | null): SiteFooter {
   const keep = (href: string): string => (lang === null ? href : withLang(href, lang));
-  const links: FrameLink[] = [{ href: keep('/cari'), label: opacText(locale, 'shell.menu.catalog') }];
-  if (site?.profile === true) links.push({ href: `${keep('/')}#tentang`, label: opacText(locale, 'shell.footer.profile') });
-  if (site?.services === true) links.push({ href: `${keep('/')}#layanan`, label: opacText(locale, 'shell.menu.services') });
+  const links: FrameLink[] = [
+    { href: keep('/cari'), label: opacText(locale, 'shell.menu.catalog') },
+    { href: keep(OPAC_ADVANCED_PATH), label: opacText(locale, 'search.advanced.link') },
+  ];
+  if (site?.profile === true) links.push({ href: keep('/profil'), label: opacText(locale, 'shell.menu.profile') });
   if (site?.news === true) links.push({ href: keep('/berita'), label: opacText(locale, 'shell.menu.news') });
-  if (site?.contact === true) links.push({ href: `${keep('/')}#kunjungi`, label: opacText(locale, 'shell.footer.visit') });
+  if (site?.gallery === true) links.push({ href: keep('/galeri'), label: opacText(locale, 'shell.menu.gallery') });
   for (const page of pages) links.push({ href: keep(page.href), label: page.label, lang: page.lang });
+  const member: FrameLink[] = [{ href: keep('/akun'), label: opacText(locale, 'akun.header.link') }];
+  if (site?.profile === true) member.push({ href: `${keep('/profil')}#anggota`, label: opacText(locale, 'shell.footer.join') });
+  if (site?.contact === true) member.push({ href: `${keep('/')}#kunjungi`, label: opacText(locale, 'shell.footer.visit') });
+  const tagline = site === undefined ? null : opacHomeTextIn(site.tagline, locale);
   return {
     address: site?.address ?? null,
     phone: site?.phone ?? null,
     email: site?.email ?? null,
+    tagline: tagline?.text ?? null,
+    taglineLang: tagline === null || tagline.lang === locale ? undefined : tagline.lang,
     hours: site?.hours ?? [],
     contentLang: site?.contentLang,
     links,
-    search: { lang },
+    member,
+    feed: site?.news === true ? keep('/berita/rss') : null,
   };
 }
 
@@ -395,6 +491,10 @@ export function pageFrame(c: Context<AppEnv>, ctx: Pick<OpacContext, 'locale' | 
     brand: ctx.site?.brand ?? null,
     logo: ctx.site?.logo ?? null,
     year: ctx.year,
+    today: ctx.site?.today ?? null,
+    phone: ctx.site?.phone ?? null,
+    email: ctx.site?.email ?? null,
+    accountHref: lang === null ? '/akun' : withLang('/akun', lang),
   };
 }
 
@@ -504,8 +604,9 @@ export function opacPage(rc: OpacResponder, ctx: OpacContext, o: OpacPageOptions
       description={description}
       robots={ctx.indexable ? ROBOTS[o.robots] : 'noindex'}
       head={head}
-      frame={{ ...pageFrame(rc.c, ctx, { search: o.headerSearch !== false }), searchBand: o.searchBand?.() }}
-      hero={o.hero}
+      frame={{ ...pageFrame(rc.c, ctx, { search: o.headerSearch ?? status === 404 }), searchBand: o.searchBand?.() }}
+      pageHead={o.pageHead?.()}
+      bleed={o.bleed}
     >
       {o.body(nonce)}
     </Layout>,

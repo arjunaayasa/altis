@@ -11,6 +11,7 @@ export const DETAIL_MESSAGES = defineOpacMessages(
     // The page.
     'detail.description_fallback': '{title} ({type}) di katalog {library}.',
     'detail.summary': 'Ringkasan',
+    'detail.side': 'Letak di rak dan ketersediaan',
     'detail.notes': 'Catatan',
     'detail.description': 'Deskripsi bibliografis',
     'detail.material_type': 'Jenis bahan',
@@ -62,6 +63,7 @@ export const DETAIL_MESSAGES = defineOpacMessages(
   {
     'detail.description_fallback': '{title} ({type}) in the {library} catalogue.',
     'detail.summary': 'Summary',
+    'detail.side': 'Shelf mark and availability',
     'detail.notes': 'Notes',
     'detail.description': 'Bibliographic description',
     'detail.material_type': 'Material type',
