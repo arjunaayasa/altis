@@ -22,8 +22,9 @@ import { defineConfig, type Plugin, type UserConfig } from 'vite';
 //   /admin/assets, so the base stays /admin/ for both.
 // - The `altis-inputs` plugin writes what the bundle is made of to .build/inputs.json (outside dist, never shipped):
 //   the module ids of every chunk, plus the packages our stylesheets `@import` (`tailwindcss`, `tw-animate-css`), whose
-//   rules Tailwind copies into the CSS output. The release build maps them to packages for the licence check and the
-//   notices.
+//   rules Tailwind copies into the CSS output, and the packages a `url()` of our stylesheets points into (the font
+//   package of src/fonts.css, whose files become assets). The release build maps them to packages for the licence check
+//   and the notices.
 
 const ADMIN_DIR = import.meta.dirname;
 const SRC_DIR = path.join(ADMIN_DIR, 'src');
@@ -70,12 +71,19 @@ function findPackage(name: string, file: string): string | undefined {
   }
 }
 
-/** The packages a stylesheet of ours `@import`s by name. */
+/**
+ * The packages a stylesheet of ours takes something from by name: the ones it `@import`s, and the ones a `url()` of it
+ * points into (a font file of a font package, which the build copies to the assets).
+ */
 function cssImports(file: string): string[] {
   const css = fs.readFileSync(file, 'utf8');
   const found: string[] = [];
-  for (const match of css.matchAll(/@import\s+(?:url\(\s*)?['"]([^'"]+)['"]/g)) {
-    const name = packageName(match[1]!);
+  const specifiers = [
+    ...[...css.matchAll(/@import\s+(?:url\(\s*)?['"]([^'"]+)['"]/g)].map((match) => match[1]!),
+    ...[...css.matchAll(/url\(\s*(?:'([^']+)'|"([^"]+)"|([^'")\s]+))\s*\)/g)].map((match) => (match[1] ?? match[2] ?? match[3])!),
+  ];
+  for (const specifier of specifiers) {
+    const name = packageName(specifier);
     const manifest = name === undefined ? undefined : findPackage(name, file);
     if (manifest !== undefined) found.push(manifest);
   }
