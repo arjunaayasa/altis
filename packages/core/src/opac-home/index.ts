@@ -2,6 +2,20 @@
 // popular titles and the loans per class (two small aggregates the reports housekeeping rebuilds from the loans).
 export { OPAC_HOME_KEY, OPAC_HOME_PHOTO_CONTEXT, readOpacHome, saveOpacHome } from './content.js';
 export type { OpacHomeState } from './content.js';
+// ---- Site identity ----
+export {
+  SITE_IDENTITY_KEY,
+  publicSiteIdentity,
+  readSiteIdentity,
+  resolveSiteIdentity,
+  saveSiteIdentity,
+  siteIconPng,
+  siteIconUrls,
+  siteIdentityUrls,
+  siteName,
+} from './site-identity.js';
+export type { SiteIdentityState } from './site-identity.js';
+export { SiteImageError, defaultSiteIcon, siteIconVariant } from '../files/site-images.js';
 export {
   POPULAR_KEEP_PER_BRANCH,
   POPULAR_MIN_BORROWERS,

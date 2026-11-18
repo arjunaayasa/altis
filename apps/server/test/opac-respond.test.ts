@@ -286,7 +286,8 @@ describe('opacContext', () => {
     // The year of the footer's line: the request's, in the library's time zone (UTC when it cannot be read).
     const year = new Date().getUTCFullYear();
     expect(got).toEqual({ locale: 'en', libraryName: 'Perpus', accent: 'green', baseUrl: BASE, indexable: true, nav: [], site, year });
-    expect(cache.reads.sort()).toEqual(['library.address', 'library.locale', 'library.name', 'library.timezone', 'opac.accent', 'opac.home', 'opac.indexable']);
+    // `library.name` twice: the page's own read, and the site details' (the logo's alternative text falls back to it).
+    expect(cache.reads.sort()).toEqual(['library.address', 'library.locale', 'library.name', 'library.name', 'library.timezone', 'opac.accent', 'opac.home', 'opac.indexable', 'site.identity']);
     await app.request('/x?lang=id');
     expect(got?.locale).toBe('id');
   });

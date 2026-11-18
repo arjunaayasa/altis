@@ -28,6 +28,7 @@ import { REPORTS_ROUTES } from '../../src/api/reports/index.js';
 import { STOCKTAKE_ROUTES } from '../../src/api/stocktake.js';
 // ---- Komunitas (OPAC home page) ----
 import { OPAC_HOME_ROUTES } from '../../src/api/opac-home.js';
+import { SITE_IDENTITY_ROUTES } from '../../src/api/site-identity.js';
 import { VISITS_ROUTES } from '../../src/api/visits/index.js';
 import { defineRoutes } from '../../src/http/route.js';
 import { komunitasJobDeps, komunitasJobHandlers } from '../../src/jobs/komunitas.js';
@@ -62,6 +63,7 @@ describe('the community routes in ALL_ROUTES', () => {
       ...VISITS_ROUTES,
       ...STOCKTAKE_ROUTES,
       ...OPAC_HOME_ROUTES,
+      ...SITE_IDENTITY_ROUTES,
     ]);
     for (const route of KOMUNITAS_ROUTES) expect(ALL_ROUTES).toContain(route);
   });

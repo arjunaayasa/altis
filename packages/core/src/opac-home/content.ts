@@ -7,6 +7,7 @@ import type { TxCtx } from '../context.js';
 import type { KeyringEntry } from '../crypto/secret-box.js';
 import { SETTINGS, type SettingKey } from '../settings/registry.js';
 import { readSettings, writeSettings } from '../settings/service.js';
+import { siteIdentitySaved } from './site-identity.js';
 
 // The content of the OPAC home page (the setting `opac.home`) and the welcome text of each language (the subtitle of a
 // hero slide without one of its own), read and saved as one thing by the admin screen OPAC › Halaman awal.
@@ -162,11 +163,14 @@ export async function saveOpacHome(
       detail: 'Halaman awal sudah diubah orang lain; muat ulang lalu ulangi perubahan Anda / The home page was changed by someone else; reload it and make your changes again',
     });
   }
-  await checkContactEmail(trx, body.home);
-  await claimPhotos(trx, body.home);
+  // Once the site identity is saved the logo lives there: the page's own logo is dropped, and its file released unless
+  // the identity took it over.
+  const home: OpacHomePutBody['home'] = body.home.logo !== null && (await siteIdentitySaved(trx)) ? { ...body.home, logo: null } : body.home;
+  await checkContactEmail(trx, home);
+  await claimPhotos(trx, home);
   const changed = await writeSettings(
     trx,
-    { 'opac.home': body.home, 'opac.welcome.id': welcomeValue(body.welcome.id), 'opac.welcome.en': welcomeValue(body.welcome.en) },
+    { 'opac.home': home, 'opac.welcome.id': welcomeValue(body.welcome.id), 'opac.welcome.en': welcomeValue(body.welcome.en) },
     { keyring: o.keyring, now: tx.now, actorId: tx.actor.id },
   );
   await tx.audit({ action: 'opac.home.update', entity: 'settings', entityId: null, meta: { keys: changed } });
