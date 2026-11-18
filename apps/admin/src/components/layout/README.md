@@ -132,7 +132,13 @@ with its border; plain content goes in a `CardBody` (16 px padding). Cards are 1
 </Card>
 ```
 
-A part of a page that needs a heading but no box is a `Section` (an `h2` of 15 px, something small on the right of
+**Nothing lies bare on the page.** Outside a `Card`, these parts draw their own card (rules of `src/index.css` on
+their `data-slot`, and `Section` by its context): a run of `FormSection`s (one card, a rule between the sections; the
+`FormBar` after it is the card's foot), a `SideSection`, a `Section`, a `FilterRow`, an `EmptyState`, and any form or
+section that starts with a `SectionHead` or an `h2`. Inside a `Card` they draw no box. A small form or a note drawn
+by hand takes the `PANEL` class; a region with a heading id of its own takes `CARD`, `CARD_HEAD` and `CARD_TITLE`.
+
+A part of a page that needs a heading is a `Section` (an `h2` of 15 px, something small on the right of
 the heading, the content 12 px below).
 
 A part that reads better with its title on the left, like a form section (a profile part, a member's own data), is a
@@ -289,7 +295,7 @@ its own, for a confirmation, or for anything a row or an `InlinePanel` can hold.
 **Tabs** (`components/ui/tabs`) switch between views of the same object or list ("Data anggota", "Pinjaman aktif");
 the arrow keys move between them. Add `WRAPPING_TABS` when they may wrap on a narrow screen. Pages of a group are
 sidebar items, not tabs; the few pages of one sidebar item (the settings groups) are `LinkTabs`, links with the
-current page underlined; the saved views of a list are `FilterTabs` (section 3). A tab never carries an icon.
+current page underlined (`side`: a list down the left of the content on a wide screen, for a part with many pages); the saved views of a list are `FilterTabs` (section 3). A tab never carries an icon.
 
 ```tsx
 <LinkTabs label={t('things.sections')} items={[{ to: '/admin/things', label: t('things.tab.list') }, { to: '/admin/things/schedules', label: t('things.tab.schedules') }]} />
