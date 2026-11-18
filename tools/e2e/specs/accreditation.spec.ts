@@ -174,59 +174,62 @@ test('Akreditasi: a school period prepared, computed, frozen, and its simulation
     await tab('accreditation.tab.register').click();
     await expect(page).toHaveURL(/[?&]tab=register(&|$)/);
     const registers = page.getByRole('tablist', { name: T('accreditation.registers.tabs_label') });
-    const dialog = page.getByRole('dialog');
+    // A register's form opens in a panel above its table, named "Tambah …" and, once the row is stored, "Ubah …".
+    const kinds = ['activities', 'staff', 'budgets', 'documents'] as const;
+    const titles = kinds.flatMap((kind) => [T(`accreditation.registers.${kind}.add`), T(`accreditation.registers.${kind}.edit`)]);
+    const panel = page.getByRole('region', { name: new RegExp(`^(${titles.map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`) });
 
     /**
-     * Saves the open dialog's form; the dialog then says the row `name` was stored, and is closed; the register lists a
+     * Saves the open panel's form; the panel then says the row `name` was stored, and is closed; the register lists a
      * row showing `rowText`.
      */
     const saveAndClose = async (name: string, rowText: string = name): Promise<void> => {
-      await dialog.getByRole('button', { name: T('form.save'), exact: true }).click();
-      await expect(dialog.getByText(T('accreditation.registers.done.created', { name }), { exact: true })).toBeVisible();
-      await dialog.getByRole('button', { name: T('accreditation.registers.close'), exact: true }).first().click();
-      await expect(dialog).toBeHidden();
+      await panel.getByRole('button', { name: T('form.save'), exact: true }).click();
+      await expect(panel.getByText(T('accreditation.registers.done.created', { name }), { exact: true })).toBeVisible();
+      await panel.getByRole('button', { name: T('form.cancel'), exact: true }).first().click();
+      await expect(panel).toBeHidden();
       await expect(page.getByRole('row').filter({ hasText: rowText }).first()).toBeVisible();
     };
 
     const activity = `Bimbingan membaca kelas X (uji ${tag})`;
     await registers.getByRole('tab', { name: T('accreditation.registers.tab.activities'), exact: true }).click();
     await page.getByRole('button', { name: T('accreditation.registers.activities.add'), exact: true }).click();
-    await expect(dialog.getByRole('heading', { name: T('accreditation.registers.activities.add'), exact: true })).toBeVisible();
-    await dialog.getByLabel(T('accreditation.registers.activities.field.kind'), { exact: true }).selectOption('reading_guidance');
-    await dialog.getByLabel(T('accreditation.registers.field.title'), { exact: true }).fill(activity);
-    await dialog.getByLabel(T('accreditation.registers.activities.field.held_on'), { exact: true }).fill(`${startYear}-09-15`);
-    await dialog.getByLabel(T('accreditation.registers.activities.field.participants'), { exact: true }).fill('30');
+    await expect(panel.getByRole('heading', { name: T('accreditation.registers.activities.add'), exact: true })).toBeVisible();
+    await panel.getByLabel(T('accreditation.registers.activities.field.kind'), { exact: true }).selectOption('reading_guidance');
+    await panel.getByLabel(T('accreditation.registers.field.title'), { exact: true }).fill(activity);
+    await panel.getByLabel(T('accreditation.registers.activities.field.held_on'), { exact: true }).fill(`${startYear}-09-15`);
+    await panel.getByLabel(T('accreditation.registers.activities.field.participants'), { exact: true }).fill('30');
     await saveAndClose(activity);
 
     const person = `Pustakawan Uji ${tag}`;
     await registers.getByRole('tab', { name: T('accreditation.registers.tab.staff'), exact: true }).click();
     await page.getByRole('button', { name: T('accreditation.registers.staff.add'), exact: true }).click();
-    await expect(dialog.getByRole('heading', { name: T('accreditation.registers.staff.add'), exact: true })).toBeVisible();
-    await dialog.getByLabel(T('accreditation.registers.staff.field.name'), { exact: true }).fill(person);
-    await dialog.getByLabel(T('accreditation.registers.staff.field.role'), { exact: true }).selectOption('head');
-    await dialog.getByLabel(T('accreditation.registers.staff.field.education_level'), { exact: true }).selectOption('s1');
-    await dialog.getByLabel(T('accreditation.registers.staff.field.starts_on'), { exact: true }).fill(`${startYear - 3}-07-01`);
-    await dialog.getByRole('checkbox', { name: T('accreditation.registers.staff.field.library_training'), exact: true }).check();
+    await expect(panel.getByRole('heading', { name: T('accreditation.registers.staff.add'), exact: true })).toBeVisible();
+    await panel.getByLabel(T('accreditation.registers.staff.field.name'), { exact: true }).fill(person);
+    await panel.getByLabel(T('accreditation.registers.staff.field.role'), { exact: true }).selectOption('head');
+    await panel.getByLabel(T('accreditation.registers.staff.field.education_level'), { exact: true }).selectOption('s1');
+    await panel.getByLabel(T('accreditation.registers.staff.field.starts_on'), { exact: true }).fill(`${startYear - 3}-07-01`);
+    await panel.getByRole('checkbox', { name: T('accreditation.registers.staff.field.library_training'), exact: true }).check();
     await saveAndClose(person);
 
     const budgetYear = startYear + 1;
     await registers.getByRole('tab', { name: T('accreditation.registers.tab.budgets'), exact: true }).click();
     await page.getByRole('button', { name: T('accreditation.registers.budgets.add'), exact: true }).click();
-    await expect(dialog.getByRole('heading', { name: T('accreditation.registers.budgets.add'), exact: true })).toBeVisible();
-    await dialog.getByLabel(T('accreditation.registers.budgets.field.year'), { exact: true }).fill(String(budgetYear));
-    await dialog.getByLabel(T('accreditation.registers.budgets.field.library'), { exact: true }).fill('6.500.000');
-    await dialog.getByLabel(T('accreditation.registers.budgets.field.parent_nonpersonnel'), { exact: true }).fill('100.000.000');
+    await expect(panel.getByRole('heading', { name: T('accreditation.registers.budgets.add'), exact: true })).toBeVisible();
+    await panel.getByLabel(T('accreditation.registers.budgets.field.year'), { exact: true }).fill(String(budgetYear));
+    await panel.getByLabel(T('accreditation.registers.budgets.field.library'), { exact: true }).fill('6.500.000');
+    await panel.getByLabel(T('accreditation.registers.budgets.field.parent_nonpersonnel'), { exact: true }).fill('100.000.000');
     await saveAndClose(T('accreditation.registers.budgets.name', { year: budgetYear }), String(budgetYear));
 
     const document = `Kebijakan pengembangan koleksi (uji ${tag})`;
     await registers.getByRole('tab', { name: T('accreditation.registers.tab.documents'), exact: true }).click();
     await page.getByRole('button', { name: T('accreditation.registers.documents.add'), exact: true }).click();
-    await expect(dialog.getByRole('heading', { name: T('accreditation.registers.documents.add'), exact: true })).toBeVisible();
-    await dialog.getByLabel(T('accreditation.registers.documents.field.kind'), { exact: true }).selectOption('collection_policy');
-    await dialog.getByLabel(T('accreditation.registers.field.title'), { exact: true }).fill(document);
-    await dialog.getByLabel(T('accreditation.registers.documents.field.issued_on'), { exact: true }).fill(`${startYear}-07-10`);
+    await expect(panel.getByRole('heading', { name: T('accreditation.registers.documents.add'), exact: true })).toBeVisible();
+    await panel.getByLabel(T('accreditation.registers.documents.field.kind'), { exact: true }).selectOption('collection_policy');
+    await panel.getByLabel(T('accreditation.registers.field.title'), { exact: true }).fill(document);
+    await panel.getByLabel(T('accreditation.registers.documents.field.issued_on'), { exact: true }).fill(`${startYear}-07-10`);
     for (const code of ['a1', 'a2', 'a3']) {
-      await dialog.getByRole('checkbox', { name: T(`accred.aspect.collection_policy.${code}` as Parameters<typeof T>[0]), exact: true }).check();
+      await panel.getByRole('checkbox', { name: T(`accred.aspect.collection_policy.${code}` as Parameters<typeof T>[0]), exact: true }).check();
     }
     await saveAndClose(document);
   });
@@ -238,14 +241,14 @@ test('Akreditasi: a school period prepared, computed, frozen, and its simulation
     const card = page.locator('section[data-indicator]').filter({ has: page.getByRole('button', { name: upload, exact: true }) }).first();
     await expect(card).toBeVisible();
     await card.getByRole('button', { name: upload, exact: true }).first().click();
-    const dialog = page.getByRole('dialog', { name: upload });
-    await expect(dialog).toBeVisible();
-    await dialog.getByLabel(T('accreditation.registers.upload.file'), { exact: true }).setInputFiles({ name: `bukti-${tag}.pdf`, mimeType: 'application/pdf', buffer: onePagePdf() });
-    await dialog.getByLabel(T('accreditation.registers.upload.caption'), { exact: true }).fill(`Bukti uji ${tag}`);
-    const submit = dialog.getByRole('button', { name: T('accreditation.registers.upload.submit'), exact: true });
+    const panel = page.getByRole('form', { name: upload });
+    await expect(panel).toBeVisible();
+    await panel.getByLabel(T('accreditation.registers.upload.file'), { exact: true }).setInputFiles({ name: `bukti-${tag}.pdf`, mimeType: 'application/pdf', buffer: onePagePdf() });
+    await panel.getByLabel(T('accreditation.registers.upload.caption'), { exact: true }).fill(`Bukti uji ${tag}`);
+    const submit = panel.getByRole('button', { name: T('accreditation.registers.upload.submit'), exact: true });
     await expect(submit).toBeEnabled();
     await submit.click();
-    await expect(dialog).toBeHidden({ timeout: 60_000 });
+    await expect(panel).toBeHidden({ timeout: 60_000 });
     const listed = await staff.call<EvidenceListResponse>('GET', `accreditation/evidence?periodId=${encodeURIComponent(periodId)}`);
     expect(listed.evidence.filter((e) => e.caption === `Bukti uji ${tag}` && e.mime === 'application/pdf')).toHaveLength(1);
   });
