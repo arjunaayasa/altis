@@ -1,10 +1,10 @@
 import type { Permission } from '@altis/shared';
 import type { MaterialTypeView } from '@altis/shared/api/catalog/masters';
-import type { RecordListItem, RecordListResponse } from '@altis/shared/api/catalog/records';
+import type { RecordCountsResponse, RecordListItem, RecordListResponse } from '@altis/shared/api/catalog/records';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EXPORT_SELECTION_KEY, EXPORT_SELECTION_MAX, parseRecordsSearch, storeExportSelection } from '@/screens/catalog/records/list';
-import { adminMe, signedIn, startApp, type FakeRequest } from '../fake-api';
+import { adminMe, problem, signedIn, startApp, type FakeRequest } from '../fake-api';
 
 // Bibliografi, the record list (Phase 2 spec §13, §4.4; plan Task 24): search and filters live in the URL search
 // params (the list's query key follows them), the rows show cover, title and main author, type, year, call number,
@@ -71,16 +71,25 @@ const ROWS: RecordListItem[] = [
 
 const keyset = (items: RecordListItem[]): RecordListResponse => ({ items, total: null, nextCursor: null, page: null });
 
-function start(o: { path?: string; permissions?: readonly Permission[]; list?: (req: FakeRequest) => RecordListResponse } = {}) {
+/** `GET catalog/records/counts`: the views, and a total that follows the filters asked for. */
+const COUNTS = (req: FakeRequest): RecordCountsResponse => ({ views: { all: 1234, no_items: 2, hidden: 1, archived: 0 }, total: req.query.toString() === '' ? 1234 : 7 });
+
+function start(
+  o: { path?: string; permissions?: readonly Permission[]; list?: (req: FakeRequest) => RecordListResponse; counts?: ((req: FakeRequest) => unknown) | null } = {},
+) {
   return startApp({
     me: o.permissions === undefined ? adminMe() : signedIn({ permissions: o.permissions }),
     path: o.path ?? '/admin/catalog/records',
     routes: {
       'GET catalog/records': (req) => (o.list ?? (() => keyset(ROWS)))(req),
       'GET catalog/material-types': () => ({ items: TYPES }),
+      ...(o.counts === null ? {} : { 'GET catalog/records/counts': o.counts ?? COUNTS }),
     },
   });
 }
+
+/** The `GET catalog/records/counts` requests, as their query strings. */
+const countQueries = (requests: FakeRequest[]): string[] => requests.filter((r) => r.method === 'GET' && r.path === 'catalog/records/counts').map((r) => r.query.toString());
 
 /** The `GET catalog/records` requests, as their query strings. */
 const listQueries = (requests: FakeRequest[]): string[] => requests.filter((r) => r.method === 'GET' && r.path === 'catalog/records').map((r) => r.query.toString());
@@ -123,7 +132,7 @@ describe('RecordsListScreen', () => {
 
     fireEvent.change(screen.getByLabelText('Tampil di OPAC'), { target: { value: 'only' } });
     fireEvent.change(screen.getByLabelText('Eksemplar'), { target: { value: 'false' } });
-    fireEvent.click(screen.getByLabelText('Tampilkan hanya yang diarsipkan'));
+    fireEvent.click(screen.getByLabelText('Hanya yang diarsipkan'));
     await waitFor(() => expect(router.state.location.search).toEqual({ materialTypeId: MT_THESIS, hidden: 'only', hasItems: false, archived: true }));
 
     fireEvent.change(screen.getByLabelText('Cari cantuman'), { target: { value: 'judul:laskar "anak belitung"' } });
@@ -154,7 +163,11 @@ describe('RecordsListScreen', () => {
     const { requests } = start({ path: `/admin/catalog/records?materialTypeId=${MT_BOOK}&changedFrom=2026-10-01&changedTo=2026-10-02&sort=title` });
     await screen.findByRole('link', { name: 'Laskar Pelangi' });
     expect((screen.getByLabelText('Jenis bahan') as HTMLSelectElement).value).toBe(MT_BOOK);
-    expect((screen.getByLabelText('Diubah sejak') as HTMLInputElement).value).toBe('2026-10-01');
+    // The range is a chip that says it, and opens the two days.
+    fireEvent.click(screen.getByRole('button', { name: 'Diubah 1 Okt 2026 – 2 Okt 2026' }));
+    const range = await screen.findByRole('dialog', { name: 'Terakhir diubah' });
+    expect((within(range).getByLabelText('Diubah sejak') as HTMLInputElement).value).toBe('2026-10-01');
+    expect((within(range).getByLabelText('Diubah sampai') as HTMLInputElement).value).toBe('2026-10-02');
     expect((screen.getByLabelText('Urutan') as HTMLSelectElement).value).toBe('title');
     const sent = Object.fromEntries(new URLSearchParams(listQueries(requests).at(-1)));
     expect(sent).toEqual({
@@ -164,6 +177,94 @@ describe('RecordsListScreen', () => {
       sort: 'title',
       limit: '50',
     });
+  });
+
+  it('the tabs carry the numbers of the views from the server; the foot says how many of how many are loaded', async () => {
+    const { requests } = start({
+      list: (req) => (req.query.get('cursor') === 'c.1.X' ? keyset([ROWS[2]!]) : { ...keyset(ROWS.slice(0, 2)), nextCursor: 'c.1.X' }),
+    });
+    await screen.findByRole('link', { name: 'Laskar Pelangi' });
+    const tabs = screen.getByRole('navigation', { name: 'Tampilan daftar' });
+    await waitFor(() => expect(within(tabs).getAllByRole('link').map((a) => a.textContent)).toEqual(['Semua 1234', 'Tanpa eksemplar 2', 'Disembunyikan dari OPAC 1', 'Diarsipkan 0']));
+    expect(within(tabs).getByRole('link', { name: 'Semua 1234' }).getAttribute('aria-current')).toBe('page');
+    const foot = document.querySelector('[data-list-count]') as HTMLElement;
+    expect(foot.textContent).toBe('Menampilkan 2 dari 1.234 cantuman');
+    fireEvent.click(screen.getByRole('button', { name: 'Muat lagi' }));
+    await screen.findByRole('link', { name: 'Pengantar Ilmu Perpustakaan' });
+    expect(foot.textContent).toBe('Menampilkan 3 dari 1.234 cantuman');
+    // Asked once, with no filter: loading more rows does not count again.
+    expect(countQueries(requests)).toEqual(['']);
+  });
+
+  it('the total follows the filters in use (not the search text or the order), under the same parameters as the list', async () => {
+    const { requests } = start({ path: `/admin/catalog/records?materialTypeId=${MT_BOOK}&changedFrom=2026-10-01&sort=title` });
+    await screen.findByRole('link', { name: 'Laskar Pelangi' });
+    await waitFor(() => expect((document.querySelector('[data-list-count]') as HTMLElement).textContent).toBe('Menampilkan 3 dari 7 cantuman'));
+    expect(countQueries(requests).map((q) => Object.fromEntries(new URLSearchParams(q)))).toEqual([
+      { materialTypeId: MT_BOOK, changedFrom: String(new Date('2026-10-01T00:00:00').getTime()) },
+    ]);
+  });
+
+  it('a search says its own total; a search text never borrows the count of the filters', async () => {
+    start({
+      path: '/admin/catalog/records?q=laskar',
+      list: () => ({ items: ROWS.slice(0, 1), total: 61, nextCursor: null, page: 1 }),
+    });
+    await screen.findByRole('link', { name: 'Laskar Pelangi' });
+    expect((document.querySelector('[data-list-count]') as HTMLElement).textContent).toBe('Menampilkan 1 dari 61 cantuman');
+  });
+
+  it('without the counts (a failed read) the tabs carry no number and the foot says only what is loaded', async () => {
+    start({ counts: () => problem(500, 'INTERNAL') });
+    await screen.findByRole('link', { name: 'Laskar Pelangi' });
+    const tabs = screen.getByRole('navigation', { name: 'Tampilan daftar' });
+    await waitFor(() => expect((document.querySelector('[data-list-count]') as HTMLElement).textContent).toBe('3 cantuman tampil'));
+    expect(within(tabs).getAllByRole('link').map((a) => a.textContent)).toEqual(['Semua', 'Tanpa eksemplar', 'Disembunyikan dari OPAC', 'Diarsipkan']);
+  });
+
+  it('the filters are chips: named controls in the tab order, one in use says its value, and each can be cleared', async () => {
+    const { router } = start();
+    await screen.findByRole('link', { name: 'Laskar Pelangi' });
+    const tools = screen.getByRole('group', { name: 'Saring cantuman' });
+    const chips = [...tools.querySelectorAll('[data-chip]')] as HTMLElement[];
+    const said = (c: HTMLElement): string => c.querySelector('[data-chip-text]')?.textContent ?? '';
+    expect(chips.map(said)).toEqual(['Jenis bahan', 'Tampil di OPAC', 'Eksemplar', 'Tanggal diubah', 'Hanya yang diarsipkan', 'Urutan: Terakhir diubah']);
+    expect(chips.filter((c) => c.hasAttribute('data-on'))).toEqual([]);
+    // Each chip holds one focusable native control (or is the button itself), named after the filter.
+    const type = within(tools).getByRole('combobox', { name: 'Jenis bahan' }) as HTMLSelectElement;
+    expect([...type.options].map((o) => o.textContent)).toEqual(['Semua jenis', 'Buku', 'Skripsi']);
+    expect(type.tabIndex).toBe(0);
+    expect(within(tools).getByRole('combobox', { name: 'Tampil di OPAC' })).toBeTruthy();
+    expect(within(tools).getByRole('combobox', { name: 'Eksemplar' })).toBeTruthy();
+    expect(within(tools).getByRole('combobox', { name: 'Urutan' })).toBeTruthy();
+    expect(within(tools).getByRole('checkbox', { name: 'Hanya yang diarsipkan' })).toBeTruthy();
+    expect(within(tools).getByRole('button', { name: 'Tanggal diubah' })).toBeTruthy();
+
+    fireEvent.change(type, { target: { value: MT_THESIS } });
+    await waitFor(() => expect(router.state.location.search).toEqual({ materialTypeId: MT_THESIS }));
+    const chip = type.closest('[data-chip]') as HTMLElement;
+    await waitFor(() => expect(said(chip)).toBe('Jenis bahan: Skripsi'));
+    expect(chip.hasAttribute('data-on')).toBe(true);
+    // The value is for the eye only: the control keeps its own name and says its value itself.
+    expect(within(tools).getByRole('combobox', { name: 'Jenis bahan' })).toBe(type);
+
+    // The date range: opened with the keyboard's own click, set, said by the chip, and cleared inside it.
+    fireEvent.click(within(tools).getByRole('button', { name: 'Tanggal diubah' }));
+    const range = await screen.findByRole('dialog', { name: 'Terakhir diubah' });
+    fireEvent.change(within(range).getByLabelText('Diubah sejak'), { target: { value: '2026-10-01' } });
+    await waitFor(() => expect(router.state.location.search).toEqual({ materialTypeId: MT_THESIS, changedFrom: '2026-10-01' }));
+    expect(await within(tools).findByRole('button', { name: 'Diubah sejak 1 Okt 2026' })).toBeTruthy();
+    fireEvent.click(within(range).getByRole('button', { name: 'Hapus rentang tanggal' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ materialTypeId: MT_THESIS }));
+
+    fireEvent.change(type, { target: { value: '' } });
+    await waitFor(() => expect(router.state.location.search).toEqual({}));
+    await waitFor(() => expect(chip.hasAttribute('data-on')).toBe(false));
+
+    fireEvent.click(within(tools).getByRole('checkbox', { name: 'Hanya yang diarsipkan' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ archived: true }));
+    fireEvent.click(within(tools).getByRole('button', { name: 'Hapus filter' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({}));
   });
 
   it('reads the search params as the router parsed them, dropping anything unknown or malformed', () => {

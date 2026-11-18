@@ -1,16 +1,33 @@
 import { isUlid } from '@altis/shared';
 import { EXPORT_RECORD_IDS_MAX } from '@altis/shared/api/catalog/exchange';
 import type { MasterListResponse, MaterialTypeView } from '@altis/shared/api/catalog/masters';
-import { RECORD_BULK_MAX, RECORD_SORTS, type RecordListItem, type RecordListResponse, type RecordSort } from '@altis/shared/api/catalog/records';
+import { RECORD_BULK_MAX, RECORD_SORTS, type RecordCountsResponse, type RecordListItem, type RecordListResponse, type RecordSort } from '@altis/shared/api/catalog/records';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { useMemo, useRef, useState } from 'react';
+import { SearchIcon } from 'lucide-react';
+import { useId, useMemo, useRef, useState } from 'react';
 import { AddToPrintQueue } from '@/components/catalog/print-queue';
 import { useDateTime } from '@/components/data-table';
-import { Badge, CheckField, Notice, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
-import { Card, DenseTable, EmptyState, ErrorState, FilterField, FilterRow, FilterTabs, PageHead, SelectionBar, SkeletonTable, type DenseColumn, type FilterTab } from '@/components/layout';
+import { Badge, Field, Notice, ProblemAlert } from '@/components/form-field';
+import {
+  Card,
+  ChipButton,
+  ChipSelect,
+  ChipToggle,
+  DenseTable,
+  EmptyState,
+  ErrorState,
+  FilterTabs,
+  PageHead,
+  SelectionBar,
+  SkeletonTable,
+  TableToolbar,
+  type DenseColumn,
+  type FilterTab,
+} from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useLocale, useT, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
@@ -23,8 +40,12 @@ import { RecordBulkPanel } from './bulk-dialog';
  * - The search (the syntax of §4.4) and the filters (material type, OPAC visibility, archived, items, the change
  *   range as local days) live in the URL search params, so a list can be bookmarked, shared and gone back to. The
  *   list's query key is those filters ({@link RecordsSearch}); a change navigates, and the list follows the URL.
+ * - The saved views are tabs above the card, each with the number of records it lists (`GET catalog/records/counts`,
+ *   `views`; no number while it is not known). The filters are chips in the card's toolbar: one in use shows its value.
  * - Paging: a search (with `q`, or the newest-first order) pages by `page` (≤ 50, top 1 000; §4.5), the other orders
- *   by the server's keyset `cursor`; both load more rows below ("Muat lagi").
+ *   by the server's keyset `cursor`; both load more rows below ("Muat lagi"). The foot says how many rows are loaded
+ *   and of how many ("Menampilkan 50 dari 1.234 cantuman"): a search carries its total, the other orders read it from
+ *   `GET catalog/records/counts` (`total`, for the filters in use); while it is not known, only the rows loaded.
  * - Selected rows go to the label print queue (`AddToPrintQueue`, records) or to "Ekspor terpilih" (M2): at most
  *   {@link EXPORT_SELECTION_MAX} ids (the `ExportBody` limit) are stored in `sessionStorage` under
  *   {@link EXPORT_SELECTION_KEY} as JSON `{ids, archived}` (`archived`: an archived record is among them, so the export
@@ -134,6 +155,21 @@ function listPath(s: RecordsSearch, page: PageParam): string {
   return `catalog/records?${q.toString()}`;
 }
 
+/** `GET catalog/records/counts` for the filters of `s` (no search text, no order). */
+function countsPath(s: RecordsSearch): string {
+  const q = new URLSearchParams();
+  if (s.materialTypeId !== undefined) q.set('materialTypeId', s.materialTypeId);
+  if (s.hidden !== undefined) q.set('hidden', s.hidden);
+  if (s.archived === true) q.set('archived', 'true');
+  if (s.hasItems !== undefined) q.set('hasItems', String(s.hasItems));
+  const from = dayBound(s.changedFrom, 'start');
+  if (from !== undefined) q.set('changedFrom', String(from));
+  const to = dayBound(s.changedTo, 'end');
+  if (to !== undefined) q.set('changedTo', String(to));
+  const query = q.toString();
+  return query === '' ? 'catalog/records/counts' : `catalog/records/counts?${query}`;
+}
+
 /** The page after `last`: by cursor, or the next search page while there are more (and not past page 50). */
 function nextPage(last: RecordListResponse): PageParam | undefined {
   if (last.nextCursor !== null) return { cursor: last.nextCursor };
@@ -198,6 +234,14 @@ export function RecordsListScreen() {
     // Every loaded page would be read again: a list being read does not change under the reader's eyes.
     refetchOnWindowFocus: false,
   });
+  // The numbers of the views and of the filters in use; the search text and the order do not change them.
+  const countsFilters = compact({ ...search, q: undefined, sort: undefined });
+  const counts = useApiQuery<RecordCountsResponse>({
+    queryKey: ['catalog', 'records', 'counts', countsFilters],
+    path: countsPath(countsFilters),
+    staleTime: 30_000,
+  });
+  const rangeId = useId();
   const rows = useMemo(() => list.data?.pages.flatMap((p) => p.items) ?? NO_ROWS, [list.data]);
   const first = list.data?.pages[0];
   const last = list.data?.pages.at(-1);
@@ -312,6 +356,7 @@ export function RecordsListScreen() {
   const atPageLimit = searchMode && last !== undefined && last.page === SEARCH_PAGES_MAX && (last.total ?? 0) > SEARCH_PAGES_MAX * PAGE_SIZE;
   const filtered = Object.keys(search).length > 0;
   const filterCount = Object.keys(search).filter((k) => k !== 'sort').length;
+  const q = search.q;
   const nothingAtAll = !filtered && list.data !== undefined && rows.length === 0 && !list.hasNextPage;
   const typeLabel = (m: MaterialTypeView): string => (locale === 'en' ? m.nameEn : m.nameId);
   const clearButton = (
@@ -330,12 +375,29 @@ export function RecordsListScreen() {
         : search.archived === true && filterCount === 1
           ? 'archived'
           : '';
+  const viewCounts = counts.data?.views;
   const views: FilterTab[] = [
-    { id: 'all', label: t('catalog.records.view.all'), to: '/admin/catalog/records' },
-    { id: 'no_items', label: t('catalog.records.filter.items_no'), to: '/admin/catalog/records', search: { hasItems: false } },
-    { id: 'hidden', label: t('catalog.records.view.hidden'), to: '/admin/catalog/records', search: { hidden: 'only' } },
-    { id: 'archived', label: t('catalog.records.view.archived'), to: '/admin/catalog/records', search: { archived: true } },
+    { id: 'all', label: t('catalog.records.view.all'), count: viewCounts?.all, to: '/admin/catalog/records' },
+    { id: 'no_items', label: t('catalog.records.filter.items_no'), count: viewCounts?.no_items, to: '/admin/catalog/records', search: { hasItems: false } },
+    { id: 'hidden', label: t('catalog.records.view.hidden'), count: viewCounts?.hidden, to: '/admin/catalog/records', search: { hidden: 'only' } },
+    { id: 'archived', label: t('catalog.records.view.archived'), count: viewCounts?.archived, to: '/admin/catalog/records', search: { archived: true } },
   ];
+
+  // How many records the list holds in all: a search says so itself, the other orders ask the counts.
+  const total = searchMode ? (first.total ?? undefined) : q === undefined ? counts.data?.total : undefined;
+  const day = new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+  const dayText = (d: string): string => {
+    const at = new Date(`${d}T00:00:00`);
+    return Number.isNaN(at.getTime()) ? d : day.format(at);
+  };
+  const range =
+    search.changedFrom !== undefined && search.changedTo !== undefined
+      ? t('catalog.records.filter.changed_range', { from: dayText(search.changedFrom), to: dayText(search.changedTo) })
+      : search.changedFrom !== undefined
+        ? t('catalog.records.filter.changed_since', { from: dayText(search.changedFrom) })
+        : search.changedTo !== undefined
+          ? t('catalog.records.filter.changed_until', { to: dayText(search.changedTo) })
+          : null;
 
   return (
     <div className="grid gap-4">
@@ -363,89 +425,103 @@ export function RecordsListScreen() {
       <FilterTabs label={t('catalog.records.view.label')} value={view} items={views} />
 
       <Card>
-      <FilterRow
-        label={t('catalog.records.list.filters')}
-        onSubmit={(e) => {
-          e.preventDefault();
-          update({ q: text.trim() === '' ? undefined : text });
-        }}
-        actions={filtered ? clearButton : undefined}>
-        <FilterField wide className="basis-full" label={t('catalog.records.list.search_label')} hint={t('catalog.records.list.search_hint')}>
-          {(c) => (
-            <div role="search" className="flex gap-2">
-              <Input
-                {...c}
-                type="search"
-                maxLength={Q_MAX}
-                autoComplete="off"
-                spellCheck={false}
-                value={text}
-                onChange={(e) => setTyped({ key: search.q ?? '', text: e.target.value })}
-              />
+        <form
+          noValidate
+          aria-label={t('catalog.records.list.filters')}
+          onSubmit={(e) => {
+            e.preventDefault();
+            update({ q: text.trim() === '' ? undefined : text });
+          }}>
+          <TableToolbar label={t('catalog.records.list.filters')} actions={filtered ? clearButton : undefined}>
+            <div role="search" className="flex min-w-0 flex-[1_1_280px] gap-2">
+              <span className="relative min-w-0 flex-1">
+                <SearchIcon aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="search"
+                  aria-label={t('catalog.records.list.search_label')}
+                  aria-describedby={`${rangeId}-hint`}
+                  placeholder={t('catalog.records.list.search_placeholder')}
+                  maxLength={Q_MAX}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="pl-8"
+                  value={text}
+                  onChange={(e) => setTyped({ key: search.q ?? '', text: e.target.value })}
+                />
+              </span>
               <Button type="submit" variant="outline">
                 {t('catalog.records.list.search_button')}
               </Button>
             </div>
-          )}
-        </FilterField>
-        <FilterField className="flex-[1_1_170px]" label={t('catalog.records.filter.type')}>
-          {(c) => (
-            <select {...c} className={SELECT_CLASS} value={search.materialTypeId ?? ''} onChange={(e) => update({ materialTypeId: e.target.value === '' ? undefined : e.target.value })}>
-              <option value="">{t('catalog.records.filter.type_all')}</option>
-              {(types.data?.items ?? []).map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.archived ? t('catalog.records.field.archived_option', { name: typeLabel(m) }) : typeLabel(m)}
-                </option>
-              ))}
-            </select>
-          )}
-        </FilterField>
-        <FilterField className="flex-[1_1_190px]" label={t('catalog.records.filter.hidden')}>
-          {(c) => (
-            <select {...c} className={SELECT_CLASS} value={search.hidden ?? ''} onChange={(e) => update({ hidden: e.target.value === '' ? undefined : e.target.value })}>
-              <option value="">{t('catalog.records.filter.hidden_all')}</option>
-              <option value="only">{t('catalog.records.filter.hidden_only')}</option>
-              <option value="exclude">{t('catalog.records.filter.hidden_exclude')}</option>
-            </select>
-          )}
-        </FilterField>
-        <FilterField className="flex-[1_1_240px]" label={t('catalog.records.filter.items')}>
-          {(c) => (
-            <select
-              {...c}
-              className={SELECT_CLASS}
+            <ChipSelect
+              label={t('catalog.records.filter.type')}
+              value={search.materialTypeId ?? ''}
+              onChange={(v) => update({ materialTypeId: v === '' ? undefined : v })}
+              options={[
+                { value: '', label: t('catalog.records.filter.type_all') },
+                ...(types.data?.items ?? []).map((m) => ({ value: m.id, label: m.archived ? t('catalog.records.field.archived_option', { name: typeLabel(m) }) : typeLabel(m) })),
+              ]}
+            />
+            <ChipSelect
+              label={t('catalog.records.filter.hidden')}
+              value={search.hidden ?? ''}
+              onChange={(v) => update({ hidden: v === '' ? undefined : v })}
+              options={[
+                { value: '', label: t('catalog.records.filter.hidden_all') },
+                { value: 'only', label: t('catalog.records.filter.hidden_only') },
+                { value: 'exclude', label: t('catalog.records.filter.hidden_exclude') },
+              ]}
+            />
+            <ChipSelect
+              label={t('catalog.records.filter.items')}
               value={search.hasItems === undefined ? '' : String(search.hasItems)}
-              onChange={(e) => update({ hasItems: e.target.value === '' ? undefined : e.target.value })}>
-              <option value="">{t('catalog.records.filter.items_all')}</option>
-              <option value="true">{t('catalog.records.filter.items_yes')}</option>
-              <option value="false">{t('catalog.records.filter.items_no')}</option>
-            </select>
-          )}
-        </FilterField>
-        <FilterField className="flex-[1_1_170px]" label={t('catalog.records.filter.sort')}>
-          {(c) => (
-            <select {...c} className={SELECT_CLASS} value={sort} onChange={(e) => update({ sort: e.target.value === sorts[0] ? undefined : e.target.value })}>
-              {sorts.map((s) => (
-                <option key={s} value={s}>
-                  {t(`catalog.records.sort.${s}`)}
-                </option>
-              ))}
-            </select>
-          )}
-        </FilterField>
-        <FilterField className="flex-[1_1_160px]" label={t('catalog.records.filter.changed_from')}>
-          {(c) => <Input {...c} type="date" value={search.changedFrom ?? ''} onChange={(e) => update({ changedFrom: e.target.value === '' ? undefined : e.target.value })} />}
-        </FilterField>
-        <FilterField className="flex-[1_1_160px]" label={t('catalog.records.filter.changed_to')}>
-          {(c) => <Input {...c} type="date" value={search.changedTo ?? ''} onChange={(e) => update({ changedTo: e.target.value === '' ? undefined : e.target.value })} />}
-        </FilterField>
-        <CheckField
-          className="min-w-0 flex-[1_1_130px] pb-2"
-          label={t('catalog.records.filter.archived')}
-          checked={search.archived === true}
-          onChange={(e) => update({ archived: e.target.checked ? true : undefined })}
-        />
-      </FilterRow>
+              onChange={(v) => update({ hasItems: v === '' ? undefined : v })}
+              options={[
+                { value: '', label: t('catalog.records.filter.items_all') },
+                { value: 'true', label: t('catalog.records.filter.items_yes') },
+                { value: 'false', label: t('catalog.records.filter.items_no') },
+              ]}
+            />
+            <Popover>
+              <PopoverTrigger asChild>
+                <ChipButton on={range !== null}>{range ?? t('catalog.records.filter.changed')}</ChipButton>
+              </PopoverTrigger>
+              <PopoverContent align="start" aria-labelledby={`${rangeId}-title`} className="grid gap-3">
+                <p id={`${rangeId}-title`} className="font-semibold">
+                  {t('catalog.records.filter.changed_title')}
+                </p>
+                <Field label={t('catalog.records.filter.changed_from')}>
+                  {(c) => <Input {...c} type="date" value={search.changedFrom ?? ''} onChange={(e) => update({ changedFrom: e.target.value === '' ? undefined : e.target.value })} />}
+                </Field>
+                <Field label={t('catalog.records.filter.changed_to')}>
+                  {(c) => <Input {...c} type="date" value={search.changedTo ?? ''} onChange={(e) => update({ changedTo: e.target.value === '' ? undefined : e.target.value })} />}
+                </Field>
+                {range !== null && (
+                  <Button type="button" variant="link" className="h-auto justify-self-start p-0" onClick={() => update({ changedFrom: undefined, changedTo: undefined })}>
+                    {t('catalog.records.filter.changed_clear')}
+                  </Button>
+                )}
+              </PopoverContent>
+            </Popover>
+            <ChipToggle checked={search.archived === true} onChange={(on) => update({ archived: on ? true : undefined })}>
+              {t('catalog.records.filter.archived')}
+            </ChipToggle>
+            <ChipSelect
+              label={t('catalog.records.filter.sort')}
+              value={sort ?? ''}
+              on={false}
+              showValue
+              onChange={(v) => update({ sort: v === sorts[0] ? undefined : v })}
+              options={sorts.map((o) => ({ value: o, label: t(`catalog.records.sort.${o}`) }))}
+            />
+          </TableToolbar>
+          <p id={`${rangeId}-hint`} className="-mt-1 px-4 pb-3 text-meta text-muted-foreground">
+            {t('catalog.records.list.search_hint')}
+          </p>
+          <button type="submit" className="sr-only" tabIndex={-1}>
+            {t('table.filter_apply')}
+          </button>
+        </form>
 
       {list.isError && list.data === undefined ? (
         <div className="p-4">
@@ -526,12 +602,12 @@ export function RecordsListScreen() {
             </div>
           )}
           <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2.5">
-            <p className="text-meta text-muted-foreground">
-              {searchMode && first.total !== null
-                ? first.total >= TOTAL_CAP
-                  ? t('catalog.records.list.total_many', { count: number.format(TOTAL_CAP) })
-                  : t('catalog.records.list.total', { count: number.format(first.total) })
-                : t('catalog.records.list.shown', { count: number.format(rows.length) })}
+            <p className="text-meta text-muted-foreground" data-list-count="">
+              {total === undefined
+                ? t('catalog.records.list.shown', { count: number.format(rows.length) })
+                : searchMode && total >= TOTAL_CAP
+                  ? t('catalog.records.list.showing_many', { shown: number.format(rows.length), count: number.format(TOTAL_CAP) })
+                  : t('catalog.records.list.showing', { shown: number.format(rows.length), count: number.format(Math.max(total, rows.length)) })}
             </p>
             {list.hasNextPage && (
               <Button type="button" variant="outline" size="sm" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
