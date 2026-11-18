@@ -75,7 +75,8 @@ describe('a password that must change first', () => {
     setup(signedIn(true), '/admin/profile/password');
     expect(await screen.findByLabelText('Kata sandi saat ini')).toBeTruthy();
     await act(() => new Promise((resolve) => setTimeout(resolve, 300)));
-    expect(paths().filter((p) => p !== '/api/v1/auth/me')).toEqual([]);
+    // The sidebar's brand is the public site identity, which any visitor may read: it is no session-bound request.
+    expect(paths().filter((p) => p !== '/api/v1/auth/me' && p !== '/api/v1/site/identity/public')).toEqual([]);
     expect(screen.queryByRole('button', { name: /^Notifikasi/ })).toBeNull();
   });
 
