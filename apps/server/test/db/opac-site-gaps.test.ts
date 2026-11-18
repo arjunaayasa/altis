@@ -26,6 +26,12 @@ const HTML = { Accept: 'text/html' };
 
 const esc = (s: string): string => s.replace(/[&<>'"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[ch]!);
 
+/** `text` as a regular expression matches it. */
+const literal = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** What a title's copies allow as the pages write it: the state's classes, its small drawing (hidden from a screen reader), then the words. */
+const statusLine = (cls: string, words: string): RegExp => new RegExp(`<span class="${cls}"><svg class="ico"[^>]*aria-hidden="true"[^>]*>[\\s\\S]*?</svg>${literal(esc(words))}</span>`);
+
 /** The markup of the `<section>` whose heading has the id `id`. */
 function section(html: string, id: string): string | undefined {
   return new RegExp(`<section[^>]*aria-labelledby="${id}"[^>]*>([\\s\\S]*?)</section>`).exec(html)?.[1];
@@ -196,13 +202,13 @@ describe.skipIf(!ctx.available)(`the public site's gaps [${engineLabel()}]`, () 
     it('the home page cards: available (n of m), on loan with the earliest due date, library use only; nothing about who holds a copy', async () => {
       const html = (await get('/')).text;
       const fresh = section(html, 'judul-baru')!;
-      for (const [title, [cls, words]] of Object.entries(WORDS)) expect(cardOf(fresh, title), title).toContain(`<span class="${cls} card-status">${esc(words)}</span>`);
+      for (const [title, [cls, words]] of Object.entries(WORDS)) expect(cardOf(fresh, title), title).toMatch(statusLine(`${cls} card-status`, words));
       noBorrower(html);
     });
 
     it('the result rows say the same words, in English too', async () => {
       const html = (await get('/cari')).text;
-      for (const [title, [cls, words]] of Object.entries(WORDS)) expect(cardOf(html, title), title).toContain(`<span class="${cls}">${esc(words)}</span>`);
+      for (const [title, [cls, words]] of Object.entries(WORDS)) expect(cardOf(html, title), title).toMatch(statusLine(cls, words));
       const en = (await get('/cari?lang=en')).text;
       expect(cardOf(en, 'Sang Pemimpi')).toContain(esc(opacText('en', 'search.card.on_loan', { date: '21 Nov' })));
       expect(cardOf(en, 'Laskar Pelangi')).toContain(esc(opacText('en', 'search.card.available_some', { count: 1, total: 2 })));
@@ -212,11 +218,11 @@ describe.skipIf(!ctx.available)(`the public site's gaps [${engineLabel()}]`, () 
 
     it("the record page's line, summary and table agree with the card", async () => {
       const laskar = (await get(recordUrlPath(ids['Laskar Pelangi']!, 'Laskar Pelangi'))).text;
-      expect(laskar).toContain(`<p class="record-shelf"><span class="status status-ok">${esc(WORDS['Laskar Pelangi']![1])}</span></p>`);
+      expect(/<p class="record-shelf">([\s\S]*?)<\/p>/.exec(laskar)?.[1]).toMatch(statusLine('status status-ok', WORDS['Laskar Pelangi']![1]));
       expect(laskar).toContain(esc(opacText('id', 'detail.availability_summary', { count: 2, available: 1 })));
       expect(laskar).toContain(esc(opacText('id', 'detail.on_loan', { date: '29 November 2026' })));
       const kamus = (await get(recordUrlPath(ids['Kamus Besar']!, 'Kamus Besar'))).text;
-      expect(kamus).toContain(`<p class="record-shelf"><span class="status status-muted">${esc(WORDS['Kamus Besar']![1])}</span></p>`);
+      expect(/<p class="record-shelf">([\s\S]*?)<\/p>/.exec(kamus)?.[1]).toMatch(statusLine('status status-muted', WORDS['Kamus Besar']![1]));
       // The status cell is marked so that a phone shows it first when a copy reads as a card.
       expect(kamus).toContain(`<td class="availability-status"><span class="status status-muted">${esc(opacText('id', 'search.card.library_use'))}</span></td>`);
       expect(kamus).toContain(esc(opacText('id', 'detail.availability_summary', { count: 1, available: 0 })));
@@ -258,7 +264,7 @@ describe.skipIf(!ctx.available)(`the public site's gaps [${engineLabel()}]`, () 
       // Nothing found with a filter: the count says 0 and the empty state offers to remove them.
       const none = (await get('/cari?q=pelangi&tahun=1990')).text;
       expect(none).toContain(`<p class="search-count">${esc(opacText('id', 'search.count_zero'))}</p>`);
-      expect(none).toContain(`<a class="empty-clear" href="/cari?q=pelangi">`);
+      expect(none).toContain(`<a class="empty-clear btn btn-outline" href="/cari?q=pelangi">`);
     });
 
     it('links the advanced search with the same search filled in', async () => {
@@ -304,16 +310,20 @@ describe.skipIf(!ctx.available)(`the public site's gaps [${engineLabel()}]`, () 
     it('linked from the home page search card', async () => {
       const html = (await get('/')).text;
       expect(html).toContain(`<a href="/cari/lanjutan">${esc(opacText('id', 'search.advanced.link'))}</a>`);
-      // The ISBN scope is one of the card's choices.
-      expect(html).toContain(`<input type="radio" name="ruas" value="isbn"/><span>${esc(opacText('id', 'search.scope.isbn'))}</span>`);
+      // The ISBN scope is one of the choices of the home page's search.
+      expect(/<select id="cari-beranda-ruas" name="ruas">([\s\S]*?)<\/select>/.exec(html)?.[1]).toContain(`<option value="isbn">${esc(opacText('id', 'search.scope.isbn'))}</option>`);
     });
   });
 
   describe("the library's logo and contact", () => {
     it('the logo with its alternative text before the name in the header and the footer; the contact as links in the footer and the visit block', async () => {
       const html = (await get('/')).text;
-      expect(html).toContain(`<img class="brand-logo" src="/files/${logoId}" alt="Logo Perpustakaan Gap" height="40" decoding="async"/><span class="brand-name">Perpustakaan Gap</span>`);
-      expect(html).toContain(`<img class="foot-logo" src="/files/${logoId}" alt="Logo Perpustakaan Gap"`);
+      // A logo without one for dark backgrounds stands on its plate (the footer's always shows it).
+      const header = /<header[\s\S]*?<\/header>/.exec(html)![0];
+      expect(header).toContain(`<a class="sitelogo" href="/"><img class="logo-plate" src="/files/${logoId}" alt="Logo Perpustakaan Gap" height="40" decoding="async"/><span class="sitename">Perpustakaan Gap</span></a>`);
+      expect(/<footer[\s\S]*<\/footer>/.exec(html)![0]).toContain(`<img class="logo-plate logo-plate-on" src="/files/${logoId}" alt="Logo Perpustakaan Gap"`);
+      // The strip above the header names them for a screen reader.
+      expect(html).toContain('<a href="tel:0215550101" aria-label="Telepon (021) 555-0101">(021) 555-0101</a>');
       const visit = section(html, 'kunjungi-judul')!;
       for (const part of [visit, /<footer[\s\S]*<\/footer>/.exec(html)![0]]) {
         expect(part).toContain('<a href="tel:0215550101">(021) 555-0101</a>');
@@ -323,7 +333,7 @@ describe.skipIf(!ctx.available)(`the public site's gaps [${engineLabel()}]`, () 
       expect(html).toContain('<span>© 2026 Perpustakaan Gap</span>');
       // Every page has them, the results page too.
       const results = (await get('/cari')).text;
-      expect(results).toContain('class="brand-logo"');
+      expect(results).toContain(`<img class="logo-plate" src="/files/${logoId}"`);
       expect(results).toContain('href="tel:0215550101"');
     });
   });

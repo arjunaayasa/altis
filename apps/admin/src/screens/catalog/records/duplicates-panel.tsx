@@ -81,7 +81,7 @@ export function DuplicatesPanel({ control, excludeId }: { control: Control<Recor
   return (
     <section aria-labelledby={headingId} className="grid content-start gap-3 p-4">
       <div className="grid gap-1">
-        <h2 id={headingId} className="text-base font-bold">
+        <h2 id={headingId} className="text-heading font-semibold">
           {t('catalog.records.dup.title')}
         </h2>
         <p className="text-meta text-muted-foreground">{t('catalog.records.dup.hint')}</p>

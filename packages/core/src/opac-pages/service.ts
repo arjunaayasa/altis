@@ -1,11 +1,14 @@
 import type { DB } from '@altis/db';
-import { DomainError, isDomainError, isUlid, newId, type BodyFormat, type PageKind, type PageLocale, type PageStatus } from '@altis/shared';
+import { DomainError, isDomainError, isUlid, newId, type BodyFormat, type NewsCategory, type PageKind, type PageLocale, type PageStatus } from '@altis/shared';
 import { TEXT_MAX_BYTES, utf8Length, type FieldWarning } from '@altis/shared/api/catalog/common';
 import { issueCode } from '@altis/shared/api/common';
 import {
   PageBody,
   PageListQuery,
   PagePatchBody,
+  newsAgendaErrors,
+  newsAgendaOf,
+  type NewsAgenda,
   type PageListItem,
   type PageListResponse,
   type PageTranslationInput,
@@ -40,6 +43,9 @@ import { sanitizedHtml, type SafeHtml } from '../html/sanitize.js';
 //   that cannot be claimed (missing, another context, owned elsewhere or marked) is refused at `coverFileId`; a body
 //   image that cannot be claimed is left as it is (a migrated body may show any public file). A claimed image stays the
 //   page's when a later edit drops it (another page may still show it), so it is never deleted as an orphan.
+// - Agenda (news only): a category and the event the post announces (its start, its end, its place), all optional.
+//   The rules between them are `newsAgendaErrors` of the contract, checked against the page as the write leaves it; a
+//   post that becomes a page loses its agenda.
 // - Concurrency: an update or an archive first locks the page row with a write that changes nothing, then compares
 //   `version` (CONFLICT_STALE) and bumps it in the UPDATE that writes the row; a translation change bumps it too.
 // - Audit: one entry per write (`opac.page.create|update|archive`, entity `pages`) whose `meta` holds the kind, the
@@ -177,6 +183,23 @@ async function claimPageImages(trx: Transaction<DB>, pageId: string, coverFileId
   if (images.length > 0) await claimImages(trx, pageId, images);
 }
 
+// ---- agenda ----------------------------------------------------------------------------------------------------------
+
+/** The agenda page `p` holds. */
+function agendaOfRow(p: PageRow): NewsAgenda {
+  return {
+    category: p.category as NewsCategory | null,
+    eventStartsAt: p.event_starts_at === null ? null : Number(p.event_starts_at),
+    eventEndsAt: p.event_ends_at === null ? null : Number(p.event_ends_at),
+    eventPlace: p.event_place,
+  };
+}
+
+/** The agenda columns of `agenda`. */
+function agendaColumns(agenda: NewsAgenda) {
+  return { category: agenda.category, event_starts_at: agenda.eventStartsAt, event_ends_at: agenda.eventEndsAt, event_place: agenda.eventPlace };
+}
+
 // ---- reading ---------------------------------------------------------------------------------------------------------
 
 function translationView(r: TranslationRow): PageTranslationView {
@@ -198,6 +221,7 @@ function viewOf(p: PageRow, translations: readonly TranslationRow[]): PageView {
     showInNav: Number(p.show_in_nav) === 1,
     coverFileId: p.cover_file_id,
     sortOrder: Number(p.sort_order),
+    ...agendaOfRow(p),
     translations: { id: idView, en: en === undefined ? null : translationView(en) },
     archived: p.archived_at !== null,
     createdAt: Number(p.created_at),
@@ -236,6 +260,7 @@ export async function listPages(db: Db, q: z.input<typeof PageListQuery>): Promi
   if (query.cursor !== undefined && !isUlid(query.cursor)) throw validationFailed([{ path: 'cursor', code: 'invalid' }]);
   let select = db.selectFrom('pages').selectAll().where('kind', '=', query.kind).where('archived_at', 'is', null);
   if (query.status !== undefined) select = select.where('status', '=', query.status);
+  if (query.category !== undefined) select = select.where('category', '=', query.category);
   if (query.cursor !== undefined) select = select.where('id', '<', query.cursor);
   const rows = await select.orderBy('id', 'desc').limit(query.limit + 1).execute();
   const pageRows = rows.slice(0, query.limit);
@@ -253,6 +278,8 @@ export async function listPages(db: Db, q: z.input<typeof PageListQuery>): Promi
       status: p.status as PageStatus,
       publishedAt: p.published_at === null ? null : Number(p.published_at),
       showInNav: Number(p.show_in_nav) === 1,
+      category: p.category as NewsCategory | null,
+      eventStartsAt: p.event_starts_at === null ? null : Number(p.event_starts_at),
       title: own.find((t) => t.locale === 'id')?.title ?? '',
       hasEnglish: own.some((t) => t.locale === 'en'),
       updatedAt: Number(p.updated_at),
@@ -289,7 +316,7 @@ function publicationDate(status: PageStatus, publishedAt: number | null, now: nu
  *
  * @throws DomainError VALIDATION_FAILED for a body the contract refuses; at `slug` (`taken`, `reserved`), at
  *   `translations.<locale>.body` (`too_big`: the sanitized HTML passes 60 000 bytes), at `coverFileId` (`not_found`,
- *   `invalid`)
+ *   `invalid`), at an agenda field (`invalid`: set on a page, an end or a place without a start, an end before it)
  */
 export async function createPage(tx: TxCtx, body: PageBody): Promise<PageView> {
   const input = parseBody(PageBody, body);
@@ -316,6 +343,7 @@ export async function createPage(tx: TxCtx, body: PageBody): Promise<PageView> {
         show_in_nav: input.showInNav ? 1 : 0,
         cover_file_id: coverFileId,
         sort_order: input.sortOrder,
+        ...agendaColumns(newsAgendaOf(input)),
         archived_at: null,
         version: 0,
         created_at: tx.now,
@@ -370,6 +398,18 @@ export async function updatePage(tx: TxCtx, id: string, patch: PagePatchBody): P
   const showInNav = input.showInNav === undefined ? Number(row.show_in_nav) === 1 : input.showInNav;
   const coverFileId = input.coverFileId === undefined ? row.cover_file_id : input.coverFileId;
   const sortOrder = input.sortOrder ?? Number(row.sort_order);
+  // The agenda the patch leaves: what it sends over what the page holds. A page that is not news keeps none, so a post
+  // turned into a page loses its own; only an agenda field the patch itself sets on such a page is refused.
+  const held = agendaOfRow(row);
+  const sent = newsAgendaOf(input);
+  const merged: NewsAgenda = {
+    category: input.category === undefined ? held.category : sent.category,
+    eventStartsAt: input.eventStartsAt === undefined ? held.eventStartsAt : sent.eventStartsAt,
+    eventEndsAt: input.eventEndsAt === undefined ? held.eventEndsAt : sent.eventEndsAt,
+    eventPlace: input.eventPlace === undefined ? held.eventPlace : sent.eventPlace,
+  };
+  const agendaErrors = newsAgendaErrors(kind, kind === 'news' ? merged : sent);
+  const agenda: NewsAgenda = kind === 'news' ? merged : { category: null, eventStartsAt: null, eventEndsAt: null, eventPlace: null };
 
   const puts: [PageLocale, StoredTranslation][] = [];
   if (input.translations?.id !== undefined) puts.push(['id', storedTranslation(input.translations.id)]);
@@ -378,6 +418,7 @@ export async function updatePage(tx: TxCtx, id: string, patch: PagePatchBody): P
 
   const errors = [
     ...(kind !== row.kind || slug !== row.slug_key ? await slugErrors(trx, kind, slug, id) : []),
+    ...agendaErrors,
     ...puts.flatMap(([locale, t]) => bodyTooBig(locale, t) ?? []),
   ];
   if (errors.length > 0) throw validationFailed(errors);
@@ -392,6 +433,10 @@ export async function updatePage(tx: TxCtx, id: string, patch: PagePatchBody): P
         ['showInNav', showInNav !== (Number(row.show_in_nav) === 1)],
         ['coverFileId', coverFileId !== row.cover_file_id],
         ['sortOrder', sortOrder !== Number(row.sort_order)],
+        ['category', agenda.category !== held.category],
+        ['eventStartsAt', agenda.eventStartsAt !== held.eventStartsAt],
+        ['eventEndsAt', agenda.eventEndsAt !== held.eventEndsAt],
+        ['eventPlace', agenda.eventPlace !== held.eventPlace],
       ] as const
     )
       .filter(([, changed]) => changed)
@@ -411,6 +456,7 @@ export async function updatePage(tx: TxCtx, id: string, patch: PagePatchBody): P
         show_in_nav: showInNav ? 1 : 0,
         cover_file_id: coverFileId,
         sort_order: sortOrder,
+        ...agendaColumns(agenda),
         updated_at: tx.now,
         updated_by: tx.actor.id,
         version: eb('version', '+', 1),

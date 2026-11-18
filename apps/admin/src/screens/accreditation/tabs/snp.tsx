@@ -116,7 +116,7 @@ export function SnpTab({ periodId }: { periodId: string }): JSX.Element {
   return (
     <section aria-labelledby={titleId} data-period-id={periodId} className="grid min-w-0 gap-4">
       <div className="grid max-w-[75ch] gap-1">
-        <h2 id={titleId} className="text-base font-bold">
+        <h2 id={titleId} className="text-heading font-semibold">
           {t('accreditation.snp.title')}
         </h2>
         <p className="text-sm text-muted-foreground">{t('accred.note.snp_selected')}</p>

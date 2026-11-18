@@ -25,6 +25,8 @@ import { IncrementalSha256, decodeSha256Midstate, encodeSha256Midstate } from '.
 import { stripImageMetadata, type StrippableImage } from './strip-metadata.js';
 // ---- Komunitas (OPAC home page) ----
 import { jpegInfo } from '../print/jpeg.js';
+// ---- Site identity ----
+import { SiteImageError, storedSiteIcon, storedSiteLogo } from './site-images.js';
 
 // Chunked, resumable uploads (spec §7.5, P10, P21; decision C7; preflight M16, M36).
 //
@@ -704,6 +706,52 @@ async function strippedImage(
   return { content, size: content.byteLength, sha256: createHash('sha256').update(content).digest('hex') };
 }
 
+// ---- Site identity ----
+/**
+ * The staged PNG of upload `s` as the server stores it for a `reencode` context: decoded and encoded again
+ * (site-images.ts), with its size and SHA-256.
+ *
+ * @throws DomainError `UPLOAD_TYPE_REFUSED` after discarding the upload, with `meta.reason` `damaged` (not a PNG this
+ *   server can decode), `interlaced`, `dimensions` (a side above `meta.maxSide`) or `too_small` (a side below
+ *   `meta.minSide`); `UPLOAD_EXPIRED` when its staged bytes are gone; the lease's `TX_CONFLICT`
+ */
+async function reencodedImage(
+  h: DbHandle,
+  lease: UploadLease,
+  s: Session,
+  context: UploadContext,
+  as: 'logo' | 'icon',
+  dataDir: string,
+): Promise<{ content: Uint8Array; size: number; sha256: string }> {
+  lease.check();
+  const raw = await readBytes(stagedFile(dataDir, s.id), s.size);
+  if (raw === null) {
+    await discard(h, s.id, dataDir);
+    throw cleanedUp();
+  }
+  let content: Uint8Array;
+  try {
+    content = as === 'logo' ? storedSiteLogo(raw) : storedSiteIcon(raw);
+  } catch (error) {
+    if (!(error instanceof SiteImageError)) throw error;
+    await discard(h, s.id, dataDir);
+    const { min, max } = error.sides;
+    const detail =
+      error.reason === 'dimensions'
+        ? `Gambar terlalu besar: paling banyak ${max} piksel per sisi / The image is too large: at most ${max} pixels a side`
+        : error.reason === 'too_small'
+          ? `Gambar terlalu kecil: paling sedikit ${min} piksel per sisi / The image is too small: at least ${min} pixels a side`
+          : 'Berkas PNG ini rusak atau tidak dapat dibaca; simpan ulang sebagai PNG lalu unggah lagi / ' +
+            'This PNG file is damaged or cannot be read; save it as PNG again and upload it once more';
+    throw new DomainError('UPLOAD_TYPE_REFUSED', {
+      detail,
+      meta: { kind: 'png', allowed: context.magic === 'any' ? [] : [...context.magic], reason: error.reason, minSide: min, maxSide: max },
+      cause: error,
+    });
+  }
+  return { content, size: content.byteLength, sha256: createHash('sha256').update(content).digest('hex') };
+}
+
 // ---- Komunitas (OPAC home page) ----
 /**
  * The width and height of a JPEG `content`, read by the PDF pictures' header reader (the whole marker structure walked,
@@ -851,9 +899,12 @@ async function completeUploadLocked(
 
     // The driver copies the bytes as they are read and checks their hash once more; an image published as uploaded is
     // stripped of its metadata first (small: 5 MiB at most), and stored with the size and digest of what is left.
-    const stored = STRIPPED_CONTEXTS.has(context.name) && STRIPPABLE.has(type.kind)
-      ? await strippedImage(h, lease, s, context, type.kind as StrippableImage, o.dataDir)
-      : { content: stagedContent(o.dataDir, s.id, lease), size: s.size, sha256: s.sha256 };
+    // Site identity: a logo or icon is not stripped but decoded and stored again as the server's own PNG.
+    const stored = context.reencode !== undefined
+      ? await reencodedImage(h, lease, s, context, context.reencode, o.dataDir)
+      : STRIPPED_CONTEXTS.has(context.name) && STRIPPABLE.has(type.kind)
+        ? await strippedImage(h, lease, s, context, type.kind as StrippableImage, o.dataDir)
+        : { content: stagedContent(o.dataDir, s.id, lease), size: s.size, sha256: s.sha256 };
     // ---- Komunitas (OPAC home page) ----
     // A context that bounds its images' dimensions reads them from the stripped bytes (held in memory).
     if (context.imageSides !== undefined) await checkImageSides(h, s.id, context, type.kind, stored.content, o.dataDir);

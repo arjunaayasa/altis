@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/i18n';
 
-/** A bulk action of a {@link SelectionBar}: its button in the bar opens its inline panel under the bar. */
+/** A bulk action of a {@link BulkBar}: its button in the bar opens its inline panel under the bar. */
 export interface SelectionAction {
   id: string;
   label: string;
@@ -35,14 +35,18 @@ interface SelectionBarProps {
 
 /**
  * The bar over a list while rows are selected: a tinted region named by the selection count, one button per bulk
- * action, and "Batal pilih" at the end. A bulk action never opens a dialog: its button (`aria-pressed`) opens the
+ * action, and "Batal pilih" at the end. Inside a `Card` (between the toolbar and the table) it runs edge to edge
+ * with a rule above and below; on its own it is a bordered box. A bulk action never opens a dialog: its button (`aria-pressed`) opens the
  * action's inline panel under the bar, which takes the focus and gives it back to that button when it closes (Esc,
  * Batal, or once applied). Only an action that destroys data asks its question, in words, in its panel.
  */
-export function SelectionBar(props: SelectionBarProps) {
+export function BulkBar(props: SelectionBarProps) {
   if (props.count <= 0) return null;
   return <Bar {...props} />;
 }
+
+/** The older name of {@link BulkBar}. */
+export const SelectionBar = BulkBar;
 
 function Bar({ count, label, actions = [], open = null, onOpenChange, extra, onClear, clearLabel, focusAfter, children }: SelectionBarProps) {
   const t = useT();
@@ -64,9 +68,11 @@ function Bar({ count, label, actions = [], open = null, onOpenChange, extra, onC
   }, []);
   const text = label ?? t('table.selected', { count });
   return (
-    <div ref={root} className="grid gap-3">
-      <section aria-label={text} className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-lg border border-primary bg-accent-soft px-3 py-2">
-        <p role="status" className="mr-1.5 text-sm font-bold text-accent-text">
+    <div ref={root} data-slot="bulk-bar" className="grid gap-3 [[data-slot=card]>&]:gap-0">
+      <section
+        aria-label={text}
+        className="flex flex-wrap items-center gap-2 rounded-md border bg-primary-soft px-4 py-2 [[data-slot=card]>[data-slot=bulk-bar]>&]:rounded-none [[data-slot=card]>[data-slot=bulk-bar]>&]:border-x-0">
+        <p role="status" className="mr-1 font-semibold">
           {text}
         </p>
         {actions.map((action) => (
@@ -74,16 +80,16 @@ function Bar({ count, label, actions = [], open = null, onOpenChange, extra, onC
             key={action.id}
             type="button"
             size="sm"
-            variant="ghost"
+            variant="outline"
             aria-pressed={open === action.id}
-            className="aria-pressed:bg-background aria-pressed:text-foreground"
+            className="aria-pressed:border-primary aria-pressed:text-accent-text"
             onClick={() => onOpenChange?.(open === action.id ? null : action.id)}>
             {action.label}
           </Button>
         ))}
         {extra}
         <span className="flex-1" />
-        <Button type="button" size="sm" variant="ghost" onClick={onClear}>
+        <Button type="button" size="sm" variant="ghost" className="text-foreground" onClick={onClear}>
           {clearLabel ?? t('table.clear_selection')}
         </Button>
       </section>

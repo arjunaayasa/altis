@@ -2,5 +2,5 @@
 // Berita). It exports only the names its task's Interfaces list, generic ones with a prefix (M14;
 // packages/core/test/barrels.test.ts).
 export { archivePage, createPage, getPage, listPages, previewBody, updatePage } from './service.js';
-export { OPAC_NEWS_PER_PAGE, latestNews, newsPage, publishedPage } from './queries.js';
-export type { OpacNewsItem, OpacNewsPage, OpacNewsText, OpacPageTranslation, OpacPublishedPage } from './queries.js';
+export { OPAC_NEWS_PER_PAGE, latestNews, newsPage, publishedPage, upcomingEvents } from './queries.js';
+export type { OpacNewsAgenda, OpacNewsItem, OpacNewsPage, OpacNewsText, OpacPageTranslation, OpacPublishedPage } from './queries.js';

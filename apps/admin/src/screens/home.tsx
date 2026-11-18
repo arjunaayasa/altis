@@ -1,6 +1,8 @@
 import { Link } from '@tanstack/react-router';
+import { ScanBarcodeIcon, UserPlusIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { paletteShortcut } from '@/components/shell/app-shell';
+import { PageHeader } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { useLocale, useT } from '@/i18n';
 import { holds } from '@/lib/access';
@@ -16,7 +18,7 @@ import { TodayStrip, useDeskToday, useLibraryToday } from '@/screens/dashboard-t
 import { UsageBlocks } from '@/screens/dashboard-usage';
 
 /**
- * Beranda: the first screen after signing in. Its title with today's date, today's opening hours (as the public home
+ * Beranda: the first screen after signing in. Its header (the way to a new member and to the desk on the right) with today's date, today's opening hours (as the public home
  * page shows them; none set: nothing), the desk's branch when the user serves at more than one, and a welcome; then,
  * each only for a user who may read it:
  *
@@ -65,30 +67,48 @@ export function HomeScreen() {
   const open = library.data?.openToday ?? null;
   const hours = open === null ? [] : open.closed ? [t('dashboard.home.closed_today')] : open.times.length > 0 ? [t('dashboard.home.open_today', { hours: open.times.join(', ') })] : [];
   const lead = [longDate(today), ...hours, ...(deskBranch !== undefined && (desk.branches?.length ?? 0) > 1 ? [t('dashboard.today.branch', { name: deskBranch.name })] : [])];
+  const addsMembers = holds(me, 'members.records.manage');
   const hasActivity = desk.branchId !== null;
   const hasAttention = attention.length > 0 || attentionSources.reads;
   const seesLibrary =
     desk.branchId !== null || holds(me, 'members.records.read') || holds(me, 'circulation.records.read') || holds(me, 'reports.statistics.read') || hasAttention;
 
   return (
-    <div className="flex flex-col gap-6" data-home="">
-      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-xl leading-snug font-bold">{t('nav.home')}</h1>
-          <p className="text-muted-foreground">
+    <div className="grid gap-4" data-home="">
+      <PageHeader
+        title={t('nav.home')}
+        description={
+          <>
             {lead.join(' · ')} · <span>{t('home.welcome', { name })}</span>
-          </p>
-          {!seesLibrary && <p className="text-muted-foreground">{t('home.intro', { shortcut: paletteShortcut() })}</p>}
-        </div>
-        {desk.branchId !== null && (
-          <Button asChild>
-            <Link to="/admin/layanan">{t('dashboard.home.open_desk')}</Link>
-          </Button>
-        )}
-      </div>
+          </>
+        }
+        actions={
+          addsMembers || desk.branchId !== null ? (
+            <>
+              {addsMembers && (
+                <Button asChild variant="outline">
+                  <Link to="/admin/anggota/baru">
+                    <UserPlusIcon aria-hidden="true" />
+                    {t('members.add')}
+                  </Link>
+                </Button>
+              )}
+              {desk.branchId !== null && (
+                <Button asChild>
+                  <Link to="/admin/layanan">
+                    <ScanBarcodeIcon aria-hidden="true" />
+                    {t('dashboard.home.open_desk')}
+                  </Link>
+                </Button>
+              )}
+            </>
+          ) : undefined
+        }
+      />
+      {!seesLibrary && <p className="text-muted-foreground">{t('home.intro', { shortcut: paletteShortcut() })}</p>}
       <TodayStrip />
       {(hasActivity || hasAttention) && (
-        <div className={cn('grid gap-8', hasActivity && hasAttention && 'min-[1060px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]')}>
+        <div className={cn('grid gap-4', hasActivity && hasAttention && 'min-[1060px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]')}>
           <DeskActivity />
           <Attention items={attention} sources={attentionSources} />
         </div>

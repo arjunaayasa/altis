@@ -35,6 +35,8 @@ import { STOCKTAKE_ROUTES } from './api/stocktake.js';
 import { LIBRARY_STATISTICS_ROUTES } from './api/library-statistics.js';
 // ---- Komunitas (OPAC home page) ----
 import { OPAC_HOME_ROUTES } from './api/opac-home.js';
+// ---- Site identity ----
+import { SITE_IDENTITY_ROUTES } from './api/site-identity.js';
 import { VISIT_STATION_ROUTES } from './opac/visits/routes.js';
 // ---- Komunitas (member area) ----
 import { AKUN_ROUTES } from './opac/akun/routes.js';
@@ -77,6 +79,8 @@ export const KOMUNITAS_ROUTES: RouteDecl[] = [
   ...STOCKTAKE_ROUTES,
   // ---- Komunitas (OPAC home page): the admin screen's content of the home page ----
   ...OPAC_HOME_ROUTES,
+  // ---- Site identity: the logo, the site icon, the name and the tagline ----
+  ...SITE_IDENTITY_ROUTES,
 ];
 
 export const ALL_ROUTES: RouteDecl[] = defineRoutes([

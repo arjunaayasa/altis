@@ -65,7 +65,7 @@ import { SruSearchQuery, SruTestBody } from '../src/api/catalog/copy.js';
 import { LabelBody } from '../src/api/catalog/labels.js';
 import type { ReindexResponse } from '../src/api/catalog/search.js';
 import { SlimsDbInput, SlimsStartBody, SlimsTestBody } from '../src/api/catalog/migration.js';
-import { PageBody, PageListQuery, PagePatchBody, PagePreviewBody, PageTranslationInput } from '../src/api/opac-pages.js';
+import { PageBody, PageListQuery, PagePatchBody, PagePreviewBody, PageTranslationInput, newsAgendaErrors, newsAgendaOf } from '../src/api/opac-pages.js';
 import { newId } from '../src/ids.js';
 
 // The Phase 2 API contracts (plan Task 4): strict Zod bodies at every depth, every maximum equal to its column, every
@@ -749,6 +749,45 @@ describe('pages', () => {
     expect(ok(PagePatchBody, { version: 2, translations: { id: null } })).toBe(false);
     expect(PageListQuery.parse({ kind: 'news', status: 'published' })).toEqual({ kind: 'news', status: 'published', limit: 50 });
     expect(ok(PageListQuery, {})).toBe(false);
+  });
+
+  it('the agenda of a news post: a category, an event with a start, an end not before it, a place of at most 160', () => {
+    const news = (o: Record<string, unknown>) => ({ ...pageBody(), kind: 'news', ...o });
+    const T = 1_800_000_000_000;
+    expect(ok(PageBody, news({}))).toBe(true);
+    expect(ok(PageBody, news({ category: null, eventStartsAt: null, eventEndsAt: null, eventPlace: null }))).toBe(true);
+    expect(ok(PageBody, news({ category: 'agenda', eventStartsAt: T, eventEndsAt: T, eventPlace: 'Ruang baca' }))).toBe(true);
+    for (const category of ['collection', 'announcement', 'activity']) expect(ok(PageBody, news({ category })), category).toBe(true);
+    expect(ok(PageBody, news({ category: 'Agenda' }))).toBe(false);
+    expect(ok(PageBody, news({ eventStartsAt: T, eventEndsAt: T - 1 }))).toBe(false);
+    expect(ok(PageBody, news({ eventEndsAt: T }))).toBe(false);
+    expect(ok(PageBody, news({ eventPlace: 'Ruang baca' }))).toBe(false);
+    expect(ok(PageBody, news({ eventStartsAt: -1 }))).toBe(false);
+    expect(ok(PageBody, news({ eventStartsAt: T, eventPlace: 'r'.repeat(160) }))).toBe(true);
+    expect(ok(PageBody, news({ eventStartsAt: T, eventPlace: 'r'.repeat(161) }))).toBe(false);
+    // A page has no agenda; nulls are fine.
+    expect(ok(PageBody, { ...pageBody(), category: 'agenda' })).toBe(false);
+    expect(ok(PageBody, { ...pageBody(), eventStartsAt: T })).toBe(false);
+    expect(ok(PageBody, { ...pageBody(), category: null, eventStartsAt: null })).toBe(true);
+    const refused = PageBody.safeParse(news({ eventStartsAt: T, eventEndsAt: T - 1 }));
+    expect(refused.success ? [] : refused.error.issues.map((i) => [i.path.join('.'), i.code, (i as { params?: { code?: string } }).params?.code])).toEqual([['eventEndsAt', 'custom', 'invalid']]);
+    // The patch takes each field alone (the service checks them against the page as it will be).
+    expect(ok(PagePatchBody, { version: 1, eventEndsAt: T })).toBe(true);
+    expect(ok(PagePatchBody, { version: 1, category: null, eventStartsAt: null, eventEndsAt: null, eventPlace: null })).toBe(true);
+    expect(ok(PagePatchBody, { version: 1, category: 'lain' })).toBe(false);
+    expect(PageListQuery.parse({ kind: 'news', category: 'agenda' })).toEqual({ kind: 'news', category: 'agenda', limit: 50 });
+    expect(ok(PageListQuery, { kind: 'news', category: 'lain' })).toBe(false);
+
+    expect(newsAgendaOf({ eventPlace: '   ' })).toEqual({ category: null, eventStartsAt: null, eventEndsAt: null, eventPlace: null });
+    expect(newsAgendaErrors('news', { category: 'agenda', eventStartsAt: T, eventEndsAt: T + 1, eventPlace: 'Aula' })).toEqual([]);
+    expect(newsAgendaErrors('news', { category: null, eventStartsAt: null, eventEndsAt: T, eventPlace: 'Aula' })).toEqual([
+      { path: 'eventEndsAt', code: 'invalid' },
+      { path: 'eventPlace', code: 'invalid' },
+    ]);
+    expect(newsAgendaErrors('page', { category: 'agenda', eventStartsAt: T, eventEndsAt: null, eventPlace: null })).toEqual([
+      { path: 'category', code: 'invalid' },
+      { path: 'eventStartsAt', code: 'invalid' },
+    ]);
   });
 });
 

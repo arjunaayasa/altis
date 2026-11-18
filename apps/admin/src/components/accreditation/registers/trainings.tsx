@@ -220,7 +220,7 @@ export function TrainingsPanel({ staff, canManage }: { staff: StaffView; canMana
     <section aria-labelledby={headingId} className="grid gap-3 border-t pt-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="grid gap-1">
-          <h3 id={headingId} className="text-base font-bold">
+          <h3 id={headingId} className="text-heading font-semibold">
             {t('accreditation.registers.trainings.title')}
           </h3>
           <p className="text-sm text-muted-foreground">{t('accreditation.registers.trainings.intro', { name: staff.name })}</p>

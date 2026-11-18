@@ -214,7 +214,7 @@ describe.skipIf(!ctx.available)(`Halaman & Berita on the OPAC [${engineLabel()}]
       // In English: the links keep the language, an Indonesian-only post is marked.
       const en = await get('/berita?lang=en');
       expect(en.text).toContain('href="/berita/warta-12?lang=en"');
-      expect(en.text).toMatch(/<article lang="id">\s*<h2><a href="\/berita\/warta-12\?lang=en">Warta 12<\/a><\/h2>/);
+      expect(en.text).toMatch(/<article class="newsrow[^"]*" lang="id">(?:(?!<\/article>)[\s\S])*<h2><a href="\/berita\/warta-12\?lang=en">Warta 12<\/a><\/h2>/);
     });
   });
 

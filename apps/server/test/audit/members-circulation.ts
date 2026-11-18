@@ -14,6 +14,7 @@ import { AUDIT as SLIMS_PEOPLE } from './komunitas-slims-people.js';
 import { AUDIT as STOCKTAKE } from './komunitas-stocktake.js';
 // ---- Komunitas (OPAC home page) ----
 import { AUDIT as OPAC_HOME } from './komunitas-opac-home.js';
+import { AUDIT as SITE_IDENTITY } from './site-identity.js';
 
 // The audit scripts of the members and circulation actions: one script per area, each in a file of its own that only
 // its owning change fills. db/audit-coverage.test.ts runs them after the community's, on the same installation and in
@@ -41,6 +42,8 @@ export const MEMBERS_CIRCULATION_AUDIT_SCRIPTS: Readonly<Record<string, AreaAudi
   stocktake: STOCKTAKE,
   // ---- Komunitas (OPAC home page) ----
   'opac-home': OPAC_HOME,
+  // ---- Site identity ----
+  'site-identity': SITE_IDENTITY,
 });
 
 /** While true, a script that is still null lists its actions as pending; both scripts are written, so every action is covered. */

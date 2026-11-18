@@ -71,7 +71,7 @@ function Component({ component, children }: { component: InstrumentView['compone
   const titleId = useId();
   return (
     <section aria-labelledby={titleId} className="grid gap-3">
-      <h3 id={titleId} className="text-base font-bold">
+      <h3 id={titleId} className="text-heading font-semibold">
         {keyText(t, component.labelKey)}
       </h3>
       <div className="grid border-b">{children}</div>

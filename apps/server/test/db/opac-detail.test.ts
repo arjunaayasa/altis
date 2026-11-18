@@ -836,6 +836,8 @@ describe.skipIf(!ctx.available)(`OPAC record detail [${engineLabel()}]`, () => {
       pages.push((await get(pageOf(many, 'Banyak Lampiran'))).text);
       const classes = new Set(pages.flatMap((p) => [...p.matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1]!.split(/\s+/))));
       expect(classes.size).toBeGreaterThan(40);
+      // Names without a rule of their own: each marks an element whose look comes from the classes or the block around it.
+      for (const hook of ['akun-link', 'foot-about', 'foot-tagline', 'top-today']) classes.delete(hook);
       for (const cls of classes) expect(OPAC_CSS, cls).toMatch(new RegExp(`\\.${cls}(?![\\w-])`));
       for (const p of pages) expect(p).not.toMatch(/<[a-z][^>]*\sstyle=/i);
     });
@@ -869,7 +871,9 @@ describe.skipIf(!ctx.available)(`OPAC record detail [${engineLabel()}]`, () => {
       await setSettings({ 'opac.showShelfMap': false });
       try {
         const res = await get(pageOf(main, 'Laskar Pelangi'));
-        expect(res.text).not.toContain('<svg');
+        // The page's icons are small inline drawings; the map is the `<details class="shelf-map">` with the plan.
+        expect(res.text).not.toContain('shelf-map');
+        expect(res.text).not.toContain('viewBox="0 0 1000');
         expect(res.text).not.toContain(`/files/${planId}`);
         expect(availabilityRows(res.text)[0]![1]).toBe('Lantai 2 › Rak 800-899 800-899 Lt. 2');
       } finally {

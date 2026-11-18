@@ -310,7 +310,7 @@ export function SourceStep({
 
   return (
     <section aria-labelledby={titleId} className="grid max-w-4xl gap-4">
-      <h2 id={titleId} className="text-base font-bold">
+      <h2 id={titleId} className="text-heading font-semibold">
         {t('catalog.migration.source.title')}
       </h2>
       <fieldset className="grid gap-3">

@@ -118,7 +118,7 @@ export function GroupMap({ editable, unknownDefault, periodId, title, intro }: G
   return (
     <section aria-labelledby={titleId} className="grid gap-3">
       <div className="grid gap-1">
-        <h3 id={titleId} className="text-base font-bold">
+        <h3 id={titleId} className="text-heading font-semibold">
           {title ?? t('accreditation.usage.groups.title')}
         </h3>
         <p className="text-sm text-muted-foreground">{intro ?? t('accreditation.usage.groups.intro')}</p>

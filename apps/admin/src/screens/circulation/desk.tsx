@@ -1087,7 +1087,7 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
   const tone = FEEDBACK_TONE[feedback.tone];
 
   return (
-    <div className="grid gap-6" onMouseUp={refocus}>
+    <div className="grid gap-4" onMouseUp={refocus}>
       {/* The two fixed live regions: what the desk says, heard once per scan (a new node each time). */}
       <div role="status" aria-live="polite" className="sr-only">
         {live.status !== '' && <p key={live.seq}>{live.status}</p>}
@@ -1097,9 +1097,9 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
       </div>
 
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-        <div className="grid max-w-[75ch] min-w-0 gap-1">
-          <h1 className="text-xl leading-tight font-bold">{t(quickReturn ? 'nav.circulation.quick_return' : inLibrary ? 'nav.circulation.in_library' : 'nav.circulation.desk')}</h1>
-          <p className="text-sm text-muted-foreground">{t(quickReturn ? 'circulation.desk.intro_quick' : inLibrary ? 'circulation.desk.intro_read' : 'circulation.desk.intro')}</p>
+        <div className="grid max-w-[75ch] min-w-0 gap-0.5">
+          <h1 className="text-title font-bold">{t(quickReturn ? 'nav.circulation.quick_return' : inLibrary ? 'nav.circulation.in_library' : 'nav.circulation.desk')}</h1>
+          <p className="text-muted-foreground">{t(quickReturn ? 'circulation.desk.intro_quick' : inLibrary ? 'circulation.desk.intro_read' : 'circulation.desk.intro')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {desk.branches !== undefined && desk.branches.length > 1 && (
@@ -1150,8 +1150,8 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
       {desk.branches !== undefined && desk.branches.length === 0 && <Notice kind="error">{t('circulation.desk.no_branch')}</Notice>}
 
       {branchId !== null && (
-        <div className="grid items-start gap-6 min-[1120px]:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="grid min-w-0 gap-4">
+        <div className="grid items-start gap-4 min-[1120px]:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid min-w-0 gap-4 rounded-lg border bg-background p-4">
             {!quickReturn && !inLibrary && <ModeSwitch mode={mode} onSwitch={switchMode} />}
             <form noValidate autoComplete="off" onSubmit={submit} className="grid gap-1.5">
               <label htmlFor={`${ids}-scan`} className="text-base font-bold">
@@ -1672,7 +1672,7 @@ function MemberPanel({
   const day = useCalendarDate();
   const money = useMoney();
   const nameId = useId();
-  const box = cn('grid content-start gap-3.5 rounded-lg border p-4', LAYER);
+  const box = 'grid content-start gap-3.5 rounded-lg border bg-background p-4';
   if (error !== null) {
     return (
       <aside aria-label={t('circulation.member.panel')} className={box}>
@@ -1696,7 +1696,7 @@ function MemberPanel({
   if (member === null) {
     return (
       <aside aria-labelledby={nameId} className={box}>
-        <h2 id={nameId} className="text-base font-bold">
+        <h2 id={nameId} className="text-heading font-semibold">
           {t('circulation.member.none')}
         </h2>
         <p className="text-sm text-muted-foreground">
@@ -1939,8 +1939,8 @@ function ReturnSide({ rows, back }: { rows: readonly ReturnRow[]; back: string |
   const late = rows.filter((r) => r.daysLate > 0).length;
   const other = rows.filter((r) => r.otherBranch !== null).length;
   return (
-    <aside aria-labelledby={id} className={cn('grid content-start gap-3.5 rounded-lg border p-4', LAYER)}>
-      <h2 id={id} className="text-base font-bold">
+    <aside aria-labelledby={id} className={'grid content-start gap-3.5 rounded-lg border bg-background p-4'}>
+      <h2 id={id} className="text-heading font-semibold">
         {t('circulation.returns.summary')}
       </h2>
       <FactList
@@ -1986,7 +1986,7 @@ function ReturnsTable({ rows }: { rows: readonly ReturnRow[] }) {
   const id = useId();
   return (
     <section aria-labelledby={id} className="grid gap-3">
-      <h2 id={id} className="text-base font-bold">
+      <h2 id={id} className="text-heading font-semibold">
         {t('circulation.returns.caption')}
       </h2>
       <div className={TABLE.wrap}>
@@ -2148,8 +2148,8 @@ function ReadSide({ rows, back }: { rows: readonly ReadRow[]; back: string | nul
   const id = useId();
   const flagged = rows.filter((r) => r.note !== null).length;
   return (
-    <aside aria-labelledby={id} className={cn('grid content-start gap-3.5 rounded-lg border p-4', LAYER)}>
-      <h2 id={id} className="text-base font-bold">
+    <aside aria-labelledby={id} className={'grid content-start gap-3.5 rounded-lg border bg-background p-4'}>
+      <h2 id={id} className="text-heading font-semibold">
         {t('circulation.returns.summary')}
       </h2>
       <FactList

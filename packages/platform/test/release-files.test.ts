@@ -6,6 +6,7 @@ import { isDomainError } from '@altis/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ADMIN_ASSET_NAME,
+  OPAC_FONT_NAME,
   parseCurrentState,
   readPreviousRelease,
   readReleaseFile,
@@ -277,6 +278,24 @@ describe('readReleaseFile', () => {
   it('follows a symbolic link that stays inside public/', async () => {
     await fsp.symlink(path.join(dir, 'public', 'THIRD_PARTY_NOTICES.txt'), path.join(dir, 'public', 'admin', 'assets', 'notices.js'));
     expect((await readReleaseFile(dir, 'admin-asset', 'notices.js'))?.toString()).toBe('MIT');
+  });
+
+  it('opac-font: reads public/opac/<name> for a name that matches OPAC_FONT_NAME, nothing else', async () => {
+    await put(path.join(dir, 'public', 'opac', 'plus-jakarta-sans-latin-0123456789.woff2'), 'wOF2');
+    await put(path.join(dir, 'public', 'opac', 'notes.txt'), 'x');
+    expect((await readReleaseFile(dir, 'opac-font', 'plus-jakarta-sans-latin-0123456789.woff2'))?.toString()).toBe('wOF2');
+    expect(await readReleaseFile(dir, 'opac-font', 'plus-jakarta-sans-latin-ext-0123456789.woff2')).toBeNull();
+    const readFile = vi.spyOn(fs.promises, 'readFile');
+    const realpath = vi.spyOn(fs.promises, 'realpath');
+    for (const name of ['notes.txt', '../admin/index.html', '../../server.mjs', 'a.b.woff2', 'A.woff2', '.woff2', 'a/b.woff2', 'a.woff2\n', '', undefined]) {
+      expect(OPAC_FONT_NAME.test(String(name))).toBe(false);
+      expect(await readReleaseFile(dir, 'opac-font', name)).toBeNull();
+    }
+    expect(readFile).not.toHaveBeenCalled();
+    expect(realpath).not.toHaveBeenCalled();
+    // A link that leaves public/ is not read.
+    await fsp.symlink(path.join(root, 'secret.js'), path.join(dir, 'public', 'opac', 'evil.woff2'));
+    expect(await readReleaseFile(dir, 'opac-font', 'evil.woff2')).toBeNull();
   });
 
   it('returns null for a directory carrying an asset name', async () => {

@@ -84,7 +84,7 @@ export function ImportWizard({ periodId, defaultCutover, unknownDefault, onClose
     <section aria-labelledby={titleId} className="grid min-w-0 gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid max-w-[75ch] gap-1">
-          <h2 id={titleId} className="text-base font-bold">
+          <h2 id={titleId} className="text-heading font-semibold">
             {t('accreditation.usage.wizard.title')}
           </h2>
           <p className="text-sm text-muted-foreground">{t('accreditation.usage.wizard.intro')}</p>

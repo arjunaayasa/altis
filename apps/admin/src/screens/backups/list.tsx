@@ -89,7 +89,7 @@ function CreateBackup() {
 
   return (
     <section aria-labelledby={titleId} className="grid min-w-0 content-start gap-3">
-      <h2 id={titleId} className="text-base font-bold">
+      <h2 id={titleId} className="text-heading font-semibold">
         {t('backups.create.title')}
       </h2>
       <CheckField

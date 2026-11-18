@@ -9,6 +9,8 @@ import * as acorn from 'acorn';
 //   package through node_modules/<name>/package.json); devDependencies never reach a bundle, so never count. A
 //   package's SPDX expression must be satisfiable with the allowlist: OR needs one allowed side, AND needs both; a
 //   WITH exception, an unknown identifier, `SEE LICENSE IN …`, `UNLICENSED` or no licence at all is refused.
+//   The only way around the allowlist is LICENSE_ALLOWANCES: a package reviewed by hand, by exact name, version and
+//   licence (the UI typeface under the SIL Open Font License).
 // - Native modules: no `.node` file among the bundle inputs.
 // - Self-contained bundles: at run time server.mjs and app.js load node built-ins only (no relative or bare
 //   specifier: node_modules lookup from the release folder would walk up into the app folder, DATA_DIR or $HOME).
@@ -33,6 +35,28 @@ export const LICENSE_ALLOWLIST: readonly string[] = Object.freeze([
   'BlueOak-1.0.0',
   'Unlicense',
   'CC0-1.0',
+]);
+
+/**
+ * A package admitted under a licence that is not on {@link LICENSE_ALLOWLIST}, reviewed by hand: that exact name,
+ * version and declared licence only. Another version, or another licence, is refused again.
+ */
+export interface LicenseAllowance {
+  name: string;
+  version: string;
+  license: string;
+}
+
+/**
+ * The reviewed exceptions to the allowlist.
+ *
+ * - The UI typeface, Plus Jakarta Sans, under the SIL Open Font License 1.1. The package holds font files and
+ *   stylesheets, no code. The OFL lets the fonts be bundled and redistributed with any software, as long as they are
+ *   not sold by themselves and keep their copyright notice and licence (reproduced in the notices); it puts no
+ *   condition on the software they ship with. It is not allowed for packages in general: it is a licence for fonts.
+ */
+export const LICENSE_ALLOWANCES: readonly LicenseAllowance[] = Object.freeze([
+  Object.freeze({ name: '@fontsource-variable/plus-jakarta-sans', version: '5.3.0', license: 'OFL-1.1' }),
 ]);
 
 export interface BundledPackage {
@@ -187,9 +211,15 @@ export async function packagesOfInputs(inputs: readonly string[], root: string):
   return packages.sort((a, b) => order(a.name, b.name) || order(a.version, b.version) || order(a.dir, b.dir));
 }
 
-/** @throws Error `LICENSE_NOT_ALLOWED:<pkg> (<version>, <licence>)[; also: …]` naming every offending package */
-export function checkLicenses(packages: readonly BundledPackage[]): void {
-  const offenders = packages.filter((p) => !licenseAllowed(p.license)).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+/**
+ * Refuses a package whose licence the allowlist cannot satisfy, unless it is one of `allowances` (default
+ * {@link LICENSE_ALLOWANCES}) by its exact name, version and declared licence.
+ *
+ * @throws Error `LICENSE_NOT_ALLOWED:<pkg> (<version>, <licence>)[; also: …]` naming every offending package
+ */
+export function checkLicenses(packages: readonly BundledPackage[], allowances: readonly LicenseAllowance[] = LICENSE_ALLOWANCES): void {
+  const reviewed = (p: BundledPackage): boolean => allowances.some((a) => a.name === p.name && a.version === p.version && a.license === p.license);
+  const offenders = packages.filter((p) => !licenseAllowed(p.license) && !reviewed(p)).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   if (offenders.length === 0) return;
   const [first, ...others] = offenders.map((p) => `${p.name} (${p.version}, ${p.license === undefined ? 'no licence' : JSON.stringify(p.license)})`);
   throw new Error(`LICENSE_NOT_ALLOWED:${first!}${others.length > 0 ? `; also: ${others.join(', ')}` : ''}`);

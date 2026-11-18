@@ -29,6 +29,7 @@ import { KEYRING, openExportDb, type ExportDb } from './reports-export-support.j
 const ctx = testDbContext();
 const NOW = Date.parse('2026-11-15T05:00:00Z');
 const DAY = 86_400_000;
+const NO_TEXT = { id: null, en: null };
 
 describe.skipIf(!ctx.available)(`the OPAC home page [${engineLabel()}]`, () => {
   let db: ExportDb;
@@ -124,7 +125,7 @@ describe.skipIf(!ctx.available)(`the OPAC home page [${engineLabel()}]`, () => {
         ...OPAC_HOME_DEFAULT,
         title: { id: '  Ruang baca untuk semua  ', en: 'A reading room for all' },
         brand: '#1E3A8A',
-        about: { text: { id: 'Berdiri sejak 1987.', en: null }, photo: null, founded: 1987, librarians: 3 },
+        about: { ...OPAC_HOME_DEFAULT.about, text: { id: 'Berdiri sejak 1987.', en: null }, founded: 1987, librarians: 3 },
         services: [{ title: 'Peminjaman', text: null }],
         hours: [{ days: 'Senin–Jumat', time: '07.00–15.00', weekdays: [1, 2, 3, 4, 5] }],
         blocks: { ...OPAC_HOME_DEFAULT.blocks, promoted: false, readingClasses: true },
@@ -187,7 +188,10 @@ describe.skipIf(!ctx.available)(`the OPAC home page [${engineLabel()}]`, () => {
       let state = await readOpacHome(db.h.db);
       const withPhotos: OpacHomeContent = {
         ...state.home,
-        hero: { fileId: hero, alt: 'Ruang baca', position: 60, overlay: 70 },
+        hero: {
+          ...state.home.hero,
+          slides: [{ id: 'slide-1', fileId: hero, alt: 'Ruang baca', position: 60, note: NO_TEXT, title: NO_TEXT, subtitle: NO_TEXT, cta: null, active: true, from: null, until: null }],
+        },
         about: { ...state.home.about, photo: { fileId: about, alt: 'Rak buku', caption: null } },
         facilities: [{ fileId: facility, alt: 'Sudut baca', caption: 'Sudut baca' }],
       };

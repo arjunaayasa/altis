@@ -395,7 +395,7 @@ export function CutoverChecklist() {
 
   return (
     <section aria-labelledby={titleId} className="grid gap-3 border-t pt-6">
-      <h2 id={titleId} className="text-base font-bold">
+      <h2 id={titleId} className="text-heading font-semibold">
         {t('catalog.migration.people.cutover_title')}
       </h2>
       <p className="text-sm text-muted-foreground">{t('catalog.migration.people.cutover_hint')}</p>

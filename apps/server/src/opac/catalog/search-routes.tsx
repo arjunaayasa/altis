@@ -194,7 +194,6 @@ const search = route({
       // The accepted parameters only, in their order (the page keeps `hal`; opacPage adds the request's `lang`).
       canonicalPath: searchPath(echo, { hal: echo.hal ?? null }, null),
       robots: 'noindex-follow',
-      headerSearch: false,
       searchBand: () => <SearchBox locale={ctx.locale} lang={lang} echo={echo} text={text} />,
       head: () => <link rel="alternate" type="application/rss+xml" title={feedTitle} href={searchPath(echo, {}, lang, '/cari/rss')} />,
       body: () => (

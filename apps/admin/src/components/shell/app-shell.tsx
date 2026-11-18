@@ -40,9 +40,8 @@ export function shellChannels(me: SignedIn): string[] {
 
 /**
  * The admin frame (spec §13.3 "Kerangka admin"): the library's name, the navigation the user's permissions allow
- * (lib/nav.ts: the module bar and the sidebar of the active module, drawn by ShellFrame), the command palette
- * (Ctrl/⌘+K), the status banners, the notification bell (1c), the user menu (theme, language) and the screen of the
- * route. The route gate (routes.tsx) only renders it for a fully signed-in session; the language comes from the root
+ * (lib/nav.ts: the one sidebar, drawn by ShellFrame), the command palette (Ctrl/⌘+K), the status banners, the
+ * notification bell (1c), the user menu (theme, language, signing out) and the screen of the route. The route gate (routes.tsx) only renders it for a fully signed-in session; the language comes from the root
  * (`me.user.locale ?? me.library.locale`).
  *
  * The session can end while the frame is open (idle expiry, a sign-out in another tab, an administrator's action):
@@ -136,7 +135,7 @@ export function AppShell() {
   return (
     <ShellFrame me={me} pathname={pathname} onPalette={() => setPaletteOpen(true)} onLogout={signOut}>
       {keep && (
-        <div className="px-4 pt-4 lg:px-8">
+        <div className="w-full max-w-[1400px] px-4 pt-4 lg:px-6 lg:pt-6">
           <Alert variant="destructive" aria-labelledby={warningId}>
             <TriangleAlertIcon aria-hidden="true" />
             <AlertTitle id={warningId}>{t('shell.session_ended.title')}</AlertTitle>
@@ -155,7 +154,8 @@ export function AppShell() {
         </div>
       )}
       <Banners banners={me.banners} />
-      <main id="main" tabIndex={-1} className="w-full max-w-[1360px] min-w-0 flex-1 px-4 pt-4 pb-10 outline-none lg:px-8 lg:pt-6 lg:pb-12">
+      {/* The content area: 24 px of padding (16 px on a narrow screen), at most 1400 px wide. */}
+      <main id="main" tabIndex={-1} className="w-full max-w-[1400px] min-w-0 flex-1 p-4 outline-none lg:p-6">
         {/* The screens see what the frame shows; another user's session starts every screen over. */}
         <ShellMeContext.Provider value={me}>
           <RealtimeContext.Provider value={hub}>

@@ -183,7 +183,7 @@ const FIELDS: Readonly<Record<SettingsGroupName, FieldMap>> = Object.freeze({
 
 // ---- Komunitas (OPAC home page) ----
 /** The settings of an edited group that a screen of their own reads and writes, never `settings/:group`. */
-export const SETTINGS_SERVED_ELSEWHERE: ReadonlySet<SettingKey> = new Set<SettingKey>(['opac.home']);
+export const SETTINGS_SERVED_ELSEWHERE: ReadonlySet<SettingKey> = new Set<SettingKey>(['opac.home', 'site.identity']);
 
 // Every registered key of a group has its place, and nothing else: checked once, when the module loads.
 for (const group of SETTINGS_GROUPS) {

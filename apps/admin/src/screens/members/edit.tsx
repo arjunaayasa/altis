@@ -5,12 +5,14 @@ import type { LoanListResponse } from '@altis/shared/api/circulation';
 import { MemberBody, MemberPatchBody, type MemberEventsResponse, type MemberView } from '@altis/shared/api/members';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-router';
+import { UploadIcon } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useDateTime } from '@/components/data-table';
 import { Field, Notice, ProblemAlert, RefetchProblem, RootError, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
-import { BackLink, Callout, FormBar, FormSection, InlinePanel, MemberPhoto, MoreMenu, MoreMenuItem, MoreMenuRule, StatStrip, StatusText, TABLE } from '@/components/layout';
+import { BackLink, Callout, Card, CardBody, FormBar, FormSection, InlinePanel, MemberPhoto, MoreMenu, MoreMenuItem, MoreMenuRule, PageHeader, SaveBar, StatStrip, StatusText, TABLE } from '@/components/layout';
+import { PageBrand, useBrand } from '@/components/shell/brand';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger, WRAPPING_TABS } from '@/components/ui/tabs';
@@ -262,6 +264,8 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
           </ProblemAlert>
         </div>
       )}
+      <div className={member === null ? 'grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]' : undefined}>
+      <div className="min-w-0">
       <FormSection title={t('members.form.membership')} intro={t('members.form.membership_intro')} disabled={!canManage}>
         {text('memberNo', 'members.field.member_no', { max: 200, hint: t('members.field.member_no_hint'), mono: true })}
         <Field
@@ -345,7 +349,20 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
         </Field>
       </FormSection>
       <RootError message={errors.root?.server?.message} />
-      {canManage && (
+      </div>
+      {member === null && <CardPreview name={form.watch('name')} memberNo={form.watch('memberNo')} type={type === undefined ? '' : typeName(type)} />}
+      </div>
+      {canManage && member === null && (
+        <SaveBar message={isDirty ? t('members.form.unsaved') : undefined}>
+          <Button asChild variant="ghost">
+            <Link to="/admin/anggota">{t('form.cancel')}</Link>
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {t(isSubmitting ? 'form.saving' : 'form.save')}
+          </Button>
+        </SaveBar>
+      )}
+      {canManage && member !== null && (
         <FormBar>
           <Button type="submit" disabled={isSubmitting}>
             {t(isSubmitting ? 'form.saving' : 'form.save')}
@@ -360,18 +377,52 @@ function MemberFormView({ member, canManage, onSaved }: { member: MemberView | n
   );
 }
 
+/**
+ * What the new member's card will carry, beside the form while it is filled: the library's logo (or its name), then
+ * the name, the number and the type as typed so far. The card itself is printed from Cetak Kartu once saved.
+ */
+function CardPreview({ name, memberNo, type }: { name: string; memberNo: string; type: string }) {
+  const t = useT();
+  const me = useMe();
+  const brand = useBrand(me?.authenticated === true ? me.library.name : '');
+  const line = [memberNo.trim(), type].filter((x) => x !== '').join(' · ');
+  return (
+    <Card title={t('members.new.card_preview')} description={t('members.new.card_preview_hint')} className="max-xl:hidden">
+      <CardBody>
+        <div className="grid gap-3 rounded-lg border p-4" data-card-preview="">
+          <PageBrand {...brand} className="[&_img]:h-8" />
+          <div className="grid gap-0.5">
+            <p className="text-heading font-bold break-words">{name.trim() === '' ? t('members.field.name') : name}</p>
+            <p className="font-mono text-meta text-muted-foreground">{line === '' ? t('members.field.member_no') : line}</p>
+          </div>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
 export function MemberCreateScreen() {
   const t = useT();
   const me = useMe();
   const navigate = useNavigate();
   const canManage = holds(me, 'members.records.manage');
   return (
-    <div className="grid max-w-5xl gap-6">
+    <div className="grid gap-4">
       <BackLink to="/admin/anggota">{t('members.back')}</BackLink>
-      <div className="grid gap-1">
-        <h1 className="text-xl leading-tight font-bold">{t('members.new.title')}</h1>
-        <p className="text-sm text-muted-foreground">{t('members.new.intro')}</p>
-      </div>
+      <PageHeader
+        title={t('members.new.title')}
+        description={t('members.new.intro')}
+        actions={
+          holds(me, 'members.import.run') ? (
+            <Button asChild variant="outline">
+              <Link to="/admin/anggota/impor">
+                <UploadIcon aria-hidden="true" />
+                {t('members.import_csv')}
+              </Link>
+            </Button>
+          ) : undefined
+        }
+      />
       {!canManage && <ProblemAlert error={new ApiError(403, 'AUTHZ_DENIED')} />}
       <MemberFormView member={null} canManage={canManage} onSaved={(id) => navigate({ href: `/admin/anggota/${encodeURIComponent(id)}`, state: { created: true } })} />
     </div>
@@ -480,7 +531,7 @@ export function MemberDetailScreen() {
       <div className="flex flex-wrap items-start gap-5">
         <MemberPhoto name={m.name} fileId={m.photoFileId} size="lg" alt={m.photoFileId === null ? undefined : t('members.tools.photo.alt', { name: m.name })} />
         <div className="grid min-w-60 flex-1 gap-1">
-          <h1 className="text-2xl leading-tight font-bold break-words">{m.name}</h1>
+          <h1 className="text-title font-bold break-words">{m.name}</h1>
           <p className="text-muted-foreground">
             <span className="font-semibold tracking-wide text-foreground tabular-nums">{m.memberNo}</span> · {typeName(m.type)}
             {m.className !== null && `, ${m.className}`}

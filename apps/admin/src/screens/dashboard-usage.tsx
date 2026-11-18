@@ -1,7 +1,9 @@
 import { DASHBOARD_USAGE_DAYS, type SubjectLoans, type TopTitle } from '@altis/shared/api/dashboard-home';
 import { Link } from '@tanstack/react-router';
 import { useId, type ReactNode } from 'react';
+import { CARD, CARD_HEAD, CARD_TITLE } from '@/components/layout';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { useT, type Translate } from '@/i18n';
 import { holds } from '@/lib/access';
 import { useMe } from '@/lib/me';
@@ -27,17 +29,17 @@ function subjectName(t: Translate, s: SubjectLoans): string {
 }
 
 /** A titled block of the usage row. */
-function Block({ title, aside, children, data }: { title: string; aside: ReactNode; children: ReactNode; data: string }) {
+function Block({ title, aside, children, data, flush = false }: { title: string; aside: ReactNode; children: ReactNode; data: string; flush?: boolean }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className="flex min-w-0 flex-col gap-3" data-usage={data}>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h2 id={id} className="text-base font-bold">
+    <section aria-labelledby={id} className={cn(CARD, 'flex flex-col self-start')} data-usage={data}>
+      <div className={CARD_HEAD}>
+        <h2 id={id} className={CARD_TITLE}>
           {title}
         </h2>
         <span className="flex flex-wrap items-baseline gap-x-3 text-meta text-muted-foreground">{aside}</span>
       </div>
-      {children}
+      <div className={cn('flex min-w-0 flex-col gap-3', flush ? undefined : 'p-4')}>{children}</div>
     </section>
   );
 }
@@ -83,7 +85,7 @@ function Subjects({ subjects, placeholder }: { subjects: readonly SubjectLoans[]
       {placeholder !== undefined ? (
         placeholder
       ) : subjects.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t('dashboard.home.subjects.empty', { days: DASHBOARD_USAGE_DAYS })}</p>
+        <p className="text-muted-foreground">{t('dashboard.home.subjects.empty', { days: DASHBOARD_USAGE_DAYS })}</p>
       ) : (
         <>
           <ul className="flex flex-col" aria-label={t('dashboard.home.subjects.caption', { days: DASHBOARD_USAGE_DAYS })}>
@@ -92,8 +94,8 @@ function Subjects({ subjects, placeholder }: { subjects: readonly SubjectLoans[]
                 <span className="truncate text-muted-foreground" title={subjectName(t, s)}>
                   {subjectName(t, s)}
                 </span>
-                <span className="h-2.5" aria-hidden="true">
-                  <span className="block h-full rounded-r-[3px] bg-series-1" style={{ width: `${(s.loans / max) * 100}%` }} />
+                <span className="h-1.5 rounded-[2px] bg-layer-2" aria-hidden="true">
+                  <span className="block h-full rounded-[2px] bg-series-1" style={{ width: `${(s.loans / max) * 100}%` }} />
                 </span>
                 <span className="text-right tabular-nums">{count(s.loans)}</span>
               </li>
@@ -142,6 +144,7 @@ function TopTitles({ titles, placeholder }: { titles: readonly TopTitle[]; place
     <Block
       title={t('dashboard.home.top.title')}
       data="top"
+      flush={placeholder === undefined && titles.length > 0}
       aside={
         <>
           <span>{t('dashboard.home.subjects.range', { days: DASHBOARD_USAGE_DAYS })}</span>
@@ -151,12 +154,12 @@ function TopTitles({ titles, placeholder }: { titles: readonly TopTitle[]; place
       {placeholder !== undefined ? (
         placeholder
       ) : titles.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t('dashboard.home.top.empty', { days: DASHBOARD_USAGE_DAYS })}</p>
+        <p className="text-muted-foreground">{t('dashboard.home.top.empty', { days: DASHBOARD_USAGE_DAYS })}</p>
       ) : (
-        <ol className="border-t">
+        <ol>
           {titles.map((title, k) => (
-            <li key={title.recordId} className="flex items-baseline gap-3 border-b py-2.5" data-top-title="">
-              <span className="w-5 shrink-0 text-right font-bold text-faint tabular-nums">{count(k + 1)}</span>
+            <li key={title.recordId} className="flex items-baseline gap-3 border-b px-4 py-2.5 last:border-b-0" data-top-title="">
+              <span className="w-4 shrink-0 text-right text-muted-foreground tabular-nums">{count(k + 1)}</span>
               <span className="min-w-0 flex-1 font-semibold break-words">
                 {readsCatalog ? (
                   <Link to={`/admin/catalog/records/${encodeURIComponent(title.recordId)}`} className="text-foreground underline-offset-4 hover:text-accent-text hover:underline">
@@ -178,7 +181,7 @@ function TopTitles({ titles, placeholder }: { titles: readonly TopTitle[]; place
   );
 }
 
-const ROW = 'grid gap-8 min-[1060px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]';
+const ROW = 'grid gap-4 min-[1060px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]';
 
 /** The loans by subject and the most borrowed titles, side by side (see the top of this file); nothing without them. */
 export function UsageBlocks() {

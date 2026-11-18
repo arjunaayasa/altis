@@ -9,6 +9,7 @@ import {
   readSettings,
   restoreMember,
   setMemberPhoto,
+  readSiteIdentity,
   storedPicture,
 } from '@altis/core';
 import { DomainError, isLocale, type Locale } from '@altis/shared';
@@ -92,6 +93,8 @@ const membersCards = route({
     const rawLocale = String(settings['library.locale']);
     const locale: Locale = isLocale(rawLocale) ? rawLocale : 'id';
     const members = await cardMembers(db, rc.body.memberIds, locale);
+    // A card profile without a logo of its own prints the site's (the site identity in force).
+    const siteLogo = (await readSiteIdentity(db)).identity.logo;
     const pdf = await buildMemberCardsPdf({
       profile: settings['members.card.profile'] as CardProfile,
       members,
@@ -100,6 +103,7 @@ const membersCards = route({
       libraryName: settings['library.name'] as string,
       today: await libraryToday(db, rc.now),
       picture: storedPicture(localStorageDriver(rc.services.dataDir)),
+      siteLogoFileId: siteLogo?.fileId ?? null,
     });
     await rc.audit({ entity: 'members', entityId: null, meta: { count: members.length } });
     return new Response(pdf, {

@@ -9,7 +9,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { JobProgress, type JobOutcome } from '@/components/job-progress';
 import { CheckField, Field, Notice, NoticeAlert, ProblemAlert, SELECT_CLASS } from '@/components/form-field';
-import { FactList, FormSection, LoadingState, Steps } from '@/components/layout';
+import { FactList, FormSection, LoadingState, Steps, PANEL } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { FileInput } from '@/components/file-input';
@@ -22,6 +22,7 @@ import { useApiQuery, useMe } from '@/lib/me';
 import { uploadFile } from '@/lib/upload';
 import { useBytes } from '@/screens/backups/upload';
 import { ProgressBar } from '@/screens/jobs/list';
+import { cn } from '@/lib/utils';
 import { RUNS_KEY, RUN_LINK, SummaryView, runHref, runKey, useRetryKey } from './summary-view';
 
 /**
@@ -194,7 +195,7 @@ function FileStep({ onUploaded }: { onUploaded(source: Source): void }) {
   const pct = upload === null || upload.total === 0 ? 0 : (upload.done / upload.total) * 100;
   const progressLabel = upload === null ? '' : t(upload.kind === 'hashing' ? 'catalog.exchange.import.hashing' : 'catalog.exchange.import.sending');
   return (
-    <form noValidate className="grid max-w-xl gap-3" onSubmit={start}>
+    <form noValidate className={cn(PANEL, 'grid gap-3')} onSubmit={start}>
       <div className="grid gap-1.5">
         <Label htmlFor={inputId}>{t('catalog.exchange.import.file')}</Label>
         <FileInput
@@ -346,7 +347,7 @@ function OptionsStep({
   if (!settled) return <LoadingState />;
   const listProblem = [branches, types, collections].find((q) => q.isError)?.error ?? null;
   return (
-    <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)}>
+    <form noValidate className={cn(PANEL, 'grid gap-4')} onSubmit={(e) => void submit(e)}>
       <ProblemAlert error={listProblem} />
       <p className="max-w-[75ch] text-sm">
         {source.kind === 'upload'
@@ -542,7 +543,7 @@ function RunPanel({
   const read = outcome !== null && (run.data !== undefined || run.isError);
   return (
     <section aria-labelledby={headingId} className="grid gap-3 border-t pt-5">
-      <h3 id={headingId} className="text-base font-bold">
+      <h3 id={headingId} className="text-heading font-semibold">
         {t(read ? title.done : title.running)}
       </h3>
       <OptionsList options={options} />
@@ -727,7 +728,7 @@ export function ImportWizard() {
 
   return (
     <section aria-labelledby={headingId} className="grid gap-5">
-      <h2 id={headingId} className="text-base font-bold">
+      <h2 id={headingId} className="text-heading font-semibold">
         {t('catalog.exchange.import.title')}
       </h2>
       <WizardSteps current={step} />

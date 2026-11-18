@@ -24,9 +24,9 @@ export function Banners({ banners }: { banners: readonly Banner[] }) {
   const mismatch = useBuildMismatch();
   if (banners.length === 0 && !mismatch) return null;
   return (
-    <section aria-label={t('shell.banners_label')} className="flex w-full max-w-[1360px] flex-col gap-2 px-4 pt-4 lg:px-8">
+    <section aria-label={t('shell.banners_label')} className="flex w-full max-w-[1400px] flex-col gap-2 px-4 pt-4 lg:px-6 lg:pt-6">
       {mismatch && (
-        <div role="alert" data-banner="build" className={cn(BANNER, 'border-border bg-layer')}>
+        <div role="alert" data-banner="build" className={cn(BANNER, 'border-border bg-background')}>
           <p className="font-semibold">{t('shell.build_mismatch')}</p>
           <Button size="sm" variant="outline" onClick={() => page.reload()}>
             {t('shell.reload')}
@@ -38,7 +38,7 @@ export function Banners({ banners }: { banners: readonly Banner[] }) {
           key={banner.kind}
           role="alert"
           data-banner={banner.kind}
-          className={cn(BANNER, banner.severity === 'info' ? 'border-border bg-layer' : TONE_SURFACE[banner.severity === 'error' ? 'bad' : 'warn'])}>
+          className={cn(BANNER, banner.severity === 'info' ? 'border-border bg-background' : TONE_SURFACE[banner.severity === 'error' ? 'bad' : 'warn'])}>
           <p className={cn('font-semibold', banner.severity !== 'info' && TONE_TEXT[banner.severity === 'error' ? 'bad' : 'warn'])}>{t(banner.messageKey, banner.params)}</p>
           {banner.link !== undefined && safeNext(banner.link) === banner.link && (
             <Button asChild size="sm" variant="outline" className="bg-background">

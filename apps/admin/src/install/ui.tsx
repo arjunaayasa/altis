@@ -24,7 +24,7 @@ export function StepHeading({ title, intro }: { title: string; intro?: string })
 export function Section({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <section className="grid gap-3 border-t pt-4">
-      <h3 className="text-base font-bold">{title}</h3>
+      <h3 className="text-heading font-semibold">{title}</h3>
       {children}
     </section>
   );
