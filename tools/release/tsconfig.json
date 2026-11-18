@@ -13,6 +13,7 @@
     { "path": "../../packages/db" },
     { "path": "../../packages/bootloader" },
     { "path": "../../packages/core" },
+    { "path": "../../packages/opac-theme" },
     { "path": "../sign-cli" },
     { "path": "../test" }
   ]

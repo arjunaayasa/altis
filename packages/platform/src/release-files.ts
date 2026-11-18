@@ -16,6 +16,7 @@ import { isInside } from './pathutil.js';
 //   admin-index   public/admin/index.html          the SPA document, with the `__CSP_NONCE__` placeholder
 //   install-index public/admin/install.html        the install wizard's document (1c, Task 10), same placeholder
 //   admin-asset   public/admin/assets/<name>       hashed assets; <name> must match ADMIN_ASSET_NAME
+//   opac-font     public/opac/<name>               the OPAC's font files; <name> must match OPAC_FONT_NAME
 //   legal         public/THIRD_PARTY_NOTICES.txt   the notices of the bundled dependencies
 
 export type ReleaseSource = 'bundled' | 'data';
@@ -144,7 +145,13 @@ export async function restartRequestedSince(appRoot: string, since: number): Pro
  */
 export const ADMIN_ASSET_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+)*\.(js|css|woff2|svg|png|ico)$/;
 
-export type ReleaseFileKind = 'admin-index' | 'install-index' | 'admin-asset' | 'legal';
+/**
+ * The file name of a font file of the OPAC: lower-case letters and digits in `-`-separated parts, ending in `.woff2`
+ * (`plus-jakarta-sans-latin-0123456789.woff2`). No dot but the extension's, no separator.
+ */
+export const OPAC_FONT_NAME = /^[a-z0-9]+(-[a-z0-9]+)*\.woff2$/;
+
+export type ReleaseFileKind = 'admin-index' | 'install-index' | 'admin-asset' | 'opac-font' | 'legal';
 
 /** Errors that mean "no such file here": the file or a folder on its way is missing, or it is a folder. */
 const NOT_A_FILE = ['ENOENT', 'ENOTDIR', 'EISDIR'];
@@ -158,6 +165,8 @@ function publicSegments(kind: ReleaseFileKind, name: string | undefined): string
       return ['admin', 'install.html'];
     case 'admin-asset':
       return typeof name === 'string' && ADMIN_ASSET_NAME.test(name) ? ['admin', 'assets', name] : null;
+    case 'opac-font':
+      return typeof name === 'string' && OPAC_FONT_NAME.test(name) ? ['opac', name] : null;
     case 'legal':
       return ['THIRD_PARTY_NOTICES.txt'];
     default:
@@ -169,7 +178,8 @@ function publicSegments(kind: ReleaseFileKind, name: string | undefined): string
  * The content of one public file of the release in `releaseDir` (see the table at the top of this file), or null
  * when there is none to serve:
  *
- * - an asset `name` that fails {@link ADMIN_ASSET_NAME} (refused before any file system call);
+ * - an asset `name` that fails {@link ADMIN_ASSET_NAME}, or a font `name` that fails {@link OPAC_FONT_NAME} (refused
+ *   before any file system call);
  * - a file whose real path (symbolic links resolved) is not inside the real path of `<releaseDir>/public`;
  * - a file that does not exist (ENOENT, ENOTDIR), or a folder (EISDIR).
  *

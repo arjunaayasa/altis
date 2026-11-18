@@ -15,6 +15,9 @@
 //   akun.ts    Komunitas: the OPAC member area and the member links of the public pages
 //   home.ts    Komunitas: the home page as the library's profile site (hero band, search card, profile blocks)
 //
+// fonts.ts is not one of them: the typeface's `@font-face` rules and the names of its files (see there). The server
+// puts the rules in front of the stylesheet only when it holds the font files.
+//
 // The content hash covers the joined string, so a change to any module gives the stylesheet a new URL.
 
 import { BASE_CSS } from './base.js';
@@ -33,6 +36,8 @@ export { ACCENTS, ACCENT_COLORS, BAR_COLORS, DEFAULT_ACCENT, FRESH_INSTALL_ACCEN
 export type { AccentName } from './base.js';
 export { contrastRatio, hexRgb, oklchHex, oklchToRgb, rgbHex } from './color.js';
 export type { Rgb } from './color.js';
+export { OPAC_FONTS, OPAC_FONT_FACE_CSS, OPAC_FONT_FAMILY, OPAC_FONT_FILE_NAME, OPAC_FONT_PACKAGE, OPAC_FONT_STACK } from './fonts.js';
+export type { OpacFont } from './fonts.js';
 export { COVER_CLASSES, COVER_COLORS, SPINE_LABEL_COLORS } from './shell.js';
 export type { CoverClass } from './shell.js';
 export { AKUN_CSS, BASE_CSS, DETAIL_CSS, HOME_CSS, PAGES_CSS, SEARCH_CSS, SHELL_CSS, VISITS_CSS };

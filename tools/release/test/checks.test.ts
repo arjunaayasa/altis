@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  LICENSE_ALLOWANCES,
   LICENSE_ALLOWLIST,
   checkLicenses,
   checkNativeInputs,
@@ -113,6 +114,21 @@ describe('checkLicenses', () => {
     expect(() => checkLicenses([pkg('a', 'MIT'), pkg('evil-gpl', 'GPL-3.0')])).toThrow(/^LICENSE_NOT_ALLOWED:evil-gpl\b/);
     expect(() => checkLicenses([pkg('nolicense', undefined)])).toThrow(/^LICENSE_NOT_ALLOWED:nolicense\b/);
     expect(() => checkLicenses([pkg('odd', 'WTFPL')])).toThrow(/^LICENSE_NOT_ALLOWED:odd\b/);
+  });
+
+  it('LICENSE_ALLOWANCES: the UI typeface under the OFL, by exact name, version and licence; the OFL is not allowed otherwise', () => {
+    expect(LICENSE_ALLOWANCES).toEqual([{ name: '@fontsource-variable/plus-jakarta-sans', version: '5.3.0', license: 'OFL-1.1' }]);
+    expect(LICENSE_ALLOWLIST).not.toContain('OFL-1.1');
+    expect(licenseAllowed('OFL-1.1')).toBe(false);
+    const font: BundledPackage = { name: '@fontsource-variable/plus-jakarta-sans', version: '5.3.0', license: 'OFL-1.1', dir: '/x/font' };
+    expect(() => checkLicenses([pkg('a', 'MIT'), font])).not.toThrow();
+    // Another version, another package under the same licence, the same package under another licence: refused.
+    expect(() => checkLicenses([{ ...font, version: '5.3.1' }])).toThrow(/^LICENSE_NOT_ALLOWED:@fontsource-variable\/plus-jakarta-sans \(5\.3\.1, "OFL-1\.1"\)/);
+    expect(() => checkLicenses([{ ...font, name: '@fontsource-variable/inter' }])).toThrow(/^LICENSE_NOT_ALLOWED:@fontsource-variable\/inter\b/);
+    expect(() => checkLicenses([{ ...font, license: 'GPL-3.0' }])).toThrow(/^LICENSE_NOT_ALLOWED:/);
+    expect(() => checkLicenses([font], [])).toThrow(/^LICENSE_NOT_ALLOWED:/);
+    // An allowance never hides another offender.
+    expect(() => checkLicenses([font, pkg('evil-gpl', 'GPL-3.0')])).toThrow(/^LICENSE_NOT_ALLOWED:evil-gpl\b/);
   });
 
   it('names every offending package', () => {

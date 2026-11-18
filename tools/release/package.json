@@ -14,9 +14,11 @@
     "@altis/bootloader": "workspace:*",
     "@altis/crypto": "workspace:*",
     "@altis/db": "workspace:*",
+    "@altis/opac-theme": "workspace:*",
     "@altis/platform": "workspace:*",
     "@altis/shared": "workspace:*",
     "@altis/sign-cli": "workspace:*",
+    "@fontsource-variable/plus-jakarta-sans": "5.3.0",
     "esbuild": "0.28.2"
   },
   "devDependencies": {

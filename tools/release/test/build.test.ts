@@ -18,6 +18,7 @@ import {
 } from '@altis/crypto';
 import { MIN_SERVER_VERSIONS, PHASE1_MIGRATIONS } from '@altis/db';
 import { PASSPHRASE_ENV, runCli as signCli } from '@altis/sign-cli';
+import { OPAC_FONTS, OPAC_FONT_FILE_NAME, OPAC_FONT_PACKAGE } from '@altis/opac-theme';
 import { ADMIN_ASSET_NAME } from '@altis/platform';
 import * as acorn from 'acorn';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -27,6 +28,7 @@ import {
   buildRelease,
   checkAdminPage,
   gitSourceState,
+  readOpacFontFiles,
   parseReleaseArgs,
   type BuildReleaseResult,
   type SourceState,
@@ -61,6 +63,8 @@ const LAYOUT = [
   `${RELEASE}/public/THIRD_PARTY_NOTICES.txt`,
   `${RELEASE}/public/admin/index.html`,
   `${RELEASE}/public/admin/install.html`,
+  // The OPAC's font files, under their content-hashed names.
+  ...OPAC_FONTS.map((f) => `${RELEASE}/public/opac/${f.file}`).sort(),
   `${RELEASE}/server.mjs`,
   'ecosystem.config.cjs',
   'package.json',
@@ -69,6 +73,9 @@ const LAYOUT = [
 ];
 
 /** The hashed admin assets of a release's zip paths. */
+/** The OPAC's font files of a release's zip paths. */
+const opacFiles = (paths: readonly string[], release = RELEASE): string[] => paths.filter((p) => p.startsWith(`${release}/public/opac/`));
+
 const adminAssets = (paths: readonly string[], release = RELEASE): string[] => paths.filter((p) => p.startsWith(`${release}/public/admin/assets/`));
 
 const packageJsonLiteral = (version: string): string =>
@@ -383,13 +390,48 @@ describe('test-profile release 0.1.0-test', () => {
     for (const tool of ['@vitejs/plugin-react', '@tailwindcss/vite', '@tailwindcss/oxide', 'lightningcss', 'jsdom', '@testing-library/react', '@types/react']) {
       expect(names).not.toContain(tool);
     }
-    for (const p of result.report.notices.packages) expect(p.license, p.name).toMatch(/^(MIT|MIT-0|ISC|Apache-2\.0|BSD-[23]-Clause|0BSD)$/);
+    // The one licence outside the allowlist is the reviewed exception: the UI typeface, under the SIL Open Font License.
+    for (const p of result.report.notices.packages) {
+      if (p.name === OPAC_FONT_PACKAGE.name) expect(p).toEqual({ ...OPAC_FONT_PACKAGE, license: 'OFL-1.1' });
+      else expect(p.license, p.name).toMatch(/^(MIT|MIT-0|ISC|Apache-2\.0|BSD-[23]-Clause|0BSD)$/);
+    }
+    expect(names).toContain(OPAC_FONT_PACKAGE.name);
+  });
+
+  it('the typeface: the OPAC font files under public/opac are the recorded ones, the admin ships its own two, the notices carry the OFL', () => {
+    const paths = entries.map((e) => e.path);
+    // The OPAC's: exactly OPAC_FONTS, each under its content-hashed name with the recorded bytes.
+    expect(opacFiles(paths).sort()).toEqual(OPAC_FONTS.map((f) => `${RELEASE}/public/opac/${f.file}`).sort());
+    for (const font of OPAC_FONTS) {
+      const data = entry(entries, `${RELEASE}/public/opac/${font.file}`).data;
+      expect(font.file).toMatch(OPAC_FONT_FILE_NAME);
+      expect(sha256(data)).toBe(font.sha256);
+      expect(font.file).toContain(font.sha256.slice(0, 10));
+      expect(data.subarray(0, 4).toString('latin1')).toBe('wOF2');
+    }
+    expect(result.report.opacFontBytes).toBe(OPAC_FONTS.reduce((sum, f) => sum + entry(entries, `${RELEASE}/public/opac/${f.file}`).data.length, 0));
+    // The admin's: the same two subsets (upright latin and latin-ext) as hashed assets, and no other font file.
+    const adminFonts = adminAssets(paths).filter((p) => p.endsWith('.woff2'));
+    expect(adminFonts.map((p) => path.posix.basename(p).replace(/-[A-Za-z0-9_-]{8}\.woff2$/, '')).sort()).toEqual([
+      'plus-jakarta-sans-latin-ext-wght-normal',
+      'plus-jakarta-sans-latin-wght-normal',
+    ]);
+    expect(adminFonts.map((p) => sha256(entry(entries, p).data)).sort()).toEqual(OPAC_FONTS.map((f) => f.sha256).sort());
+    const css = adminAssets(paths).filter((p) => p.endsWith('.css')).map((p) => textOf(entries, p)).join('\n');
+    for (const p of adminFonts) expect(css).toContain(`url(/admin/assets/${path.posix.basename(p)})`);
+    expect(css.match(/@font-face/g)).toHaveLength(2);
+    expect(paths.filter((p) => /\.(woff2?|ttf|otf)$/.test(p)).sort()).toEqual([...adminFonts, ...opacFiles(paths)].sort());
+    // The licence text and the copyright line of the typeface, as the font package ships them.
+    const notices = textOf(entries, 'THIRD_PARTY_NOTICES.txt');
+    expect(notices).toContain(`${OPAC_FONT_PACKAGE.name} ${OPAC_FONT_PACKAGE.version}\nLisensi / License: OFL-1.1\n`);
+    expect(notices).toContain('Copyright 2020 The Plus Jakarta Sans Project Authors');
+    expect(notices).toContain('SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007');
   });
 
   it('build-report.json: zipBytes (under 15 MB), adminBytes, the files and the notice packages', async () => {
     const report = JSON.parse(await fsp.readFile(path.join(out, 'build-report.json'), 'utf8')) as BuildReleaseResult['report'];
     expect(report).toEqual(result.report);
-    expect(Object.keys(report).sort()).toEqual(['adminBytes', 'files', 'notices', 'zipBytes']);
+    expect(Object.keys(report).sort()).toEqual(['adminBytes', 'files', 'notices', 'opacFontBytes', 'zipBytes']);
     const admin = entries.filter((e) => e.path.startsWith(`${RELEASE}/public/admin/`));
     expect(report.adminBytes).toBe(admin.reduce((sum, e) => sum + e.data.length, 0));
     expect(report.adminBytes).toBeGreaterThan(0);
@@ -791,6 +833,40 @@ describe('guards', () => {
     expect(() => checkAdminPage('index.html', page('<script src="https://cdn.example/x.js"></script>'))).toThrow(
       'ADMIN_BUILD_INVALID:index.html (a script not served from /admin/assets: https://cdn.example/x.js)',
     );
+  });
+
+  it('the OPAC font files come from the pinned font package: the recorded version and bytes, or OPAC_FONT_INVALID', async () => {
+    // The installed package is the recorded one: every file found, with its digest in its name.
+    const files = await readOpacFontFiles();
+    expect(files.map((f) => f.name)).toEqual(OPAC_FONTS.map((f) => f.file));
+    for (const [i, file] of files.entries()) {
+      expect(sha256(file.data)).toBe(OPAC_FONTS[i]!.sha256);
+      expect(file.input).toMatch(/(^|\/)node_modules\/@fontsource-variable\/plus-jakarta-sans\/files\/[a-z-]+\.woff2$/);
+      expect(path.isAbsolute(file.input)).toBe(false);
+    }
+    // Each `unicode-range` is the package's own for that subset.
+    const pkgDir = path.dirname(createRequire(import.meta.url).resolve(`${OPAC_FONT_PACKAGE.name}/package.json`));
+    const css = await fsp.readFile(path.join(pkgDir, 'wght.css'), 'utf8');
+    for (const font of OPAC_FONTS) {
+      const rule = css.split('@font-face').find((r) => r.includes(`url(./${font.source})`));
+      expect(rule, font.subset).toBeDefined();
+      expect(/unicode-range:\s*([^;]+);/.exec(rule!)![1]!.replace(/\s/g, '')).toBe(font.unicodeRange);
+    }
+
+    // Another version of the package, an altered file and a missing file are refused.
+    const fake = path.join(tmp, 'fake-font');
+    await fsp.mkdir(path.join(fake, 'files'), { recursive: true });
+    for (const font of OPAC_FONTS) await fsp.copyFile(path.join(pkgDir, font.source), path.join(fake, font.source));
+    await fsp.writeFile(path.join(fake, 'package.json'), JSON.stringify({ name: OPAC_FONT_PACKAGE.name, version: '5.3.1' }));
+    await expect(readOpacFontFiles(OPAC_FONTS, fake)).rejects.toThrow(/^OPAC_FONT_INVALID:@fontsource-variable\/plus-jakarta-sans \(version "5\.3\.1"/);
+    await fsp.writeFile(path.join(fake, 'package.json'), JSON.stringify(OPAC_FONT_PACKAGE));
+    expect((await readOpacFontFiles(OPAC_FONTS, fake)).map((f) => f.name)).toEqual(OPAC_FONTS.map((f) => f.file));
+    const last = OPAC_FONTS.at(-1)!;
+    await fsp.appendFile(path.join(fake, last.source), 'x');
+    await expect(readOpacFontFiles(OPAC_FONTS, fake)).rejects.toThrow(new RegExp(`^OPAC_FONT_INVALID:${last.source} \\(SHA-256 `));
+    await fsp.rm(path.join(fake, last.source));
+    await expect(readOpacFontFiles(OPAC_FONTS, fake)).rejects.toThrow(new RegExp(`^OPAC_FONT_INVALID:${last.source} \\(cannot be read`));
+    await expect(readOpacFontFiles([{ ...OPAC_FONTS[0]!, file: '../evil.woff2' }], pkgDir)).rejects.toThrow(/^OPAC_FONT_INVALID:\.\.\/evil\.woff2 /);
   });
 
   it('a bundled package licensed GPL-3.0 fails LICENSE_NOT_ALLOWED:<pkg>, and no zip is written', async () => {
