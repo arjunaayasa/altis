@@ -2,12 +2,11 @@ import { LOCALES, type Locale } from '@altis/shared';
 import type { CirculationSettingsBody, CirculationSettingsView, EmailSettings, EmailSettingsBody, EmailTemplate } from '@altis/shared/api/settings';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
-import { SideSection } from '@/components/layout';
-import { Field, TEXTAREA_CLASS } from '@/components/form-field';
+import { CheckField, Field, TEXTAREA_CLASS } from '@/components/form-field';
 import { Input } from '@/components/ui/input';
 import { translate, useT, type TKey } from '@/i18n';
 import { useDirtyGuard } from '@/lib/dirty-forms';
-import { SettingsFooter, saveSettings, type SaveOutcome } from './library';
+import { SettingsFooter, SettingsSection, saveSettings, type SaveOutcome } from './library';
 
 /**
  * The member notices' settings, two more forms:
@@ -88,22 +87,31 @@ export function NoticesSettingsForm({ initial, canManage }: { initial: Circulati
   );
 
   return (
-    <SideSection title={t('notices.settings.title')} intro={t('notices.settings.intro')}>
-      <form noValidate className="grid gap-4 sm:grid-cols-3" onSubmit={(e) => void submit(e)}>
+    <SettingsSection title={t('notices.settings.title')} intro={t('notices.settings.intro')}>
+      <form noValidate className="grid" onSubmit={(e) => void submit(e)}>
         <fieldset disabled={!canManage} className="contents">
           {number('dueSoonDays', 'notices.settings.due_soon_days', 'notices.settings.due_soon_hint')}
           {number('overdueEveryDays', 'notices.settings.overdue_every', 'notices.settings.overdue_every_hint')}
           {number('overdueMax', 'notices.settings.overdue_max', 'notices.settings.overdue_max_hint')}
-          <label className="flex items-center gap-2 text-sm sm:col-span-3">
-            <input type="checkbox" className="size-4 accent-primary" checked={holdReady} onChange={(e) => setHoldReady(e.target.checked)} />
-            {t('notices.settings.hold_ready')}
-          </label>
+          <CheckField label={t('notices.settings.hold_ready')} checked={holdReady} onChange={(e) => setHoldReady(e.target.checked)} />
         </fieldset>
-        <div className="grid gap-4 sm:col-span-3">
-          <SettingsFooter canManage={canManage} busy={busy} outcome={outcome} problem={problem} rootError={undefined} />
-        </div>
+        <SettingsFooter
+          canManage={canManage}
+          busy={busy}
+          dirty={dirty}
+          onDiscard={() => {
+            setValues({ dueSoonDays: String(view.dueSoonDays), overdueEveryDays: String(view.overdueEveryDays), overdueMax: String(view.overdueMax) });
+            setHoldReady(view.holdReady);
+            setErrors({});
+            setOutcome(null);
+            setProblem(null);
+          }}
+          outcome={outcome}
+          problem={problem}
+          rootError={undefined}
+        />
       </form>
-    </SideSection>
+    </SettingsSection>
   );
 }
 
@@ -140,7 +148,8 @@ export function NoticeTemplatesForm({ initial, canManage }: { initial: EmailSett
   const [outcome, setOutcome] = useState<SaveOutcome>(null);
   const [problem, setProblem] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  useDirtyGuard(JSON.stringify(texts) !== JSON.stringify(textsOf(view)));
+  const dirty = JSON.stringify(texts) !== JSON.stringify(textsOf(view));
+  useDirtyGuard(dirty);
 
   const set = (name: TemplateName, locale: Locale, part: 'subject' | 'body', value: string): void =>
     setTexts((x) => ({ ...x, [name]: { ...x[name], [locale]: { ...x[name][locale], [part]: value } } }));
@@ -180,14 +189,14 @@ export function NoticeTemplatesForm({ initial, canManage }: { initial: EmailSett
   };
 
   return (
-    <SideSection title={t('notices.templates.title')} intro={t('notices.templates.intro', { placeholders: NOTICE_PLACEHOLDERS })}>
-      <form noValidate className="grid gap-6" onSubmit={(e) => void submit(e)}>
+    <SettingsSection title={t('notices.templates.title')} intro={t('notices.templates.intro', { placeholders: NOTICE_PLACEHOLDERS })}>
+      <form noValidate className="grid" onSubmit={(e) => void submit(e)}>
         <fieldset disabled={!canManage} className="contents">
           {TEMPLATES.map(({ name, kind, label }) => (
-            <fieldset key={name} className="grid gap-4 border-t pt-4 first-of-type:border-t-0 first-of-type:pt-0">
-              <legend className="text-sm font-semibold">{t(label)}</legend>
+            <fieldset key={name} className="grid min-w-0">
+              <legend className="float-left w-full border-t px-4 pt-3 pb-2 font-semibold">{t(label)}</legend>
               {LOCALES.map((locale) => (
-                <div key={locale} className="grid gap-3">
+                <div key={locale} className="contents">
                   <Field label={t('settings.email.subject', { language: t(`palette.language.${locale}`) })}>
                     {(c) => (
                       <Input
@@ -200,7 +209,7 @@ export function NoticeTemplatesForm({ initial, canManage }: { initial: EmailSett
                       />
                     )}
                   </Field>
-                  <Field label={t('settings.email.body', { language: t(`palette.language.${locale}`) })}>
+                  <Field wide label={t('settings.email.body', { language: t(`palette.language.${locale}`) })}>
                     {(c) => (
                       <textarea
                         {...c}
@@ -218,8 +227,20 @@ export function NoticeTemplatesForm({ initial, canManage }: { initial: EmailSett
             </fieldset>
           ))}
         </fieldset>
-        <SettingsFooter canManage={canManage} busy={busy} outcome={outcome} problem={problem} rootError={undefined} />
+        <SettingsFooter
+          canManage={canManage}
+          busy={busy}
+          dirty={dirty}
+          onDiscard={() => {
+            setTexts(textsOf(view));
+            setOutcome(null);
+            setProblem(null);
+          }}
+          outcome={outcome}
+          problem={problem}
+          rootError={undefined}
+        />
       </form>
-    </SideSection>
+    </SettingsSection>
   );
 }

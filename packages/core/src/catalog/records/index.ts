@@ -7,7 +7,7 @@ export { setCover } from './cover.js';
 export { checkDuplicates } from './duplicates.js';
 export { recordBodyFromDraft } from './draft.js';
 export { loadRecordData } from './data.js';
-export { listRecords } from './list.js';
+export { RECORD_VIEW_COUNTS_TTL_MS, cachedRecordViewCounts, countRecords, listRecords, recordViewCounts } from './list.js';
 export { recordDetail } from './detail.js';
 // ---- Komunitas K1 (catalogue accreditation fields) ----
 export { bulkUpdateRecords } from './bulk.js';

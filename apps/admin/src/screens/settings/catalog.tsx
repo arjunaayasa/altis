@@ -4,9 +4,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useForm, useWatch, type UseFormReturn } from 'react-hook-form';
-import { SideSection } from '@/components/layout';
 import { CheckField, Field, Notice, SELECT_CLASS } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
+import { SettingBlock } from '@/components/layout';
 import { Input } from '@/components/ui/input';
 import { useLocale, useT } from '@/i18n';
 import { holds, isSuperAdmin } from '@/lib/access';
@@ -18,7 +18,7 @@ import { BarcodePatternsEditor } from './catalog/barcode-patterns';
 import { CatalogForm, catalogBody, catalogFormValues, changedElsewhere, errorAt, ownError, type CatalogFormValues } from './catalog/form';
 import { LabelProfilesEditor, SYMBOLOGY_NAMES } from './catalog/label-profiles';
 import { SruServersEditor } from './catalog/sru-servers';
-import { SettingsFooter, SettingsLoader, SettingsPage, saveSettings, type SaveOutcome } from './library';
+import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, saveSettings, type SaveOutcome } from './library';
 
 /**
  * Pengaturan › Katalog (Phase 2 spec §13 "Pengaturan › Katalog", §12.6, §6.2, §7; plan Task 28), `/admin/settings/catalog`:
@@ -122,6 +122,11 @@ function CatalogSettingsForm({ initial, canManage }: { initial: CatalogSettings;
   const { errors, isDirty, isSubmitting } = form.formState;
   useDirtyGuard(isDirty);
   const readOnly = !canManage;
+  const discard = (): void => {
+    form.reset();
+    setOutcome(null);
+    setProblem(null);
+  };
   const superAdmin = isSuperAdmin(me);
 
   const mastersReadable = holds(me, 'catalog.records.read');
@@ -169,11 +174,10 @@ function CatalogSettingsForm({ initial, canManage }: { initial: CatalogSettings;
   const fieldError = (path: string) => ownError(errorAt(errors, path));
 
   return (
-    <form noValidate className="grid gap-6" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
+    <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
       <p className="text-sm text-muted-foreground">{t('catalog.settings.description')}</p>
 
-      <SideSection title={t('catalog.settings.general.title')}>
-        <div className="grid gap-4 sm:grid-cols-2">
+      <SettingsSection title={t('catalog.settings.general.title')}>
           <Field label={t('catalog.settings.marc_org_code')} hint={t('catalog.settings.marc_org_code_hint')} error={fieldError('marcOrgCode')}>
             {(c) => <Input {...c} className="font-mono" maxLength={16} autoComplete="off" spellCheck={false} {...form.register('marcOrgCode')} disabled={readOnly} />}
           </Field>
@@ -236,15 +240,13 @@ function CatalogSettingsForm({ initial, canManage }: { initial: CatalogSettings;
               />
             )}
           </Field>
-        </div>
-      </SideSection>
+      </SettingsSection>
 
-      <SideSection title={t('catalog.settings.barcode.title')} intro={t('catalog.settings.barcode.description')}>
+      <SettingsSection title={t('catalog.settings.barcode.title')} intro={t('catalog.settings.barcode.description')}>
         <Field
           label={t('catalog.settings.barcode.symbology')}
           hint={t('catalog.settings.barcode.symbology_hint')}
           error={fieldError('barcode.symbology')}
-          className="max-w-xs"
         >
           {(c) => (
             <select {...c} className={SELECT_CLASS} {...form.register('barcode.symbology')} disabled={readOnly}>
@@ -256,25 +258,29 @@ function CatalogSettingsForm({ initial, canManage }: { initial: CatalogSettings;
             </select>
           )}
         </Field>
-        <BarcodePatternsEditor form={form} readOnly={readOnly} />
-      </SideSection>
+        <SettingBlock>
+          <BarcodePatternsEditor form={form} readOnly={readOnly} />
+        </SettingBlock>
+      </SettingsSection>
 
-      <SideSection title={t('catalog.settings.labels.title')} intro={t('catalog.settings.labels.description')}>
-        <LabelProfilesEditor form={form} readOnly={readOnly} />
-      </SideSection>
+      <SettingsSection title={t('catalog.settings.labels.title')} intro={t('catalog.settings.labels.description')}>
+        <SettingBlock>
+          <LabelProfilesEditor form={form} readOnly={readOnly} />
+        </SettingBlock>
+      </SettingsSection>
 
-      <SideSection title={t('catalog.settings.sru.title')} intro={t('catalog.settings.sru.description')}>
-        <SruServersEditor form={form} readOnly={readOnly} />
-        <div className="grid gap-3 border-t pt-4">
+      <SettingsSection title={t('catalog.settings.sru.title')} intro={t('catalog.settings.sru.description')}>
+        <SettingBlock>
+          <SruServersEditor form={form} readOnly={readOnly} />
+        </SettingBlock>
           <CheckField
             label={t('catalog.settings.sru.allow_private')}
             hint={t('catalog.settings.sru.allow_private_hint')}
             {...form.register('sru.allowPrivateHosts')}
             disabled={readOnly || !superAdmin}
           />
-          {!superAdmin && <p className="pl-6 text-xs font-semibold text-muted-foreground">{t('catalog.settings.sru.allow_private_super_only')}</p>}
-        </div>
-      </SideSection>
+          {!superAdmin && <p className="px-4 pb-3 text-meta font-semibold text-muted-foreground">{t('catalog.settings.sru.allow_private_super_only')}</p>}
+      </SettingsSection>
 
       {newer !== null && (
         <Notice
@@ -297,7 +303,7 @@ function CatalogSettingsForm({ initial, canManage }: { initial: CatalogSettings;
           {t('catalog.settings.changed_elsewhere')}
         </Notice>
       )}
-      <SettingsFooter canManage={canManage} busy={isSubmitting} outcome={outcome} problem={problem} rootError={errors.root?.['server']?.message} />
+      <SettingsFooter canManage={canManage} busy={isSubmitting} dirty={isDirty} onDiscard={discard} outcome={outcome} problem={problem} rootError={errors.root?.['server']?.message} />
     </form>
   );
 }

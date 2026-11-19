@@ -1,7 +1,9 @@
 import {
   archiveRecord,
   bulkUpdateRecords,
+  cachedRecordViewCounts,
   checkDuplicates,
+  countRecords,
   createRecord,
   listRecords,
   mergeRecord,
@@ -17,11 +19,13 @@ import {
   DuplicateCheckBody,
   MergeBody,
   RecordBulkBody,
+  RecordCountsQuery,
   RecordCreateBody,
   RecordListQuery,
   RecordPatchBody,
   type DuplicateCheckResponse,
   type RecordBulkResponse,
+  type RecordCountsResponse,
   type RecordDetail,
   type RecordListResponse,
 } from '@altis/shared/api/catalog/records';
@@ -34,6 +38,8 @@ import { route, type RouteDecl } from '../../http/route.js';
 // (decision P2-11).
 //
 // - Reads need `catalog.records.read`, writes `catalog.records.manage`; records are global (no branch).
+// - `GET catalog/records/counts` counts what the list holds, under the list's own permission: one number per saved
+//   view (kept for a short while per database) and one for the filters of the request (always counted afresh).
 // - The writes are `store` routes and answer `StoreResponse` (`{id, version, warnings?}`), never the detail (S15):
 //   the stored response stays far below 60 000 bytes whatever the record holds, and the editor reads the record again
 //   with GET. A create answers 201.
@@ -65,6 +71,21 @@ const recordsList = route({
   query: RecordListQuery,
   handler: async (rc) => {
     const body: RecordListResponse = await listRecords(rc.db.db, rc.query, { now: rc.now });
+    return { body };
+  },
+});
+
+/** GET catalog/records/counts: a literal path, declared before the routes of one record. */
+const recordsCounts = route({
+  id: 'catalog.records.counts',
+  method: 'GET',
+  path: `${RECORDS}/counts`,
+  permission: 'catalog.records.read',
+  idempotency: 'none',
+  audit: null,
+  query: RecordCountsQuery,
+  handler: async (rc) => {
+    const body: RecordCountsResponse = { views: await cachedRecordViewCounts(rc.db.db), total: await countRecords(rc.db.db, rc.query) };
     return { body };
   },
 });
@@ -215,6 +236,7 @@ const recordsDuplicates = route({
 
 export const RECORDS_ROUTES: RouteDecl[] = [
   recordsList,
+  recordsCounts,
   // ---- Komunitas K1 (catalogue accreditation fields) ----
   recordsBulk,
   recordsGet,

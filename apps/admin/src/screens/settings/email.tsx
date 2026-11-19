@@ -5,14 +5,15 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { SideSection } from '@/components/layout';
 import { Field, TEXTAREA_CLASS } from '@/components/form-field';
+import { SETTING_BLOCK } from '@/components/layout';
 import { Input } from '@/components/ui/input';
 import { translate, useT, type AdminKey } from '@/i18n';
 import { useDirtyGuard } from '@/lib/dirty-forms';
 import { FORM_PARSE, applyServerErrors, hasFieldErrors } from '@/lib/form-errors';
 import { useMe } from '@/lib/me';
-import { SettingsFooter, SettingsLoader, SettingsPage, blankToNull, saveSettings, type SaveOutcome } from './library';
+import { cn } from '@/lib/utils';
+import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, blankToNull, saveSettings, type SaveOutcome } from './library';
 
 /**
  * Pengaturan → E-mail (spec §13.3 "nama pengirim + templat e-mail"; `PUT settings/email`): the sender's display name
@@ -90,6 +91,11 @@ function EmailSettingsForm({ initial, canManage }: { initial: EmailSettings; can
   const { errors, isDirty, isSubmitting } = form.formState;
   useDirtyGuard(isDirty);
   const readOnly = !canManage;
+  const discard = (): void => {
+    form.reset();
+    setOutcome(null);
+    setProblem(null);
+  };
 
   const submit = form.handleSubmit(async (values) => {
     setProblem(null);
@@ -114,9 +120,9 @@ function EmailSettingsForm({ initial, canManage }: { initial: EmailSettings; can
   const language = (locale: Locale): string => t(`palette.language.${locale}`);
   const resetErrors = errors.templates?.passwordReset;
   return (
-    <form noValidate className="flex flex-col gap-6" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
-      <SideSection title={t('settings.tab.email')} intro={t('settings.email.description')}>
-        <Field label={t('settings.email.sender_name')} hint={t('settings.email.sender_name_hint')} error={errors.senderName} className="max-w-md">
+    <form noValidate className="grid gap-4" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
+      <SettingsSection title={t('settings.tab.email')} intro={t('settings.email.description')}>
+        <Field label={t('settings.email.sender_name')} hint={t('settings.email.sender_name_hint')} error={errors.senderName}>
           {(c) => (
             <Input
               {...c}
@@ -128,13 +134,11 @@ function EmailSettingsForm({ initial, canManage }: { initial: EmailSettings; can
             />
           )}
         </Field>
-      </SideSection>
-      <SideSection title={t('settings.email.reset_title')} intro={t('settings.email.reset_description')}>
-        <p className="text-sm text-muted-foreground">
-          {t('settings.email.placeholders', { placeholders: RESET_PLACEHOLDERS })}
-        </p>
+      </SettingsSection>
+      <SettingsSection title={t('settings.email.reset_title')} intro={t('settings.email.reset_description')}>
+        <p className={cn(SETTING_BLOCK, 'text-meta text-muted-foreground')}>{t('settings.email.placeholders', { placeholders: RESET_PLACEHOLDERS })}</p>
         {LOCALES.map((locale) => (
-          <fieldset key={locale} className="grid gap-4 border-t pt-4 first-of-type:border-t-0 first-of-type:pt-0">
+          <fieldset key={locale} className="contents">
             <legend className="sr-only">{language(locale)}</legend>
             <Field label={t('settings.email.subject', { language: language(locale) })} error={resetErrors?.[locale]?.subject}>
               {(c) => (
@@ -148,7 +152,7 @@ function EmailSettingsForm({ initial, canManage }: { initial: EmailSettings; can
                 />
               )}
             </Field>
-            <Field label={t('settings.email.body', { language: language(locale) })} error={resetErrors?.[locale]?.body}>
+            <Field wide label={t('settings.email.body', { language: language(locale) })} error={resetErrors?.[locale]?.body}>
               {(c) => (
                 <textarea
                   {...c}
@@ -163,8 +167,8 @@ function EmailSettingsForm({ initial, canManage }: { initial: EmailSettings; can
             </Field>
           </fieldset>
         ))}
-      </SideSection>
-      <SettingsFooter canManage={canManage} busy={isSubmitting} outcome={outcome} problem={problem} rootError={errors.root?.['server']?.message} />
+      </SettingsSection>
+      <SettingsFooter canManage={canManage} busy={isSubmitting} dirty={isDirty} onDiscard={discard} outcome={outcome} problem={problem} rootError={errors.root?.['server']?.message} />
     </form>
   );
 }

@@ -5,7 +5,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { SideSection } from '@/components/layout';
 import { CheckField, Field, Notice, ProblemAlert, RefetchProblem } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +14,7 @@ import { ApiError, api } from '@/lib/api';
 import { useDirtyGuard } from '@/lib/dirty-forms';
 import { FORM_PARSE, applyServerErrors, hasFieldErrors, problemText } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
-import { SettingsFooter, SettingsLoader, SettingsPage, saveSettings, wholeNumberIn, type SaveOutcome } from './library';
+import { SettingsFooter, SettingsLoader, SettingsPage, SettingsSection, saveSettings, wholeNumberIn, type SaveOutcome } from './library';
 
 /**
  * Pengaturan → Keamanan (spec §13.3 "kebijakan sandi, idle sesi, 2FA wajib per peran"):
@@ -56,6 +55,11 @@ function SecuritySettingsForm({ initial, canManage }: { initial: SecuritySetting
   const { errors, isDirty, isSubmitting } = form.formState;
   useDirtyGuard(isDirty);
   const readOnly = !canManage;
+  const discard = (): void => {
+    form.reset();
+    setOutcome(null);
+    setProblem(null);
+  };
 
   const submit = form.handleSubmit(async (values) => {
     setProblem(null);
@@ -78,8 +82,8 @@ function SecuritySettingsForm({ initial, canManage }: { initial: SecuritySetting
   });
 
   return (
-    <SideSection title={t('settings.security.policy_title')}>
-      <form noValidate className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
+    <SettingsSection title={t('settings.security.policy_title')}>
+      <form noValidate className="grid" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
         <Field
           label={t('settings.security.password_min_length')}
           hint={t('settings.security.password_min_length_hint', { min: PASSWORD_MIN.minValue ?? '', max: PASSWORD_MIN.maxValue ?? '' })}
@@ -114,18 +118,18 @@ function SecuritySettingsForm({ initial, canManage }: { initial: SecuritySetting
             />
           )}
         </Field>
-        <div className="grid gap-4 sm:col-span-2">
-          <SettingsFooter
-            canManage={canManage}
-            busy={isSubmitting}
-            outcome={outcome}
-            problem={problem}
-            rootError={errors.root?.['server']?.message}
-            note={t('settings.security.reauth_note')}
-          />
-        </div>
+        <SettingsFooter
+          canManage={canManage}
+          busy={isSubmitting}
+          dirty={isDirty}
+          onDiscard={discard}
+          outcome={outcome}
+          problem={problem}
+          rootError={errors.root?.['server']?.message}
+          note={t('settings.security.reauth_note')}
+        />
       </form>
-    </SideSection>
+    </SettingsSection>
   );
 }
 
@@ -218,11 +222,11 @@ function RoleMfaList() {
   }
 
   return (
-    <SideSection title={t('settings.security.mfa_title')} intro={t('settings.security.mfa_description')}>
+    <SettingsSection title={t('settings.security.mfa_title')} intro={t('settings.security.mfa_description')}>
       {notice !== null && <Notice kind={notice.kind}>{notice.text}</Notice>}
       {canRead && <RefetchProblem query={roles} />}
       {content}
-    </SideSection>
+    </SettingsSection>
   );
 }
 
