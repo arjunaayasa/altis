@@ -406,25 +406,25 @@ export function SystemHealth() {
           name="update"
           to="/admin/updates"
           title={t('dashboard.update.title')}
-          detail={update.checkedAt === null ? t('dashboard.health.update.never') : t('dashboard.health.update.checked', { at: dateTime(update.checkedAt) })}>
+          detail={update.checkedAt === null ? t('dashboard.home.health.update.never') : t('dashboard.home.health.update.checked', { at: dateTime(update.checkedAt) })}>
           {update.available !== null ? (
-            <HealthState tone={update.entitled ? 'warn' : 'bad'}>{t('dashboard.health.update.available', { version: update.available.version })}</HealthState>
+            <HealthState tone={update.entitled ? 'warn' : 'bad'}>{t('dashboard.home.health.update.available', { version: update.available.version })}</HealthState>
           ) : update.checkedAt === null ? (
             <Button asChild variant="outline" size="sm">
-              <Link to="/admin/updates" aria-label={t('dashboard.health.update.check_label')}>
-                {t('dashboard.health.update.check')}
+              <Link to="/admin/updates" aria-label={t('dashboard.home.health.update.check_label')}>
+                {t('dashboard.home.health.update.check')}
               </Link>
             </Button>
           ) : (
-            <HealthState tone="ok">{t('dashboard.health.update.current')}</HealthState>
+            <HealthState tone="ok">{t('dashboard.home.health.update.current')}</HealthState>
           )}
         </HealthRow>,
       );
     }
     if (queue !== null) {
       rows.push(
-        <HealthRow key="queue" name="queue" to="/admin/jobs" title={t('dashboard.queue.title')} detail={t('dashboard.health.queue.detail', { queued: queue.queued, running: queue.running })}>
-          {queue.dead > 0 ? <HealthState tone="warn">{t('dashboard.health.queue.dead', { count: queue.dead })}</HealthState> : <HealthState tone="ok">{t('dashboard.health.queue.ok')}</HealthState>}
+        <HealthRow key="queue" name="queue" to="/admin/jobs" title={t('dashboard.queue.title')} detail={t('dashboard.home.health.queue.detail', { queued: queue.queued, running: queue.running })}>
+          {queue.dead > 0 ? <HealthState tone="warn">{t('dashboard.home.health.queue.dead', { count: queue.dead })}</HealthState> : <HealthState tone="ok">{t('dashboard.home.health.queue.ok')}</HealthState>}
         </HealthRow>,
       );
     }
@@ -436,7 +436,7 @@ export function SystemHealth() {
           to="/admin/jobs/schedules"
           title={t('dashboard.scheduler.title')}
           detail={t('dashboard.scheduler.schedules', { enabled, total: scheduler.schedules.length })}>
-          {stale ? <HealthState tone="bad">{t('dashboard.health.scheduler.stale')}</HealthState> : <HealthState tone="ok">{t('dashboard.health.scheduler.ok')}</HealthState>}
+          {stale ? <HealthState tone="bad">{t('dashboard.home.health.scheduler.stale')}</HealthState> : <HealthState tone="ok">{t('dashboard.home.health.scheduler.ok')}</HealthState>}
         </HealthRow>,
       );
     }
@@ -446,11 +446,11 @@ export function SystemHealth() {
     <section aria-labelledby={headingId} className={cn(CARD, 'flex flex-col self-start')} data-system-health="">
       <CardHead
         id={headingId}
-        title={t('dashboard.health.title')}
+        title={t('dashboard.home.health.title')}
         description={data === undefined ? undefined : `ALTIS ${data.version.current} · ${editionName(t, data.edition.edition)}`}
         aside={
           <Link to="/admin/about" className="font-semibold text-accent-text underline-offset-4 hover:underline">
-            {t('dashboard.health.detail')}
+            {t('dashboard.home.health.detail')}
           </Link>
         }
         className={body === null ? 'border-b-0' : undefined}
