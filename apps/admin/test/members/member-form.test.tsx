@@ -109,8 +109,13 @@ describe('Anggota baru', () => {
     expect(app.requests.filter((r) => r.method === 'POST')).toHaveLength(0);
 
     fireEvent.change(screen.getByLabelText('Nomor anggota'), { target: { value: 'b 001' } });
-    await screen.findByRole('option', { name: 'SISWA — Siswa' });
-    fireEvent.change(screen.getByLabelText('Tipe anggota'), { target: { value: TYPE_ID } });
+    // A short list of types is a group of radio buttons, each with what the type allows; none is chosen for the user.
+    const typeGroup = await screen.findByRole('group', { name: 'Tipe anggota' });
+    const siswa = within(typeGroup).getByRole('radio', { name: /^Siswa/ }) as HTMLInputElement;
+    expect(siswa.checked).toBe(false);
+    expect(siswa.closest('label')?.textContent).toBe('Siswa3 eksemplar · berlaku 365 hari');
+    expect(screen.queryByRole('combobox', { name: 'Tipe anggota' })).toBeNull();
+    fireEvent.click(siswa);
     fireEvent.change(screen.getByLabelText('Nama'), { target: { value: '  Siti Aminah ' } });
     fireEvent.change(screen.getByLabelText('Kelas'), { target: { value: '8B' } });
     // Gender has no default: "Tidak diisi" is the one checked.
@@ -128,6 +133,123 @@ describe('Anggota baru', () => {
     expect(body).toMatchObject({ memberNo: 'b 001', memberTypeId: TYPE_ID, name: 'Siti Aminah', className: '8B', gender: null, homeBranchId: null, locale: 'id' });
     expect(body).not.toHaveProperty('joinedOn');
     expect(body).not.toHaveProperty('expiresOn');
+  });
+});
+
+describe('Anggota baru: the type list, the order of the sections, the card preview and the possible duplicates', () => {
+  const type = (k: number): MemberTypeView => ({ ...SISWA, id: `01JZ00000000000000000000T${k}`, code: `T${k}`, nameId: `Tipe ${k}`, nameEn: null, sortOrder: k });
+  const DUP_ID = '01JZ0000000000000000000D01';
+
+  function open(o: { types?: MemberTypeView[]; me?: ReturnType<typeof adminMe>; duplicates?: (body: unknown) => unknown } = {}) {
+    return startApp({
+      me: o.me ?? adminMe(),
+      path: '/admin/anggota/baru',
+      routes: {
+        'GET members/types': () => ({ items: o.types ?? [SISWA] }),
+        'GET branches': () => ({ items: [BRANCH] }),
+        'POST members/duplicates': (req) => (o.duplicates ?? (() => ({ items: [] })))(req.body),
+        'POST members': () => new Response(JSON.stringify({ id: NEW_ID, version: 1 }), { status: 201, headers: { 'Content-Type': 'application/json', 'X-Altis-Build': '0.1.0' } }),
+        'GET members/:id': () => CREATED,
+        'GET members/:id/events': () => ({ items: [], nextCursor: null }),
+      },
+    });
+  }
+
+  it('six types are radio buttons with the loan period of their rule; seven are a select', async () => {
+    const withRule: MemberTypeView = { ...SISWA, loanRule: { policyId: 'P1', code: 'UMUM', loanDays: 7, renewLimit: 1, loanable: true, others: 0 }, membershipDays: null, loanLimit: null };
+    const six = [withRule, ...[2, 3, 4, 5, 6].map(type)];
+    const first = open({ types: six });
+    const group = await screen.findByRole('group', { name: 'Tipe anggota' });
+    expect(within(group).getAllByRole('radio')).toHaveLength(6);
+    expect(within(group).getByRole('radio', { name: /^Siswa/ }).closest('label')?.textContent).toBe('SiswaTanpa batas · 7 hari · Tanpa kedaluwarsa');
+    // One group for the keyboard: the radios share a name, so the arrow keys move within it.
+    expect(new Set(within(group).getAllByRole('radio').map((r) => (r as HTMLInputElement).name))).toEqual(new Set(['memberTypeId']));
+    first.queryClient.setQueryData(['members', 'types', { includeArchived: false }], { items: [...six, type(7)] });
+    const select = (await screen.findByRole('combobox', { name: 'Tipe anggota' })) as HTMLSelectElement;
+    expect(select.options).toHaveLength(8);
+    expect(screen.queryByRole('group', { name: 'Tipe anggota' })).toBeNull();
+  });
+
+  it('the sections run Data diri, Kontak, Keanggotaan, Catatan internal', async () => {
+    open();
+    await screen.findByRole('group', { name: 'Tipe anggota' });
+    const form = screen.getByLabelText('Nama').closest('form') as HTMLElement;
+    const titles = within(form)
+      .getAllByRole('heading')
+      .map((h) => h.textContent);
+    expect(titles.filter((x) => ['Data diri', 'Kontak', 'Keanggotaan', 'Catatan internal'].includes(x ?? ''))).toEqual(['Data diri', 'Kontak', 'Keanggotaan', 'Catatan internal']);
+  });
+
+  it('the card preview carries the number as a Code 128 barcode once it can be one', async () => {
+    open();
+    await screen.findByRole('group', { name: 'Tipe anggota' });
+    const preview = document.querySelector('[data-card-preview]') as HTMLElement;
+    expect(preview.querySelector('[data-card-barcode]')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Nomor anggota'), { target: { value: 'S-1114' } });
+    const barcode = await within(preview).findByRole('img', { name: 'Barkod nomor anggota S-1114' });
+    // The bars are the modules of the shared encoder (the one the printed card uses), with a quiet zone of 10 on each side.
+    const { code128Modules } = await import('@altis/shared');
+    const modules = code128Modules('S-1114');
+    expect(barcode.getAttribute('viewBox')).toBe(`0 0 ${modules.length + 20} 24`);
+    const dark = [...barcode.querySelectorAll('rect')].reduce((n, r) => n + Number(r.getAttribute('width')), 0);
+    expect(dark).toBe(modules.filter(Boolean).length);
+    // A number Code 128 cannot hold: no barcode (the field says what is wrong when saved).
+    fireEvent.change(screen.getByLabelText('Nomor anggota'), { target: { value: 'Sé-1' } });
+    await waitFor(() => expect(preview.querySelector('[data-card-barcode]')).toBeNull());
+  });
+
+  it('possible duplicates: asked with the name and birth date or the phone, listed with links, and never in the way of saving', async () => {
+    const asked: unknown[] = [];
+    const app = open({
+      duplicates: (body) => {
+        asked.push(body);
+        return { items: [{ id: DUP_ID, memberNo: 'S-001', name: 'Siti Aminah', match: ['name_birth', 'phone'] }] };
+      },
+    });
+    const card = await screen.findByRole('region', { name: 'Kemungkinan duplikat' });
+    expect(within(card).getByText(/^Setelah nama dan tanggal lahir, atau nomor telepon, diisi/)).toBeTruthy();
+    // A name alone asks nothing.
+    fireEvent.change(screen.getByLabelText('Nama'), { target: { value: ' Siti Aminah ' } });
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(asked).toEqual([]);
+    fireEvent.change(screen.getByLabelText('Tanggal lahir'), { target: { value: '2012-05-06' } });
+    fireEvent.change(screen.getByLabelText('Telepon'), { target: { value: '0811-111' } });
+    const link = await within(card).findByRole('link', { name: /S-001 · Siti Aminah/ }, { timeout: 3000 });
+    // One request for the two changes made in a row, with what was typed and nothing else.
+    expect(asked).toEqual([{ name: 'Siti Aminah', birthDate: '2012-05-06', phone: '0811-111' }]);
+    expect(link.getAttribute('href')).toBe(`/admin/anggota/${DUP_ID}`);
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(within(card).getByText('1 anggota mungkin orang yang sama')).toBeTruthy();
+    expect(within(card).getByText('Nama dan tanggal lahir sama · Nomor telepon sama')).toBeTruthy();
+    expect(within(card).getByRole('status').contains(link)).toBe(true);
+
+    // The save goes through all the same.
+    fireEvent.change(screen.getByLabelText('Nomor anggota'), { target: { value: 'B 002' } });
+    fireEvent.click(within(screen.getByRole('group', { name: 'Tipe anggota' })).getByRole('radio', { name: /^Siswa/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Simpan' }));
+    await waitFor(() => expect(app.requests.filter((r) => r.method === 'POST' && r.path === 'members')).toHaveLength(1));
+  });
+
+  it('possible duplicates: none found says so; a failed check says the member can still be saved', async () => {
+    let fail = false;
+    open({ duplicates: () => (fail ? problem(500, 'INTERNAL') : { items: [] }) });
+    const card = await screen.findByRole('region', { name: 'Kemungkinan duplikat' });
+    fireEvent.change(screen.getByLabelText('Telepon'), { target: { value: '0811-111' } });
+    expect(await within(card).findByText('Tidak ada anggota dengan nama dan tanggal lahir, atau nomor telepon, yang sama.', undefined, { timeout: 3000 })).toBeTruthy();
+    fail = true;
+    fireEvent.change(screen.getByLabelText('Telepon'), { target: { value: '0811-112' } });
+    expect(await within(card).findByText('Pemeriksaan duplikat gagal dimuat. Anggota tetap bisa disimpan.', undefined, { timeout: 3000 })).toBeTruthy();
+  });
+
+  it('possible duplicates are not asked for, nor shown, without members.records.read', async () => {
+    const me = adminMe();
+    if (me.authenticated) me.permissions = me.permissions.filter((p) => p !== 'members.records.read');
+    const app = open({ me });
+    await screen.findByRole('group', { name: 'Tipe anggota' });
+    fireEvent.change(screen.getByLabelText('Telepon'), { target: { value: '0811-111' } });
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(screen.queryByRole('region', { name: 'Kemungkinan duplikat' })).toBeNull();
+    expect(app.requests.filter((r) => r.path === 'members/duplicates')).toEqual([]);
   });
 });
 
@@ -183,10 +305,10 @@ describe('the member page form', () => {
         'GET members/:id/events': () => ({ items: [], nextCursor: null }),
       },
     });
+    // Until the types are in, the field is the select with its placeholder; then the member's type is the one chosen.
     await screen.findByLabelText('Tipe anggota');
     answer();
-    await waitFor(() => expect(screen.getByLabelText<HTMLSelectElement>('Tipe anggota').options.length).toBe(2));
-    await waitFor(() => expect(screen.getByLabelText<HTMLSelectElement>('Tipe anggota').value).toBe(TYPE_ID));
+    await waitFor(() => expect((within(screen.getByRole('group', { name: 'Tipe anggota' })).getByRole('radio', { name: /^Siswa/ }) as HTMLInputElement).checked).toBe(true));
     expect(screen.getByLabelText<HTMLSelectElement>('Cabang asal').value).toBe(BRANCH.id);
     // Putting the values back changed nothing the user typed.
     expect(screen.queryByText('Ada perubahan yang belum disimpan.')).toBeNull();

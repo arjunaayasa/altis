@@ -1,5 +1,6 @@
 import { useId, type ComponentProps, type ReactNode } from 'react';
 import { PageError } from '@/components/layout/callout';
+import { SETTING_ROW, useSettingRows } from '@/components/layout/setting-row';
 import { TAG_SHAPE, TAG_TONE, TONE_SURFACE, TONE_TEXT } from '@/components/layout/status';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -52,6 +53,7 @@ export function Field({
   hint,
   error,
   className,
+  wide = false,
   children,
 }: {
   id?: string;
@@ -59,6 +61,8 @@ export function Field({
   hint?: string;
   error?: FieldErrorLike;
   className?: string;
+  /** As a row of a settings card: the control under its label, across the card (a long text, a list). */
+  wide?: boolean;
   children: ReactNode | ((control: FieldControl) => ReactNode);
 }) {
   const t = useT();
@@ -67,6 +71,38 @@ export function Field({
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
   const message = fieldErrorText(t, typeof error === 'string' ? { message: error } : error);
+  const asRow = useSettingRows();
+  if (asRow) {
+    // A row of a settings card: the same label, ids and messages, the label and the hint on the left.
+    return (
+      <div data-slot="setting-row" className={cn(SETTING_ROW, wide && 'lg:grid-cols-1')}>
+        <div className="min-w-0">
+          <label htmlFor={id} className="block font-semibold">
+            {label}
+          </label>
+          {hint !== undefined && (
+            <p id={hintId} className="text-meta text-muted-foreground">
+              {hint}
+            </p>
+          )}
+        </div>
+        <div className="grid min-w-0 gap-1.5">
+          {typeof children === 'function'
+            ? children({
+                id,
+                'aria-invalid': message === undefined ? undefined : true,
+                'aria-describedby': joinIds(message !== undefined && errorId, hint !== undefined && hintId),
+              })
+            : children}
+          {message !== undefined && (
+            <p id={errorId} className="text-meta font-semibold text-bad">
+              {message}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={cn('grid content-start gap-1.5', className)}>
       <Label htmlFor={id} className="text-meta leading-snug">
@@ -107,6 +143,32 @@ export function CheckField({
 }: Omit<ComponentProps<'input'>, 'type' | 'role'> & { label: string; hint?: string; asSwitch?: boolean }) {
   const id = useId();
   const hintId = `${id}-hint`;
+  const asRow = useSettingRows();
+  if (asRow) {
+    // A row of a settings card: the name and the hint on the left, the box on the right.
+    return (
+      <div data-slot="setting-row" className={cn(SETTING_ROW, 'grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_auto]')}>
+        <div className="min-w-0">
+          <label htmlFor={id} className="block font-semibold">
+            {label}
+          </label>
+          {hint !== undefined && (
+            <p id={hintId} className="text-meta text-muted-foreground">
+              {hint}
+            </p>
+          )}
+        </div>
+        <input
+          {...input}
+          id={id}
+          type="checkbox"
+          role={asSwitch ? 'switch' : undefined}
+          aria-describedby={joinIds(hint !== undefined && hintId, input['aria-describedby'])}
+          className="size-4 shrink-0 accent-primary focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      </div>
+    );
+  }
   return (
     <div className={cn('grid gap-1', className)}>
       <div className="flex items-start gap-2">

@@ -65,8 +65,8 @@ test('Anggota: a member added through the form and three imported from a CSV sho
     await expect(page.getByRole('heading', { level: 1, name: T('members.new.title'), exact: true })).toBeVisible();
 
     await page.getByLabel(T('members.field.member_no'), { exact: true }).fill(added.no);
-    // The seeded types are listed as "<code> — <name>".
-    await page.getByLabel(T('members.field.type'), { exact: true }).selectOption({ label: 'UMUM — Umum' });
+    // The few seeded types are radio buttons, each named by the type and what it allows.
+    await page.getByRole('group', { name: T('members.field.type'), exact: true }).getByRole('radio', { name: /^Umum/ }).check();
     await page.getByLabel(T('members.field.name'), { exact: true }).fill(added.name);
     await page.getByLabel(T('members.field.email'), { exact: true }).fill(added.email);
     await page.getByRole('button', { name: T('form.save'), exact: true }).click();

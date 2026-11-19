@@ -83,7 +83,7 @@ describe('FilterTabs', () => {
     render(<FilterTabs label="Saringan cantuman" items={items} value="all" onChange={onChange} />);
     const nav = screen.getByRole('navigation', { name: 'Saringan cantuman' });
     const tabs = within(nav).getAllByRole('button');
-    expect(tabs.map((b) => b.textContent)).toEqual(['Semua28', 'Tanpa sampul3', 'Draf']);
+    expect(tabs.map((b) => b.textContent)).toEqual(['Semua 28', 'Tanpa sampul 3', 'Draf']);
     expect(tabs.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false']);
     expect(classes(tabs[0]!)).toContain('border-primary');
     expect(classes(tabs[1]!)).not.toContain('border-primary');

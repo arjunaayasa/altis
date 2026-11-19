@@ -84,16 +84,15 @@ describe('the numbers of today', () => {
     expect([figure('returned').textContent, figure('returned').getAttribute('href')]).toEqual(['Dikembalikan hari ini9Minggu lalu 1.234', '/admin/layanan/kembali']);
     expect([figure('overdue').textContent, figure('overdue').getAttribute('href')]).toEqual(['Pinjaman terlambat32 anggota', '/admin/layanan/terlambat']);
     expect([figure('visits').textContent, figure('visits').getAttribute('href')]).toEqual(['Kunjungan hari ini1.234dari buku tamu', '/admin/layanan/kunjungan']);
-    // Four figures at most: the active members stay in the library's statistics below.
+    // Four figures at most: the active members are a figure of the library's statistics on the reports page.
     expect(figure('active_members')).toBeNull();
     expect(strip.querySelectorAll('[data-figure]')).toHaveLength(4);
     expect(requests.find((r) => r.path === 'branches/B1/dashboard')).toBeDefined();
-    // The holds ready for pickup are a line of "Perlu perhatian"; today's visits are a figure of the visits card.
+    // The holds ready for pickup are a line of "Perlu perhatian"; today's visits are a figure of the strip only (the
+    // visits card with the month and the year is on the reports page).
     const attention = screen.getByRole('region', { name: 'Perlu perhatian' });
     expect(within(attention).getByRole('link', { name: 'Reservasi siap diambil 2' }).getAttribute('href')).toBe('/admin/layanan/rak-tunggu');
-    const visits = await screen.findByRole('region', { name: 'Kunjungan' });
-    await waitFor(() => expect(within(visits).getByText('1.234')).toBeTruthy());
-    expect(within(visits).getByText('Kunjungan hari ini')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Statistik perpustakaan' })).toBeNull();
     expect(requests.filter((r) => r.path === 'visits/summary').map((r) => r.query.get('branchId'))).toEqual([null]);
   });
 
@@ -145,7 +144,7 @@ describe('the numbers of today', () => {
       path: '/admin',
       routes: { 'GET dashboard': () => DASHBOARD, 'GET branches': () => ({ items: [BRANCH] }), 'GET dashboard/library': () => ({ ...LIBRARY, members: null, loans: null }) },
     });
-    await screen.findByRole('group', { name: 'Dasbor sistem' });
+    await within(await screen.findByRole('region', { name: 'Kesehatan sistem' })).findByText(/^ALTIS /);
     expect(screen.queryByRole('region', { name: 'Angka hari ini' })).toBeNull();
   });
 });

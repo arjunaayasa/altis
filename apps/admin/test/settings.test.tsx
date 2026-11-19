@@ -9,7 +9,7 @@ import type {
   SecuritySettings,
   SettingsView,
 } from '@altis/shared/api/settings';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ROLES, ROLE_ADMIN, ROLE_LIBRARIAN, adminMe, problem, signedIn, startApp, superMe, type FakeHandler, type FakeRequest } from './fake-api';
 
@@ -290,5 +290,110 @@ describe('settings: OPAC', () => {
     fireEvent.change(accent, { target: { value: 'blue' } });
     fireEvent.click(screen.getByRole('button', { name: 'Simpan' }));
     await waitFor(() => expect(store.puts).toEqual([{ group: 'opac', body: { accent: 'blue' } }]));
+  });
+});
+
+describe('settings: one bar saves the page, a row per setting, and leaving with changes asks first', () => {
+  const saveButtons = (): HTMLElement[] => screen.getAllByRole('button', { name: 'Simpan' });
+  const bar = (): HTMLElement => document.querySelector('[data-slot="save-bar"]') as HTMLElement;
+
+  it('a page with several forms has one save button; it saves the forms that changed, each with its own PUT', async () => {
+    const store = settingsStore();
+    startApp({ me: adminMe(), path: '/admin/settings/circulation', routes: store.routes });
+    const minutes = (await screen.findByLabelText('Batas waktu membatalkan pinjaman (menit)')) as HTMLInputElement;
+    const pickup = (await screen.findByLabelText('Lama menunggu di rak tunggu (hari)')) as HTMLInputElement;
+    await screen.findByLabelText('Awalan nomor');
+    // One bar, with the only "Simpan" and "Buang" of the page, and nothing to say yet.
+    expect(saveButtons()).toHaveLength(1);
+    expect(bar().contains(saveButtons()[0]!)).toBe(true);
+    const discard = screen.getByRole('button', { name: 'Buang' }) as HTMLButtonElement;
+    expect(discard.disabled).toBe(true);
+    expect(bar().textContent).not.toContain('belum disimpan');
+
+    fireEvent.change(minutes, { target: { value: '15' } });
+    fireEvent.change(pickup, { target: { value: '5' } });
+    await waitFor(() => expect(bar().textContent).toContain('Ada perubahan yang belum disimpan.'));
+    expect(discard.disabled).toBe(false);
+    fireEvent.click(saveButtons()[0]!);
+    await waitFor(() => expect(store.puts).toHaveLength(2));
+    // Only the two forms that changed were sent, each with only what changed.
+    expect(store.puts).toEqual(
+      expect.arrayContaining([
+        { group: 'circulation', body: { loanVoidMinutes: 15 } },
+        { group: 'circulation', body: { holds: { pickupDays: 5 } } },
+      ]),
+    );
+    await waitFor(() => expect(screen.getAllByText('Perubahan disimpan.')).toHaveLength(2));
+    await waitFor(() => expect(bar().textContent).not.toContain('belum disimpan'));
+  });
+
+  it('"Buang" puts back what was loaded and sends nothing', async () => {
+    const store = settingsStore();
+    startApp({ me: adminMe(), path: '/admin/settings/circulation', routes: store.routes });
+    const minutes = (await screen.findByLabelText('Batas waktu membatalkan pinjaman (menit)')) as HTMLInputElement;
+    const prefix = (await screen.findByLabelText('Awalan nomor')) as HTMLInputElement;
+    fireEvent.change(minutes, { target: { value: '15' } });
+    fireEvent.change(prefix, { target: { value: 'XX' } });
+    await waitFor(() => expect(bar().textContent).toContain('Ada perubahan yang belum disimpan.'));
+    fireEvent.click(screen.getByRole('button', { name: 'Buang' }));
+    await waitFor(() => expect(minutes.value).toBe('10'));
+    expect(prefix.value).toBe('BP');
+    await waitFor(() => expect(bar().textContent).not.toContain('belum disimpan'));
+    expect(store.puts).toEqual([]);
+  });
+
+  it('each setting is a row of its card: the name and the hint beside the control, still its label and description', async () => {
+    const store = settingsStore();
+    startApp({ me: adminMe(), path: '/admin/settings', routes: store.routes });
+    const name = (await screen.findByLabelText('Nama perpustakaan')) as HTMLInputElement;
+    const card = screen.getByRole('region', { name: 'Profil perpustakaan' });
+    const row = name.closest('[data-slot="setting-row"]') as HTMLElement;
+    expect(card.contains(row)).toBe(true);
+    expect(card.querySelectorAll('[data-slot="setting-row"]').length).toBeGreaterThanOrEqual(5);
+    const locale = screen.getByLabelText('Bahasa bawaan');
+    const hint = document.getElementById(locale.getAttribute('aria-describedby') ?? '');
+    expect(hint?.textContent).not.toBe('');
+    expect(locale.closest('[data-slot="setting-row"]')?.contains(hint)).toBe(true);
+    // A refused value says so in its row.
+    fireEvent.change(name, { target: { value: '' } });
+    fireEvent.click(saveButtons()[0]!);
+    await waitFor(() => expect(name.getAttribute('aria-invalid')).toBe('true'));
+    expect(row.contains(document.getElementById((name.getAttribute('aria-describedby') ?? '').split(' ')[0] ?? ''))).toBe(true);
+    expect(store.puts).toEqual([]);
+  });
+
+  it('going to another group with unsaved changes asks first: staying keeps what was typed, leaving drops it', async () => {
+    const store = settingsStore();
+    const { router } = startApp({ me: adminMe(), path: '/admin/settings', routes: store.routes });
+    const name = (await screen.findByLabelText('Nama perpustakaan')) as HTMLInputElement;
+    fireEvent.change(name, { target: { value: 'Perpustakaan Baru' } });
+    await waitFor(() => expect(bar().textContent).toContain('Ada perubahan yang belum disimpan.'));
+    const groups = screen.getByRole('navigation', { name: 'Bagian pengaturan' });
+    fireEvent.click(within(groups).getByRole('link', { name: 'E-mail' }));
+    const dialog = await screen.findByRole('alertdialog', { name: 'Perubahan belum disimpan' });
+    expect(router.state.location.pathname).toBe('/admin/settings');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Batal' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(router.state.location.pathname).toBe('/admin/settings');
+    expect((screen.getByLabelText('Nama perpustakaan') as HTMLInputElement).value).toBe('Perpustakaan Baru');
+
+    fireEvent.click(within(groups).getByRole('link', { name: 'E-mail' }));
+    fireEvent.click(within(await screen.findByRole('alertdialog', { name: 'Perubahan belum disimpan' })).getByRole('button', { name: 'Pindah tanpa menyimpan' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/settings/email'));
+    await screen.findByLabelText('Nama pengirim');
+    expect(store.puts).toEqual([]);
+    // Without changes the move is not questioned.
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Bagian pengaturan' })).getByRole('link', { name: 'Keamanan' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/settings/security'));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('with system.settings.read only there is no bar', async () => {
+    const store = settingsStore();
+    startApp({ me: signedIn({ permissions: ['system.settings.read'] }), path: '/admin/settings/circulation', routes: store.routes });
+    await screen.findByLabelText('Batas waktu membatalkan pinjaman (menit)');
+    await screen.findByLabelText('Awalan nomor');
+    expect(screen.queryByRole('button', { name: 'Simpan' })).toBeNull();
+    expect(document.querySelector('[data-slot="save-bar"]')).toBeNull();
   });
 });

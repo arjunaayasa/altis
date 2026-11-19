@@ -22,6 +22,7 @@ import {
   DuplicateCheckBody,
   MergeBody,
   RecordCreateBody,
+  RecordCountsQuery,
   RecordListQuery,
   RecordPatchBody,
 } from '../src/api/catalog/records.js';
@@ -407,6 +408,18 @@ describe('records', () => {
     expect(ok(RecordListQuery, { page: '51' })).toBe(false);
     expect(ok(RecordListQuery, { hidden: 'all' })).toBe(false);
     expect(ok(RecordListQuery, { foo: '1' })).toBe(false);
+  });
+
+  it('the counts query reads the filters of the list as text, and nothing else', () => {
+    expect(RecordCountsQuery.parse({ archived: 'true', hasItems: '0', hidden: 'only', changedTo: '1700000000000' })).toEqual({
+      archived: true,
+      hasItems: false,
+      hidden: 'only',
+      changedTo: 1_700_000_000_000,
+    });
+    expect(RecordCountsQuery.parse({})).toEqual({});
+    for (const extra of [{ q: 'atlas' }, { sort: 'title' }, { page: '2' }, { limit: '5' }, { cursor: 'c.1.X' }]) expect(ok(RecordCountsQuery, extra)).toBe(false);
+    expect(ok(RecordCountsQuery, { materialTypeId: 'BUKU' })).toBe(false);
   });
 
   it('merge, cover and the duplicate check', () => {

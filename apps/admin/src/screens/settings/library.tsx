@@ -10,17 +10,19 @@ import {
 } from '@altis/shared/api/settings';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Field, NoticeAlert, ProblemAlert, RefetchProblem, RootError, SELECT_CLASS, TEXTAREA_CLASS } from '@/components/form-field';
-import { ErrorState, FORM_FULL, FormBar, LinkTabs, LoadingState, PageHead, SideSection } from '@/components/layout';
+import { ConfirmDialog } from '@/components/confirm-dialog';
+import { Card, ErrorState, FormBar, LinkTabs, LoadingState, PageHead, SETTING_BLOCK, SaveBar, SettingRowsScope, useSettingRows } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT, type AdminKey } from '@/i18n';
 import { holds } from '@/lib/access';
 import { api } from '@/lib/api';
 import { useDirtyGuard } from '@/lib/dirty-forms';
+import { useUnsavedNavigationQuestion } from '@/lib/dirty-navigation';
 import { FORM_PARSE, applyServerErrors, hasFieldErrors } from '@/lib/form-errors';
 import { useApiQuery, useMe } from '@/lib/me';
 import { refreshMe } from '@/lib/sign-in';
@@ -35,6 +37,12 @@ import { refreshMe } from '@/lib/sign-in';
  *   over from what the server now stores ({@link saveSettings}).
  * - A form sends only the fields that differ from what was loaded (a key left out keeps its value, `null` clears a
  *   text back to its default).
+ * - A group is drawn as cards ({@link SettingsSection}), one setting per row: its name and a sentence on the left, its
+ *   control on the right. Its forms share one bar that stays at the bottom of the window ({@link SettingsPage}):
+ *   "Simpan" saves every form of the group that holds changes (all of them when none does, so each says that nothing
+ *   changed), "Buang" puts back what was loaded. Enter in a field still saves that field's own form.
+ * - Going to another group, or anywhere else in the admin, while a form holds unsaved changes asks first
+ *   (lib/dirty-navigation.ts); closing the tab is the browser's own question.
  * - Reading needs `system.settings.read`; without `system.settings.manage` the fields are shown disabled and there
  *   is no save button (the server refuses the PUT anyway). `PUT settings/security` asks for the password first: the
  *   API client opens the reauth dialog.
@@ -56,20 +64,84 @@ const SECTIONS: readonly { to: string; labelKey: AdminKey }[] = [
   { to: '/admin/settings/privasi', labelKey: 'visits.settings.privacy_tab' },
 ];
 
+/** One form of the page, as the page's save bar knows it. */
+interface SettingsFormHandle {
+  dirty: boolean;
+  busy: boolean;
+  /** Submits the form (its own checks, its own `PUT`). */
+  save(): void;
+  /** Puts back what was loaded. */
+  discard(): void;
+}
+
+/** The forms of the settings page being shown; null outside a {@link SettingsPage} (a form then keeps its own button). */
+const SettingsForms = createContext<{ register(id: string, form: SettingsFormHandle | null): void } | null>(null);
+
 /**
  * The frame of the settings pages: the page head, the links between the groups (a list down the left on a wide
- * screen, one line of links under the head on a narrow one; the current group marked) and the page's parts.
+ * screen, one line of links under the head on a narrow one; the current group marked), the group's cards, and one
+ * bar at the bottom of the window for every form of the group (see the top of this file).
  */
 export function SettingsPage({ children }: { children: ReactNode }) {
   const t = useT();
+  const [forms, setForms] = useState<ReadonlyMap<string, SettingsFormHandle>>(new Map());
+  const register = useCallback((id: string, form: SettingsFormHandle | null) => {
+    setForms((prev) => {
+      const next = new Map(prev);
+      if (form === null) next.delete(id);
+      else next.set(id, form);
+      return next;
+    });
+  }, []);
+  const scope = useMemo(() => ({ register }), [register]);
+  const question = useUnsavedNavigationQuestion();
+  const all = [...forms.values()];
+  const dirty = all.filter((f) => f.dirty);
+  const busy = all.some((f) => f.busy);
   return (
     <div className="grid gap-4">
       <PageHead title={t('nav.settings')} intro={t('settings.intro')} />
       <div className="grid items-start gap-4 lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-6">
         <LinkTabs side label={t('settings.sections')} items={SECTIONS.map((section) => ({ to: section.to, label: t(section.labelKey) }))} />
-        <div className="grid max-w-4xl min-w-0 gap-4">{children}</div>
+        <div className="grid max-w-4xl min-w-0 gap-4">
+          <SettingsForms.Provider value={scope}>{children}</SettingsForms.Provider>
+        </div>
       </div>
+      {all.length > 0 && (
+        <SaveBar message={dirty.length > 0 ? t('settings.unsaved') : undefined}>
+          <Button type="button" variant="ghost" disabled={busy || dirty.length === 0} onClick={() => dirty.forEach((f) => f.discard())}>
+            {t('settings.discard')}
+          </Button>
+          <Button type="button" disabled={busy} onClick={() => (dirty.length > 0 ? dirty : all).forEach((f) => f.save())}>
+            {t(busy ? 'form.saving' : 'form.save')}
+          </Button>
+        </SaveBar>
+      )}
+      <ConfirmDialog
+        open={question !== null}
+        destructive
+        title={t('settings.unsaved.title')}
+        description={t('settings.unsaved.body')}
+        confirmLabel={t('settings.unsaved.leave')}
+        onConfirm={async () => question?.leave()}
+        onClose={() => question?.stay()}
+      />
     </div>
+  );
+}
+
+/**
+ * A titled card of a settings page: its title and a sentence in the head, then its settings, one row each (a `Field`
+ * or a `CheckField` drawn inside is a row; anything else takes {@link SETTING_BLOCK} for the same rule and sides).
+ */
+export function SettingsSection({ title, intro, aside, children }: { title: string; intro?: ReactNode; aside?: ReactNode; children: ReactNode }) {
+  return (
+    <Card title={title} description={intro} aside={aside}>
+      {/* The first row's rule lies on the head's own. */}
+      <div data-slot="settings-rows" className="-mt-px grid min-w-0">
+        <SettingRowsScope>{children}</SettingRowsScope>
+      </div>
+    </Card>
   );
 }
 
@@ -128,12 +200,16 @@ export function SettingsLoader<G extends SettingsGroupName>({
 export type SaveOutcome = 'saved' | 'unchanged' | null;
 
 /**
- * The bottom of a settings form: its errors and outcome, and the save button (only for a user who may save).
- * `rootError` is the form's `root.server` message key.
+ * The end of a settings form: its errors and the outcome of its last save, in the form's card. Inside a
+ * {@link SettingsPage} the form is saved from the page's bar, which this registers the form with (`dirty`, and
+ * `onDiscard` to put back what was loaded); anywhere else it keeps a save button of its own. `rootError` is the
+ * form's `root.server` message key.
  */
 export function SettingsFooter({
   canManage,
   busy,
+  dirty,
+  onDiscard,
   outcome,
   problem,
   rootError,
@@ -141,25 +217,52 @@ export function SettingsFooter({
 }: {
   canManage: boolean;
   busy: boolean;
+  dirty: boolean;
+  onDiscard(): void;
   outcome: SaveOutcome;
   problem: unknown;
   rootError: string | undefined;
   note?: string;
 }) {
   const t = useT();
+  const id = useId();
+  const page = useContext(SettingsForms);
+  // Inside a card it is one more block of the card; after the cards of a form it stands on its own.
+  const inCard = useSettingRows();
+  const marker = useRef<HTMLSpanElement>(null);
+  const discard = useRef(onDiscard);
+  discard.current = onDiscard;
+  const register = page?.register;
+  useEffect(() => {
+    if (register === undefined || !canManage) return undefined;
+    register(id, {
+      dirty,
+      busy,
+      save: () => marker.current?.closest('form')?.requestSubmit(),
+      discard: () => discard.current(),
+    });
+    return () => register(id, null);
+  }, [register, id, canManage, dirty, busy]);
+  const said = rootError !== undefined || (problem !== null && problem !== undefined) || outcome !== null || (canManage && (note !== undefined || page === null));
   return (
     <>
-      <RootError message={rootError} />
-      <ProblemAlert error={problem} />
-      {outcome === 'saved' && <NoticeAlert tone="success">{t('form.saved')}</NoticeAlert>}
-      {outcome === 'unchanged' && <NoticeAlert>{t('settings.unchanged')}</NoticeAlert>}
-      {canManage && (
-        <FormBar>
-          <Button type="submit" disabled={busy}>
-            {t(busy ? 'form.saving' : 'form.save')}
-          </Button>
-          {note !== undefined && <p className="text-xs text-muted-foreground">{note}</p>}
-        </FormBar>
+      <span ref={marker} hidden />
+      {said && (
+        <div className={inCard ? SETTING_BLOCK : 'grid min-w-0 gap-3'} data-slot="settings-outcome">
+          <RootError message={rootError} />
+          <ProblemAlert error={problem} />
+          {outcome === 'saved' && <NoticeAlert tone="success">{t('form.saved')}</NoticeAlert>}
+          {outcome === 'unchanged' && <NoticeAlert>{t('settings.unchanged')}</NoticeAlert>}
+          {canManage && page !== null && note !== undefined && <p className="text-meta text-muted-foreground">{note}</p>}
+          {canManage && page === null && (
+            <FormBar className="border-t-0 pt-0">
+              <Button type="submit" disabled={busy}>
+                {t(busy ? 'form.saving' : 'form.save')}
+              </Button>
+              {note !== undefined && <p className="text-xs text-muted-foreground">{note}</p>}
+            </FormBar>
+          )}
+        </div>
       )}
     </>
   );
@@ -259,9 +362,9 @@ function LibrarySettingsForm({ initial, canManage }: { initial: LibrarySettings;
   });
 
   return (
-    <SideSection title={t('settings.tab.library')} intro={t('settings.library.description')}>
-      <form noValidate className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
-        <Field label={t('settings.library.name')} error={errors.name} className={FORM_FULL}>
+    <SettingsSection title={t('settings.tab.library')} intro={t('settings.library.description')}>
+      <form noValidate className="grid" onSubmit={(e) => void submit(e)} onChange={() => setOutcome(null)}>
+        <Field label={t('settings.library.name')} error={errors.name}>
           {(c) => <Input {...c} autoComplete="organization" maxLength={191} {...form.register('name')} disabled={readOnly} />}
         </Field>
         <Field label={t('settings.library.type')} error={errors.type}>
@@ -287,10 +390,10 @@ function LibrarySettingsForm({ initial, canManage }: { initial: LibrarySettings;
             </select>
           )}
         </Field>
-        <Field label={t('settings.library.address')} error={errors.address} className={FORM_FULL}>
+        <Field wide label={t('settings.library.address')} error={errors.address}>
           {(c) => <textarea {...c} className={TEXTAREA_CLASS} maxLength={1000} {...form.register('address')} disabled={readOnly} />}
         </Field>
-        <Field label={t('settings.library.timezone')} hint={t('branches.field.timezone_hint')} error={errors.timezone} className={FORM_FULL}>
+        <Field label={t('settings.library.timezone')} hint={t('branches.field.timezone_hint')} error={errors.timezone}>
           {(c) => (
             <>
               <Input {...c} list={zonesId} autoComplete="off" spellCheck={false} maxLength={64} {...form.register('timezone')} disabled={readOnly} />
@@ -302,17 +405,21 @@ function LibrarySettingsForm({ initial, canManage }: { initial: LibrarySettings;
             </>
           )}
         </Field>
-        <div className={`grid gap-4 ${FORM_FULL}`}>
-          <SettingsFooter
-            canManage={canManage}
-            busy={isSubmitting}
-            outcome={outcome}
-            problem={problem}
-            rootError={errors.root?.['server']?.message}
-          />
-        </div>
+        <SettingsFooter
+          canManage={canManage}
+          busy={isSubmitting}
+          dirty={isDirty}
+          onDiscard={() => {
+            form.reset();
+            setOutcome(null);
+            setProblem(null);
+          }}
+          outcome={outcome}
+          problem={problem}
+          rootError={errors.root?.['server']?.message}
+        />
       </form>
-    </SideSection>
+    </SettingsSection>
   );
 }
 

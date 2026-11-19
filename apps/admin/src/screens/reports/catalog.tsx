@@ -4,6 +4,7 @@ import { EmptyState, ErrorState, LoadingState, PageHead, Section, Tag } from '@/
 import { useLocale, useT, type TKey, type Translate } from '@/i18n';
 import { isMessageKey } from '@/lib/form-errors';
 import { useApiQuery } from '@/lib/me';
+import { LibraryStatistics } from '@/screens/dashboard-library';
 
 /**
  * Laporan, the report catalogue (`/admin/reports`; spec §6.3 "Kartu per modul"): `GET reports/catalog` lists the
@@ -11,7 +12,8 @@ import { useApiQuery } from '@/lib/me';
  * fixed order (Koleksi, then Akreditasi), each a titled part of the page listing its reports by title, one ruled line
  * each, with a link to the report's page. A tag says when a report holds personal data (its exports and downloads ask
  * for the password), when it is a document (made in the accreditation workspace) and when the user may preview it but
- * not export it.
+ * not export it. Above the cards stands "Statistik perpustakaan" (screens/dashboard-library.tsx): the library's
+ * figures of the year, one card per module the user reads.
  */
 
 /** The query of the catalogue, shared with a report's page. */
@@ -88,6 +90,7 @@ export function ReportsCatalogScreen() {
   return (
     <div className="grid gap-6">
       <PageHead title={t('reports.catalog.title')} intro={t('reports.catalog.description')} />
+      <LibraryStatistics />
       {catalog.isError && catalog.data === undefined ? (
         <ErrorState error={catalog.error} onRetry={() => void catalog.refetch()} retrying={catalog.isFetching} />
       ) : catalog.data === undefined ? (

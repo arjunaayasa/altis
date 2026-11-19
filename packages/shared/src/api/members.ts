@@ -237,6 +237,37 @@ export interface MemberClassesResponse {
   items: string[];
 }
 
+/** How many members `POST members/duplicates` answers with at most. */
+export const MEMBER_DUPLICATES_MAX = 5;
+
+/**
+ * `POST members/duplicates` (a POST read, `members.records.read`): the live members who may be the person being
+ * entered. A member matches when the name and the birth date are both the same (the name compared as the search
+ * compares it: case, accents and spacing aside), or when the phone number is exactly the same. A name without a birth
+ * date matches nobody. `excludeId` leaves the member being edited out. The answer never blocks a save.
+ */
+export const MemberDuplicatesBody = z.strictObject({
+  name: shortText(191).optional(),
+  birthDate: dateField.optional(),
+  phone: shortText(64).optional(),
+  excludeId: ulidField.optional(),
+});
+
+export type MemberDuplicatesBody = z.infer<typeof MemberDuplicatesBody>;
+
+/** One possible duplicate: who it is (number and name, nothing else) and what matched. */
+export interface MemberDuplicate {
+  id: string;
+  memberNo: string;
+  name: string;
+  match: ('name_birth' | 'phone')[];
+}
+
+/** `POST members/duplicates`: at most {@link MEMBER_DUPLICATES_MAX}, by name. */
+export interface MemberDuplicatesResponse {
+  items: MemberDuplicate[];
+}
+
 /** `POST members/lookup` (a POST read) → `MemberView`; 404 NOT_FOUND when no live member has the number. */
 export const MemberLookupBody = z.strictObject({ no: rawMemberNoField });
 

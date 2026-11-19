@@ -2,12 +2,15 @@ import type { DB } from '@altis/db';
 import { DomainError, addDays, isUlid, newId, type Gender, type MemberEventType, type MemberStoredStatus } from '@altis/shared';
 import type { FieldWarning, Paged } from '@altis/shared/api/catalog/common';
 import {
+  MEMBER_DUPLICATES_MAX,
   MemberBody,
   MemberExtendBody,
   MemberPatchBody,
   type MemberEventView,
   type MemberEventsQuery,
   type MemberListItem,
+  type MemberDuplicate,
+  type MemberDuplicatesBody,
   type MemberSearchBody,
   type MemberSearchResponse,
   type MemberTypeRef,
@@ -562,6 +565,39 @@ export async function searchMembers(db: Db, body: MemberSearchBody, now: number)
   }
   const last = page[page.length - 1];
   return { items, nextCursor: rows.length > body.limit && last !== undefined ? `k.${last.id}` : null };
+}
+
+/**
+ * The live members (not archived, not anonymised) who may be the person of `body`: the same name key and birth date,
+ * or exactly the same phone number; at most MEMBER_DUPLICATES_MAX, by name. Only the number and the name leave here.
+ */
+export async function findMemberDuplicates(db: Db, body: MemberDuplicatesBody): Promise<MemberDuplicate[]> {
+  const nameKey = body.name === undefined ? '' : memberNameKey(body.name);
+  const byName = nameKey !== '' && body.birthDate !== undefined ? { nameKey, birthDate: body.birthDate } : null;
+  const phone = body.phone?.trim() ?? '';
+  if (byName === null && phone === '') return [];
+  let query = db
+    .selectFrom('members as m')
+    .select(['m.id', 'm.member_no_display', 'm.name', 'm.name_key', 'm.birth_date', 'm.phone'])
+    .where('m.archived_at', 'is', null)
+    .where('m.anonymized_at', 'is', null)
+    .where((eb) =>
+      eb.or([
+        ...(byName === null ? [] : [eb.and([eb('m.name_key', '=', byName.nameKey), eb('m.birth_date', '=', byName.birthDate)])]),
+        ...(phone === '' ? [] : [eb('m.phone', '=', phone)]),
+      ]),
+    );
+  if (body.excludeId !== undefined) query = query.where('m.id', '<>', body.excludeId);
+  const rows = await query.orderBy('m.name_key').orderBy('m.id').limit(MEMBER_DUPLICATES_MAX).execute();
+  return rows.map((r) => ({
+    id: r.id,
+    memberNo: r.member_no_display,
+    name: r.name,
+    match: [
+      ...(byName !== null && r.name_key === byName.nameKey && r.birth_date === byName.birthDate ? (['name_birth'] as const) : []),
+      ...(phone !== '' && r.phone === phone ? (['phone'] as const) : []),
+    ],
+  }));
 }
 
 // ---- Komunitas (staff screens' data) ----

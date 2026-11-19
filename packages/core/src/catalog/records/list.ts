@@ -1,6 +1,6 @@
 import type { DB } from '@altis/db';
 import { isUlid } from '@altis/shared';
-import type { RecordListItem, RecordListQuery, RecordListResponse } from '@altis/shared/api/catalog/records';
+import type { RecordCountsQuery, RecordListItem, RecordListQuery, RecordListResponse, RecordView } from '@altis/shared/api/catalog/records';
 import type { ExpressionBuilder, Kysely, SelectQueryBuilder, Transaction } from 'kysely';
 import { searchCatalog } from '../../search/search.js';
 import type { CatalogSearchQuery } from '../../search/types.js';
@@ -20,6 +20,8 @@ import { validationFailed } from './service.js';
 // - Filters: `materialTypeId`; `hidden` `only`/`exclude` (OPAC visibility); `archived` true → only archived records,
 //   otherwise only live ones; `hasItems` (an item that is not archived); `changedFrom`/`changedTo` (inclusive).
 // - Each row: the main agent's name (the first main one), the count of items that are not archived, the cover.
+// - The counts (`GET catalog/records/counts`) apply the same filters as the keyset list, so a count is the number of
+//   rows that list holds: one for the filters asked for, and one per saved view, kept for a short while.
 
 type Db = Kysely<DB> | Transaction<DB>;
 type RecordsQuery = SelectQueryBuilder<DB, 'records', object>;
@@ -31,7 +33,7 @@ function badCursor(): never {
 }
 
 /** The filters every list applies (the keyset ones, and the page of a search). */
-function withFilters<Q extends RecordsQuery>(query: Q, q: RecordListQuery): Q {
+function withFilters<Q extends RecordsQuery>(query: Q, q: RecordCountsQuery): Q {
   let out = query as RecordsQuery;
   if (q.materialTypeId !== undefined) out = out.where('records.material_type_id', '=', q.materialTypeId);
   if (q.hidden === 'only') out = out.where('records.opac_visible', '=', 0);
@@ -167,4 +169,50 @@ export async function listRecords(db: Kysely<DB>, q: RecordListQuery, o: { now?:
   const last = page[page.length - 1];
   const nextCursor = rows.length > limit && last !== undefined ? (byTitle ? `t.${last.id}` : `c.${Number(last.changed_at)}.${last.id}`) : null;
   return { items: await listItems(db, page.map((r) => r.id)), total: null, nextCursor, page: null };
+}
+
+/** How many records the keyset list holds for the filters of `q` (the same conditions, counted and not loaded). */
+export async function countRecords(db: Db, q: RecordCountsQuery): Promise<number> {
+  const row = await withFilters(
+    db.selectFrom('records').select((eb) => eb.fn.countAll().as('n')),
+    q,
+  ).executeTakeFirst();
+  return Number(row?.n ?? 0);
+}
+
+/** The filter each saved view of the list stands for. */
+const VIEW_FILTERS: Readonly<Record<RecordView, RecordCountsQuery>> = Object.freeze({
+  all: {},
+  no_items: { hasItems: false },
+  hidden: { hidden: 'only' },
+  archived: { archived: true },
+});
+
+/** How many records each saved view lists with no other filter. */
+export async function recordViewCounts(db: Db): Promise<Record<RecordView, number>> {
+  const out: Record<RecordView, number> = { all: 0, no_items: 0, hidden: 0, archived: 0 };
+  for (const view of Object.keys(VIEW_FILTERS) as RecordView[]) out[view] = await countRecords(db, VIEW_FILTERS[view]);
+  return out;
+}
+
+/** How long the counts of the saved views are kept before they are read again. */
+export const RECORD_VIEW_COUNTS_TTL_MS = 30_000;
+
+/** The view counts read per database, with the time (a monotonic clock) they were read at; a pending read is shared. */
+const viewCountsCache = new WeakMap<object, { at: number; value: Promise<Record<RecordView, number>> }>();
+
+/**
+ * {@link recordViewCounts}, kept for {@link RECORD_VIEW_COUNTS_TTL_MS} per database: every opening of the list asks
+ * for them, and a count that is half a minute late is fine on a tab. A failed read is not kept.
+ */
+export function cachedRecordViewCounts(db: Kysely<DB>, clock: () => number = () => performance.now()): Promise<Record<RecordView, number>> {
+  const now = clock();
+  const hit = viewCountsCache.get(db);
+  if (hit !== undefined && now - hit.at < RECORD_VIEW_COUNTS_TTL_MS) return hit.value;
+  const value = recordViewCounts(db);
+  viewCountsCache.set(db, { at: now, value });
+  value.catch(() => {
+    if (viewCountsCache.get(db)?.value === value) viewCountsCache.delete(db);
+  });
+  return value;
 }

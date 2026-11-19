@@ -8,7 +8,7 @@ import { useVisitsToday } from '@/screens/dashboard-today';
 import { useApiQuery, useMe } from '@/lib/me';
 
 /**
- * Statistik perpustakaan on Beranda: the library's figures at a glance, one card per module the user reads, each from
+ * Statistik perpustakaan, the first part of the reports page (screens/reports/catalog.tsx): the library's figures at a glance, one card per module the user reads, each from
  * that module's own endpoint (`GET catalog/statistics`, `members/statistics`, `visits/statistics`,
  * `circulation/statistics`; @altis/shared/api/library-statistics), so a staff member sees the figures of the modules
  * they hold the read permission of and no other:
@@ -19,10 +19,9 @@ import { useApiQuery, useMe } from '@/lib/me';
  *   with a compact chart of the year's months;
  * - Peminjaman (`circulation.records.read`): loans this month and this year (with the chart), open and overdue loans.
  *
- * Each card links to the screen holding the rows; the section links to the reports for a holder of the statistics
- * reports. A user who reads none of the four sees nothing. The figures are counts only (no person in them), read in the
+ * Each card links to the screen holding the rows. A user who reads none of the four sees nothing. The figures are counts only (no person in them), read in the
  * background and kept five minutes (today's visits every minute, like the other figures of today). The section is one
- * of Beranda's sections (a heading of level 2), its cards headed one level below.
+ * of the page's sections (a heading of level 2), its cards headed one level below.
  */
 
 const STALE_MS = 5 * 60_000;
@@ -41,11 +40,12 @@ function Figure({ label, value, tone }: { label: string; value: number | undefin
   );
 }
 
-/** A module's card: its figures, an optional chart, and the link to its screen. */
+/** A module's card: its figures, an optional chart, and the link to its screen. A group, not a region: the page's
+ * report modules below carry the same names as regions. */
 function StatCard({ title, to, linkLabel, children, chart }: { title: string; to: string; linkLabel: string; children: ReactNode; chart?: ReactNode }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-3 rounded-lg border bg-background p-4" data-library-card="">
+    <div role="group" aria-labelledby={id} className="flex flex-col gap-3 rounded-lg border bg-background p-4" data-library-card="">
       <h3 id={id} className="text-heading font-semibold">
         {title}
       </h3>
@@ -54,7 +54,7 @@ function StatCard({ title, to, linkLabel, children, chart }: { title: string; to
       <Link to={to} className="mt-auto self-start text-sm font-semibold text-accent-text underline-offset-4 hover:underline">
         {linkLabel}
       </Link>
-    </section>
+    </div>
   );
 }
 
@@ -98,17 +98,10 @@ export function LibraryStatistics() {
   if (!reads.catalog && !reads.members && !reads.visits && !reads.loans) return null;
   const year = collection.data?.year ?? members.data?.year ?? visits.data?.year ?? loans.data?.year;
   return (
-    <section aria-labelledby={headingId} className="mt-2 flex flex-col gap-3" data-library-statistics="">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id={headingId} className="text-heading font-semibold">
-          {t('dashboard.library.title')}
-        </h2>
-        {holds(me, 'reports.statistics.read') && (
-          <Link to="/admin/reports" className="text-meta font-semibold text-accent-text underline-offset-4 hover:underline">
-            {t('dashboard.library.reports')}
-          </Link>
-        )}
-      </div>
+    <section aria-labelledby={headingId} className="flex flex-col gap-3" data-library-statistics="">
+      <h2 id={headingId} className="text-heading font-semibold">
+        {t('dashboard.library.title')}
+      </h2>
       <div className="grid gap-4 lg:grid-cols-2">
         {reads.catalog && (
           <StatCard title={t('dashboard.library.collection')} to="/admin/catalog/records" linkLabel={t('dashboard.library.collection_open')}>
