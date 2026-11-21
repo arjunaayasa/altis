@@ -134,7 +134,7 @@ describe('Meja Layanan', () => {
     expect(await screen.findByText('Anggota dimuat: Budi Santoso')).toBeTruthy();
     const card = screen.getByTestId('desk-feedback');
     expect(card.getAttribute('data-tone')).toBe('warning');
-    expect(within(card).getByText('Pindai eksemplar untuk dipinjam. 1 pinjaman terlambat. Peminjaman tetap bisa. Lihat tab Dipinjam (F7).')).toBeTruthy();
+    expect(within(card).getByText('Pindai eksemplar untuk dipinjam.')).toBeTruthy();
     await waitFor(() => expect(within(screen.getAllByRole('status')[0]!).queryByText(/1 pinjaman terlambat\./)).toBeTruthy());
 
     member = deskMember({ id: '01JZ0000000000000000000A02', memberNo: 'A002', name: 'Siti Aminah' });
@@ -144,6 +144,27 @@ describe('Meja Layanan', () => {
     expect(await screen.findByText('Anggota dimuat: Siti Aminah')).toBeTruthy();
     expect(screen.getByTestId('desk-feedback').getAttribute('data-tone')).toBe('success');
     expect(within(screen.getByTestId('desk-feedback')).getByText('Pindai eksemplar untuk dipinjam.')).toBeTruthy();
+  });
+
+  it('the overdue notice is drawn once: in the member panel, not again in the feedback card', async () => {
+    const member = deskMember({ counts: { openLoans: 2, overdue: 1, holdsReady: 0 } });
+    start({
+      'POST branches/:branchId/circulation/members/lookup': () => member,
+      'GET branches/:branchId/circulation/members/:memberId': () => member,
+    });
+    await scan('A001');
+    expect(await screen.findByText('Anggota dimuat: Budi Santoso')).toBeTruthy();
+    const card = screen.getByTestId('desk-feedback');
+    expect(within(card).queryByText(/pinjaman terlambat/)).toBeNull();
+    expect(within(card).queryByText(/Peminjaman tetap bisa/)).toBeNull();
+    // What a sighted user sees: everything but the two visually hidden live regions.
+    const drawn = (pattern: RegExp): HTMLElement[] => screen.queryAllByText(pattern).filter((el) => el.closest('.sr-only') === null);
+    expect(drawn(/1 pinjaman terlambat/)).toHaveLength(1);
+    expect(drawn(/Peminjaman tetap bisa\. Lihat tab Dipinjam \(F7\)\./)).toHaveLength(1);
+    expect(drawn(/1 pinjaman terlambat/)[0]!.closest('aside')).not.toBeNull();
+    // The card still warns by its tone, and a screen reader still hears the notice with it.
+    expect(card.getAttribute('data-tone')).toBe('warning');
+    await waitFor(() => expect(within(screen.getAllByRole('status')[0]!).queryByText(/Anggota dimuat: Budi Santoso .*1 pinjaman terlambat\. Peminjaman tetap bisa\./)).toBeTruthy());
   });
 
   it('Ctrl+Z voids the last loan, and the slip (F9) then leaves that loan out', async () => {
