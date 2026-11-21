@@ -12,26 +12,41 @@ untuk perpustakaan sekolah, kampus, dan umum. Edisi Komunitas bersifat sumber te
 
 ## Fitur (Edisi Komunitas)
 
-- **Katalog:** bibliografi, eksemplar, master data, kendali otoritas, lokasi/rak, impor-ekspor MARC 21/MARCXML/CSV,
-  deteksi duplikat.
-- **OPAC:** pencarian bawaan berfaset (FULLTEXT/GIN/FTS5), halaman dan berita, feed, sitemap, JSON-LD.
+- **Katalog:** bibliografi, eksemplar, data induk, kendali otoritas, lokasi/rak dengan peta rak, impor-ekspor
+  MARC 21/MARCXML/CSV, deteksi duplikat, label dan barkod (PDF).
+- **Anggota:** tipe anggota, foto, impor CSV, aksi massal dan naik kelas, kartu anggota (PDF), surat bebas pustaka,
+  unduh dan anonimisasi data pribadi.
+- **Layanan:** Meja Layanan yang bisa dijalankan penuh dengan pemindai dan keyboard, Kembali Cepat, baca di tempat,
+  reservasi dan rak tunggu, denda dan pembayaran dengan kuitansi, daftar terlambat, pengingat e-mail, kalender hari
+  tutup, aturan peminjaman per tipe anggota, tipe koleksi, dan jenis bahan.
+- **Kunjungan:** buku tamu di perangkat sendiri (anggota dan tamu), check-in oleh petugas, kunjungan kelas.
+- **Inventarisasi** (stock opname) per cabang dengan berita acara.
+- **Laporan** koleksi, anggota, kunjungan, dan sirkulasi (pratinjau, cetak, ekspor CSV/XLSX/PDF), serta **ruang
+  akreditasi**: perkiraan nilai, daftar periksa bukti, register, dan berkas siap cetak.
+- **Situs profil perpustakaan dan OPAC:** beranda dengan slider yang dikelola dari admin, profil, galeri, berita dan
+  agenda, halaman; identitas situs dengan logo sendiri; pencarian bawaan berfaset (FULLTEXT/GIN/FTS5); akun anggota
+  (pinjaman, reservasi, penanda, denda); bahasa Indonesia dan Inggris, terang dan gelap, berfungsi tanpa JavaScript;
+  feed, sitemap, JSON-LD.
 - **Interoperabilitas:** OAI-PMH, salin katalog lewat SRU, pencarian ISBN.
-- **Label dan barcode** (PDF).
-- **Migrasi dari SLiMS:** dari dump SQL atau koneksi langsung ke database SLiMS, termasuk berkas lampiran dan sampul.
+- **Migrasi dari SLiMS:** dari dump SQL atau koneksi langsung ke database SLiMS: katalog, lampiran dan sampul, anggota,
+  kunjungan, dan sirkulasi, dengan uji kering, rekonsiliasi, dan daftar periksa hari pindah.
+- **Admin:** satu sidebar kiri, palet perintah, dasbor dengan kartu kesehatan sistem, terang dan gelap.
 - **Fondasi:**
   - wizard pemasangan;
   - login dengan 2FA; pengguna, peran, dan cabang;
   - jejak audit berantai;
   - job dan penjadwal, notifikasi, unggahan;
   - backup dan restore (juga lintas mesin database);
-  - mode pemeliharaan, Diagnostik, dasbor;
+  - mode pemeliharaan, Diagnostik;
   - pembaruan sekali klik yang aman: rilis ditandatangani Ed25519, pergantian versi atomik dengan backup dan
     rollback otomatis; atau unggah zip tanpa internet, atau image Docker baru.
 
-## Nilai unggulan (segera hadir): Laporan siap akreditasi
+## Panduan
 
-Laporan otomatis yang mengikuti indikator akreditasi perpustakaan Perpusnas (koleksi per kelas DDC, kunjungan,
-peminjaman, anggota), siap cetak. **Fitur ini sedang dikembangkan** dan belum ada di kode saat ini.
+- **Pustakawan dan petugas:** [docs/panduan/](docs/panduan/README.md), yaitu langkah pertama setelah instalasi, lalu
+  katalog, anggota, layanan, kunjungan, inventarisasi, laporan dan akreditasi, situs/OPAC, sistem, dan migrasi dari
+  SLiMS.
+- **Pemasangan dan operasional server:** [docs/install/](docs/install/) dan [docs/ops/operations.md](docs/ops/operations.md).
 
 ## Persyaratan
 
@@ -97,14 +112,6 @@ pnpm release --profile test --version 0.1.0-test
 
 Build produksi membutuhkan kunci Anda sendiri: lihat [docs/ops/release-signing.md](docs/ops/release-signing.md).
 
-## Peta jalan
-
-- **Laporan siap akreditasi** (nilai unggulan).
-- Sirkulasi: peminjaman/pengembalian, reservasi, denda.
-- Keanggotaan.
-- Laporan.
-- Stock opname.
-
 ## Edisi komersial
 
 Edisi dengan modul dan layanan tambahan akan menyusul; Edisi Komunitas tetap AGPL dan tanpa batas waktu.
@@ -129,17 +136,25 @@ system: an alternative to SLiMS for school, academic and public libraries, under
 > **In development.** There is no official release yet; the API and schema may still change between pre-1.0
 > versions.
 
-**Features:** cataloguing (bibliographic records, items, master data, authority control, locations and shelves,
-MARC 21/MARCXML/CSV import and export, duplicate detection); an OPAC with built-in faceted search
-(FULLTEXT/GIN/FTS5), pages and news, feeds, sitemap and JSON-LD; OAI-PMH, SRU copy cataloguing and ISBN lookup;
-labels and barcodes (PDF); **migration from SLiMS** (SQL dump or direct connection, attachments and covers); and the
-foundation: install wizard, 2FA login, users, roles and branches, a chained audit trail, jobs and scheduler,
-notifications, uploads, backup and restore (across database engines), maintenance mode, diagnostics, a dashboard,
-and safe one-click updates (Ed25519-signed releases, atomic switch with automatic backup and rollback, offline zip
-upload or a new Docker image).
+**Features:** cataloguing (bibliographic records, items, master data, authority control, locations and shelves with
+shelf maps, MARC 21/MARCXML/CSV import and export, duplicate detection, labels and barcodes as PDF); members (types,
+photos, CSV import, bulk actions, member cards, clearance letters, personal data export and anonymisation); services
+(a service desk that runs fully from a scanner and the keyboard, quick return, in-library use, holds and a hold shelf,
+fines and payments with receipts, overdue lists, e-mail reminders, a closing-day calendar, loan rules per member
+type, collection type and material type); visits (a guestbook on a device of your own, staff check-in, class visits);
+stocktaking per branch; reports on the collection, members, visits and circulation (preview, print, CSV/XLSX/PDF
+export) and an accreditation workspace (estimated score, evidence checklists, registers, print-ready files); a
+library profile site and OPAC (a home page with a slider managed in the admin, profile, gallery, news and events,
+pages, a site identity with your own logo, built-in faceted search on FULLTEXT/GIN/FTS5, member accounts, Indonesian
+and English, light and dark, working without JavaScript, feeds, sitemap and JSON-LD); OAI-PMH, SRU copy cataloguing
+and ISBN lookup; **migration from SLiMS** (SQL dump or direct connection: catalogue, attachments and covers, members,
+visits and circulation, with a dry run, reconciliation and a cutover checklist); an admin with one left sidebar and a
+command palette; and the foundation: install wizard, 2FA login, users, roles and branches, a chained audit trail,
+jobs and scheduler, notifications, uploads, backup and restore (across database engines), maintenance mode,
+diagnostics, a dashboard, and safe one-click updates (Ed25519-signed releases, atomic switch with automatic backup
+and rollback, offline zip upload or a new Docker image).
 
-**Headline feature (coming soon): accreditation-ready reports**, generated along the Perpusnas library accreditation
-indicators (collection by DDC class, visits, loans, members), ready to print. It is in development.
+**Guides:** the librarian guide is in Indonesian, in [docs/panduan/](docs/panduan/README.md).
 
 **Requirements:** Node.js 22.16+; SQLite (built in), MySQL 8.0+, MariaDB 10.6+ or PostgreSQL 15+; cPanel/CloudLinux
 (Passenger), aaPanel, Docker, PM2 or a single PC.
@@ -156,9 +171,6 @@ so run `npm install -g corepack` first, or `npm install -g pnpm@10.15.0`): `pnpm
 an evaluation build with `pnpm release --profile test --version 0.1.0-test`. **Test builds trust the public
 development keys of `tools/keys/dev`: never use them in production.** A production build needs your own keys
 ([docs/ops/release-signing.md](docs/ops/release-signing.md)).
-
-**Roadmap:** accreditation-ready reports, circulation (loans and returns, reservations, fines), membership, reports,
-stocktaking.
 
 **Commercial edition:** an edition with additional modules and services will follow; the Community Edition stays
 AGPL and has no time limit.
