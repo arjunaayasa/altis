@@ -446,10 +446,11 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
     return () => clearTimeout(id);
   }, [flash, feedback.seq]);
 
-  const say = (tone: Tone, title: string, detail?: string, fact?: { label: string; value: string }): void => {
+  /** `heard` is spoken after the rest and not drawn in the band: for what the screen already shows elsewhere. */
+  const say = (tone: Tone, title: string, detail?: string, fact?: { label: string; value: string }, heard?: string): void => {
     seq.current += 1;
     setFeedback({ tone, title, ...(detail === undefined || detail === '' ? {} : { detail }), ...(fact === undefined ? {} : { fact }), seq: seq.current });
-    const said = [title, detail ?? '', fact === undefined ? '' : `${fact.label}: ${fact.value}`].filter((x) => x !== '');
+    const said = [title, detail ?? '', fact === undefined ? '' : `${fact.label}: ${fact.value}`, heard ?? ''].filter((x) => x !== '');
     const text = said.join(' ');
     setLive({ status: tone === 'error' ? '' : text, alert: tone === 'error' ? text : '', seq: seq.current });
     setFlash(tone);
@@ -504,11 +505,12 @@ function Desk({ quickReturn, inLibrary = false }: { quickReturn: boolean; inLibr
     setReceipt(null);
     setVisitPayments([]);
     const refusal = borrowRefusalText(t, view);
-    // Overdue loans do not stop lending, but the desk should see them at once: the card turns to a warning and says so.
-    const late = view.counts.overdue > 0 ? [`${t('circulation.member.late_title', { count: view.counts.overdue })}.`, t('circulation.member.late_body')] : [];
-    const notes = [...late, ...warningTexts(t, day, view.warnings)];
+    // Overdue loans do not stop lending, but the desk should see them at once: the card turns to a warning, and the
+    // member panel's box says how many (once on the screen; a screen reader hears it with the card).
+    const late = view.counts.overdue > 0 ? `${t('circulation.member.late_title', { count: view.counts.overdue })}. ${t('circulation.member.late_body')}` : '';
+    const notes = warningTexts(t, day, view.warnings);
     if (refusal !== null) say(view.borrowRefusal === 'CIRC_LIMIT_REACHED' || view.borrowRefusal === 'MEMBER_SUSPENDED' ? 'warning' : 'error', t('circulation.feedback.member_loaded', { name: view.name }), refusal);
-    else say(notes.length > 0 ? 'warning' : 'success', t('circulation.feedback.member_loaded', { name: view.name }), [t('circulation.feedback.scan_items'), ...notes].join(' '));
+    else say(late !== '' || notes.length > 0 ? 'warning' : 'success', t('circulation.feedback.member_loaded', { name: view.name }), [t('circulation.feedback.scan_items'), ...notes].join(' '), undefined, late);
   };
 
   const lookup = async (no: string): Promise<void> => {
