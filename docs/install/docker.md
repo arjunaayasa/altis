@@ -62,10 +62,10 @@ dengan versi rilis terbaru (lihat halaman Releases GitHub atau daftar tag di Doc
 ALTIS_IMAGE=arjunaayasa/altis:0.1.0
 ```
 
-Pakai tag versi seperti ini, bukan `arjunaayasa/altis:latest`. Dengan tag versi, ALTIS hanya berganti versi ketika
-Anda sendiri mengganti tag di `.env` (lihat [Pembaruan](#pembaruan)), dan versi sebelumnya selalu bisa ditarik lagi
-dengan tagnya. `latest` berpindah setiap ada rilis baru, sehingga `docker compose pull` berikutnya bisa memasang versi
-baru tanpa disengaja.
+Pakai tag versi seperti ini, bukan `arjunaayasa/altis:latest`. Dengan tag versi, `docker compose pull` hanya membawa
+versi baru ketika Anda sendiri mengganti tag di `.env` (lihat [Pembaruan](#pembaruan)), dan versi sebelumnya selalu
+bisa ditarik lagi dengan tagnya. `latest` berpindah setiap ada rilis baru, sehingga `docker compose pull` berikutnya
+bisa memasang versi baru tanpa disengaja.
 
 **b. Dibangun sendiri dari zip rilis (alternatif):** biarkan baris `ALTIS_IMAGE` bertanda `#`. Taruh juga
 `Dockerfile`, `entrypoint.sh`, dan `.dockerignore` di folder yang sama, lalu ekstrak zip rilis ke `~/altis/release`
@@ -128,8 +128,7 @@ Buka `https://<domain-ALTIS>/install`.
 
 ## Pembaruan
 
-Di Docker, ALTIS diperbarui dengan mengganti image, bukan dengan tombol pembaruan satu klik di admin: versi yang
-berjalan mengikuti tag image di `.env`.
+Cara yang disarankan di Docker adalah menarik image versi baru:
 
 1. Di `.env`, ganti tag `ALTIS_IMAGE` ke versi baru, misalnya `arjunaayasa/altis:0.1.0` menjadi
    `arjunaayasa/altis:0.2.0`. Catat tag lamanya.
@@ -150,8 +149,12 @@ ALTIS tetap dalam pemeliharaan dan halaman itu menunjukkan langkahnya, misalnya:
 sebelumnya, lalu pulihkan backup `pre_update`. Karena itu, simpan tag image versi sebelumnya sampai pembaruan
 selesai, dan pakai tag versi (`:0.2.0`), bukan `:latest`.
 
-Halaman **Sistem → Pembaruan** di admin juga menampilkan perintah di atas. Bila `ALTIS_RELEASE_SOURCE=image` diatur,
-tombol pembaruan satu klik tidak ditampilkan sama sekali: setiap rilis datang dari image saja.
+Tombol pembaruan satu klik dan unggah zip di halaman **Sistem → Pembaruan** admin juga bisa dipakai di Docker, dan
+halaman itu juga menampilkan perintah di atas. Rilis yang dipasang lewat admin disimpan di volume `data`, sehingga
+versi yang berjalan bisa lebih baru daripada tag di `.env`. Image dengan versi yang sama atau lebih lama tidak
+menurunkan versi itu; ganti juga tag di `.env` ke versi yang sama agar keduanya sejalan. Bila
+`ALTIS_RELEASE_SOURCE=image` diatur, tombol satu klik dan unggah zip tidak ditampilkan sama sekali: setiap rilis
+datang dari image saja.
 
 ## Data dan backup
 
@@ -185,9 +188,10 @@ Lalu `docker compose up -d` dari folder itu, dan arahkan proxy domain kedua ke `
 
 - `docker compose logs -f app` (kode pemasangan dan semua pesan ALTIS tercetak di sini).
 - `docker compose exec app node /app/app.js doctor`.
-- `docker compose pull` gagal (`invalid reference format`, `manifest unknown`, `not found`): periksa baris
-  `ALTIS_IMAGE` di `.env`. `<versi>` harus sudah diganti dengan versi rilis yang ada di Docker Hub, tanpa tanda `#`
-  di depan barisnya.
+- `docker compose pull` gagal (`pull access denied for altis`, `invalid reference format`, `manifest unknown`,
+  `not found`): periksa baris `ALTIS_IMAGE` di `.env`. `pull access denied for altis` berarti baris itu masih bertanda
+  `#`, sehingga compose mencari image `altis:local` yang dibangun sendiri (cara b). `<versi>` harus sudah diganti
+  dengan versi rilis yang ada di Docker Hub, tanpa tanda `#` di depan barisnya.
 - Pesan `jalankan ./altis-init dulu`: `.env` tidak ada di folder `compose.yml`, atau salah satu sandi di dalamnya
   kosong.
 - Masih buntu: laporkan di [GitHub Issues](https://github.com/arjunaayasa/altis/issues) dengan keluaran `doctor`
