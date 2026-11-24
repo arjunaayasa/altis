@@ -1028,6 +1028,14 @@ describe('the Docker guide (docs/install/docker.md)', () => {
     expect(env['ALTIS_HTTP_PORT']).toMatch(/^\d+$/);
     expect(env['ALTIS_HTTP_PORT']).not.toBe('8080');
   });
+
+  it('the main path pins a version of the official image on Docker Hub in ALTIS_IMAGE; compose.yml still builds altis:local without it', () => {
+    const doc = read('docs', 'install', 'docker.md');
+    expect(envBlockLines(doc)['ALTIS_IMAGE']).toMatch(/^arjunaayasa\/altis:\d+\.\d+\.\d+$/);
+    expect(doc).toContain('docker compose pull && docker compose up -d');
+    expect(doc).not.toMatch(/ghcr\.io/);
+    expect(serviceBlock(read('docker', 'compose.yml'), 'app')).toMatch(/^ {4}image: \$\{ALTIS_IMAGE:-altis:local\}$/m);
+  });
 });
 
 describe('.github/workflows', () => {

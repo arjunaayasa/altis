@@ -5,8 +5,10 @@
 #      ALTIS_DB_PASSWORD and ALTIS_DB_ROOT_PASSWORD and an ALTIS_INSTALL_CODE, and prints the install code. Until it
 #      has run, every compose command stops with "jalankan ./altis-init dulu". (The smoke run,
 #      tools/release/smoke/run.ts, writes its own .env and passes --env-file.)
-#   2. Image: a published one named by ALTIS_IMAGE in .env, or one built here from the unzipped release zip (see
-#      Dockerfile):
+#   2. Image: the official one, arjunaayasa/altis:<version> on Docker Hub (linux/amd64 and linux/arm64, built from the
+#      signed release zip with the Dockerfile here), named by ALTIS_IMAGE in .env (altis-init writes that line commented
+#      out; pin a version tag, not latest) and fetched with `docker compose pull`. Or, without ALTIS_IMAGE, altis:local
+#      built here from the unzipped release zip (see Dockerfile):
 #        ALTIS_RELEASE_DIR=/path/to/unzipped-release docker compose -f docker/compose.yml build
 #   3. docker compose -f docker/compose.yml up -d     → http://127.0.0.1:8080 (ALTIS_HTTP_BIND / ALTIS_HTTP_PORT),
 #      published on loopback only: put it behind a TLS proxy on this host, with trustProxy hops = 1 (P15). The install
@@ -25,7 +27,7 @@
 #      Hapus berkas masukan segera: isinya memuat sandi super admin pertama.
 #        docker compose -f docker/compose.yml run --rm app rm /data/install.json
 #   4. Updates (§9.8): a new image goes through the update flow by itself, with a pre_update backup:
-#        docker compose pull && docker compose up -d        (a published image)
+#        docker compose pull && docker compose up -d        (the official image, after the new tag is set in ALTIS_IMAGE)
 #        docker compose build && docker compose up -d       (a newer release unzipped at ALTIS_RELEASE_DIR)
 #
 # Hardening (§9.11): the app runs as `node`, read-only root file system (writable: the /data volume and the /tmp
@@ -42,6 +44,7 @@ name: altis
 
 services:
   app:
+    # ALTIS_IMAGE: the official image (arjunaayasa/altis:<version>); unset, altis:local built from the release zip below.
     image: ${ALTIS_IMAGE:-altis:local}
     build:
       context: .

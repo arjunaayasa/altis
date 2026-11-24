@@ -7,6 +7,10 @@
 #   ALTIS_DB_ROOT_PASSWORD  32 random characters of [A-Za-z0-9] (the database's root; ALTIS never uses it)
 #   ALTIS_INSTALL_CODE      26 random characters of the install-code alphabet, shown in groups 5-5-5-5-6
 #
+# and, commented out, `# ALTIS_IMAGE=arjunaayasa/altis:<versi>`: the official image on Docker Hub. The operator removes
+# the `#` and puts a release version in place of `<versi>`; left commented out, compose.yml builds `altis:local` from
+# the unzipped release zip instead (docs/install/docker.md).
+#
 # then prints the install code (never a password): it opens the install wizard (§7.7 "altis-init mengisi
 # ALTIS_INSTALL_CODE acak ke .env lalu menampilkannya").
 #
@@ -128,7 +132,13 @@ content() {
     '# ALTIS Docker: written by altis-init. Holds secrets: never share or commit it, never copy it into an image.' \
     "ALTIS_DB_PASSWORD=$db_password" \
     "ALTIS_DB_ROOT_PASSWORD=$root_password" \
-    "ALTIS_INSTALL_CODE=$code"
+    "ALTIS_INSTALL_CODE=$code" \
+    '' \
+    '# Image resmi dari Docker Hub: hapus tanda # di depan ALTIS_IMAGE dan ganti <versi> dengan versi rilis, misalnya' \
+    '# 0.1.0 (tag versi, bukan latest). Image dibangun sendiri dari zip rilis: biarkan baris ini bertanda #.' \
+    '# The official image on Docker Hub: remove the # before ALTIS_IMAGE and put a release version, such as 0.1.0, in' \
+    '# place of <versi> (a version tag, not latest). To build the image from the release zip, leave the line commented out.' \
+    '# ALTIS_IMAGE=arjunaayasa/altis:<versi>'
 }
 
 umask 077
@@ -193,7 +203,11 @@ printf '%s\n' \
   "    $code" \
   '' \
   'Langkah berikutnya / Next steps:' \
-  '  1. docker compose up -d   (dari folder ini, tempat compose.yml / from this folder, next to compose.yml)' \
-  '  2. Buka ALTIS di browser dan masukkan kode di atas pada wizard instalasi.' \
+  '  1. Di .env, hapus tanda # di depan ALTIS_IMAGE dan isi versinya (image resmi dari Docker Hub).' \
+  '     In .env, remove the # before ALTIS_IMAGE and set the version (the official image on Docker Hub).' \
+  '  2. docker compose pull && docker compose up -d   (dari folder ini, tempat compose.yml / from this folder, next to compose.yml)' \
+  '     Image dibangun sendiri dari zip rilis: lewati langkah 1, lalu docker compose up -d saja.' \
+  '     Image built from the release zip: skip step 1, then just docker compose up -d.' \
+  '  3. Buka ALTIS di browser dan masukkan kode di atas pada wizard instalasi.' \
   '     Open ALTIS in a browser and enter the code above in the install wizard.' \
   'Kode ini juga tersimpan di .env sebagai ALTIS_INSTALL_CODE. / The code is also kept in .env as ALTIS_INSTALL_CODE.'
