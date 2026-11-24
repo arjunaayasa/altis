@@ -14,6 +14,8 @@ Kunjungan dicatat lewat **buku tamu**: sebuah komputer atau tablet di pintu masu
 Bila perangkat hilang atau diganti, **cabut** perangkatnya di menu yang sama. Perangkat yang dicabut harus diaktifkan
 ulang dengan kode baru.
 
+![Perangkat Buku Tamu: isian nama perangkat dan tombol Tambah perangkat; satu perangkat "Meja tamu teras" berstatus Menunggu kode, dengan tombol Kode baru dan Cabut](../img/admin-buku-tamu.jpg)
+
 ## Cara pengunjung mengisi
 
 - **Anggota:** memindai kartu atau mengetik nomor anggota. Layar menyapa dengan namanya.
@@ -27,6 +29,8 @@ ulang dengan kode baru.
 - **Check-in oleh petugas** untuk anggota atau tamu yang tidak mengisi sendiri;
 - **Kunjungan kelas atau rombongan:** dicatat sekaligus dengan nama kelas dan jumlah orangnya;
 - **Daftar kunjungan** menurut rentang tanggal dan sumbernya.
+
+![Halaman Kunjungan: jumlah pengunjung, anggota, dan tamu hari ini; formulir Check-in oleh petugas; formulir Kunjungan kelas atau rombongan; dan Daftar kunjungan menurut tanggal](../img/admin-kunjungan.jpg)
 
 ## Pengaturan
 

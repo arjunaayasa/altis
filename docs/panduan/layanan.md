@@ -8,6 +8,8 @@ Menu **Layanan** di sidebar: semua yang terjadi di meja peminjaman.
 
 **Layanan → Meja Layanan.** Seluruh alur bisa dijalankan dengan pemindai dan keyboard, tanpa mouse.
 
+![Meja Layanan dengan anggota yang sudah dimuat: tab Anggota & pinjam, Kembali, Baca di tempat, dan Cari nama dengan tombol F-nya; kotak pindai barkod eksemplar; panel anggota dengan peringatan pinjaman terlambat; reservasi siap diambil dan aturan tipe anggota di sisi kanan](../img/admin-meja-layanan.jpg)
+
 Meminjamkan:
 
 1. Pindai kartu anggota, atau ketik nomornya lalu Enter. Tidak bawa kartu? Tekan `F6` dan ketik namanya.
@@ -67,6 +69,8 @@ kembali.
   rak, pakai **Tandai siap** lalu pindai eksemplarnya.
 - Anggota yang punya alamat e-mail diberi tahu saat reservasinya siap (bila pengingat e-mail menyala).
 - Batas ambil dan pengaturan reservasi lain ada di Sistem → Pengaturan → Sirkulasi.
+
+![Rak Tunggu & Reservasi: satu eksemplar siap diambil dengan nama anggota, batas ambil, serta tombol Cetak slip dan Batalkan; bagian Kembalikan ke rak dan Antrean per judul yang masih kosong](../img/admin-rak-tunggu.jpg)
 
 ## Denda dan pembayaran
 

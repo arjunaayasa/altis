@@ -21,6 +21,8 @@ Data pribadi anggota tidak pernah tampil di halaman publik.
 
 **Situs / OPAC → Identitas situs.**
 
+![Identitas situs: unggahan logo utama, logo untuk latar gelap, dan ikon situs; isian teks alternatif logo; pratinjau kepala situs, footer, sidebar admin, dan tab peramban di sisi kanan](../img/admin-identitas-situs.jpg)
+
 - **Logo utama** (untuk latar terang): tampil di kepala situs, halaman masuk, dan kartu anggota. Bentuk mendatar; tinggi
   80 piksel atau lebih supaya tajam.
 - **Logo untuk latar gelap** (opsional): untuk footer, sidebar admin, dan mode gelap. Tanpa ini, logo utama ditaruh di
@@ -42,6 +44,8 @@ Bagian pratinjau menunjukkan hasilnya sebelum disimpan. Setelah disimpan, peruba
 ## Halaman awal
 
 **Situs / OPAC → Halaman awal** punya enam tab dan satu bilah **Simpan** di bawah. Situs baru berubah setelah disimpan.
+
+![Tab Slider hero di Halaman awal: tiga slide dengan foto kecil, sakelar tampil, tombol panah urutan, ubah, dan hapus; pengaturan ganti otomatis; pratinjau slide untuk layar lebar dan ponsel](../img/admin-slider.jpg)
 
 - **Slider hero:** paling banyak 6 slide. Tiap slide: foto, judul, subjudul, catatan kecil (misalnya tanggal acara),
   tombol dengan tujuannya (berita, halaman, atau alamat di situs ini), dan jadwal tampil (dari tanggal sampai tanggal).

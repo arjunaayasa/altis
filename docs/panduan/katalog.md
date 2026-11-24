@@ -22,6 +22,8 @@ Menu **Katalog** di sidebar. Dua istilah yang dipakai di seluruh ALTIS:
 **Katalog → Bibliografi** menampilkan semua cantuman. Tab di atas daftar menyaring tampilan dan menunjukkan
 jumlahnya; chip saringan mempersempit daftar; "Muat lagi" menambah baris.
 
+![Daftar bibliografi: tab Semua, Tanpa eksemplar, Disembunyikan dari OPAC, dan Diarsipkan; kotak cari dan chip saringan; tabel judul, pengarang, tahun, nomor panggil, dan jumlah eksemplar](../img/admin-katalog-daftar.jpg)
+
 Menambah cantuman:
 
 1. Tekan **Cantuman baru** dan pilih jenis bahan.
@@ -32,6 +34,8 @@ Menambah cantuman:
 4. Perhatikan kotak **Kemungkinan duplikat** saat mengisi. Bila judul itu sudah ada, buka cantuman yang ada dan
    tambahkan eksemplar di sana.
 5. Simpan. Sampul dan lampiran bisa ditambahkan setelah cantuman disimpan.
+
+![Formulir cantuman: tab Data bibliografi, Eksemplar, Lampiran, dan Tampilan MARC; isian judul dan pengarang; kotak sampul dan kotak Kemungkinan duplikat di sisi kanan](../img/admin-katalog-cantuman.jpg)
 
 Hal lain:
 

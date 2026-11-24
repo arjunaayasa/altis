@@ -21,6 +21,8 @@ Yang penting dipahami lebih dulu:
 
 ### 2. Ambil data dari SLiMS
 
+![Migrasi SLiMS, langkah Sumber: pilihan Basis data SLiMS (koneksi langsung) atau Berkas dump SQL, tombol Lanjut, dan tabel Riwayat migrasi](../img/admin-migrasi-slims.jpg)
+
 Pilih salah satu sumber:
 
 - **Berkas dump SQL** (`.sql` atau `.sql.gz`) hasil ekspor basis data SLiMS dari phpMyAdmin atau mysqldump. Ini cara
