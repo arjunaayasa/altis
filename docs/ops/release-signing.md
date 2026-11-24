@@ -4,7 +4,7 @@
 
 Build `-test` (`pnpm release --profile test …`) memakai kunci pengembangan publik di `tools/keys/dev` dan hanya
 untuk uji. Build produksi membutuhkan kunci Anda sendiri. Dokumen ini menjelaskan cara membuatnya, membangun rilis
-bertanda tangan, menerbitkan feed pembaruan, dan merotasi kunci.
+bertanda tangan dan image Docker-nya, menerbitkan feed pembaruan, dan merotasi kunci.
 
 ## Model kepercayaan
 
@@ -145,6 +145,40 @@ pnpm release --profile production --version 0.1.0 \
 - Hasilnya `dist/altis-<versi>.zip` dan `dist/build-report.json`. *Source map* ditulis terpisah di `dist/` dan tidak
   pernah masuk zip; boleh dilampirkan ke GitHub Release bila perlu.
 - Pakai `roots.json` yang sama untuk setiap rilis (lihat bagian 9).
+
+### Image Docker resmi (Docker Hub)
+
+Image resmi `arjunaayasa/altis` dibangun dari zip rilis yang sudah ditandatangani (zip yang sama dengan yang
+dilampirkan ke GitHub Releases, tidak dibangun ulang), dengan `docker/Dockerfile` repositori ini, untuk `linux/amd64`
+dan `linux/arm64`. Panduan Docker ([docs/install/docker.md](../install/docker.md)) meminta pengguna memakai tag
+versinya, jadi terbitkan image **sebelum** rilis diumumkan: tag yang belum ada membuat `docker compose pull` gagal
+dengan `manifest unknown`. Fork memakai repositori Docker Hub-nya sendiri (dan label sumbernya sendiri, lihat
+Persiapan).
+
+```sh
+V=0.1.0
+ZIP=/abs/path/altis-$V.zip         # zip rilis yang ditandatangani (absolut)
+REL=$(mktemp -d) && unzip -q "$ZIP" -d "$REL"
+
+# 1. Periksa image dulu: satu platform, dimuat ke Docker lokal (tanpa .env, .git, source map; bukan root)
+docker buildx build --platform linux/amd64 --build-context release="$REL" --tag "altis:$V-check" --load docker
+pnpm exec tsx tools/release/smoke/docker-image-check.ts --image "altis:$V-check"
+
+# 2. Bangun kedua platform dan dorong ke Docker Hub
+docker login                                     # sebagai pemilik repositori; pakai access token, bukan sandi
+docker buildx create --name altis-multi --use    # sekali saja per mesin
+docker buildx build --platform linux/amd64,linux/arm64 --build-context release="$REL" \
+  --tag "arjunaayasa/altis:$V" --tag arjunaayasa/altis:latest --push docker
+
+# 3. Pastikan tag versi memuat kedua platform
+docker buildx imagetools inspect "arjunaayasa/altis:$V"    # harus menyebut linux/amd64 dan linux/arm64
+```
+
+- Jalankan dari akar repositori, pada commit yang sama dengan build rilisnya: `docker` di akhir perintah adalah
+  folder `docker/`, yang `.dockerignore`-nya hanya meloloskan `entrypoint.sh`; aplikasinya datang dari `$REL`.
+- Tag `latest` hanya untuk rilis terbaru. Rilis perbaikan untuk versi lama hanya mendapat tag versinya.
+- Jangan pernah menimpa tag versi yang sudah terbit dengan isi lain: pengguna mengandalkannya untuk kembali ke versi
+  sebelumnya.
 
 ## 7. Feed pembaruan (opsional)
 

@@ -70,7 +70,7 @@ describe('isRootUser', () => {
 describe('parseImageCheckArgs', () => {
   it('takes --image <tag>', () => {
     expect(parseImageCheckArgs(['--image', 'altis:0.1.0-test'])).toEqual({ image: 'altis:0.1.0-test' });
-    expect(parseImageCheckArgs(['--image=ghcr.io/arjunaayasa/altis@sha256:' + 'a'.repeat(64)])).toEqual({ image: 'ghcr.io/arjunaayasa/altis@sha256:' + 'a'.repeat(64) });
+    expect(parseImageCheckArgs(['--image=arjunaayasa/altis@sha256:' + 'a'.repeat(64)])).toEqual({ image: 'arjunaayasa/altis@sha256:' + 'a'.repeat(64) });
   });
 
   it('refuses a missing or option-like tag and unknown flags (USAGE)', () => {

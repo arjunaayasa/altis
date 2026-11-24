@@ -90,6 +90,8 @@ describe.skipIf(IS_WINDOWS).each(SHELLS)('docker/altis-init under %s', (name) =>
     expect((await fsp.stat(file)).mode & 0o777).toBe(0o600);
     const env = parseEnv(await fsp.readFile(file, 'utf8'));
     expect(Object.keys(env).sort()).toEqual(['ALTIS_DB_PASSWORD', 'ALTIS_DB_ROOT_PASSWORD', 'ALTIS_INSTALL_CODE']);
+    // the official image, commented out: the operator sets its version; left as is, compose builds from the zip
+    expect(await fsp.readFile(file, 'utf8')).toMatch(/^# ALTIS_IMAGE=arjunaayasa\/altis:<versi>$/m);
 
     // the passwords: 32 characters of [A-Za-z0-9], different from each other
     expect(env['ALTIS_DB_PASSWORD']).toMatch(/^[A-Za-z0-9]{32}$/);
