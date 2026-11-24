@@ -6,6 +6,8 @@ Menu **Laporan** di sidebar berisi dua halaman: Laporan dan Akreditasi.
 
 ## Laporan
 
+![Halaman Laporan: Statistik perpustakaan berisi angka koleksi, anggota, kunjungan, dan peminjaman, dengan grafik kunjungan dan peminjaman per bulan; di bawahnya daftar laporan Koleksi dan Akreditasi](../img/admin-laporan.jpg)
+
 **Laporan → Laporan.** Di bagian atas ada **Statistik perpustakaan** (angka utama dan grafik tahunan). Di bawahnya
 daftar laporan:
 

@@ -16,7 +16,9 @@ Menu **Anggota** di sidebar.
 
 ## Menambah anggota
 
-**Anggota → Daftar Anggota → Anggota baru.**
+**Anggota → Daftar Anggota → Tambah anggota.**
+
+![Formulir anggota baru: bagian Data diri dan Kontak, pratinjau kartu anggota dengan barkod, dan kotak Kemungkinan duplikat](../img/admin-anggota-baru.jpg)
 
 1. Isi **Data diri** (nama wajib), **Kontak**, lalu **Keanggotaan** (tipe wajib).
 2. Nomor anggota: huruf besar/kecil dan spasi tidak membedakan, jadi `b 001` sama dengan `B001`.
@@ -40,6 +42,8 @@ Catatan pada anggota hanya terlihat petugas dan ikut tampil di Meja Layanan.
 Di Daftar Anggota, centang beberapa anggota untuk aksi massal: perpanjang masa, ubah tipe/kelas/cabang, tangguhkan,
 aktifkan kembali, arsipkan, pulihkan, dan **naik kelas**. Untuk naik kelas, tulis satu pasangan per baris, misalnya
 `VII-A => VIII-A`. Kosongkan kelas tujuan untuk siswa yang lulus.
+
+![Daftar Anggota: saringan tipe, kelas, dan status; tombol Naik kelas; tabel nama, nomor anggota, kelas, masa berlaku, status, dan jumlah pinjaman](../img/admin-anggota-daftar.jpg)
 
 ## Impor CSV
 

@@ -38,6 +38,8 @@ katalog judul dan anggota dipakai bersama. Hari tutup di Kalender berlaku untuk 
 Keamanan, Tampilan OPAC, Katalog, Akreditasi, Sirkulasi, Kunjungan, Privasi. Satu bilah **Simpan / Buang** di bawah
 berlaku untuk seluruh halaman; ALTIS mengingatkan bila Anda pindah dengan perubahan yang belum disimpan.
 
+![Sistem → Pengaturan pada kelompok Sirkulasi: daftar kelompok di sisi kiri; isian Meja layanan serta Denda, blokir, dan kuitansi; bilah Simpan di bawah](../img/admin-pengaturan-sirkulasi.jpg)
+
 **Sistem → Konfigurasi Sistem** berisi hal teknis: alamat situs, server e-mail (SMTP) beserta tombol kirim e-mail uji,
 dan token penjadwal. Biasanya diatur sekali bersama orang yang memasang server.
 

@@ -9,6 +9,8 @@ untuk perpustakaan sekolah, kampus, dan umum. Edisi Komunitas bersifat sumber te
 > **Pra-1.0.** Rilis pertama: [0.1.0](https://github.com/arjunaayasa/altis/releases). API dan skema masih dapat berubah
 > antar versi pra-1.0.
 
+![Beranda situs perpustakaan contoh "Taman Baca Kali Bening" di ALTIS: slider dengan ilustrasi ruang baca, menu situs, dan kotak cari katalog](docs/img/opac-beranda.jpg)
+
 [English](#english)
 
 ## Fitur (Edisi Komunitas)
@@ -41,6 +43,17 @@ untuk perpustakaan sekolah, kampus, dan umum. Edisi Komunitas bersifat sumber te
   - mode pemeliharaan, Diagnostik;
   - pembaruan sekali klik yang aman: rilis ditandatangani Ed25519, pergantian versi atomik dengan backup dan
     rollback otomatis; atau unggah zip tanpa internet, atau image Docker baru.
+
+## Tampilan
+
+Semua tangkapan layar memakai data contoh perpustakaan fiktif "Taman Baca Kali Bening".
+
+| Situs dan OPAC | Admin |
+| --- | --- |
+| <img src="docs/img/opac-beranda-ponsel-gelap.jpg" alt="Beranda situs perpustakaan di layar ponsel dalam mode gelap, dengan slider dan kotak cari" width="240"><br>Beranda di ponsel, mode gelap | ![Dasbor admin: angka pinjam, kembali, terlambat, dan kunjungan hari ini, grafik aktivitas meja, dan daftar yang perlu perhatian](docs/img/admin-dasbor.jpg)<br>Dasbor admin |
+| ![Halaman profil perpustakaan dengan sejarah, lini masa, serta visi dan misi](docs/img/opac-profil.jpg)<br>Profil perpustakaan | ![Meja Layanan dengan panel anggota, kotak pindai barkod eksemplar, reservasi siap diambil, dan aturan pinjam tipe Siswa](docs/img/admin-meja-layanan.jpg)<br>Meja Layanan: pinjam dan kembali dengan pemindai |
+| ![Halaman judul di OPAC: ketersediaan tiap eksemplar, nomor panggil, dan tombol pesan](docs/img/opac-detail-judul.jpg)<br>Halaman judul dan ketersediaan eksemplar | ![Daftar bibliografi di admin dengan pencarian, saringan, dan kolom nomor panggil serta jumlah eksemplar](docs/img/admin-katalog-daftar.jpg)<br>Katalog: daftar bibliografi |
+| ![Akun anggota di OPAC: data keanggotaan, pemberitahuan denda, dan pinjaman saat ini dengan tombol perpanjang](docs/img/opac-akun-anggota.jpg)<br>Akun anggota | ![Pengaturan slider beranda di admin: daftar slide dengan foto, urutan, dan pratinjau](docs/img/admin-slider.jpg)<br>Slider beranda dikelola dari admin |
 
 ## Panduan
 
@@ -136,6 +149,19 @@ system: an alternative to SLiMS for school, academic and public libraries, under
 
 > **Pre-1.0.** First release: [0.1.0](https://github.com/arjunaayasa/altis/releases). The API and schema may still
 > change between pre-1.0 versions.
+
+### Screenshots
+
+All screenshots use the sample data of a fictional library, "Taman Baca Kali Bening".
+
+![Home page of the sample library site on ALTIS: a slider with a reading-room illustration, the site menu and the catalogue search box](docs/img/opac-beranda.jpg)
+
+| Library site and OPAC | Admin |
+| --- | --- |
+| <img src="docs/img/opac-beranda-ponsel-gelap.jpg" alt="The library home page on a phone in dark mode, with the slider and the search box" width="240"><br>Home page on a phone, dark mode | ![Admin dashboard: today's loans, returns, overdue loans and visits, a desk activity chart and a list of items that need attention](docs/img/admin-dasbor.jpg)<br>Admin dashboard |
+| ![Library profile page with its history, timeline, vision and mission](docs/img/opac-profil.jpg)<br>Library profile | ![The service desk with the member panel, the item barcode box, a hold ready for pickup and the loan rules of the member type](docs/img/admin-meja-layanan.jpg)<br>Service desk: loans and returns with a scanner |
+| ![A title page in the OPAC: availability of each item, call number and a hold button](docs/img/opac-detail-judul.jpg)<br>Title page with item availability | ![The bibliographic record list in the admin, with search, filters, call numbers and item counts](docs/img/admin-katalog-daftar.jpg)<br>Catalogue: bibliographic records |
+| ![A member account in the OPAC: membership details, a fines notice and current loans with a renew button](docs/img/opac-akun-anggota.jpg)<br>Member account | ![The home page slider settings in the admin: the slides with their photos, their order and a preview](docs/img/admin-slider.jpg)<br>Home page slider managed from the admin |
 
 **Features:** cataloguing (bibliographic records, items, master data, authority control, locations and shelves with
 shelf maps, MARC 21/MARCXML/CSV import and export, duplicate detection, labels and barcodes as PDF); members (types,

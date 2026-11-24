@@ -3,6 +3,8 @@
 Panduan ini untuk pustakawan dan petugas yang memakai ALTIS sehari-hari. Isinya mengikuti menu di sidebar kiri
 halaman admin (`/admin`). Untuk pemasangan di server, lihat [panduan instalasi](../install/).
 
+![Dasbor admin ALTIS: sidebar kiri dengan menu Kerja harian, Koleksi, serta Situs & sistem; angka pinjam, kembali, terlambat, dan kunjungan hari ini; grafik aktivitas meja; dan daftar yang perlu perhatian](../img/admin-dasbor.jpg)
+
 ## Daftar isi
 
 | Halaman | Isi |
