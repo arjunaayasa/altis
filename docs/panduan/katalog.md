@@ -26,7 +26,7 @@ jumlahnya; chip saringan mempersempit daftar; "Muat lagi" menambah baris.
 
 Menambah cantuman:
 
-1. Tekan **Cantuman baru** dan pilih jenis bahan.
+1. Tekan **Tambah cantuman** dan pilih jenis bahan.
 2. Cara tercepat: pindai atau ketik ISBN lalu cari. Bila server salin katalog (SRU) sudah diaktifkan, formulir terisi
    dari cantuman perpustakaan lain. Periksa isinya, lalu simpan.
 3. Bila mengetik sendiri: isi judul, pengarang (nama keluarga di depan, misalnya `Toer, Pramoedya Ananta`), penerbit,

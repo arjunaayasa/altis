@@ -16,7 +16,7 @@ Menu **Anggota** di sidebar.
 
 ## Menambah anggota
 
-**Anggota → Daftar Anggota → Anggota baru.**
+**Anggota → Daftar Anggota → Tambah anggota.**
 
 ![Formulir anggota baru: bagian Data diri dan Kontak, pratinjau kartu anggota dengan barkod, dan kotak Kemungkinan duplikat](../img/admin-anggota-baru.jpg)
 

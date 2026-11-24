@@ -14,7 +14,7 @@ Kunjungan dicatat lewat **buku tamu**: sebuah komputer atau tablet di pintu masu
 Bila perangkat hilang atau diganti, **cabut** perangkatnya di menu yang sama. Perangkat yang dicabut harus diaktifkan
 ulang dengan kode baru.
 
-![Perangkat Buku Tamu: isian nama perangkat dan tombol Tambah perangkat; satu perangkat "Meja tamu teras" berstatus Menunggu kode, dengan tombol Kode baru dan Cabut](../img/admin-buku-tamu.jpg)
+![Perangkat Buku Tamu: isian nama perangkat dan tombol Tambah perangkat; satu perangkat "Meja tamu teras" berstatus Belum aktif, dengan tombol Kode baru dan Cabut](../img/admin-buku-tamu.jpg)
 
 ## Cara pengunjung mengisi
 
