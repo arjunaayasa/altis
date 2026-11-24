@@ -7,5 +7,14 @@
       "alg": "Ed25519",
       "sig": "_yF19MtZRegyziNfRIjDpB9kUiZP0B17WkOrwTNU2dHeVwwLFaf8SNSG0zHFy20gASiGSpmiDgpO9jCmI3xADg"
     }
+  },
+  {
+    "raw": "{\"keys\":[{\"kid\":\"arsya-ts-2\",\"pub\":\"b_2YIAh0u2OTFiyTr7zpE3KZu-Kh--v73-lXip-zD4s\",\"use\":\"timestamp\"}],\"revokedKids\":[\"arsya-ts-1\"],\"seq\":2}",
+    "env": {
+      "typ": "altis-keyset/1",
+      "kid": "arsya-root-1",
+      "alg": "Ed25519",
+      "sig": "-xJxjchhMI_otHJj-fd3_xW9O8kL2ecYuYUzEAVYyPybannQ0yO1d-J_XU0un-iFPJ8Sibxrcs8feczA1kj8CA"
+    }
   }
 ]
