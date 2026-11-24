@@ -1,0 +1,12 @@
+[
+  {
+    "kid": "arsya-root-1",
+    "use": "root",
+    "pub": "a9_bqRz7_7I0AHPYKZ2AE1i-BEuzBJ6c2LWJH_uhca4"
+  },
+  {
+    "kid": "arsya-root-2",
+    "use": "root",
+    "pub": "6bssVCewI7LEmCtVsmmuhFABwc280yESKgYbMAOtJi4"
+  }
+]

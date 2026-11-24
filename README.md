@@ -6,7 +6,8 @@ ALTIS adalah sistem otomasi perpustakaan modern yang Anda pasang di server sendi
 untuk perpustakaan sekolah, kampus, dan umum. Edisi Komunitas bersifat sumber terbuka di bawah lisensi
 [AGPL-3.0-only](LICENSE).
 
-> **Sedang dikembangkan.** Belum ada rilis resmi; API dan skema masih dapat berubah antar versi pra-1.0.
+> **Pra-1.0.** Rilis pertama: [0.1.0](https://github.com/arjunaayasa/altis/releases). API dan skema masih dapat berubah
+> antar versi pra-1.0.
 
 [English](#english)
 
@@ -56,10 +57,10 @@ untuk perpustakaan sekolah, kampus, dan umum. Edisi Komunitas bersifat sumber te
 
 ## Mulai cepat
 
-Zip rilis akan tersedia di halaman [Releases](https://github.com/arjunaayasa/altis/releases). **Sampai rilis pertama
-terbit, belum ada zip untuk pemakaian sungguhan.** Build `-test` dari kode sumber hanya untuk evaluasi, jangan pernah
-untuk data sungguhan. Zip untuk pemakaian sungguhan adalah build produksi dengan kunci Anda sendiri
-([docs/ops/release-signing.md](docs/ops/release-signing.md)).
+Unduh zip rilis dari halaman [Releases](https://github.com/arjunaayasa/altis/releases). Zip resmi ditandatangani
+kunci rilis Edisi Komunitas (sidik jari di [tools/keys/community/FINGERPRINTS.md](tools/keys/community/FINGERPRINTS.md)).
+Build `-test` dari kode sumber hanya untuk evaluasi, jangan pernah untuk data sungguhan. Fork yang menerbitkan rilisnya
+sendiri memakai kuncinya sendiri ([docs/ops/release-signing.md](docs/ops/release-signing.md)).
 
 ### Docker
 
@@ -133,8 +134,8 @@ Edisi dengan modul dan layanan tambahan akan menyusul; Edisi Komunitas tetap AGP
 ALTIS (Arsya Library Tracking Information System), Community Edition, is a modern self-hosted library automation
 system: an alternative to SLiMS for school, academic and public libraries, under [AGPL-3.0-only](LICENSE).
 
-> **In development.** There is no official release yet; the API and schema may still change between pre-1.0
-> versions.
+> **Pre-1.0.** First release: [0.1.0](https://github.com/arjunaayasa/altis/releases). The API and schema may still
+> change between pre-1.0 versions.
 
 **Features:** cataloguing (bibliographic records, items, master data, authority control, locations and shelves with
 shelf maps, MARC 21/MARCXML/CSV import and export, duplicate detection, labels and barcodes as PDF); members (types,
@@ -159,9 +160,10 @@ and rollback, offline zip upload or a new Docker image).
 **Requirements:** Node.js 22.16+; SQLite (built in), MySQL 8.0+, MariaDB 10.6+ or PostgreSQL 15+; cPanel/CloudLinux
 (Passenger), aaPanel, Docker, PM2 or a single PC.
 
-**Install:** release zips will appear on the [Releases](https://github.com/arjunaayasa/altis/releases) page. **Until
-the first release there is no zip for real use:** a `-test` build from source is for evaluation only, never for real
-data, and a zip for real use is a production build with your own keys
+**Install:** download the release zip from the [Releases](https://github.com/arjunaayasa/altis/releases) page. Official
+zips are signed with the Community Edition release keys (fingerprints in
+[tools/keys/community/FINGERPRINTS.md](tools/keys/community/FINGERPRINTS.md)). A `-test` build from source is for
+evaluation only, never for real data; a fork that publishes its own releases uses its own keys
 ([docs/ops/release-signing.md](docs/ops/release-signing.md)). The install guides are in Indonesian:
 [Docker](docs/install/docker.md), [cPanel](docs/install/cpanel.md), [CloudLinux](docs/install/cloudlinux.md),
 [aaPanel](docs/install/aapanel.md), [PM2](docs/install/pm2.md) and [a single PC](docs/install/node-lokal.md).

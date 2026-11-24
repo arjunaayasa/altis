@@ -1,0 +1,11 @@
+[
+  {
+    "raw": "{\"keys\":[{\"kid\":\"arsya-rel-1\",\"pub\":\"ug_VAxKXnLl3_a-gYHSTdZalGmmBkyJ2N1kpmeyuoQo\",\"use\":\"release\"},{\"kid\":\"arsya-ts-1\",\"pub\":\"0bX9yr1G4DpHHb00sLQs1QEKFOCUpox7EnfJcex9qng\",\"use\":\"timestamp\"}],\"revokedKids\":[],\"seq\":1}",
+    "env": {
+      "typ": "altis-keyset/1",
+      "kid": "arsya-root-1",
+      "alg": "Ed25519",
+      "sig": "_yF19MtZRegyziNfRIjDpB9kUiZP0B17WkOrwTNU2dHeVwwLFaf8SNSG0zHFy20gASiGSpmiDgpO9jCmI3xADg"
+    }
+  }
+]
