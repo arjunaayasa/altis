@@ -77,13 +77,15 @@ sendiri memakai kuncinya sendiri ([docs/ops/release-signing.md](docs/ops/release
 
 ### Docker
 
+Pakai image resmi [`arjunaayasa/altis`](https://hub.docker.com/r/arjunaayasa/altis) di Docker Hub:
+
 1. Salin berkas folder [`docker/`](docker/) ke satu folder di server, lalu jalankan `./altis-init` (menulis `.env`
    dan menampilkan kode pemasangan).
-2. Ekstrak zip rilis ke subfolder `release/`.
-3. `docker compose up -d`, lalu pasang proxy TLS di depannya.
+2. Di `.env`, hapus tanda `#` di depan `ALTIS_IMAGE` dan isi versi rilis terbaru (misalnya `arjunaayasa/altis:0.1.0`).
+3. `docker compose pull && docker compose up -d`, lalu pasang proxy TLS di depannya.
 4. Buka `https://<domain>/install`.
 
-Panduan lengkap: [docs/install/docker.md](docs/install/docker.md).
+Image juga tetap bisa dibangun sendiri dari zip rilis. Panduan lengkap: [docs/install/docker.md](docs/install/docker.md).
 
 ### cPanel
 
@@ -190,7 +192,11 @@ and rollback, offline zip upload or a new Docker image).
 zips are signed with the Community Edition release keys (fingerprints in
 [tools/keys/community/FINGERPRINTS.md](tools/keys/community/FINGERPRINTS.md)). A `-test` build from source is for
 evaluation only, never for real data; a fork that publishes its own releases uses its own keys
-([docs/ops/release-signing.md](docs/ops/release-signing.md)). The install guides are in Indonesian:
+([docs/ops/release-signing.md](docs/ops/release-signing.md)). With Docker, use the official image
+[`arjunaayasa/altis`](https://hub.docker.com/r/arjunaayasa/altis) on Docker Hub: copy `docker/` and run `./altis-init`,
+in `.env` remove the `#` before `ALTIS_IMAGE` and set the latest release (such as `arjunaayasa/altis:0.1.0`), run `docker compose pull && docker compose up -d` behind a TLS
+proxy and open `https://<domain>/install` (building the image from the release zip is still possible). The install
+guides are in Indonesian:
 [Docker](docs/install/docker.md), [cPanel](docs/install/cpanel.md), [CloudLinux](docs/install/cloudlinux.md),
 [aaPanel](docs/install/aapanel.md), [PM2](docs/install/pm2.md) and [a single PC](docs/install/node-lokal.md).
 
