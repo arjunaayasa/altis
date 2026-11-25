@@ -13,7 +13,8 @@ ada di `/admin`. Semua pengaturannya ada di menu **Situs / OPAC**.
 - **Profil** (`/profil`), **Galeri** (`/galeri`), **Berita** (`/berita`), dan halaman tetap (`/halaman/...`).
 - **Akun anggota** (`/akun`): pinjaman, riwayat, reservasi, penanda, kartu anggota, denda dan biaya, ganti kata sandi,
   unduh data sendiri. Anggota masuk dengan nomor anggota dan kata sandi yang diatur petugas.
-- Situs tersedia dalam bahasa Indonesia dan Inggris, mode terang dan gelap, dan nyaman dibuka di ponsel.
+- Situs tersedia dalam bahasa Indonesia dan Inggris, mode terang dan gelap (mengikuti pengaturan perangkat atau diubah
+  lewat tombol **Gelap** / **Terang** di kepala situs), dan nyaman dibuka di ponsel.
 
 Data pribadi anggota tidak pernah tampil di halaman publik.
 
@@ -49,9 +50,10 @@ Bagian pratinjau menunjukkan hasilnya sebelum disimpan. Setelah disimpan, peruba
 
 - **Slider hero:** paling banyak 6 slide. Tiap slide: foto, judul, subjudul, catatan kecil (misalnya tanggal acara),
   tombol dengan tujuannya (berita, halaman, atau alamat di situs ini), dan jadwal tampil (dari tanggal sampai tanggal).
-  Urutan diubah dengan tombol panah. Foto mendatar 16:9; letakkan bagian penting di tengah karena di ponsel foto
-  dipotong. Teks slide berada di panel berwarna, jadi selalu terbaca apa pun fotonya. Slider berganti otomatis,
-  berhenti saat disorot, dan selalu punya tombol jeda.
+  Urutan diubah dengan tombol panah. Foto mendatar 16:9 tampil penuh sebagai latar slide dengan lapisan gradasi gelap di
+  bawah teks agar judul tetap jelas terbaca apa pun fotonya (letakkan bagian penting foto agak ke kanan atau tengah agar
+  tidak tertutup teks di layar lebar maupun potongan di ponsel). Slider berganti otomatis, berhenti saat disorot, dan
+  selalu punya tombol jeda.
 - **Profil singkat:** paragraf tentang perpustakaan dan fotonya; sejarah dan lini masa; visi dan misi; pengelola (nama
   dan jabatan yang sengaja Anda ketik untuk dipublikasikan). Jumlah koleksi dan anggota aktif dihitung otomatis.
 - **Layanan:** daftar layanan dan foto fasilitas.

@@ -9,7 +9,7 @@ untuk perpustakaan sekolah, kampus, dan umum. Edisi Komunitas bersifat sumber te
 > **Pra-1.0.** Rilis pertama: [0.1.0](https://github.com/arjunaayasa/altis/releases). API dan skema masih dapat berubah
 > antar versi pra-1.0.
 
-![Beranda situs perpustakaan contoh "Taman Baca Kali Bening" di ALTIS: slider dengan ilustrasi ruang baca, menu situs, dan kotak cari katalog](docs/img/opac-beranda.jpg)
+![Beranda situs perpustakaan contoh "Taman Baca Kali Bening" di ALTIS: slider foto ruang baca penuh dengan teks di atas foto, menu situs, tombol mode gelap, dan pita cari katalog](docs/img/opac-beranda.jpg)
 
 [English](#english)
 
@@ -28,7 +28,8 @@ untuk perpustakaan sekolah, kampus, dan umum. Edisi Komunitas bersifat sumber te
   akreditasi**: perkiraan nilai, daftar periksa bukti, register, dan berkas siap cetak.
 - **Situs profil perpustakaan dan OPAC:** beranda dengan slider yang dikelola dari admin, profil, galeri, berita dan
   agenda, halaman; identitas situs dengan logo sendiri; pencarian bawaan berfaset (FULLTEXT/GIN/FTS5); akun anggota
-  (pinjaman, reservasi, penanda, denda); bahasa Indonesia dan Inggris, terang dan gelap, berfungsi tanpa JavaScript;
+  (pinjaman, reservasi, penanda, denda); bahasa Indonesia dan Inggris, mode terang dan gelap (otomatis maupun lewat
+  tombol di kepala situs), tetap berfungsi penuh tanpa JavaScript;
   feed, sitemap, JSON-LD.
 - **Interoperabilitas:** OAI-PMH, salin katalog lewat SRU, pencarian ISBN.
 - **Migrasi dari SLiMS:** dari dump SQL atau koneksi langsung ke database SLiMS: katalog, lampiran dan sampul, anggota,
@@ -50,7 +51,7 @@ Semua tangkapan layar memakai data contoh perpustakaan fiktif "Taman Baca Kali B
 
 | Situs dan OPAC | Admin |
 | --- | --- |
-| <img src="docs/img/opac-beranda-ponsel-gelap.jpg" alt="Beranda situs perpustakaan di layar ponsel dalam mode gelap, dengan slider dan kotak cari" width="240"><br>Beranda di ponsel, mode gelap | ![Dasbor admin: angka pinjam, kembali, terlambat, dan kunjungan hari ini, grafik aktivitas meja, dan daftar yang perlu perhatian](docs/img/admin-dasbor.jpg)<br>Dasbor admin |
+| <img src="docs/img/opac-beranda-ponsel-gelap.jpg" alt="Beranda situs perpustakaan di layar ponsel dalam mode gelap, dengan tombol tema, menu, slider foto penuh, dan pita cari" width="240"><br>Beranda di ponsel, mode gelap | ![Dasbor admin: angka pinjam, kembali, terlambat, dan kunjungan hari ini, grafik aktivitas meja, dan daftar yang perlu perhatian](docs/img/admin-dasbor.jpg)<br>Dasbor admin |
 | ![Halaman profil perpustakaan dengan sejarah, lini masa, serta visi dan misi](docs/img/opac-profil.jpg)<br>Profil perpustakaan | ![Meja Layanan dengan panel anggota, kotak pindai barkod eksemplar, reservasi siap diambil, dan aturan pinjam tipe Siswa](docs/img/admin-meja-layanan.jpg)<br>Meja Layanan: pinjam dan kembali dengan pemindai |
 | ![Halaman judul di OPAC: ketersediaan tiap eksemplar, nomor panggil, dan tombol pesan](docs/img/opac-detail-judul.jpg)<br>Halaman judul dan ketersediaan eksemplar | ![Daftar bibliografi di admin dengan pencarian, saringan, dan kolom nomor panggil serta jumlah eksemplar](docs/img/admin-katalog-daftar.jpg)<br>Katalog: daftar bibliografi |
 | ![Akun anggota di OPAC: data keanggotaan, pemberitahuan denda, dan pinjaman saat ini dengan tombol perpanjang](docs/img/opac-akun-anggota.jpg)<br>Akun anggota | ![Pengaturan slider beranda di admin: daftar slide dengan foto, urutan, dan pratinjau](docs/img/admin-slider.jpg)<br>Slider beranda dikelola dari admin |
@@ -156,11 +157,11 @@ system: an alternative to SLiMS for school, academic and public libraries, under
 
 All screenshots use the sample data of a fictional library, "Taman Baca Kali Bening".
 
-![Home page of the sample library site on ALTIS: a slider with a reading-room illustration, the site menu and the catalogue search box](docs/img/opac-beranda.jpg)
+![Home page of the sample library site on ALTIS: a full-bleed reading-room photograph slider with overlaid text, the site menu, the theme toggle and the catalogue search band](docs/img/opac-beranda.jpg)
 
 | Library site and OPAC | Admin |
 | --- | --- |
-| <img src="docs/img/opac-beranda-ponsel-gelap.jpg" alt="The library home page on a phone in dark mode, with the slider and the search box" width="240"><br>Home page on a phone, dark mode | ![Admin dashboard: today's loans, returns, overdue loans and visits, a desk activity chart and a list of items that need attention](docs/img/admin-dasbor.jpg)<br>Admin dashboard |
+| <img src="docs/img/opac-beranda-ponsel-gelap.jpg" alt="The library home page on a phone in dark mode, with the theme toggle, menu, full-bleed slider and search band" width="240"><br>Home page on a phone, dark mode | ![Admin dashboard: today's loans, returns, overdue loans and visits, a desk activity chart and a list of items that need attention](docs/img/admin-dasbor.jpg)<br>Admin dashboard |
 | ![Library profile page with its history, timeline, vision and mission](docs/img/opac-profil.jpg)<br>Library profile | ![The service desk with the member panel, the item barcode box, a hold ready for pickup and the loan rules of the member type](docs/img/admin-meja-layanan.jpg)<br>Service desk: loans and returns with a scanner |
 | ![A title page in the OPAC: availability of each item, call number and a hold button](docs/img/opac-detail-judul.jpg)<br>Title page with item availability | ![The bibliographic record list in the admin, with search, filters, call numbers and item counts](docs/img/admin-katalog-daftar.jpg)<br>Catalogue: bibliographic records |
 | ![A member account in the OPAC: membership details, a fines notice and current loans with a renew button](docs/img/opac-akun-anggota.jpg)<br>Member account | ![The home page slider settings in the admin: the slides with their photos, their order and a preview](docs/img/admin-slider.jpg)<br>Home page slider managed from the admin |
@@ -175,7 +176,7 @@ stocktaking per branch; reports on the collection, members, visits and circulati
 export) and an accreditation workspace (estimated score, evidence checklists, registers, print-ready files); a
 library profile site and OPAC (a home page with a slider managed in the admin, profile, gallery, news and events,
 pages, a site identity with your own logo, built-in faceted search on FULLTEXT/GIN/FTS5, member accounts, Indonesian
-and English, light and dark, working without JavaScript, feeds, sitemap and JSON-LD); OAI-PMH, SRU copy cataloguing
+and English, light and dark (automatic or via the header toggle), working without JavaScript, feeds, sitemap and JSON-LD); OAI-PMH, SRU copy cataloguing
 and ISBN lookup; **migration from SLiMS** (SQL dump or direct connection: catalogue, attachments and covers, members,
 visits and circulation, with a dry run, reconciliation and a cutover checklist); an admin with one left sidebar and a
 command palette; and the foundation: install wizard, 2FA login, users, roles and branches, a chained audit trail,
