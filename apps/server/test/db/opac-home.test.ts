@@ -377,7 +377,9 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
     expect(hero).not.toContain('<button');
     expect(hero).not.toContain('hero-dots');
     expect(html).not.toContain('opac-slider-');
-    expect(hero).toContain(`<img class="hero-pos-40" src="/files/${photoId}" alt="Gedung &quot;B&quot; perpustakaan" width="${OPAC_HOME_HERO_SIZE.width}" height="${OPAC_HOME_HERO_SIZE.height}" decoding="async"/>`);
+    expect(hero).toContain(
+      `<img class="hero-pos-40" src="/files/${photoId}" alt="Gedung &quot;B&quot; perpustakaan" width="${OPAC_HOME_HERO_SIZE.width}" height="${OPAC_HOME_HERO_SIZE.height}" fetchpriority="high" decoding="async"/>`,
+    );
     expect(hero).toContain('<h1>Ruang baca &lt;untuk&gt; semua</h1>');
     expect(html).toContain(`<meta property="og:image" content="${CONFIG.baseUrl}/files/${photoId}"`);
     const about = section(html, 'tentang-judul')!;
@@ -486,8 +488,10 @@ describe.skipIf(!ctx.available)(`the OPAC home page as a profile site [${engineL
       const style = /<style nonce="([^"]+)">([^<]*)<\/style>/.exec(html);
       expect(style?.[1]).toBe(nonce);
       expect(style?.[2]).toBe(brandCss('#1e3a8a'));
-      // Custom properties with hex colours for both schemes, and nothing a colour could smuggle in.
-      expect(style?.[2]).toMatch(/^:root\{(?:--[a-z-]+:#[0-9a-f]{6};?)+\}@media \(prefers-color-scheme:dark\)\{:root\{(?:--[a-z-]+:#[0-9a-f]{6};?)+\}\}$/);
+      // Custom properties with hex colours for both schemes (and explicit data-theme override), and nothing a colour could smuggle in.
+      expect(style?.[2]).toMatch(
+        /^:root\{(?:--[a-z-]+:#[0-9a-f]{6};?)+\}@media \(prefers-color-scheme:dark\)\{:root:not\(\[data-theme=light\]\)\{(?:--[a-z-]+:#[0-9a-f]{6};?)+\}\}:root\[data-theme=dark\]\{(?:--[a-z-]+:#[0-9a-f]{6};?)+\}$/,
+      );
       expect(html.match(/<style/g)).toHaveLength(1);
       expect(reply.headers.get('content-security-policy')).toContain(`style-src 'self' 'nonce-${nonce}'`);
       expect(html).not.toContain('style=');

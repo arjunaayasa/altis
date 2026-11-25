@@ -162,27 +162,24 @@ describe('OPAC › Halaman awal › Slider hero', () => {
     expect(why.textContent).toBe(t('opacHome.slides.full', { max: 6 }));
   });
 
-  it('the preview shows the picked slide on a panel of the library colour, wide or as on a phone', async () => {
+  it('the preview shows the picked slide over its full-bleed photo, wide or as on a phone', async () => {
     startApp({
       me: adminMe(),
       path: '/admin/opac/beranda/slider',
       routes: { 'GET opac/home': () => view({ brand: '#1e3a8a', hero: heroOf(slide(1, { active: false }), slide(2, { subtitle: { id: 'Sabtu pagi', en: null }, cta: { label: { id: 'Baca', en: null }, target: { kind: 'news' } }, position: 20 })) }) },
     });
     const side = await screen.findByRole('complementary', { name: t('opacHome.preview.title') }, FIRST);
-    // The first slide that shows today is the second one.
     expect(within(side).getByText(t('opacHome.preview.which', { n: 2, count: 2 }))).toBeTruthy();
     const preview = side.querySelector<HTMLElement>('[data-slot=slide-preview]')!;
     expect(within(preview).getByText('Judul 2')).toBeTruthy();
     expect(within(preview).getByText('Sabtu pagi')).toBeTruthy();
     expect(within(preview).getByText('Baca')).toBeTruthy();
-    expect((preview.firstElementChild as HTMLElement).style.backgroundColor).toBe('rgb(30, 58, 138)');
     expect(preview.querySelector('img')!.style.objectPosition).toBe('50% 20%');
-    expect(preview.className).toContain('grid-cols-[46%');
+    expect(preview.className).toContain('aspect-video');
     const phone = within(side).getByRole('button', { name: t('opacHome.preview.phone') });
     fireEvent.click(phone);
     expect(phone.getAttribute('aria-pressed')).toBe('true');
-    expect(preview.className).not.toContain('grid-cols-[46%');
-    // A slide whose control has the focus is the one previewed; without texts of its own it shows the page's.
+    expect(preview.className).toContain('aspect-[4/5]');
     fireEvent.focus(screen.getByRole('switch', { name: t('opacHome.slides.show', { n: 1 }) }));
     expect(within(side).getByText(t('opacHome.preview.which', { n: 1, count: 2 }))).toBeTruthy();
     expect(within(preview).getByText('Selamat datang.')).toBeTruthy();

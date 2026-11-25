@@ -280,7 +280,7 @@ describe.skipIf(!ctx.available)(`the public site's gaps [${engineLabel()}]`, () 
       const html = res.text;
       expect(html).toContain(`<h1>${esc(opacText('id', 'search.advanced.title'))}</h1>`);
       expect(html).toContain('<meta name="robots" content="noindex, follow"');
-      expect(html).not.toContain('<script');
+      expect([...html.matchAll(/<script\b[^>]*>/gi)].map((m) => m[0])).toEqual([expect.stringContaining('src="/assets/opac-ui-')]);
       expect(html).toContain('<form class="advanced-form" method="get" action="/cari">');
       for (const name of ['q', 'judul', 'penulis', 'topik', 'penerbit', 'isbn', 'tahun']) expect(html, name).toMatch(new RegExp(`<input id="[^"]+" type="text" name="${name}"`));
       for (const name of ['jenis', 'bahasa', 'koleksi', 'urut']) expect(html, name).toContain(`name="${name}"`);

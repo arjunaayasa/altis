@@ -68,9 +68,9 @@ describe('the hero with several slides', () => {
       ['h2', 'Koleksi baru'],
     ]);
     const { width, height } = OPAC_HOME_HERO_SIZE;
-    // The first photo is fetched at once; the others, which lie under it, only when the browser gets to them.
+    // The first photo carries fetchpriority="high" (R-40); subsequent slides load lazily.
     expect(tags(track, 'img')).toEqual([
-      `<img class="hero-pos-40" src="/files/01JZFXQ00000000000000000A1" alt="Foto satu" width="${width}" height="${height}" decoding="async"/>`,
+      `<img class="hero-pos-40" src="/files/01JZFXQ00000000000000000A1" alt="Foto satu" width="${width}" height="${height}" fetchpriority="high" decoding="async"/>`,
       `<img class="hero-pos-50" src="/files/01JZFXQ00000000000000000A2" alt="Foto dua" width="${width}" height="${height}" loading="lazy" decoding="async"/>`,
       `<img class="hero-pos-50" src="/files/01JZFXQ00000000000000000A3" alt="Foto tiga" width="${width}" height="${height}" loading="lazy" decoding="async"/>`,
     ]);
@@ -236,20 +236,23 @@ describe("the hero's styles", () => {
     expect(HOME_CSS).toContain('.hero-track.js>.slide.is-on{visibility:visible;opacity:1}');
   });
 
-  it('a slide is at least 440 px high and its photo never sets the height', () => {
-    expect(rule('.slide').split(';')).toContain('min-height:27.5rem');
+  it('each slide layers its full-bleed photo beneath text, and the photo never sets the height', () => {
+    expect(rule('.slide').split(';')).toContain('min-height:clamp(25rem,38vw,32rem)');
     const img = rule('.slide>img').split(';');
-    expect(img).toContain('contain:size');
+    expect(img).toContain('position:absolute');
+    expect(img).toContain('inset:0');
     expect(img).toContain('object-fit:cover');
     for (let p = 0; p <= 100; p += 10) expect(HOME_CSS).toContain(`.hero-pos-${p}{object-position:50% ${p}%}`);
   });
 
-  it('the panel is one flat colour under white text, a change fades only when motion is welcome, focus shows on the panel', () => {
-    expect(rule('.slide-text')).toContain('background:var(--panel);color:var(--on-panel)');
-    expect(HOME_CSS).not.toMatch(/gradient|rgba?\(8 12 20|hero-ov-|hero-photo/);
+  it('the photo scrim guarantees white-text contrast, controls meet 44px targets, and fades respect reduced motion', () => {
+    expect(rule('.slide-text')).toContain('grid-area:1/1;z-index:2;color:#ffffff');
+    expect(rule('.slide:not(.slide-nophoto)::after')).toContain('linear-gradient(');
+    expect(rule('.slide-nophoto')).toContain('background:var(--panel)');
+    expect(rule('.hero-ui button')).toContain('width:2.75rem;height:2.75rem');
     expect(HOME_CSS).toContain('@media (prefers-reduced-motion:no-preference){.hero-track.js>.slide{transition:opacity .45s ease,visibility .45s}}');
     expect(HOME_CSS.replace(/@media \(prefers-reduced-motion:no-preference\)\{[^}]*\}\}/, '')).not.toMatch(/\.slide[^{]*\{[^}]*transition/);
-    expect(HOME_CSS).toContain('.hero a:focus-visible,.hero button:focus-visible{outline-color:var(--on-panel)}');
+    expect(HOME_CSS).toContain('.hero a:focus-visible,.hero button:focus-visible{outline-color:#ffffff}');
     expect(OPAC_CSS).toContain(HOME_CSS);
   });
 

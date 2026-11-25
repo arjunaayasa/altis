@@ -88,8 +88,8 @@ function Card(props: { card: TitleCard; locale: Locale; lang: Locale | null; yea
         book={{ title: card.title, author: card.mainAgent, callNumber: card.callNumber, classification: card.classification, coverFileId: card.coverFileId }}
         size="card"
         imgClass="card-cover"
-        width={64}
-        height={96}
+        width={84}
+        height={126}
       />
       <span class="card-body">
         <a class="card-title" href={keep(recordUrlPath(card.id, card.title), lang)}>
@@ -103,7 +103,6 @@ function Card(props: { card: TitleCard; locale: Locale; lang: Locale | null; yea
   );
 }
 
-/** A section's head: its heading (and a line under it) on the left, a "see all" link on the right. */
 function SectionHead(props: { id: string; heading: string; sub?: string | undefined; more?: { href: string; label: string } | undefined }) {
   return (
     <div class="section-head">
@@ -113,7 +112,7 @@ function SectionHead(props: { id: string; heading: string; sub?: string | undefi
       </div>
       {props.more === undefined ? null : (
         <a class="section-link" href={props.more.href}>
-          {props.more.label} →
+          {props.more.label}
         </a>
       )}
     </div>
@@ -246,6 +245,7 @@ export function Hero(props: {
               alt={slide.alt}
               width={OPAC_HOME_HERO_SIZE.width}
               height={OPAC_HOME_HERO_SIZE.height}
+              fetchpriority={i === 0 ? 'high' : undefined}
               loading={i === 0 ? undefined : 'lazy'}
               decoding="async"
             />
@@ -303,34 +303,32 @@ function SliderScript() {
 // ---------------------------------------------------------------------------------------------------------------
 // The blocks
 
-/** One block of the page: what it is called in `aria-labelledby`/`id`, and its content. */
 interface Block {
   id?: string;
   labelledBy: string;
+  variant?: 'band' | 'compact';
   body: JSX.Element;
 }
 
-/**
- * The search band under the hero: the field to search in joined to the text, then the collection's facts (the number
- * of titles and of titles on the shelf now) and the link to the advanced search.
- */
 function SearchBand(props: { locale: Locale; lang: Locale | null; titles: number; available: number }) {
   const { locale, lang, titles } = props;
+  const meta = (
+    <p class="search-meta">
+      {titles > 0 ? (
+        <span>
+          {opacText(locale, titles === 1 ? 'home.search.summary_one' : 'home.search.summary', {
+            count: countText(titles, locale),
+            available: countText(props.available, locale),
+          })}
+        </span>
+      ) : null}
+      <a href={keep(OPAC_ADVANCED_PATH, lang)}>{opacText(locale, 'search.advanced.link')}</a>
+    </p>
+  );
   return (
     <div class="search-band home-search">
       <div class="wrap">
-        <SearchForm locale={locale} lang={lang} id="cari-beranda" scope="semua" label maxlength={OPAC_SEARCH_TEXT_MAX} />
-        <p class="search-meta">
-          {titles > 0 ? (
-            <span>
-              {opacText(locale, titles === 1 ? 'home.search.summary_one' : 'home.search.summary', {
-                count: countText(titles, locale),
-                available: countText(props.available, locale),
-              })}
-            </span>
-          ) : null}
-          <a href={keep(OPAC_ADVANCED_PATH, lang)}>{opacText(locale, 'search.advanced.link')}</a>
-        </p>
+        <SearchForm locale={locale} lang={lang} id="cari-beranda" scope="semua" label meta={meta} maxlength={OPAC_SEARCH_TEXT_MAX} />
       </div>
     </div>
   );
@@ -358,7 +356,7 @@ function about(o: { home: OpacHomeContent; figures: HomeFigures; profile: boolea
             {text === null ? null : paragraphs(text.text).map((p) => <p lang={text.lang}>{p}</p>)}
             {o.profile ? (
               <a class="more-link" href={keep('/profil', o.lang)}>
-                {opacText(locale, 'home.about.more')} →
+                {opacText(locale, 'home.about.more')}
               </a>
             ) : null}
           </div>
@@ -391,6 +389,7 @@ function services(o: { home: OpacHomeContent; profile: boolean; locale: Locale; 
   return {
     id: 'layanan',
     labelledBy: 'layanan-judul',
+    variant: 'compact',
     body: (
       <>
         <SectionHead id="layanan-judul" heading={opacText(locale, 'home.services.title')} more={more} />
@@ -478,6 +477,7 @@ function titles(o: {
   if (fresh.length === 0 && lists === 0) return null;
   return {
     labelledBy: fresh.length > 0 ? 'judul-baru' : popular.length > 0 ? 'judul-populer' : 'jelajah-kelas',
+    variant: 'band',
     body: (
       <>
         {fresh.length === 0 ? null : (
@@ -575,6 +575,7 @@ function gallery(o: { home: OpacHomeContent; locale: Locale; lang: Locale | null
   if (photos.length === 0) return null;
   return {
     labelledBy: 'galeri-judul',
+    variant: 'compact',
     body: (
       <>
         <SectionHead id="galeri-judul" heading={opacText(o.locale, 'home.gallery.title')} more={{ href: keep('/galeri', o.lang), label: opacText(o.locale, 'home.gallery.all') }} />
@@ -765,8 +766,12 @@ export async function homeResponse(rc: HomeSource): Promise<Response> {
           lang={lang}
         />
         <SearchBand locale={locale} lang={lang} titles={figures.titles} available={facts.available} />
-        {sections.map((block, i) => (
-          <section class={i % 2 === 1 ? 'section section-alt' : 'section'} id={block.id} aria-labelledby={block.labelledBy}>
+        {sections.map((block) => (
+          <section
+            class={block.variant === 'band' ? 'section section-band' : block.variant === 'compact' ? 'section section-compact' : 'section'}
+            id={block.id}
+            aria-labelledby={block.labelledBy}
+          >
             <div class="wrap">{block.body}</div>
           </section>
         ))}

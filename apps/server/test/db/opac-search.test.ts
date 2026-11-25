@@ -269,8 +269,8 @@ describe.skipIf(!ctx.available)(`OPAC search, facets and feeds [${engineLabel()}
       expect(card).toContain(opacText('id', 'search.card.available'));
       const pemimpiCard = cardOf(res.text, id('pemimpi'));
       expect(pemimpiCard).not.toContain(opacText('id', 'search.card.available'));
-      // Without JavaScript: no script at all, every form a GET to /cari, and no Host-header URL anywhere.
-      expect(res.text).not.toContain('<script');
+      // Every search control is a plain GET form to /cari; only the hashed shell UI script is linked, never inline script.
+      expect([...res.text.matchAll(/<script\b[^>]*>/gi)].map((m) => m[0])).toEqual([expect.stringContaining('src="/assets/opac-ui-')]);
       const forms = [...res.text.matchAll(/<form ([^>]*)>/g)].map((m) => m[1]!);
       expect(forms.length).toBeGreaterThanOrEqual(3); // the search box, the order, the year
       for (const f of forms) expect(f).toMatch(/method="get" action="\/cari"/);
@@ -447,7 +447,7 @@ describe.skipIf(!ctx.available)(`OPAC search, facets and feeds [${engineLabel()}
       const evil = '"><script>alert(1)</script>';
       const res = await get(`/cari?q=${encodeURIComponent(evil)}`);
       expect(res.status).toBe(200);
-      expect(res.text).not.toContain('<script');
+      expect(res.text).not.toContain('<script>');
       expect(res.text).toContain('&quot;&gt;&lt;script&gt;');
     });
 

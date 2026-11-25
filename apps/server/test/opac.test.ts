@@ -19,6 +19,7 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 import { createApp } from '../src/app.js';
 import { OPAC_SLIDER_FILE, OPAC_SLIDER_JS } from '../src/opac/slider.js';
+import { OPAC_UI_FILE, OPAC_UI_JS } from '../src/opac/ui.js';
 import { cspHeader } from '../src/http/csp.js';
 import type { OpsFence } from '../src/http/ops-fence.js';
 import { opacText } from '../src/opac/catalog/messages.js';
@@ -112,13 +113,15 @@ function expectDocument(html: string, res?: Response): void {
   expect(html).toMatch(/<meta name="viewport" content="width=device-width, initial-scale=1"/);
   expect(html).toMatch(/<meta name="description" content="[^"]+"/);
   expect(html).toContain(`<link rel="stylesheet" href="/assets/opac-${OPAC_CSS_HASH}.css"`);
-  expect(html).not.toMatch(/<script/i);
+  const nonce = metaNonce(html);
+  expect(nonce).toMatch(NONCE);
+  for (const [tag] of html.matchAll(/<script\b[^>]*>[\s\S]*?<\/script>/gi)) {
+    expect(tag).toBe(`<script nonce="${nonce!}" src="/assets/${OPAC_UI_FILE}" defer=""></script>`);
+  }
   expect(html).not.toMatch(/<style/i);
   // Attributes of real tags only: an escaped library name may well contain the text ` onmouseover=`.
   expect(html).not.toMatch(/<[a-z][^>]*\sstyle=/i);
   expect(html).not.toMatch(/<[a-z][^>]*\son[a-z]+=/i);
-  const nonce = metaNonce(html);
-  expect(nonce).toMatch(NONCE);
   if (res !== undefined) {
     expect(res.headers.get('content-type')).toBe(HTML_TYPE);
     expect(res.headers.get('content-security-policy')).toBe(cspHeader(nonce!));
@@ -243,6 +246,14 @@ describe("the hero slider's script", () => {
     expect(await res.text()).toBe(OPAC_SLIDER_JS);
     // Like the stylesheet it needs no database and no settings.
     expect(settings.reads).toEqual([]);
+
+    expect(OPAC_UI_FILE).toMatch(/^opac-ui-[0-9a-f]{10}\.js$/);
+    expect(OPAC_UI_FILE).toBe(`opac-ui-${sha256hex(OPAC_UI_JS).slice(0, 10)}.js`);
+    const uiRes = await app.request(`/assets/${OPAC_UI_FILE}`);
+    expect(uiRes.status).toBe(200);
+    expect(uiRes.headers.get('content-type')).toBe('text/javascript; charset=utf-8');
+    expect(uiRes.headers.get('cache-control')).toBe(IMMUTABLE);
+    expect(await uiRes.text()).toBe(OPAC_UI_JS);
   });
 
   it.each([

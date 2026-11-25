@@ -10,8 +10,8 @@ import { OPAC_MESSAGE_AREAS, defineOpacMessages, opacText, type OpacKey } from '
 
 const placeholders = (text: string): string[] => [...new Set([...text.matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((m) => m[1]!))].sort();
 
-/** Keys whose two texts may be the same (a proper name, a format, a number): none so far. */
-const SAME_IN_BOTH: readonly string[] = [];
+/** Keys whose two texts may be the same (a proper name, a format, a number, or an identical loanword). */
+const SAME_IN_BOTH: readonly string[] = ['shell.nav.menu_short'];
 
 describe('the OPAC message areas', () => {
   const areas = Object.entries(OPAC_MESSAGE_AREAS);

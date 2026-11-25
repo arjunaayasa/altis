@@ -117,6 +117,9 @@ describe('the theme colours', () => {
       expect(contrastRatio(c.footText, c.footBg), scheme).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio(c.footMuted, c.footBg), scheme).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio('#ffffff', c.footBg), `${scheme} focus ring on the footer`).toBeGreaterThanOrEqual(3);
+      // Control borders (`borderStrong`) hold >= 3:1 non-text contrast against both page and layer surfaces (WCAG 1.4.11).
+      expect(contrastRatio(c.borderStrong, c.bg), `${scheme} borderStrong on bg`).toBeGreaterThanOrEqual(3);
+      expect(contrastRatio(c.borderStrong, c.layer), `${scheme} borderStrong on layer`).toBeGreaterThanOrEqual(3);
     }
   });
 
@@ -139,8 +142,11 @@ describe('the theme colours', () => {
     expect(BRAND_BACKDROPS).toEqual({ light: SCHEME_COLORS.light.layer, dark: SCHEME_COLORS.dark.layer });
   });
 
-  it('no gradient, no blur, reduced motion honoured', () => {
-    expect(OPAC_CSS).not.toMatch(/gradient|blur\(|backdrop-filter/);
+  it('gradients appear only on the hero photo contrast scrim, never decorative glow or blur, and reduced motion is honoured', () => {
+    expect(OPAC_CSS).not.toMatch(/radial-gradient|conic-gradient|blur\(|backdrop-filter/);
+    const gradientRules = OPAC_CSS.split('\n').filter((line) => line.includes('gradient'));
+    expect(gradientRules.length).toBeGreaterThan(0);
+    for (const line of gradientRules) expect(line).toContain('.slide:not(.slide-nophoto)::after{');
     expect(OPAC_CSS).toContain('@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important');
   });
 
@@ -191,15 +197,16 @@ describe("the library colour's tokens", () => {
     for (const scheme of ['light', 'dark'] as const) expect(Math.abs(hue(brandTokens('#17624f')[scheme].accent) - hue('#17624f'))).toBeLessThan(6);
   });
 
-  it('brandCss: the tokens of both schemes on the root element, nothing but hex colours; not a colour throws', () => {
+  it('brandCss: the tokens of both schemes on the root element (plus explicit data-theme override), nothing but hex colours; not a colour throws', () => {
     for (const colour of COLOURS) {
       const t = brandTokens(colour);
       expect(brandCss(colour)).toBe(
         `:root{--accent:${t.light.accent};--accent-hover:${t.light.accentHover};--panel:${t.light.panel}}` +
-          `@media (prefers-color-scheme:dark){:root{--accent:${t.dark.accent};--accent-hover:${t.dark.accentHover};--panel:${t.dark.panel}}}`,
+          `@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--accent:${t.dark.accent};--accent-hover:${t.dark.accentHover};--panel:${t.dark.panel}}}` +
+          `:root[data-theme=dark]{--accent:${t.dark.accent};--accent-hover:${t.dark.accentHover};--panel:${t.dark.panel}}`,
       );
       expect(brandCss(colour)).toMatch(
-        /^:root\{--accent:#[0-9a-f]{6};--accent-hover:#[0-9a-f]{6};--panel:#[0-9a-f]{6}\}@media \(prefers-color-scheme:dark\)\{:root\{--accent:#[0-9a-f]{6};--accent-hover:#[0-9a-f]{6};--panel:#[0-9a-f]{6}\}\}$/,
+        /^:root\{--accent:#[0-9a-f]{6};--accent-hover:#[0-9a-f]{6};--panel:#[0-9a-f]{6}\}@media \(prefers-color-scheme:dark\)\{:root:not\(\[data-theme=light\]\)\{--accent:#[0-9a-f]{6};--accent-hover:#[0-9a-f]{6};--panel:#[0-9a-f]{6}\}\}:root\[data-theme=dark\]\{--accent:#[0-9a-f]{6};--accent-hover:#[0-9a-f]{6};--panel:#[0-9a-f]{6}\}$/,
       );
     }
     for (const bad of ['red', '#fff', '#1e3a8a;}body{display:none', '']) expect(() => brandCss(bad), bad).toThrow(TypeError);

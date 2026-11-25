@@ -12,6 +12,7 @@ import { createApp } from '../../src/app.js';
 import { HOME_GALLERY } from '../../src/opac/catalog/home.js';
 import { opacText } from '../../src/opac/catalog/messages.js';
 import { OPAC_SLIDER_FILE } from '../../src/opac/slider.js';
+import { OPAC_UI_FILE } from '../../src/opac/ui.js';
 import { createAgent, type AgentReply } from '../agent.js';
 import { recordingLogger, sampleConfig } from '../support.js';
 
@@ -632,7 +633,7 @@ describe.skipIf(!ctx.available)(`the library's site with content [${engineLabel(
       expect(HOME_GALLERY).toBe(4);
       const html = (await get('/')).text;
       const block = section(html, 'galeri-judul')!;
-      expect(block).toContain(`<a class="section-link" href="/galeri">${opacText('id', 'home.gallery.all')} →</a>`);
+      expect(block).toContain(`<a class="section-link" href="/galeri">${opacText('id', 'home.gallery.all')}</a>`);
       expect(figures(part(block, /<ul class="gallery">([\s\S]*?)<\/ul>/)).map((p) => p.src)).toEqual(galleryIds.slice(0, 4).map((id) => `/files/${id}`));
       for (const id of galleryIds.slice(4)) expect(html).not.toContain(id);
       expect(part(html, /<footer class="site-footer">([\s\S]*?)<\/footer>/)).toContain(`<a href="/galeri">${opacText('id', 'shell.menu.gallery')}</a>`);
@@ -694,15 +695,20 @@ describe.skipIf(!ctx.available)(`the library's site with content [${engineLabel(
         expect(hero).toContain('<a class="btn btn-inv" href="/cari">Lihat katalog</a>');
         expect(hero).toContain('<a class="btn btn-inv" href="/profil">Profil kami</a>');
         expect(html.match(/<h1\b/g)).toHaveLength(1);
-        // The one script: a file of this site under its content hash, deferred; nothing inline.
-        expect(scripts(html)).toEqual([`<script src="/assets/${OPAC_SLIDER_FILE}" defer="">`]);
+        // Only hashed deferred scripts from this site; nothing inline.
+        expect(scripts(html)).toEqual([
+          expect.stringMatching(new RegExp(`^<script nonce="[A-Za-z0-9_-]+" src="/assets/${OPAC_UI_FILE}" defer="">$`)),
+          `<script src="/assets/${OPAC_SLIDER_FILE}" defer="">`,
+        ]);
         expect(html).not.toMatch(/<[a-z][^>]*\son[a-z]+=/i);
         const policy = res.headers.get('content-security-policy') ?? '';
         expect(policy).toMatch(/script-src [^;]*'self'/);
         expect(policy).not.toMatch(/script-src [^;]*'unsafe-inline'/);
-        const file = await get(`/assets/${OPAC_SLIDER_FILE}`);
-        expect(file.status).toBe(200);
-        expect(file.headers.get('content-type')).toBe('text/javascript; charset=utf-8');
+        for (const f of [OPAC_UI_FILE, OPAC_SLIDER_FILE]) {
+          const file = await get(`/assets/${f}`);
+          expect(file.status).toBe(200);
+          expect(file.headers.get('content-type')).toBe('text/javascript; charset=utf-8');
+        }
         // The first slide's photo is the page's picture for a link preview.
         expect(html).toContain(`<meta property="og:image" content="${CONFIG.baseUrl}/files/${slides[0]!.fileId}"`);
         // The page language is kept in a slide's button.
@@ -712,12 +718,12 @@ describe.skipIf(!ctx.available)(`the library's site with content [${engineLabel(
       }
     });
 
-    it('one slide today, or none: no controls and no script at all', async () => {
+    it('one slide today, or none: no carousel controls and no slider script', async () => {
       for (const slides of [[slide('satu'), slide('lewat', { until: '2026-11-14' })], []]) {
         await setHome({ ...home, hero: { slides, autoplay: true, intervalSec: 7 } });
         try {
           const html = (await get('/')).text;
-          expect(scripts(html)).toEqual([]);
+          expect(scripts(html)).toEqual([expect.stringMatching(new RegExp(`^<script nonce="[A-Za-z0-9_-]+" src="/assets/${OPAC_UI_FILE}" defer="">$`))]);
           expect(html).not.toContain('opac-slider-');
           const hero = part(html, /(<section class="hero"[\s\S]*?<\/section>)/);
           for (const absent of ['hero-ui', '<button', 'data-hero', 'aria-roledescription']) expect(hero, absent).not.toContain(absent);

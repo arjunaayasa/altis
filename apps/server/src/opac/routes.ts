@@ -16,6 +16,7 @@ import { FONT_TYPE, OPAC_FONT_CSS, OPAC_FONT_CSS_FILE, opacFontFile, opacFontsSe
 import { OPAC_CSS_FILE } from './layout.js';
 import { renderError, renderNotFound } from './pages.js';
 import { OPAC_SLIDER_FILE, OPAC_SLIDER_JS } from './slider.js';
+import { OPAC_UI_FILE, OPAC_UI_JS } from './ui.js';
 
 // The OPAC's own routes (spec §4.9, §9.1; decisions D2, D30), after the catalogue's (opac/catalog, Phase 2):
 //
@@ -104,7 +105,7 @@ const assets = route<unknown, unknown, Record<string, string>>({
     if (file === OPAC_FONT_CSS_FILE && opacFontsServed()) {
       return rc.c.body(OPAC_FONT_CSS, 200, { 'Content-Type': CSS_TYPE, 'Cache-Control': IMMUTABLE_CACHE });
     }
-    // The hero slider's script: the OPAC's one script file.
+    if (file === OPAC_UI_FILE) return rc.c.body(OPAC_UI_JS, 200, { 'Content-Type': JS_TYPE, 'Cache-Control': IMMUTABLE_CACHE });
     if (file === OPAC_SLIDER_FILE) return rc.c.body(OPAC_SLIDER_JS, 200, { 'Content-Type': JS_TYPE, 'Cache-Control': IMMUTABLE_CACHE });
     const font = opacFontFile(file);
     if (font === null) throw new DomainError('NOT_FOUND');

@@ -18,6 +18,7 @@ import { robotsTxt } from '../src/opac/catalog/robots.js';
 import { SITEMAP_MAX_URLS, sitemapIndexXml, urlsetXml, w3cDate } from '../src/opac/catalog/sitemap.js';
 import { NO_ICON } from '../src/opac/layout.js';
 import { renderError, renderMaintenance, renderNotFound } from '../src/opac/pages.js';
+import { OPAC_UI_FILE } from '../src/opac/ui.js';
 
 // The OPAC shell's page frame and its pure parts (Phase 2 Task 21; spec §9.1, §9.2, §9.4, §9.7, §9.9; S6, S7, S17):
 // - opacPage: a skip link to <main>, a strip with the language switch that keeps the path and the query, a header with
@@ -216,16 +217,21 @@ describe('opacPage: the frame (§9.2)', () => {
     }
   });
 
-  it('every <script> carries the nonce of the policy; the frame adds none of its own', async () => {
+  it('every inline <script> carries the nonce of the policy; the frame adds only its hashed deferred UI script', async () => {
     const res = await page({ jsonLd: [{ '@type': 'Library' }, { '@type': 'WebSite' }] });
     const nonce = /'nonce-([A-Za-z0-9_-]+)'/.exec(res.headers.get('content-security-policy') ?? '')![1]!;
     const html = await res.text();
     const scripts = [...html.matchAll(/<script\b[^>]*>/gi)].map((m) => m[0]);
-    expect(scripts).toHaveLength(2);
+    expect(scripts).toHaveLength(3);
+    expect(scripts[0]).toBe(`<script nonce="${nonce}" src="/assets/${OPAC_UI_FILE}" defer="">`);
     for (const tag of scripts) expect(tag).toContain(`nonce="${nonce}"`);
     expect(html).not.toMatch(/<style/i);
     expect(html).not.toMatch(/<[a-z][^>]*\s(?:style|on[a-z]+)=/i);
-    expect(await (await page()).text()).not.toMatch(/<script/i);
+    const plain = await page();
+    const plainNonce = /'nonce-([A-Za-z0-9_-]+)'/.exec(plain.headers.get('content-security-policy') ?? '')![1]!;
+    expect([...(await plain.text()).matchAll(/<script\b[^>]*>/gi)].map((m) => m[0])).toEqual([
+      `<script nonce="${plainNonce}" src="/assets/${OPAC_UI_FILE}" defer="">`,
+    ]);
   });
 
   it('head: the site icon on a page of the site, an empty data: icon on a bare page, so the browser asks for no /favicon.ico (a 404 in its console)', async () => {

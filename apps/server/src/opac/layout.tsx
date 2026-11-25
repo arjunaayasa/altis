@@ -8,6 +8,7 @@ import { opacText } from './catalog/messages.js';
 import { OPAC_SEARCH_SCOPES, type OpacSearchScope } from './catalog/search-params.js';
 import { FONT_TYPE, opacFontPreloads, opacStylesheetFile } from './fonts.js';
 import { Icon } from './icons.js';
+import { OPAC_UI_FILE } from './ui.js';
 
 // The frame of every OPAC page: `<html lang data-accent>`, the head, a skip link to the content, a thin strip with
 // today's opening hours, the published telephone number and e-mail address and the language switch, the site's header
@@ -186,13 +187,31 @@ export interface LayoutProps extends PageOptions {
  * stay in that language. `scope`: the field choice (`ruas`) joined to the text, the one given selected. `label`: the
  * label is shown above the field (the home page); otherwise it is for screen readers only.
  */
-export function SearchForm(props: { locale: Locale; lang: Locale | null; id: string; label?: boolean; scope?: OpacSearchScope; text?: string; maxlength?: number }) {
+export function SearchForm(props: {
+  locale: Locale;
+  lang: Locale | null;
+  id: string;
+  label?: boolean;
+  meta?: Child | undefined;
+  scope?: OpacSearchScope;
+  text?: string;
+  maxlength?: number;
+}) {
   const { locale, lang, id } = props;
   return (
     <form class="search-box" role="search" method="get" action="/cari">
-      <label for={id} class={props.label === true ? 'search-label' : 'visually-hidden'}>
-        {opacText(locale, 'shell.search.label')}
-      </label>
+      {props.label === true && props.meta !== undefined ? (
+        <div class="search-head">
+          <label for={id} class="search-label">
+            {opacText(locale, 'shell.search.label')}
+          </label>
+          {props.meta}
+        </div>
+      ) : (
+        <label for={id} class={props.label === true ? 'search-label' : 'visually-hidden'}>
+          {opacText(locale, 'shell.search.label')}
+        </label>
+      )}
       <span class="search-row">
         <span class="search-join">
           {props.scope === undefined ? null : (
@@ -446,12 +465,14 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
         ))}
         <link rel="stylesheet" href={`/assets/${opacStylesheetFile(OPAC_CSS_FILE)}`} />
         {brand === null ? null : <style nonce={nonce}>{brandCss(brand)}</style>}
+        {nav.length === 0 ? null : <script nonce={nonce} src={`/assets/${OPAC_UI_FILE}`} defer></script>}
         {props.head ?? null}
       </head>
       <body>
         <a class="skip-link" href={`#${MAIN_ID}`}>
           {opacText(locale, 'shell.skip_link')}
         </a>
+        {nav.length === 0 ? null : <div class="nav-progress" data-nav-progress hidden aria-hidden="true"></div>}
         <div class="topstrip">
           <div class="wrap">
             {today === null ? null : (
@@ -494,16 +515,36 @@ export function Layout(props: PropsWithChildren<LayoutProps>) {
               </nav>
             )}
             <div class="head-actions">
+              {nav.length === 0 ? null : (
+                <button
+                  type="button"
+                  class="btn btn-outline btn-sm theme-toggle"
+                  data-theme-toggle
+                  hidden
+                  aria-label={opacText(locale, 'shell.theme.to_dark')}
+                  data-label-to-dark={opacText(locale, 'shell.theme.to_dark')}
+                  data-label-to-light={opacText(locale, 'shell.theme.to_light')}
+                >
+                  <span data-icon-moon>
+                    <Icon name="moon" />
+                    <span class="theme-word hide-s">{opacText(locale, 'shell.theme.dark_short')}</span>
+                  </span>
+                  <span data-icon-sun hidden>
+                    <Icon name="sun" />
+                    <span class="theme-word hide-s">{opacText(locale, 'shell.theme.light_short')}</span>
+                  </span>
+                </button>
+              )}
               {/* The member area: a static link; the page never reads a member session for it. */}
               <a class={nav.length === 0 ? 'btn btn-outline btn-sm akun-link' : 'btn btn-outline btn-sm akun-link hide-s'} href={account}>
                 <Icon name="user" />
                 {opacText(locale, 'akun.header.link')}
               </a>
-              {/* On a narrow screen the menu is this `<details>`: it opens without a script. */}
               {nav.length === 0 ? null : (
                 <details class="mobnav">
                   <summary aria-label={opacText(locale, 'shell.nav.open')}>
                     <Icon name="menu" />
+                    <span class="mobnav-word">{opacText(locale, 'shell.nav.menu_short')}</span>
                   </summary>
                   <nav aria-label={opacText(locale, 'shell.nav.label_mobile')}>
                     {menu}
